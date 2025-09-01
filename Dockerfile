@@ -3,12 +3,12 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies including su-exec
+# Install system dependencies including gosu
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
-    su-exec \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -30,7 +30,7 @@ mkdir -p /data/database/backups /data/uploads\n\
 chown -R app:app /data\n\
 chmod -R 755 /data\n\
 # Switch to app user and run the application\n\
-exec su-exec app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
+exec gosu app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 
 # Set ownership of app directory
 RUN chown -R app:app /app

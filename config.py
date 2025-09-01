@@ -14,11 +14,15 @@ class Config:
     if SECRET_KEY in ['CHANGE_THIS_SECRET_KEY', 'your-secret-key-here']:
         raise ValueError("SECRET_KEY must be changed from the default placeholder value")
     
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    if not SQLALCHEMY_DATABASE_URI:
-        raise ValueError("DATABASE_URL environment variable must be set")
-    if SQLALCHEMY_DATABASE_URI in ['CHANGE_THIS_DATABASE_URL']:
-        raise ValueError("DATABASE_URL must be changed from the default placeholder value")
+    # Construct database URL from APP_DATA_DIR setting
+    APP_DATA_DIR = os.environ.get('APP_DATA_DIR', 'instance')
+    SQLALCHEMY_DATABASE_URI = f"sqlite:///{APP_DATA_DIR}/portfolio.db"
+    
+    # Allow override via DATABASE_URL for advanced users (backward compatibility)
+    if os.environ.get('DATABASE_URL'):
+        SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+        if SQLALCHEMY_DATABASE_URI in ['CHANGE_THIS_DATABASE_URL']:
+            raise ValueError("DATABASE_URL must be changed from the default placeholder value")
     
     # Validate FLASK_ENV
     FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
@@ -30,39 +34,39 @@ class Config:
     DEBUG = False
     TESTING = False
 
-    # Session configuration
-    PERMANENT_SESSION_LIFETIME = timedelta(days=1)
+    # Session configuration (configurable via environment variables)
+    PERMANENT_SESSION_LIFETIME = timedelta(days=int(os.environ.get('SESSION_LIFETIME_DAYS', '1')))
     SESSION_COOKIE_SECURE = True  # Only send cookies over HTTPS
     SESSION_COOKIE_HTTPONLY = True  # Prevent XSS attacks
     SESSION_COOKIE_SAMESITE = 'Lax'  # CSRF protection
 
-    # Cache settings
+    # Cache settings (configurable via environment variables)
     CACHE_TYPE = 'SimpleCache'
-    CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
+    CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))  # 5 minutes default
 
-    # Database backup settings
-    DB_BACKUP_DIR = os.path.join('app', 'database', 'backups')
-    MAX_BACKUP_FILES = 10
-    BACKUP_INTERVAL_HOURS = 6  # Automatic backup every 6 hours
+    # Database backup settings (configurable via environment variables)
+    DB_BACKUP_DIR = os.environ.get('DB_BACKUP_DIR', os.path.join(APP_DATA_DIR, 'backups'))
+    MAX_BACKUP_FILES = int(os.environ.get('MAX_BACKUP_FILES', '10'))
+    BACKUP_INTERVAL_HOURS = int(os.environ.get('BACKUP_INTERVAL_HOURS', '6'))  # Automatic backup every N hours
 
-    # Market data settings
-    PRICE_UPDATE_INTERVAL = timedelta(hours=24)
-    BATCH_SIZE = 5  # Number of tickers to fetch in a batch
+    # Market data settings (configurable via environment variables)
+    PRICE_UPDATE_INTERVAL = timedelta(hours=int(os.environ.get('PRICE_UPDATE_INTERVAL_HOURS', '24')))
+    BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '5'))  # Number of tickers to fetch in a batch
 
-    # Upload settings
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload
-    UPLOAD_FOLDER = os.path.join('app', 'uploads')
+    # Upload settings (configurable via environment variables)
+    MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(16 * 1024 * 1024)))  # 16MB max upload default
+    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join('app', 'uploads'))
     ALLOWED_EXTENSIONS = {'csv'}
 
-    # Default number of items to show in pagination
-    PER_PAGE = 20
+    # Default number of items to show in pagination (configurable via environment variables)
+    PER_PAGE = int(os.environ.get('PER_PAGE', '20'))
 
 
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
-    SQLALCHEMY_ECHO = True
-    SESSION_COOKIE_SECURE = False  # Allow HTTP in development
+    SQLALCHEMY_ECHO = os.environ.get('SQLALCHEMY_ECHO', 'true').lower() == 'true'
+    SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'  # Allow HTTP in development
 
 
 class TestingConfig(Config):

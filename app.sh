@@ -45,20 +45,22 @@ show_help() {
     echo "======================================"
     echo
     echo "Usage:"
-    echo "  ./app.sh              Auto-manage app (deploy/update/fix as needed)"
-    echo "  ./app.sh --status     Show current status"
-    echo "  ./app.sh --help       Show this help"
+    echo "  ./app.sh                  Auto-manage app (always rebuild for latest changes)"
+    echo "  ./app.sh --status         Show current status"
+    echo "  ./app.sh --force-rebuild  Force full rebuild from scratch"
+    echo "  ./app.sh --help           Show this help"
     echo
     echo "Examples:"
-    echo "  ./app.sh              # Make the app work (handles everything)"
-    echo "  ./app.sh --status     # Check if app is running"
+    echo "  ./app.sh                  # Always rebuild to ensure latest code"
+    echo "  ./app.sh --status         # Check if app is running"
+    echo "  ./app.sh --force-rebuild  # Force complete rebuild"
     echo
-    echo "The script automatically detects:"
-    echo "  • First time setup    → Full deployment"
-    echo "  • Code changes        → Quick update" 
-    echo "  • Docker changes      → Rebuild from scratch"
-    echo "  • Broken containers   → Fix/rebuild"
-    echo "  • Already running     → Nothing to do"
+    echo "The script behavior:"
+    echo "  • Always rebuilds containers to ensure latest code"
+    echo "  • First time setup       → Full deployment"
+    echo "  • Any changes detected   → Full rebuild" 
+    echo "  • Docker changes         → Rebuild from scratch"
+    echo "  • Broken containers      → Fix/rebuild"
 }
 
 # Show status
@@ -255,12 +257,15 @@ EOF
     done
 }
 
-# Perform quick update
+# Perform quick update (now same as rebuild for consistency)
 do_update() {
-    log_info "⚡ Quick update in progress..."
-    log_info "This will take ~30 seconds"
+    log_info "🔨 Rebuilding to ensure latest code..."
+    log_info "This will take ~1-2 minutes"
     
     DOCKER_COMPOSE_CMD=$(detect_docker_compose)
+    
+    # Stop containers first
+    $DOCKER_COMPOSE_CMD down 2>/dev/null || true
     
     # Pull latest changes if this is a git repo
     if [[ -d .git ]]; then
@@ -268,25 +273,29 @@ do_update() {
         git pull origin main 2>/dev/null || git pull 2>/dev/null || true
     fi
     
-    # Quick rebuild and restart
-    $DOCKER_COMPOSE_CMD up -d --build --no-deps portfolio-app
+    # Full rebuild with no cache to ensure latest code
+    log_info "Building fresh containers..."
+    $DOCKER_COMPOSE_CMD build --no-cache portfolio-app
+    
+    # Start containers
+    $DOCKER_COMPOSE_CMD up -d
     
     # Update build marker
     touch .last_build_time
     
     # Wait for health check
     log_info "Waiting for application to be healthy..."
-    for i in {1..10}; do
-        sleep 3
+    for i in {1..15}; do
+        sleep 4
         if is_app_healthy; then
-            log_success "🎉 Update completed successfully!"
+            log_success "🎉 Rebuild completed successfully!"
             return 0
-        elif [[ $i -eq 10 ]]; then
-            log_error "Health check failed after 30 seconds - may need full rebuild"
-            log_info "Try running './app.sh' again or check logs: $DOCKER_COMPOSE_CMD logs $CONTAINER_NAME"
+        elif [[ $i -eq 15 ]]; then
+            log_error "Health check failed after 60 seconds"
+            log_info "Check logs with: $DOCKER_COMPOSE_CMD logs $CONTAINER_NAME"
             return 1
         else
-            log_info "Health check attempt $i/10..."
+            log_info "Health check attempt $i/15..."
         fi
     done
 }
@@ -306,31 +315,16 @@ auto_manage() {
         exit 1
     fi
     
-    # Check if rebuild is needed
+    # Always check if rebuild is needed for first time or major changes
     if needs_rebuild; then
         do_rebuild
         return $?
     fi
     
-    # Check if update is needed
-    if needs_update; then
-        do_update
-        return $?
-    fi
-    
-    # Check if app is already healthy
-    if is_app_healthy; then
-        log_success "App already running perfectly!"
-        echo "📊 Status:"
-        echo "  - URL: http://localhost:$PORT"
-        echo "  - Health: http://localhost:$PORT/health"
-        echo "  - Logs: $(detect_docker_compose) logs -f $CONTAINER_NAME"
-        return 0
-    fi
-    
-    # If we get here, something's wrong but not detected - try rebuild
-    log_warning "App not healthy but no obvious issues detected - rebuilding..."
-    do_rebuild
+    # For any other case, always rebuild to ensure latest code
+    log_info "Ensuring latest code is deployed..."
+    do_update
+    return $?
 }
 
 # Parse command line arguments
@@ -340,6 +334,10 @@ case "${1:-}" in
         ;;
     --help|-h)
         show_help
+        ;;
+    --force-rebuild|-f)
+        log_info "🔨 Force rebuilding from scratch..."
+        do_rebuild
         ;;
     "")
         auto_manage

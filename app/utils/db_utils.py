@@ -322,7 +322,7 @@ def load_portfolio_data(account_id=None, portfolio_id=None):
                 cs.shares, cs.override_share, cs.manual_edit_date, cs.is_manually_edited, cs.csv_modified_after_edit,
                 p.name as portfolio_name, p.id as portfolio_id,
                 mp.price, mp.currency, mp.price_eur, mp.last_updated,
-                mp.country, mp.sector, mp.industry
+                mp.country
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN portfolios p ON c.portfolio_id = p.id

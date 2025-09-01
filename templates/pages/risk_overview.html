@@ -111,7 +111,7 @@
      * Features include:
      * - Portfolio allocation visualization
      * - Company allocation across all portfolios
-     * - Distribution breakdowns by country, category, sector, and industry
+     * - Distribution breakdowns by country and category
      */
     document.addEventListener('DOMContentLoaded', function () {
         console.log('DOM loaded, initializing Risk Overview...');
@@ -522,8 +522,7 @@
                         portfolioName: portfolioName,
                         // Include risk analysis fields
                         country: item.country || 'Unknown',
-                        sector: item.sector || 'Unknown',
-                        industry: item.industry || 'Unknown',
+
                         exchange: item.exchange || 'Unknown'
                     });
 
@@ -638,16 +637,14 @@
             const companyCountEl = document.getElementById('companyCountSubtitle');
             const countryCountEl = document.getElementById('countryCountSubtitle');
             const categoryCountEl = document.getElementById('categoryCountSubtitle');
-            const sectorCountEl = null;
-            const industryCountEl = null;
+
 
             if (filteredPortfolios.length === 0) {
                 portfolioCountEl.textContent = 'No portfolios selected';
                 companyCountEl.textContent = 'Select portfolios to view';
                 countryCountEl.textContent = '';
                 categoryCountEl.textContent = '';
-                if (sectorCountEl) sectorCountEl.textContent = '';
-                if (industryCountEl) industryCountEl.textContent = '';
+
                 return;
             }
 
@@ -662,13 +659,11 @@
             // Calculate distribution counts
             const countries = new Set(allCompanies.map(c => c.country || 'Unknown'));
             const categories = new Set(allCompanies.map(c => c.category || 'Unknown'));
-            const sectors = new Set(allCompanies.map(c => c.sector || 'Unknown'));
-            const industries = new Set(allCompanies.map(c => c.industry || 'Unknown'));
+
 
             countryCountEl.textContent = `${countries.size} countries`;
             categoryCountEl.textContent = `${categories.size} categories`;
-            if (sectorCountEl) sectorCountEl.textContent = `${sectors.size} sectors`;
-            if (industryCountEl) industryCountEl.textContent = `${industries.size} industries`;
+
         }
 
         function showEmptyStates() {
@@ -819,8 +814,7 @@
 
                 // Ensure metadata fields exist
                 company.country = company.country || 'Unknown';
-                company.sector = company.sector || 'Unknown';
-                company.industry = company.industry || 'Unknown';
+
                 company.category = company.category || 'Unknown';
                 company.exchange = company.exchange || 'Unknown';
 
@@ -843,8 +837,7 @@
                         // Preserve metadata from the first occurrence
                         category: company.category || 'Unknown',
                         country: company.country || 'Unknown',
-                        sector: company.sector || 'Unknown',
-                        industry: company.industry || 'Unknown',
+
                         exchange: company.exchange || 'Unknown'
                     };
                 }
@@ -1020,9 +1013,9 @@
 
         // Helper function to get display country for geographic spread
         function getDisplayCountry(company) {
-            // Check if this is a cryptocurrency based on sector field
-            const sector = company.sector || '';
-            if (sector === 'Cryptocurrency') {
+            // Check if this is a cryptocurrency based on identifier pattern
+            const identifier = company.identifier || '';
+            if (identifier.includes('-USD') || identifier.includes('BTC') || identifier.includes('ETH')) {
                 return 'Crypto';
             }
 

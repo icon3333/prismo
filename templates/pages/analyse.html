@@ -508,8 +508,7 @@
                             portfolioName: portfolioName,
                             // Include risk analysis fields
                             country: item.country || 'Unknown',
-                            sector: item.sector || 'Unknown',
-                            industry: item.industry || 'Unknown'
+
                         });
 
                         // Update portfolio totals
@@ -787,8 +786,7 @@
 
                     // Ensure metadata fields exist
                     company.country = company.country || 'Unknown';
-                    company.sector = company.sector || 'Unknown';
-                    company.industry = company.industry || 'Unknown';
+
                     company.category = company.category || 'Unknown';
 
                     return company;
@@ -810,8 +808,7 @@
                             // Preserve metadata from the first occurrence
                             category: company.category || 'Unknown',
                             country: company.country || 'Unknown',
-                            sector: company.sector || 'Unknown',
-                            industry: company.industry || 'Unknown'
+
                         };
                     }
 
@@ -1447,9 +1444,9 @@
 
             // Helper function to get display country for geographic spread
             function getDisplayCountry(company) {
-                // Check if this is a cryptocurrency based on sector field
-                const sector = company.sector || '';
-                if (sector === 'Cryptocurrency') {
+                // Check if this is a cryptocurrency based on identifier pattern
+                const identifier = company.identifier || '';
+                if (identifier.includes('-USD') || identifier.includes('BTC') || identifier.includes('ETH')) {
                     return 'Crypto';
                 }
 

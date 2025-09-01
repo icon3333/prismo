@@ -1970,9 +1970,7 @@ p {
 }
 
 /* Ensure heatmap containers have proper dimensions */
-#categoryHeatmap,
-#sectorHeatmap,
-#industryHeatmap {
+#categoryHeatmap {
   min-height: 400px;
   width: 100%;
 }

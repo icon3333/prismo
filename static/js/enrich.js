@@ -64,19 +64,6 @@ const ProgressManager = {
                 if (data.status === 'processing' && data.percentage < 100) {
                     console.log('Found ongoing upload, resuming progress tracking');
                     this.startTracking('csv_upload');
-                } else if (data.status === 'completed' && data.percentage === 100) {
-                    console.log('Found recently completed upload');
-                    this.show('csv_upload');
-                    this.setProgress(100, 'Upload completed!');
-                    setTimeout(() => {
-                        this.hide();
-                        // Clear the progress from session
-                        fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
-                        // Only reload if not already on a different page
-                        if (window.location.pathname.includes('enrich')) {
-                            window.location.reload();
-                        }
-                    }, 2000);
                 }
             }
         } catch (error) {
@@ -173,8 +160,8 @@ const ProgressManager = {
         this.checkPriceFetchProgress();
     },
 
-    startCsvUploadProgress(checkInterval = 2000) {
-        // Use longer interval to reduce server load during file processing
+    startCsvUploadProgress(checkInterval = 500) {
+        // Use shorter interval for more responsive progress updates
         this.currentJob.interval = setInterval(() => {
             this.checkCsvProgress();
         }, checkInterval);
@@ -249,9 +236,16 @@ const ProgressManager = {
                 }, 3000);
                 
             } else if (data.status === 'idle' && percentage === 0) {
-                // No active upload found - this might mean the upload completed outside our polling
-                console.log('No active upload found - checking if this is expected');
-                // Don't immediately stop - let it continue polling for a bit in case upload just started
+                // No active upload found - check how long we've been polling
+                const pollingDuration = Date.now() - this.currentJob.startTime;
+                console.log(`No active upload found - polling duration: ${pollingDuration}ms`);
+                
+                // If we've been polling for more than 10 seconds with no progress, stop
+                if (pollingDuration > 10000) {
+                    console.log('Stopping polling - no progress found after 10 seconds');
+                    this.error('Upload may have failed to start. Please try again.');
+                    this.stopTracking();
+                }
             }
             
         } catch (error) {
@@ -261,16 +255,6 @@ const ProgressManager = {
             // But for now, just log and continue - the upload might still be processing
             if (error.message.includes('NetworkError')) {
                 console.warn('Network error while checking progress - upload may still be processing');
-            }
-            
-            // If we've been getting errors for too long, stop tracking
-            if (this.currentJob.startTime) {
-                const elapsed = Date.now() - this.currentJob.startTime;
-                if (elapsed > 150000) { // 2.5 minutes
-                    console.warn('Stopping progress tracking after 2.5 minutes of errors');
-                    this.error('Upload appears to have failed or completed without proper status update');
-                    this.stopTracking();
-                }
             }
         }
     },
@@ -452,19 +436,6 @@ const FileUploadHandler = {
                 const fileSize = fileInput.files[0].size;
                 fileLabel.textContent = fileName;
                 console.log(`File selected: ${fileName}, size: ${fileSize} bytes`);
-                
-                // Check file size (50MB limit)
-                const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-                if (fileSize > maxSize) {
-                    if (typeof showNotification === 'function') {
-                        showNotification(`File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB). Please use a file smaller than 50MB.`, 'is-warning');
-                    } else {
-                        alert(`File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB). Please use a file smaller than 50MB.`);
-                    }
-                    fileInput.value = '';
-                    fileLabel.textContent = 'No file selected';
-                    return;
-                }
 
                 // Prevent multiple submissions by checking if already processing
                 if (uploadCard.classList.contains('is-processing')) {
@@ -510,11 +481,11 @@ const FileUploadHandler = {
 
             console.log('Uploading file via AJAX...');
             
-            // Use longer timeout for file uploads (2 minutes for larger files)
+            // Use longer timeout for file uploads (120 seconds for large files)
             const controller = new AbortController();
             const timeoutId = setTimeout(() => {
                 controller.abort();
-                console.error('Upload timeout after 2 minutes');
+                console.error('Upload timeout after 120 seconds');
             }, 120000);
             
             const response = await fetch(form.action, {
@@ -543,15 +514,13 @@ const FileUploadHandler = {
                     ProgressManager.setProgress(100, 'Upload completed successfully!');
                     
                     // Show success notification
-                                    if (typeof showNotification === 'function') {
-                    showNotification(result.message || 'CSV uploaded successfully!', 'is-success');
-                }
-                
-                setTimeout(() => {
-                    // Clear the progress from session before reload
-                    fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
-                    window.location.reload();
-                }, 2000);
+                    if (typeof showNotification === 'function') {
+                        showNotification(result.message || 'CSV uploaded successfully!', 'is-success');
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
                     return;
                 } else {
                     throw new Error(result.message || 'Upload failed');

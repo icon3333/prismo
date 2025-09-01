@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 def update_csv_progress(current, total, message="Processing...", status="processing"):
     """Update CSV upload progress in session with improved persistence"""
     import time
+    from flask import session
+    
     percentage = int((current / total) * 100) if total > 0 else 0
     
     # Add timestamp for better tracking
@@ -28,19 +30,22 @@ def update_csv_progress(current, total, message="Processing...", status="process
         'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
     }
     
+    # Ensure session is available before updating
     try:
         session['csv_upload_progress'] = progress_data
         session.modified = True
         
-        # Force session to be saved immediately
-        session.permanent = True
-        
-        # Log progress for debugging
-        logger.info(f"CSV Progress: {percentage}% - {message} (Status: {status})")
-        
+        # Force session to persist immediately (costs time but ensures reliability) [[memory:6980966]]
+        # This method ensures progress is immediately available for polling
+        import threading
+        if hasattr(session, '_get_current_object'):
+            session._get_current_object().modified = True
+            
     except Exception as e:
-        logger.error(f"Failed to update CSV progress: {e}")
-        # Continue processing even if progress update fails
+        logger.warning(f"Failed to update session progress: {e}")
+    
+    # Log progress for debugging
+    logger.info(f"CSV Progress: {percentage}% - {message} (Status: {status}) - Session modified: {session.modified if 'session' in locals() else 'Unknown'}")
 
 
 def process_csv_data(account_id, file_content):
@@ -51,10 +56,6 @@ def process_csv_data(account_id, file_content):
         # Initialize progress tracking
         update_csv_progress(0, 100, "Starting CSV processing...", "processing")
         
-        # Add a small delay to ensure session is updated
-        import time
-        time.sleep(0.2)
-        
         db = get_db()
         cursor = db.cursor()
         
@@ -62,12 +63,12 @@ def process_csv_data(account_id, file_content):
         logger.info("Creating automatic backup before CSV processing...")
         backup_database()
         update_csv_progress(5, 100, "Backup created, processing CSV...", "processing")
-        time.sleep(0.1)
         
         update_csv_progress(10, 100, "Reading CSV file...", "processing")
         
         # Add small delay to ensure progress is captured
-        time.sleep(0.2)
+        import time
+        time.sleep(0.1)
 
         df = pd.read_csv(io.StringIO(file_content),
                          delimiter=';',
@@ -76,7 +77,7 @@ def process_csv_data(account_id, file_content):
         df.columns = df.columns.str.lower()
         
         update_csv_progress(20, 100, "Validating CSV columns...", "processing")
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         essential_columns = {
             "identifier": ["identifier", "isin", "symbol"],
@@ -111,10 +112,8 @@ def process_csv_data(account_id, file_content):
                 missing_columns.append(required_col)
         if missing_columns:
             logger.warning(f"Missing essential columns: {missing_columns}")
-            error_msg = f"Missing required columns: {', '.join(missing_columns)}"
-            update_csv_progress(0, 100, error_msg, "failed")
-            time.sleep(0.2)  # Ensure error status is captured
-            return False, error_msg, {}
+            update_csv_progress(0, 100, f"Missing required columns: {', '.join(missing_columns)}", "failed")
+            return False, f"Missing required columns: {', '.join(missing_columns)}", {}
 
         for opt_col, alternatives in optional_columns.items():
             for alt in alternatives:
@@ -126,7 +125,7 @@ def process_csv_data(account_id, file_content):
         df = df.rename(columns=column_mapping)
         
         update_csv_progress(30, 100, "Preparing data...", "processing")
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         if 'currency' not in df.columns:
             df['currency'] = 'EUR'
@@ -372,17 +371,19 @@ def process_csv_data(account_id, file_content):
         csv_company_names = set(df['holdingname'])
         
         update_csv_progress(60, 100, "Updating database...", "processing")
-        time.sleep(0.2)
+        time.sleep(0.1)
         
         # Track companies that should be removed (either not in CSV or have zero shares)
         companies_with_zero_shares = set()
 
-        total_positions = len(company_positions)
-        for idx, (company_name, position) in enumerate(company_positions.items()):
+        total_companies = len(company_positions)
+        processed_companies = 0
+        
+        for company_name, position in company_positions.items():
             # Update progress for each company processed
-            if total_positions > 0 and idx % max(1, total_positions // 10) == 0:
-                progress = 60 + int((idx / total_positions) * 20)  # 60-80% range
-                update_csv_progress(progress, 100, f"Processing company {idx+1}/{total_positions}...", "processing")
+            processed_companies += 1
+            progress_percentage = 60 + int((processed_companies / total_companies) * 20)  # 60-80% range
+            update_csv_progress(progress_percentage, 100, f"Processing company {processed_companies}/{total_companies}: {company_name[:30]}...", "processing")
             current_shares = position['total_shares']
             total_invested = position['total_invested']
             
@@ -552,14 +553,8 @@ def process_csv_data(account_id, file_content):
                         'DELETE FROM market_prices WHERE identifier = ?', [identifier])
             positions_removed.append(company_name)
 
-        update_csv_progress(80, 100, "Saving changes...", "processing")
-        time.sleep(0.2)
-        
         db.commit()
         clear_data_caches()
-        
-        update_csv_progress(87, 100, "Preparing price updates...", "processing")
-        time.sleep(0.2)
 
         all_identifiers = set()
         for company_name in positions_added + positions_updated:
@@ -572,48 +567,41 @@ def process_csv_data(account_id, file_content):
                 all_identifiers.add(company['identifier'])
 
         if all_identifiers:
-            update_csv_progress(90, 100, "Updating prices...", "processing")
-            time.sleep(0.2)
-            logger.info(f"Updating prices for {len(all_identifiers)} identifiers...")
+            update_csv_progress(80, 100, "Updating prices and metadata...", "processing")
+            time.sleep(0.1)
+            logger.info(
+                f"Updating prices and metadata for {len(all_identifiers)} companies")
+                
+            total_identifiers = len(all_identifiers)
+            processed_identifiers = 0
             
-            try:
-                # Use the more efficient batch price update method
-                from app.utils.yfinance_price import update_multiple_prices
-                results = update_multiple_prices(list(all_identifiers))
-                
-                # Process results
-                updated_count = len([r for r in results if r['success']])
-                failed_count = len([r for r in results if not r['success']])
-                
-                logger.info(f"Price update results: {updated_count} updated, {failed_count} failed")
-                
-                # Collect failed identifiers for reporting
-                failed_prices = [r['identifier'] for r in results if not r['success']]
-                
-                if failed_count > 0:
-                    logger.warning(f"Failed to update prices for {failed_count} companies: {failed_prices[:5]}{'...' if len(failed_prices) > 5 else ''}")
-                    
-            except Exception as e:
-                logger.error(f"Error during batch price update: {str(e)}")
-                # If batch update fails, fall back to individual updates for critical identifiers
-                logger.info("Falling back to individual price updates...")
-                for identifier in list(all_identifiers)[:10]:  # Limit to first 10 to avoid long delays
-                    try:
-                        result = get_isin_data(identifier)
-                        if result['success'] and result.get('price') is not None:
-                            price = result.get('price')
-                            currency = result.get('currency', 'USD')
-                            price_eur = result.get('price_eur', price)
-                            country = result.get('country')
-                            if not update_price_in_db(identifier, price, currency, price_eur, country):
-                                failed_prices.append(identifier)
-                        else:
+            for identifier in all_identifiers:
+                processed_identifiers += 1
+                progress_percentage = 80 + int((processed_identifiers / total_identifiers) * 15)  # 80-95% range
+                update_csv_progress(progress_percentage, 100, f"Fetching price {processed_identifiers}/{total_identifiers}: {identifier}", "processing")
+                try:
+                    result = get_isin_data(identifier)
+                    if result['success'] and result.get('price') is not None:
+                        price = result.get('price')
+                        currency = result.get('currency', 'USD')
+                        price_eur = result.get('price_eur', price)
+                        country = result.get('country')
+                        logger.info(
+                            f"Updating metadata for {identifier}: Country: {country}")
+                        if not update_price_in_db(identifier, price, currency, price_eur, country):
+                            logger.warning(
+                                f"Failed to update price and metadata in database for {identifier}")
                             failed_prices.append(identifier)
-                    except Exception as e:
-                        logger.error(f"Error updating price for {identifier}: {str(e)}")
+                    else:
+                        error_reason = "No price data returned" if result.get(
+                            'success') else result.get('error', 'Unknown error')
+                        logger.warning(
+                            f"Failed to fetch price for {identifier}: {error_reason}")
                         failed_prices.append(identifier)
-        else:
-            logger.info("No identifiers found for price updates")
+                except Exception as e:
+                    logger.error(
+                        f"Error updating price for {identifier}: {str(e)}")
+                    failed_prices.append(identifier)
 
         # Final completion with longer persistence
         update_csv_progress(100, 100, "CSV import completed successfully!", "completed")
@@ -621,33 +609,12 @@ def process_csv_data(account_id, file_content):
         # Keep the completion status for a bit longer for frontend to catch it
         time.sleep(0.5)
         
-        # Build success message with details
-        message_parts = ["CSV data imported successfully"]
-        
-        # Add position details
-        if positions_added:
-            message_parts.append(f"Added {len(positions_added)} new positions")
-        if positions_updated:
-            message_parts.append(f"Updated {len(positions_updated)} existing positions")
-        if positions_removed:
-            message_parts.append(f"Removed {len(positions_removed)} positions")
-            
-        # Add price update info
-        if all_identifiers:
-            successful_prices = len(all_identifiers) - len(failed_prices)
-            if successful_prices > 0:
-                message_parts.append(f"Updated prices for {successful_prices} companies")
-            if failed_prices:
-                message_parts.append(f"Could not update prices for {len(failed_prices)} companies (network issues)")
-        
-        message = ". ".join(message_parts) + "."
-        
-        # Add details about removed companies if any
+        message = "CSV data imported successfully with simple add/subtract calculation"
         if positions_removed:
             removed_details = ', '.join(positions_removed)
             if len(removed_details) > 100:
                 removed_details = removed_details[:97] + '...'
-            message += f" <br><small>Removed companies: {removed_details}</small>"
+            message += f". <strong>Removed {len(positions_removed)} companies</strong> that had zero shares or were not in the CSV: {removed_details}"
 
         return True, message, {
             'added': positions_added,

@@ -25,10 +25,10 @@ COPY . .
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
-# Ensure data directories exist with correct permissions\n\
-mkdir -p /data/database/backups /data/uploads\n\
-chown -R app:app /data\n\
-chmod -R 755 /data\n\
+# Ensure app directories exist with correct permissions\n\
+mkdir -p /app/database/backups\n\
+chown -R app:app /app\n\
+chmod -R 755 /app\n\
 # Switch to app user and run the application\n\
 exec gosu app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 

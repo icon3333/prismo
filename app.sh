@@ -17,8 +17,8 @@ NC='\033[0m' # No Color
 APP_NAME="portfolio_rebalancer"
 CONTAINER_NAME="portfolio_rebalancer"
 PORT="8065"
-DATA_DIR="/data"
-BACKUP_DIR="/data/backups"
+DATA_DIR="app/database"
+BACKUP_DIR="app/database/backups"
 
 # Function to print colored output
 log_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
@@ -199,8 +199,8 @@ do_rebuild() {
     
     # Create necessary directories
     log_info "Setting up directories..."
-    sudo mkdir -p "$DATA_DIR/database/backups" "$DATA_DIR/uploads" "$BACKUP_DIR" 2>/dev/null || {
-        mkdir -p "$DATA_DIR/database/backups" "$DATA_DIR/uploads" "$BACKUP_DIR" 2>/dev/null || true
+    sudo mkdir -p "$DATA_DIR" "$BACKUP_DIR" 2>/dev/null || {
+        mkdir -p "$DATA_DIR" "$BACKUP_DIR" 2>/dev/null || true
     }
     
     # Set permissions
@@ -226,7 +226,7 @@ do_rebuild() {
 # Generated automatically on $(date)
 
 SECRET_KEY=$SECRET_KEY
-DATABASE_URL=sqlite:////data/database/portfolio.db
+DATABASE_URL=sqlite:///app/database/portfolio.db
 FLASK_ENV=production
 PYTHONUNBUFFERED=1
 EOF

@@ -6,14 +6,14 @@ services:
     ports:
       - "8065:8065"
     volumes:
-      # Create and mount local data directory for persistence
-      - ./data:/data
+      # Mount app/database directory for persistence
+      - ./app/database:/app/database
       # Mount environment file
       - ./.env:/app/.env:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:////data/database/portfolio.db
+      - DATABASE_URL=sqlite:///app/database/portfolio.db
     labels:
       # Enable autoheal monitoring
       - "autoheal=true"

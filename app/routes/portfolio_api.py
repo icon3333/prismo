@@ -622,7 +622,8 @@ def get_portfolio_data_api():
         if not portfolio_data:
             logger.warning(
                 f"No portfolio data found for account_id: {account_id}")
-            return jsonify({'error': 'Portfolio data could not be loaded. It may have been deleted or is missing from the database.'}), 404
+            # Return empty array instead of 404 for no data
+            return jsonify([])
         else:
             logger.info(
                 f"Successfully retrieved {len(portfolio_data)} portfolio items")
@@ -810,15 +811,37 @@ def upload_csv():
     # Process the file
     try:
         logger.info("Starting CSV file processing...")
+        
+        # Set initial progress
+        session['csv_upload_progress'] = {
+            'current': 0,
+            'total': 100,
+            'percentage': 0,
+            'status': 'processing',
+            'message': 'Starting upload...'
+        }
+        
         # Create backup
         backup_database()
+        
+        # Update progress
+        session['csv_upload_progress']['percentage'] = 10
+        session['csv_upload_progress']['message'] = 'Reading file...'
 
         # Read file content
         file_content = file.read().decode('utf-8')
         logger.info(f"CSV file content length: {len(file_content)} characters")
+        
+        # Update progress
+        session['csv_upload_progress']['percentage'] = 30
+        session['csv_upload_progress']['message'] = 'Processing data...'
 
         # Try to process the data
         success, message, result = process_csv_data(account_id, file_content)
+        
+        # Update progress
+        session['csv_upload_progress']['percentage'] = 90
+        session['csv_upload_progress']['message'] = 'Finalizing...'
 
         if success:
             # Show detailed success message
@@ -834,6 +857,15 @@ def upload_csv():
                     f"Removed {len(result['removed'])} positions with zero shares")
 
             success_message = f"CSV data imported successfully. {' | '.join(message_parts)}"
+            
+            # Set final progress
+            session['csv_upload_progress'] = {
+                'current': 100,
+                'total': 100,
+                'percentage': 100,
+                'status': 'completed',
+                'message': 'Upload completed successfully!'
+            }
             
             if is_ajax:
                 return jsonify({'success': True, 'message': success_message})
@@ -896,6 +928,15 @@ def upload_csv():
             session['use_default_portfolio'] = True
             
         else:
+            # Set failed progress
+            session['csv_upload_progress'] = {
+                'current': 0,
+                'total': 100,
+                'percentage': 0,
+                'status': 'failed',
+                'message': message
+            }
+            
             if is_ajax:
                 return jsonify({'success': False, 'message': message})
             else:
@@ -904,6 +945,16 @@ def upload_csv():
     except Exception as e:
         logger.error(f"Error processing CSV: {str(e)}", exc_info=True)
         error_message = f'Error processing CSV: {str(e)}'
+        
+        # Set error progress
+        session['csv_upload_progress'] = {
+            'current': 0,
+            'total': 100,
+            'percentage': 0,
+            'status': 'failed',
+            'message': error_message
+        }
+        
         if is_ajax:
             return jsonify({'success': False, 'message': error_message})
         else:

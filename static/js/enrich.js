@@ -170,12 +170,12 @@ const ProgressManager = {
                     this.setProgress(0, 'Upload failed');
                 }
 
-                // Ensure minimum display time before hiding
-                const timeRemaining = this.currentJob.minimumDisplayTime ?
-                    Math.max(0, this.currentJob.minimumDisplayTime - Date.now()) : 1500;
-
+                // Stop tracking immediately to prevent further polling
+                this.stopTracking();
+                
+                // Hide progress after a brief delay
                 setTimeout(() => {
-                    this.complete();
+                    this.hide();
                     // Clear the progress from session after completion
                     fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
 
@@ -185,11 +185,12 @@ const ProgressManager = {
                             window.location.reload();
                         }, 1000);
                     }
-                }, Math.max(timeRemaining, 1500));
+                }, 1500);
             }
         } catch (error) {
             console.error('Error checking CSV upload progress:', error);
-            this.setProgress(0, 'Error checking progress');
+            // Don't set progress to 0 on error, just log it
+            // This prevents the progress from resetting during temporary network issues
         }
     },
 
@@ -383,7 +384,11 @@ const FileUploadHandler = {
 
     async submitFileAjax(file, actionUrl) {
         try {
-            console.log('Submitting CSV file via AJAX...');
+            console.log('Submitting CSV file via AJAX...', {
+                fileName: file.name,
+                fileSize: file.size,
+                actionUrl: actionUrl
+            });
 
             const formData = new FormData();
             formData.append('csv_file', file);
@@ -392,27 +397,46 @@ const FileUploadHandler = {
                 method: 'POST',
                 body: formData,
                 headers: {
-                    'Accept': 'application/json'
-                }
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                credentials: 'same-origin'
             });
 
+            console.log('Upload response status:', response.status);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             const result = await response.json();
+            console.log('Upload response data:', result);
 
             if (result.success) {
                 console.log('CSV upload successful:', result.message);
-                // Success messages will be shown via flash messages after page reload
+                ProgressManager.setProgress(100, 'Upload completed successfully!');
+                
+                // Wait a bit to show the completion message
                 setTimeout(() => {
                     window.location.reload();
-                }, 1000);
+                }, 1500);
             } else {
                 console.error('CSV upload failed:', result.message);
                 ProgressManager.complete();
-                this.showErrorMessage(result.message);
+                this.showErrorMessage(result.message || 'Upload failed');
             }
         } catch (error) {
             console.error('Error during AJAX CSV upload:', error);
             ProgressManager.complete();
-            this.showErrorMessage('Error uploading file. Please try again.');
+            
+            let errorMessage = 'Error uploading file. Please try again.';
+            if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+                errorMessage = 'Network error during upload. Please check your connection and try again.';
+            } else if (error.message.includes('HTTP error')) {
+                errorMessage = `Server error during upload: ${error.message}`;
+            }
+            
+            this.showErrorMessage(errorMessage);
         }
     },
 
@@ -851,8 +875,24 @@ class PortfolioTableApp {
                         const response = await fetch('/portfolio/api/portfolio_data', {
                             cache: 'no-store'
                         });
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        
                         const data = await response.json();
-                        this.portfolioItems = data;
+                        
+                        // Ensure data is an array
+                        if (Array.isArray(data)) {
+                            this.portfolioItems = data;
+                        } else if (data && data.error) {
+                            console.error('API error:', data.error);
+                            this.portfolioItems = [];
+                        } else {
+                            console.warn('Unexpected data format, using empty array');
+                            this.portfolioItems = [];
+                        }
+                        
                         console.log('Loaded portfolio items:', this.portfolioItems);
 
                         // Extract unique portfolios from the data that are actually in use
@@ -1426,17 +1466,11 @@ class PortfolioTableApp {
                         console.log('Portfolio options type:', typeof data, Array.isArray(data));
 
                         if (Array.isArray(data)) {
-                            this.companies = data.map(item => ({
-                                id: item.id,
-                                company: item.company || '',
-                                identifier: item.identifier || '',
-                                portfolio: item.portfolio || 'Unassigned',
-                                category: item.category || ''
-                            }));
-                            console.log('Processed company data:', this.companies.length, 'items');
+                            this.portfolioOptions = data.filter(p => p && p !== '-');
+                            console.log('Processed portfolio options:', this.portfolioOptions.length, 'items');
                         } else {
                             console.warn('Invalid portfolio options format from server');
-                            this.companies = [];
+                            this.portfolioOptions = [];
                         }
                     })
                     .catch(error => {

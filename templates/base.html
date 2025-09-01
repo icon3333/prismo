@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Portfolio Rebalancer{% endblock %}</title>
+
+    <!-- Bulma CSS (base styles) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Bulma Tooltip Extension -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-tooltip@3.0.2/dist/css/bulma-tooltip.min.css">
+
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
+
+    <!-- Chart Configuration -->
+    <script
+        src="{{ url_for('static', filename='js/apex_chart_config.js') }}?v=colorfix2{{ range(1, 10000) | random }}"></script>
+
+    <!-- Custom CSS (overrides) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1, 10000) | random }}">
+
+    <!-- Bulk Edit Styles -->
+    <link rel="stylesheet"
+        href="{{ url_for('static', filename='css/bulk-edit.css') }}?v={{ range(1, 10000) | random }}">
+
+    {% block head_extras %}{% endblock %}
+
+    <style>
+        /* Fix for the empty space issue */
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+        }
+
+        .content-container {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .footer {
+            margin-top: 0;
+            padding-top: 1.5rem;
+            padding-bottom: 1.5rem;
+        }
+
+        /* Sidebar scrolling fix */
+        .sidebar-container {
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navigation -->
+    {% include 'components/navbar.html' %}
+
+    <div class="main-wrapper">
+        <!-- Sidebar - Show by default unless show_sidebar is explicitly set to false by child template -->
+        {% if show_sidebar is not defined or show_sidebar %}
+        <div class="sidebar-container" style="width: 240px; flex-shrink: 0;">
+            {% include 'components/sidebar.html' %}
+        </div>
+        {% endif %}
+
+        <!-- Main Content -->
+        <div class="content-container" {% if show_sidebar is defined and not show_sidebar %} style="width: 100%;" {%
+            endif %}>
+            <main class="section">
+                <div class="container">
+                    <!-- Flash Messages -->
+                    {% include 'components/messages.html' %}
+
+                    <!-- Page Content -->
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    {% include 'components/footer.html' %}
+
+    <!-- Vue.js (for components that need it) -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+
+    <!-- Axios for AJAX requests -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- jsPDF for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- Main JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

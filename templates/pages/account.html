@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Account Management - Portfolio Rebalancer{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title">
+        <span class="icon-text">
+            <span class="icon">
+                <i class="fas fa-user-cog"></i>
+            </span>
+            <span>Account Management</span>
+        </span>
+    </h1>
+
+    <h2 class="section-title">Account Information</h2>
+    <div class="columns">
+        <div class="column is-4">
+            <div class="card">
+                <header class="card-header">
+                    <p class="card-header-title">
+                        <span class="icon-text">
+                            <span class="icon">
+                                <i class="fas fa-id-card"></i>
+                            </span>
+                            <span>Account Details</span>
+                        </span>
+                    </p>
+                </header>
+                <div class="card-content">
+                    <div class="content">
+                        <div class="field">
+                            <label class="label">Username</label>
+                            <div class="control">
+                                <input class="input" type="text" value="{{ account.username }}" disabled>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">Account ID</label>
+                            <div class="control">
+                                <input class="input" type="text" value="{{ account.id }}" disabled>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">Created At</label>
+                            <div class="control">
+                                <input class="input" type="text" value="{{ account.created_at }}" disabled>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label class="label">Last Price Update</label>
+                            <div class="control">
+                                <input class="input" type="text" value="{{ account.last_price_update or 'Never' }}"
+                                    disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="column is-8">
+            <div class="tabs mb-4">
+                <ul class="nav-tabs" id="accountTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="settings-tab" type="button">Settings</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="delete-tab" type="button">Delete</button>
+                    </li>
+                </ul>
+            </div>
+            <div class="tab-content" id="accountTabsContent">
+                <div class="tab-pane active" id="settings" role="tabpanel">
+                    <div class="card mb-5">
+                        <header class="card-header">
+                            <p class="card-header-title">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <i class="fas fa-edit"></i>
+                                    </span>
+                                    <span>Update Username</span>
+                                </span>
+                            </p>
+                        </header>
+                        <div class="card-content">
+                            <form action="{{ url_for('account.update_account') }}" method="post">
+                                <div class="field">
+                                    <label class="label">New Username</label>
+                                    <div class="control has-icons-left">
+                                        <input class="input" type="text" name="new_username" placeholder="Enter new username" required>
+                                        <span class="icon is-small is-left">
+                                            <i class="fas fa-user"></i>
+                                        </span>
+                                    </div>
+                                    <p class="help">Choose a unique username for your account</p>
+                                </div>
+
+                                <div class="field">
+                                    <div class="control">
+                                        <button type="submit" class="button is-primary">
+                                            <span class="icon">
+                                                <i class="fas fa-save"></i>
+                                            </span>
+                                            <span>Update Username</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-pane" id="delete" role="tabpanel" style="display: none;">
+                    <div class="card mb-5">
+                        <header class="card-header has-background-warning-light">
+                            <p class="card-header-title has-text-warning-dark">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <i class="fas fa-trash"></i>
+                                    </span>
+                                    <span>Delete Stock/Crypto</span>
+                                </span>
+                            </p>
+                        </header>
+                        <div class="card-content">
+                            <div class="content">
+                                <div class="notification is-info is-light">
+                                    <p><strong>Info:</strong> This will remove all stock and crypto data for your current account, including companies, shares, and market prices. This action cannot be undone.</p>
+                                </div>
+
+                                <form action="{{ url_for('account.delete_stocks_crypto') }}" method="post" id="delete-stocks-form">
+                                    <div class="field">
+                                        <div class="control">
+                                            <button type="submit" class="button is-warning">
+                                                <span class="icon">
+                                                    <i class="fas fa-chart-line"></i>
+                                                </span>
+                                                <span>Delete All Stocks & Crypto</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-5">
+                        <header class="card-header has-background-info-light">
+                            <p class="card-header-title has-text-info-dark">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <i class="fas fa-undo"></i>
+                                    </span>
+                                    <span>Reset Account Settings</span>
+                                </span>
+                            </p>
+                        </header>
+                        <div class="card-content">
+                            <div class="content">
+                                <div class="notification is-info is-light">
+                                    <p><strong>Info:</strong> This will clear all saved settings for this account and restore defaults.</p>
+                                </div>
+
+                                <form action="{{ url_for('account.reset_account_settings') }}" method="post" id="reset-account-form">
+                                    <div class="field">
+                                        <div class="control">
+                                            <button type="submit" class="button is-info">
+                                                <span class="icon">
+                                                    <i class="fas fa-undo"></i>
+                                                </span>
+                                                <span>Reset Account Settings</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <header class="card-header has-background-danger-light">
+                            <p class="card-header-title has-text-danger">
+                                <span class="icon-text">
+                                    <span class="icon">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </span>
+                                    <span>Delete Account</span>
+                                </span>
+                            </p>
+                        </header>
+                        <div class="card-content">
+                            <div class="content">
+                                <div class="notification is-warning is-light">
+                                    <p><strong>Warning:</strong> Deleting your account is permanent and cannot be undone. All your portfolio data, preferences, and history will be permanently removed.</p>
+                                </div>
+
+                                <form action="{{ url_for('account.delete_account') }}" method="post" id="delete-account-form">
+                                    <div class="field">
+                                        <label class="label">Confirmation</label>
+                                        <div class="control">
+                                            <input class="input" type="text" name="confirmation" placeholder="Type DELETE to confirm" required>
+                                        </div>
+                                        <p class="help">Type <strong>DELETE</strong> in uppercase to confirm account deletion</p>
+                                    </div>
+
+                                    <div class="field">
+                                        <div class="control">
+                                            <button type="submit" class="button is-danger" id="delete-button" disabled>
+                                                <span class="icon">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </span>
+                                                <span>Delete My Account</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Delete account confirmation validator
+        const confirmInput = document.querySelector('input[name="confirmation"]');
+        const deleteButton = document.getElementById('delete-button');
+
+        if (confirmInput && deleteButton) {
+            confirmInput.addEventListener('input', function () {
+                deleteButton.disabled = this.value !== 'DELETE';
+            });
+        }
+
+        // Delete account form submission confirmation
+        const deleteForm = document.getElementById('delete-account-form');
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', function (e) {
+                if (!confirm('Are you sure you want to permanently delete this account? This action cannot be undone.')) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        // Delete stocks/crypto form submission confirmation
+        const deleteStocksForm = document.getElementById('delete-stocks-form');
+        if (deleteStocksForm) {
+            deleteStocksForm.addEventListener('submit', function (e) {
+                if (!confirm('Are you sure you want to delete all stocks and crypto data for this account? This will remove all companies, shares, and market prices. This action cannot be undone.')) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        // Reset settings confirmation
+        const resetForm = document.getElementById('reset-account-form');
+        if (resetForm) {
+            resetForm.addEventListener('submit', function (e) {
+                if (!confirm('Reset all saved settings for this account?')) {
+                    e.preventDefault();
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

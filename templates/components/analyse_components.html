@@ -1,0 +1,260 @@
+<!-- analyse_components.html -->
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Portfolio Analysis Chart Components</title>
+    <!-- ApexCharts is included in base.html -->
+    <style>
+        .sunburst-legend {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .legend-item.highlighted {
+            font-weight: bold;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <script>
+        /**
+         * NOTE:
+         * -------
+         * This version uses ApexCharts for all visualizations.
+         * It assumes that the following global variables
+         * are set from your main "analyse.html" script:
+         *
+         *   window.portfolioData
+         *   window.formatCurrency
+         *   window.formatPercentage
+         *   window.generateColors
+         */
+
+        window.PortfolioCharts = (function () {
+            // Store chart instances for updates
+            const chartInstances = {};
+
+            /**
+             * Creates a doughnut chart with ApexCharts.
+             * @param {string} elementId - ID of the element to render chart in
+             * @param {Array<string>} labels - Array of labels
+             * @param {Array<number>} values - Array of actual monetary values
+             * @param {string} title - Chart title
+             * @param {Array<string>} colors - Array of colors
+             * @param {Array<number>} percentages - Optional array of percentages for display
+             */
+            function createDoughnutChart(elementId, labels, values, title, colors, percentages) {
+                // Use the standardized chart configuration with consistent styling
+                const overrides = {
+                    title: title || '',
+                    showTotal: true,
+                    height: 350
+                    // Colors will be automatically assigned consistently based on labels
+                    // Only override colors if explicitly provided and different from standard mapping
+                };
+
+                // Only override colors if explicitly provided and they're custom colors
+                // Otherwise, let ChartConfig.createStandardDoughnutChart use consistent color mapping
+                if (colors && colors.length > 0) {
+                    // Check if these are custom colors (not from our standard mapping)
+                    const hasCustomColors = colors.some(color =>
+                        !Object.values(ChartConfig.colorMapping).flat().includes(color)
+                    );
+                    if (hasCustomColors) {
+                        overrides.colors = colors;
+                    }
+                }
+
+                // Use the centralized standardized chart configuration
+                return ChartConfig.createStandardDoughnutChart(elementId, labels, values, overrides);
+            }
+
+            /**
+             * Creates a chart for category breakdowns using nested donut charts.
+             * Since Frappe Charts doesn't have sunburst, we'll create a custom visualization
+             */
+            function createSunburstChart(elementId, portfolio, formatCurrency, formatPercentage, generateColors) {
+                console.log(`Creating category chart for portfolio ${portfolio.id}`);
+
+                // Check if we have the necessary functions globally
+                formatCurrency = formatCurrency || window.formatCurrency || (v => v);
+                formatPercentage = formatPercentage || window.formatPercentage || (v => v);
+                generateColors = generateColors || window.generateColors || ChartConfig.generateColors;
+
+                const chartContainer = document.getElementById(elementId);
+                if (!chartContainer) {
+                    console.error(`Element with id ${elementId} not found`);
+                    return null;
+                }
+
+                // Ensure element is visible and has dimensions
+                chartContainer.style.display = 'block';
+                chartContainer.style.height = '450px';
+                chartContainer.style.width = '100%';
+                chartContainer.style.visibility = 'visible';
+                chartContainer.style.opacity = '1';
+
+                // Clear any existing content
+                chartContainer.innerHTML = '';
+
+                // Ensure categories exist
+                const categories = portfolio.categories || [];
+                if (categories.length === 0) {
+                    console.warn(`No categories found for portfolio ${portfolio.id}`);
+                    chartContainer.innerHTML = '<div class="has-text-centered p-6">No category data available</div>';
+                    return null;
+                }
+
+                console.log(`Portfolio ${portfolio.id} has ${categories.length} categories`);
+
+                // For a sunburst-like visualization, we'll create a nested donut chart
+                // First, prepare the data for categories
+                const categoryLabels = categories.map(cat => `${cat.name} (${formatPercentage(cat.percentage)})`);
+                const categoryValues = categories.map(cat => cat.currentValue);
+                // Use consistent colors based on category names
+                const categoryNames = categories.map(cat => cat.name);
+                const categoryColors = ChartConfig.getConsistentColors(categoryNames);
+
+                // Create a container for the main chart and a details section
+                const mainContainer = document.createElement('div');
+                mainContainer.style.height = '100%';
+                mainContainer.style.display = 'flex';
+                mainContainer.style.flexDirection = 'column';
+
+                // Chart container
+                const chartDiv = document.createElement('div');
+                chartDiv.style.flex = '1';
+                chartDiv.style.minHeight = '300px';
+                chartDiv.id = `${elementId}_chart`;
+
+                // Details container
+                const detailsDiv = document.createElement('div');
+                detailsDiv.style.height = '150px';
+                detailsDiv.style.overflowY = 'auto';
+                detailsDiv.style.padding = '10px';
+                detailsDiv.style.borderTop = '1px solid #e0e0e0';
+                detailsDiv.innerHTML = '<p class="has-text-centered has-text-grey">Click on a category to see details</p>';
+
+                mainContainer.appendChild(chartDiv);
+                mainContainer.appendChild(detailsDiv);
+                chartContainer.appendChild(mainContainer);
+
+                // Create the doughnut chart using standardized configuration
+                const chart = ChartConfig.createStandardDoughnutChart(chartDiv.id,
+                    categories.map(cat => cat.name),
+                    categoryValues,
+                    {
+                        title: 'Category Breakdown',
+                        showTotal: true,
+                        height: 350
+                        // Colors will be automatically assigned consistently based on category names
+                    }
+                );
+
+                // Add click handler to show category details
+                chartDiv.addEventListener('click', function (e) {
+                    // Find which segment was clicked (this is a simplified approach)
+                    // In practice, you might need to analyze the click coordinates
+                    const rect = chartDiv.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    // For now, we'll show all categories with their companies
+                    let detailsHTML = '<div class="category-details">';
+
+                    categories.forEach((category, idx) => {
+                        detailsHTML += `
+                    <div class="mb-3">
+                        <h5 class="has-text-weight-bold" style="color: ${categoryColors[idx]}">
+                            ${category.name} - ${formatCurrency(category.currentValue)} (${formatPercentage(category.percentage)})
+                        </h5>
+                        <div class="ml-3">
+                `;
+
+                        category.companies.forEach(company => {
+                            detailsHTML += `
+                        <div class="is-size-7">
+                            ${company.name}: ${formatCurrency(company.currentValue)} 
+                            (${formatPercentage(company.categoryPercentage)} of category)
+                        </div>
+                    `;
+                        });
+
+                        detailsHTML += '</div></div>';
+                    });
+
+                    detailsHTML += '</div>';
+                    detailsDiv.innerHTML = detailsHTML;
+                });
+
+                // Store the chart instance
+                chartInstances[elementId] = chart;
+
+                return chartContainer;
+            }
+
+            /**
+             * Helper function to create lighter/darker shades of a color
+             */
+            function adjustColorBrightness(color, percent) {
+                // Simple brightness adjustment
+                const num = parseInt(color.replace("#", ""), 16);
+                const amt = Math.round(2.55 * percent);
+                const R = (num >> 16) + amt;
+                const G = (num >> 8 & 0x00FF) + amt;
+                const B = (num & 0x0000FF) + amt;
+                return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+                    (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+                    (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
+            }
+
+            /**
+             * Updates an existing doughnut chart with new data.
+             */
+            function updateDoughnutChart(elementId, labels, values, colors) {
+                ChartConfig.updateDoughnutChart(elementId, labels, values, colors);
+            }
+
+            /**
+             * Resizes charts whenever the window is resized
+             */
+            function setupResizeHandlers() {
+                window.addEventListener('resize', () => {
+                    // Frappe Charts handle resize automatically
+                    // Just trigger a re-render for any custom visualizations
+                    Object.keys(chartInstances).forEach(id => {
+                        const chart = chartInstances[id];
+                        if (chart && chart.update) {
+                            chart.update();
+                        }
+                    });
+                });
+            }
+
+            /**
+             * Clean up chart instances
+             */
+            function destroyChart(elementId) {
+                if (chartInstances[elementId]) {
+                    delete chartInstances[elementId];
+                }
+            }
+
+            // Return the public API
+            return {
+                createDoughnutChart: createDoughnutChart,
+                createSunburstChart: createSunburstChart,
+                updateDoughnutChart: updateDoughnutChart,
+                setupResizeHandlers: setupResizeHandlers,
+                destroyChart: destroyChart
+            };
+        })();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,314 @@
+/**
+ * Portfolio Manager - Allocation Builder Page Styles
+ * Extends the core design system with page-specific styles
+ */
+
+/* ===== Build Allocation Page Extensions ===== */
+
+/* Section Title Styling */
+.section-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--primary-light);
+}
+
+/* Budget Card Styles */
+.budget-card {
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  margin-bottom: var(--space-xl);
+  padding: var(--space-xl);
+}
+
+.budget-results {
+  background-color: var(--darker-bg);
+  padding: var(--space-lg) var(--space-xl);
+  border-radius: var(--border-radius);
+  margin-top: var(--space-lg);
+}
+
+.result-label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.result-value {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.available-percentage {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-left: var(--space-sm);
+}
+
+/* Form field spacing and layout */
+.field {
+  margin-bottom: var(--space-md);
+}
+
+.label {
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: var(--space-xs);
+  font-size: 0.95rem;
+}
+
+/* Global Allocation Rules Card */
+.card {
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  margin-bottom: var(--space-xl);
+  padding: var(--space-lg) var(--space-xl);
+}
+
+/* Allocation Rules List Styles */
+.allocation-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rule-item:last-child {
+  border-bottom: none;
+}
+
+.rule-description {
+  flex: 1;
+  margin-right: var(--space-lg);
+}
+
+.rule-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: var(--space-xs);
+}
+
+.rule-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0;
+  line-height: 1.4;
+}
+
+.rule-input {
+  flex-shrink: 0;
+  width: 140px;
+}
+
+.rule-input .field {
+  margin-bottom: 0;
+}
+
+.rule-input .input {
+  text-align: center;
+  font-weight: 500;
+}
+
+/* Compact Box for Portfolio Items */
+.compact-box {
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-lg);
+}
+
+/* Portfolio Toggle Button */
+.portfolio-toggle {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: var(--darker-bg);
+  transition: background-color var(--transition-speed) var(--transition-func);
+}
+
+.portfolio-toggle:hover {
+  background-color: var(--primary-light);
+}
+
+.portfolio-toggle i {
+  color: var(--primary);
+}
+
+/* Add Position Section */
+.add-position-section {
+  background-color: var(--darker-bg);
+  padding: var(--space-lg);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--space-lg);
+  margin-top: var(--space-lg);
+}
+
+/* Custom styling for the remaining positions notification */
+.add-position-section .notification.is-warning {
+  padding: 0;
+  margin: 0;
+  height: 2.5rem;
+  /* Match input/select height */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-width: auto;
+  border-radius: var(--border-radius);
+}
+
+.add-position-section .notification.is-warning .has-text-weight-medium {
+  padding: 0 var(--space-md);
+  white-space: nowrap;
+}
+
+/* Placeholder Position Styling */
+.placeholder-position {
+  background-color: var(--primary-light);
+  font-style: italic;
+  border-radius: var(--border-radius);
+}
+
+.placeholder-position td:first-child {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.placeholder-position td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--primary);
+  border-top-left-radius: var(--border-radius);
+  border-bottom-left-radius: var(--border-radius);
+}
+
+.remaining-positions-text {
+  font-weight: 500;
+  color: var(--primary);
+}
+
+/* Table Styling Overrides for Build Page */
+.table tr {
+  background-color: var(--card-bg);
+  transition: background-color var(--transition-speed) var(--transition-func);
+}
+
+.table tr:hover {
+  background-color: var(--primary-light);
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 1rem;
+}
+
+.table-active {
+  background-color: var(--primary-light) !important;
+  border-radius: var(--border-radius);
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .budget-results {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+
+  .add-position-section {
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+
+  .table tr {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+
+  .table tr:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .budget-card .columns {
+    flex-direction: column;
+  }
+
+  .budget-results {
+    padding: var(--space-md);
+  }
+
+  .result-item {
+    margin-bottom: var(--space-md);
+  }
+
+  .result-value {
+    font-size: 1.25rem;
+  }
+
+  .compact-box {
+    padding: var(--space-md);
+  }
+
+  .add-position-section {
+    padding: var(--space-md);
+  }
+
+  /* Allocation Rules responsive adjustments */
+  .rule-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+  }
+
+  .rule-description {
+    margin-right: 0;
+  }
+
+  .rule-input {
+    width: 100%;
+    max-width: 200px;
+  }
+}
+
+/* Portfolio Value Hint Styles */
+.portfolio-value-hint {
+  color: var(--primary);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  margin-left: var(--space-xs);
+}
+
+.portfolio-value-hint:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+  transform: scale(1.02);
+}
+
+.portfolio-value-hint:active {
+  transform: scale(0.98);
+}

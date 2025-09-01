@@ -1,0 +1,87 @@
+<aside class="menu p-4">
+    {% if session.account_id %}
+    <p class="menu-label">
+        Overview
+    </p>
+    <ul class="menu-list">
+        <li>
+            <a href="{{ url_for('main.index') }}" class="{{ 'is-active' if request.endpoint == 'main.index' }}">
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-home"></i>
+                    </span>
+                    <span>Overview</span>
+                </span>
+            </a>
+        </li>
+    </ul>
+
+    <p class="menu-label">
+        Portfolios
+    </p>
+    <ul class="menu-list">
+        <li>
+            <a href="{{ url_for('portfolio.enrich') }}"
+                class="{{ 'is-active' if request.endpoint == 'portfolio.enrich' }}">
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-gem"></i>
+                    </span>
+                    <span>Enrich</span>
+                </span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('portfolio.risk_overview') }}"
+                class="{{ 'is-active' if request.endpoint == 'portfolio.risk_overview' }}">
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-chart-pie"></i>
+                    </span>
+                    <span>Risk Overview</span>
+                </span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('portfolio.analyse') }}"
+                class="{{ 'is-active' if request.endpoint == 'portfolio.analyse' }}">
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <span>Risk Detail</span>
+                </span>
+            </a>
+        </li>
+    </ul>
+
+    <p class="menu-label mt-5">
+        Allocation
+    </p>
+    <ul class="menu-list">
+        <li>
+            <a href="{{ url_for('portfolio.build') }}" {% if request.endpoint=='portfolio.build' %}class="is-active" {%
+                endif %}>
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-cubes"></i>
+                    </span>
+                    <span>Builder</span>
+                </span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('portfolio.allocate') }}"
+                class="{{ 'is-active' if request.endpoint == 'portfolio.allocate' }}">
+                <span class="icon-text">
+                    <span class="icon">
+                        <i class="fas fa-balance-scale"></i>
+                    </span>
+                    <span>Rebalancer</span>
+                </span>
+            </a>
+        </li>
+    </ul>
+    {% else %}
+    {% endif %}
+</aside>

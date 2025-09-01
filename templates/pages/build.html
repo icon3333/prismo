@@ -1,0 +1,411 @@
+{% extends 'base.html' %}
+
+{% block title %}Allocation Builder{% endblock %}
+
+{% block head_extras %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1000, 9999) | random }}">
+<link rel="stylesheet"
+  href="{{ url_for('static', filename='css/build-allocation.css') }}?v={{ range(1000, 9999) | random }}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1 class="title is-3 mb-4">Allocation Builder</h1>
+
+  <div id="allocation-builder" v-cloak>
+    <!-- Budget Management Section -->
+    <h2 class="section-title">Budget Management</h2>
+    <div class="budget-card">
+      <!-- Input Fields Row -->
+      <div class="columns is-variable is-4">
+        <div class="column">
+          <div class="field">
+            <label class="label">Total Net Worth</label>
+            <div class="control">
+              <input class="input" type="text" id="totalNetWorth" placeholder="Enter total net worth"
+                :value="getInputDisplayValue('totalNetWorth')" @input="budgetData.totalNetWorth = $event.target.value"
+                @focus="handleInputFocus('totalNetWorth')" @blur="handleInputBlur('totalNetWorth')">
+            </div>
+          </div>
+        </div>
+        <div class="column">
+          <div class="field">
+            <label class="label">
+              Already Invested
+              <span v-if="portfolioMetrics.total_value > 0" class="portfolio-value-hint"
+                @click="populateAlreadyInvested()" title="Click to use current portfolio value">
+                (${ formatCurrency(portfolioMetrics.total_value) })
+              </span>
+            </label>
+            <div class="control">
+              <input class="input" type="text" id="alreadyInvested" placeholder="Enter amount already invested"
+                :value="getInputDisplayValue('alreadyInvested')"
+                @input="budgetData.alreadyInvested = $event.target.value" @focus="handleInputFocus('alreadyInvested')"
+                @blur="handleInputBlur('alreadyInvested')">
+            </div>
+          </div>
+        </div>
+        <div class="column">
+          <div class="field">
+            <label class="label">Emergency Fund</label>
+            <div class="control">
+              <input class="input" type="text" id="emergencyFund" placeholder="Enter emergency fund amount"
+                :value="getInputDisplayValue('emergencyFund')" @input="budgetData.emergencyFund = $event.target.value"
+                @focus="handleInputFocus('emergencyFund')" @blur="handleInputBlur('emergencyFund')">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results Row -->
+      <div class="budget-results">
+        <div class="columns is-variable is-4">
+          <div class="column is-half">
+            <div class="result-item">
+              <span class="result-label">Total Investable Capital</span>
+              <div class="result-value">${ formatCurrency(budgetData.totalInvestableCapital) }</div>
+            </div>
+          </div>
+          <div class="column is-half">
+            <div class="result-item">
+              <span class="result-label">Available to Invest</span>
+              <div class="result-value">
+                ${ formatCurrency(budgetData.availableToInvest) }
+                <span class="available-percentage">(${availablePercentage}% of Total)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global Allocation Rules -->
+    <h2 class="section-title">Global Allocation Rules</h2>
+    <div class="card">
+      <div class="allocation-rules-list">
+        <!-- Maximum % per Stock -->
+        <div class="rule-item">
+          <div class="rule-description">
+            <h4 class="rule-title">Maximum % per Stock</h4>
+            <p class="rule-subtitle">Limits the maximum percentage allocation for any single stock position</p>
+          </div>
+          <div class="rule-input">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
+                  v-model.number="rules.maxPerStock">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Maximum % per Category -->
+        <div class="rule-item">
+          <div class="rule-description">
+            <h4 class="rule-title">Maximum % per Category</h4>
+            <p class="rule-subtitle">Limits the maximum percentage allocation for any single portfolio category</p>
+          </div>
+          <div class="rule-input">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
+                  v-model.number="rules.maxPerCategory">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Maximum % per Country -->
+        <div class="rule-item">
+          <div class="rule-description">
+            <h4 class="rule-title">Maximum % per Country</h4>
+            <p class="rule-subtitle">Limits the maximum percentage allocation for companies from any single country</p>
+          </div>
+          <div class="rule-input">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
+                  v-model.number="rules.maxPerCountry">
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+    <!-- Portfolio Allocation -->
+    <h2 class="section-title">Portfolio Allocation</h2>
+
+    <!-- Allocation Status Indicator -->
+    <div class="notification" :class="{
+        'is-success': isAllocationValid, 
+        'is-warning': isAllocationUnder, 
+        'is-danger': isAllocationOver
+    }">
+      <p class="has-text-weight-bold">
+        ${ allocationStatusMessage }
+      </p>
+    </div>
+
+    <!-- Portfolio List -->
+    <div v-if="portfolios.length > 0">
+      <div v-for="(portfolio, index) in portfolios" :key="index" class="compact-box">
+        <!-- Portfolio Header -->
+        <div class="columns is-vcentered is-variable is-4">
+          <div class="column is-3">
+            <label class="label">${ getPortfolioName(portfolio.id) }</label>
+          </div>
+          <div class="column is-3">
+            <div class="field">
+              <label class="label">Allocation %</label>
+              <input class="input" type="text" :value="parseFloat(portfolio.allocation).toFixed(0)"
+                @change="$event.target.value && $event.target.value.length > 0 ? portfolio.allocation = parseFloat($event.target.value) : null; updateAllocations()"
+                @focus="$event.target.select()">
+            </div>
+          </div>
+          <div class="column is-3">
+            <div class="field">
+              <label class="label">Amount</label>
+              <input class="input" type="text" :value="formatCurrency(calculateAllocationAmount(portfolio.allocation))"
+                readonly>
+            </div>
+          </div>
+          <div class="column is-2">
+            <div class="field">
+              <label class="label">Min Positions</label>
+              <input class="input" type="text" :value="portfolio.minPositions.toFixed(2)" readonly>
+            </div>
+          </div>
+          <div class="column is-1 has-text-centered">
+            <span class="portfolio-toggle" @click="togglePortfolioExpand(index)">
+              <i class="fas" :class="isPortfolioExpanded(index) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+            </span>
+          </div>
+        </div>
+
+        <!-- Position Management (collapsible) -->
+        <div v-if="isPortfolioExpanded(index)" class="mt-5">
+          <div class="columns is-variable is-4">
+            <div class="column is-4">
+              <div class="field">
+                <label class="checkbox">
+                  <input type="checkbox" v-model="portfolio.evenSplit" @change="updatePositionAllocations(index)">
+                  <span class="ml-2">Distribute evenly across positions</span>
+                </label>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label">Maximum Weight per Position</label>
+                <input class="input" type="text"
+                  :value="(100 / Math.max(1, Math.ceil(portfolio.minPositions))).toFixed(0) + '%'" readonly>
+              </div>
+            </div>
+          </div>
+
+          <!-- Add Position Section -->
+          <div class="add-position-section">
+            <div class="columns is-variable is-4">
+              <div class="column is-8">
+                <div class="field has-addons">
+                  <div class="control is-expanded">
+                    <div class="select is-fullwidth">
+                      <select v-model="portfolio.selectedPosition">
+                        <option value="">Select a position to add</option>
+                        <option v-for="company in availableCompaniesForPortfolio(portfolio.id)" :value="company.id"
+                          :key="company.id">
+                          ${ company.name }
+                        </option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="control">
+                    <button class="button is-primary" @click="addSelectedPosition(index)"
+                      :disabled="!portfolio.selectedPosition">
+                      Add Position
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="column is-4">
+                <div v-if="getRemainingPositionsCount(index) > 0" class="notification is-warning py-3">
+                  <span class="has-text-weight-medium">
+                    ${ getRemainingPositionsCount(index) } positions remaining
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Position List -->
+          <div class="table-responsive mt-4">
+            <table class="table is-fullwidth">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Weight %</th>
+                  <th>Allocation Amount</th>
+                  <th width="70"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(position, pIndex) in sortedPositions(portfolio.positions)" :key="pIndex"
+                  :class="{'placeholder-position': position.isPlaceholder}">
+                  <td>
+                    <div v-if="position.isPlaceholder" class="remaining-positions-text">
+                      ${ position.companyName }
+                    </div>
+                    <div v-else>
+                      ${ position.companyName || 'Select a company' }
+                    </div>
+                  </td>
+                  <td>
+                    <input class="input" type="text" :value="(position.weight || 0).toFixed(0)"
+                      @change="updateManualWeight(index, pIndex, $event.target.value)" @focus="$event.target.select()"
+                      :disabled="portfolio.evenSplit">
+                  </td>
+                  <td>
+                    <input class="input" type="text" :value="formatCurrency(calculatePositionAmount(index, pIndex))"
+                      readonly>
+                  </td>
+                  <td class="has-text-centered">
+                    <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded"
+                      style="width: 36px; height: 36px; padding: 0;" @click="removePosition(index, pIndex)"
+                      title="Remove position">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="portfolio.positions.length === 0">
+                  <td colspan="4" class="has-text-centered py-4">No positions added yet.</td>
+                </tr>
+              </tbody>
+              <tfoot v-if="portfolio.positions.length > 0">
+                <tr>
+                  <th>Total</th>
+                  <th>${ calculateTotalWeight(index).toFixed(0) }%</th>
+                  <th>${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }</th>
+                  <th></th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="notification is-info">
+      No portfolios with positions. Please add positions to your portfolios.
+    </div>
+
+    <!-- Allocation Summary -->
+    <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+      <h2 class="section-title mb-0">Allocation Summary</h2>
+      <div class="field is-grouped">
+        <div class="control">
+          <button class="button is-primary" @click="exportToCSV" :disabled="portfolios.length === 0">
+            <span class="icon">
+              <i class="fas fa-download"></i>
+            </span>
+            <span>Download as CSV</span>
+          </button>
+        </div>
+        <div class="control">
+          <button class="button is-info" @click="exportToPDF" :disabled="portfolios.length === 0">
+            <span class="icon">
+              <i class="fas fa-file-pdf"></i>
+            </span>
+            <span>Download as PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Table -->
+    <div class="table-responsive">
+      <table class="table is-fullwidth">
+        <thead>
+          <tr>
+            <th>Portfolio</th>
+            <th>Position</th>
+            <th>Global %</th>
+            <th>Portfolio %</th>
+            <th>To Be Invested</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(portfolio, index) in portfolios">
+            <!-- Portfolio row -->
+            <tr class="table-active">
+              <td class="has-text-weight-bold">
+                ${ getPortfolioName(portfolio.id) }
+              </td>
+              <td></td>
+              <td class="has-text-weight-bold">
+                ${ parseFloat(portfolio.allocation).toFixed(1) }%
+              </td>
+              <td class="has-text-weight-bold">100%</td>
+              <td class="has-text-weight-bold">
+                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }
+              </td>
+            </tr>
+
+            <!-- Position rows -->
+            <tr v-for="group in groupPositionsByWeight(portfolio.positions, portfolio)" v-if="group.weight > 0"
+              :class="{'placeholder-position': group.isPlaceholder}">
+              <td></td>
+              <td>
+                ${ group.companyName }
+              </td>
+              <td>
+                <span v-if="group.isPlaceholder">
+                  ${ ((portfolio.allocation * group.weight * group.count) / 100).toFixed(1) }%
+                </span>
+                <span v-else>
+                  ${ ((portfolio.allocation * group.weight) / 100).toFixed(1) }%
+                </span>
+              </td>
+              <td>
+                <span v-if="group.isPlaceholder">
+                  ${ (parseFloat(group.weight) * group.count).toFixed(1) }%
+                </span>
+                <span v-else>
+                  ${ parseFloat(group.weight).toFixed(1) }%
+                </span>
+              </td>
+              <td v-if="group.isPlaceholder">
+                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation) * group.weight * group.count / 100) }
+                <br>
+                <small class="has-text-grey">(${ formatCurrency(calculateAllocationAmount(portfolio.allocation) *
+                  group.weight / 100) } each)</small>
+              </td>
+              <td v-else>
+                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation) * group.weight / 100) }
+              </td>
+            </tr>
+          </template>
+          <tr v-if="portfolios.length === 0">
+            <td colspan="5" class="has-text-centered py-5">No portfolios added yet.</td>
+          </tr>
+        </tbody>
+        <tfoot v-if="portfolios.length > 0">
+          <tr>
+            <th>Total</th>
+            <th></th>
+            <th>${ calculateTotalAllocation().toFixed(1) }%</th>
+            <th>-</th>
+            <th>${ formatCurrency(calculateTotalAllocatedAmount()) }</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1000, 9999) | random }}"></script>
+<script src="{{ url_for('static', filename='js/builder.js') }}?v={{ range(1000, 9999) | random }}"></script>
+{% endblock %}

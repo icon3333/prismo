@@ -1,0 +1,313 @@
+/**
+ * Portfolio Manager - Allocation Page Styles
+ * Extends the core design system with page-specific styles
+ */
+
+/* ===== Allocation Page Extensions ===== */
+
+/* Header Content Layout */
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) 0;
+  margin-bottom: var(--space-md);
+  gap: var(--space-md);
+}
+
+/* Investment Input Styling */
+.investment-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: transparent;
+  flex: 1;
+  min-width: 320px;
+}
+
+.investment-input label {
+  margin: 0;
+  color: var(--text-color);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.input-group-text {
+  background: transparent;
+  color: var(--text-color);
+  border: none;
+  padding: var(--space-xs) var(--space-sm);
+  font-weight: 500;
+}
+
+/* Portfolio Select */
+.portfolio-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.portfolio-select label {
+  margin: 0;
+  color: var(--text-color);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Expand/Collapse Buttons */
+.btn-outline-primary {
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  background: transparent;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all var(--transition-speed) var(--transition-func);
+  cursor: pointer;
+}
+
+.btn-outline-primary:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-outline-secondary {
+  border: 1px solid var(--text-muted);
+  color: var(--text-muted);
+  background: transparent;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all var(--transition-speed) var(--transition-func);
+  cursor: pointer;
+}
+
+.btn-outline-secondary:hover {
+  background: var(--text-muted);
+  color: var(--bg);
+}
+
+/* Category and Position Row Styling */
+.category-row {
+  background-color: var(--darker-bg) !important;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.position-row td:first-child {
+  padding-left: var(--space-lg);
+}
+
+/* Total Row Styling */
+.total-row {
+  background-color: var(--darker-bg) !important;
+  font-weight: 600;
+}
+
+.total-row td {
+  border-top: 2px solid var(--primary);
+  border-bottom: none;
+}
+
+/* Missing Positions Styling */
+.missing-positions-row td {
+  border-left: 3px solid var(--warning);
+  background-color: rgba(255, 221, 87, 0.1);
+}
+
+/* Loading Spinner */
+.spinner-border {
+  display: block;
+  margin: var(--space-lg) auto;
+  width: 2rem;
+  height: 2rem;
+  border: 0.25rem solid var(--border-color);
+  border-right-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+/* Action Colors */
+.actions-positive {
+  color: var(--success);
+  font-weight: 500;
+}
+
+.actions-negative {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.actions-neutral {
+  color: var(--text-muted);
+}
+
+/* Column-specific styling */
+.allocation-after {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.value-after {
+  color: var(--success);
+  font-weight: 500;
+}
+
+.current-value {
+  font-weight: 500;
+}
+
+.target-value {
+  color: var(--info);
+  font-weight: 500;
+}
+
+.allocation-percentage {
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+/* Tab Navigation Override */
+.nav-tabs {
+  display: flex;
+  background-color: var(--darker-bg);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
+  overflow: hidden;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nav-tabs .nav-item {
+  flex: 1;
+  text-align: center;
+}
+
+.nav-tabs .nav-link {
+  border: none;
+  color: var(--text-muted);
+  padding: var(--space-md);
+  transition: all var(--transition-speed) var(--transition-func);
+  width: 100%;
+  text-align: center;
+  background-color: var(--darker-bg);
+  display: block;
+  cursor: pointer;
+}
+
+.nav-tabs .nav-link:hover {
+  color: var(--text-color);
+  background-color: var(--primary-light);
+}
+
+.nav-tabs .nav-link.active {
+  color: var(--primary);
+  border-bottom: 2px solid var(--primary);
+  background-color: var(--bg);
+}
+
+.tab-content {
+  padding-top: var(--space-md);
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  .nav-tabs {
+    background-color: var(--section-bg);
+  }
+
+  .nav-tabs .nav-link {
+    background-color: var(--section-bg);
+  }
+
+  .nav-tabs .nav-link.active {
+    background-color: var(--bg);
+  }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .investment-input {
+    width: 100%;
+    padding: var(--space-sm);
+    margin-top: var(--space-md);
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .input-group {
+    width: 100%;
+    margin-top: var(--space-xs);
+  }
+
+  .portfolio-select {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .nav-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .nav-tabs .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .nav-tabs .nav-link {
+    white-space: nowrap;
+    padding: var(--space-sm) var(--space-md);
+  }
+}
+
+/* Placeholder position styling */
+.placeholder-position {
+  font-style: italic;
+  color: #6c757d;
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.placeholder-position:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.missing-positions-category {
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+.missing-positions-category:hover {
+  background-color: rgba(255, 193, 7, 0.2);
+}
+
+/* Icon styling for placeholder positions */
+.placeholder-position .fa-plus-circle {
+  opacity: 0.6;
+}
+
+/* Tooltip styling for placeholder positions */
+.placeholder-position[title] {
+  cursor: help;
+}

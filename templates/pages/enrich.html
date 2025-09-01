@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% from "components/enrich_components.html" import head_extras, page_header, upload_section, portfolio_management,
+portfolio_data_section %}
+
+{% block title %}Enrich Portfolio Data - Portfolio Rebalancer{% endblock %}
+
+{% block head_extras %}
+{{ super() }}
+{{ head_extras() }}
+{% endblock %}
+
+{% block content %}
+{{ page_header() }}
+
+<!-- Upload and Management Section -->
+<h2 class="section-title">Data Management</h2>
+<div class="columns">
+    {{ upload_section(url_for) }}
+    {{ portfolio_management(url_for, portfolios) }}
+</div>
+
+<!-- Portfolio Data Section -->
+<h2 class="section-title">Portfolio Data</h2>
+{{ portfolio_data_section(portfolios) }}
+
+<!-- Hidden data elements for JavaScript -->
+<script id="portfolios-data" type="application/json">{{ portfolios|tojson|safe }}</script>
+<script id="default-portfolio" type="text/plain">{{ use_default_portfolio|lower|default('false')|string }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/enrich.js') }}"></script>
+{% endblock %}

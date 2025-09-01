@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio Allocation{% endblock %}
+
+{% block head_extras %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1000, 9999) | random }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/allocate.css') }}?v={{ range(1000, 9999) | random }}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1 class="title is-3 mb-4">Portfolio Allocation</h1>
+
+  <!-- Tab Navigation -->
+  <div class="header-content">
+    <div class="tabs">
+      <ul class="nav-tabs" id="allocationTabs" role="tablist">
+        <li class="nav-item">
+          <button class="nav-link active" id="global-tab" type="button" role="tab">
+            <i class="fas fa-globe mr-2"></i>Global Overview
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="detailed-tab" type="button" role="tab">
+            <i class="fas fa-chart-pie mr-2"></i>Detailed Overview
+          </button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Tab Content -->
+  <div class="tab-content" id="allocationTabsContent">
+    <!-- Global Overview Tab -->
+    <div class="tab-pane active" id="global" role="tabpanel">
+      <h2 class="section-title">Investment Settings</h2>
+      <!-- Investment Input in Global Overview -->
+      <div class="card">
+        <div class="investment-input">
+          <label class="label">Investment Amount:</label>
+          <div class="input-group">
+            <span class="input-group-text">€</span>
+            <input type="text" class="input" id="investment-amount" placeholder="Enter amount">
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title">Portfolio Allocations</h2>
+      <div class="card">
+        <div id="portfolio-table-container">
+          <!-- Table will be rendered here -->
+          <div class="has-text-centered">
+            <div class="spinner-border" role="status">
+              <span class="is-sr-only">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed Overview Tab -->
+    <div class="tab-pane" id="detailed" role="tabpanel">
+      <h2 class="section-title">Portfolio Details</h2>
+      <!-- Portfolio Selection Dropdown -->
+      <div class="card">
+        <div class="portfolio-select">
+          <label class="label">Select Portfolio:</label>
+          <div class="select is-fullwidth">
+            <select class="form-select" id="portfolio-select">
+              <!-- Options will be populated dynamically -->
+              <option value="">Select a portfolio</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Expand/Collapse buttons -->
+        <div class="mb-3">
+          <button type="button" class="btn btn-outline-primary btn-sm me-2" id="expand-all-btn">
+            <i class="fas fa-expand-arrows-alt me-1"></i>Expand All
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="collapse-all-btn">
+            <i class="fas fa-compress-arrows-alt me-1"></i>Collapse All
+          </button>
+        </div>
+
+        <!-- Single portfolio table will be rendered here -->
+        <div id="detailed-portfolio-container">
+          <div class="has-text-centered">
+            <div class="spinner-border" role="status">
+              <span class="is-sr-only">Loading...</span>
+            </div>
+          </div>
+        </div>
+        <div id="detailedChart" class="mt-4"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/allocate.js') }}?v={{ range(1000, 9999) | random }}"></script>
+{% endblock %}

@@ -1,0 +1,52 @@
+identifier;holdingname;shares;price;type;currency;broker;assettype;category;date;fee;tax
+AAPL;Apple Inc;25,00;180,50;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-15;9,99;0,00
+MSFT;Microsoft Corporation;30,00;374,25;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-16;9,99;0,00
+GOOGL;Alphabet Inc Class A;15,00;142,80;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-17;9,99;0,00
+TSLA;Tesla Inc;12,00;248,42;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-18;9,99;0,00
+NVDA;NVIDIA Corporation;18,00;722,48;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-19;9,99;0,00
+AMZN;Amazon.com Inc;22,00;155,74;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-20;9,99;0,00
+META;Meta Platforms Inc;20,00;484,52;buy;USD;Interactive Brokers;Stock;Large Cap Growth;2024-01-21;9,99;0,00
+BRK-B;Berkshire Hathaway Inc Class B;28,00;425,18;buy;USD;Interactive Brokers;Stock;Large Cap Value;2024-01-22;9,99;0,00
+JNJ;Johnson & Johnson;35,00;156,23;buy;USD;Interactive Brokers;Stock;Large Cap Value;2024-01-23;9,99;0,00
+PG;Procter & Gamble Co;32,00;158,74;buy;USD;Interactive Brokers;Stock;Large Cap Value;2024-01-24;9,99;0,00
+JPM;JPMorgan Chase & Co;24,00;168,92;buy;USD;Interactive Brokers;Stock;Financial Services;2024-01-25;9,99;0,00
+BAC;Bank of America Corp;65,00;33,47;buy;USD;Interactive Brokers;Stock;Financial Services;2024-01-26;9,99;0,00
+V;Visa Inc Class A;18,00;258,73;buy;USD;Interactive Brokers;Stock;Financial Services;2024-01-27;9,99;0,00
+MA;Mastercard Inc Class A;12,00;442,58;buy;USD;Interactive Brokers;Stock;Financial Services;2024-01-28;9,99;0,00
+XOM;Exxon Mobil Corp;42,00;102,35;buy;USD;Interactive Brokers;Stock;Energy;2024-01-29;9,99;0,00
+CVX;Chevron Corporation;28,00;147,82;buy;USD;Interactive Brokers;Stock;Energy;2024-01-30;9,99;0,00
+UNH;UnitedHealth Group Inc;15,00;524,67;buy;USD;Interactive Brokers;Stock;Healthcare;2024-02-01;9,99;0,00
+PFE;Pfizer Inc;58,00;27,89;buy;USD;Interactive Brokers;Stock;Healthcare;2024-02-02;9,99;0,00
+KO;Coca-Cola Co;45,00;59,18;buy;USD;Interactive Brokers;Stock;Consumer Staples;2024-02-03;9,99;0,00
+PEP;PepsiCo Inc;26,00;168,47;buy;USD;Interactive Brokers;Stock;Consumer Staples;2024-02-04;9,99;0,00
+ASML;ASML Holding NV;8,00;785,42;buy;EUR;Interactive Brokers;Stock;Technology;2024-02-05;9,99;0,00
+SAP;SAP SE;15,00;142,68;buy;EUR;Interactive Brokers;Stock;Technology;2024-02-06;9,99;0,00
+NESN.SW;Nestle SA;22,00;96,54;buy;CHF;Interactive Brokers;Stock;Consumer Staples;2024-02-07;9,99;0,00
+NOVN.SW;Novartis AG;28,00;87,32;buy;CHF;Interactive Brokers;Stock;Healthcare;2024-02-08;9,99;0,00
+ROG.SW;Roche Holding AG;18,00;242,80;buy;CHF;Interactive Brokers;Stock;Healthcare;2024-02-09;9,99;0,00
+MC.PA;LVMH Moet Hennessy Louis Vuitton SE;6,00;724,20;buy;EUR;Interactive Brokers;Stock;Consumer Discretionary;2024-02-10;9,99;0,00
+OR.PA;L'Oreal SA;12,00;386,45;buy;EUR;Interactive Brokers;Stock;Consumer Discretionary;2024-02-11;9,99;0,00
+TTE;TotalEnergies SE;32,00;64,82;buy;EUR;Interactive Brokers;Stock;Energy;2024-02-12;9,99;0,00
+7203.T;Toyota Motor Corp;85,00;2847,00;buy;JPY;Interactive Brokers;Stock;Consumer Discretionary;2024-02-13;9,99;0,00
+6758.T;Sony Group Corp;35,00;12450,00;buy;JPY;Interactive Brokers;Stock;Technology;2024-02-14;9,99;0,00
+9984.T;SoftBank Group Corp;22,00;5284,00;buy;JPY;Interactive Brokers;Stock;Technology;2024-02-15;9,99;0,00
+SHOP;Shopify Inc;14,00;74,58;buy;CAD;Interactive Brokers;Stock;Technology;2024-02-16;9,99;0,00
+CNQ;Canadian Natural Resources Ltd;38,00;73,25;buy;CAD;Interactive Brokers;Stock;Energy;2024-02-17;9,99;0,00
+005930.KS;Samsung Electronics Co Ltd;45,00;71200,00;buy;KRW;Interactive Brokers;Stock;Technology;2024-02-18;9,99;0,00
+000660.KS;SK Hynix Inc;28,00;138900,00;buy;KRW;Interactive Brokers;Stock;Technology;2024-02-19;9,99;0,00
+2330.TW;Taiwan Semiconductor Manufacturing Co Ltd;55,00;625,00;buy;TWD;Interactive Brokers;Stock;Technology;2024-02-20;9,99;0,00
+0700.HK;Tencent Holdings Ltd;68,00;305,40;buy;HKD;Interactive Brokers;Stock;Technology;2024-02-21;9,99;0,00
+9988.HK;Alibaba Group Holding Ltd;48,00;78,85;buy;HKD;Interactive Brokers;Stock;Technology;2024-02-22;9,99;0,00
+BTC-USD;Bitcoin;0,25;42850,00;buy;USD;Coinbase;Crypto;Cryptocurrency;2024-02-23;25,00;0,00
+ETH-USD;Ethereum;3,50;2689,45;buy;USD;Coinbase;Crypto;Cryptocurrency;2024-02-24;25,00;0,00
+BNB-USD;Binance Coin;8,00;324,58;buy;USD;Coinbase;Crypto;Cryptocurrency;2024-02-25;25,00;0,00
+ADA-USD;Cardano;2250,00;0,52;buy;USD;Coinbase;Crypto;Cryptocurrency;2024-02-26;25,00;0,00
+SOL-USD;Solana;24,00;98,74;buy;USD;Coinbase;Crypto;Cryptocurrency;2024-02-27;25,00;0,00
+VTI;Vanguard Total Stock Market ETF;35,00;234,52;buy;USD;Vanguard;ETF;Broad Market;2024-02-28;0,00;0,00
+VEA;Vanguard FTSE Developed Markets ETF;58,00;48,74;buy;USD;Vanguard;ETF;International Developed;2024-02-29;0,00;0,00
+VWO;Vanguard FTSE Emerging Markets ETF;72,00;41,28;buy;USD;Vanguard;ETF;Emerging Markets;2024-03-01;0,00;0,00
+BND;Vanguard Total Bond Market ETF;68,00;79,42;buy;USD;Vanguard;ETF;Bonds;2024-03-02;0,00;0,00
+VNQ;Vanguard Real Estate Index Fund ETF;42,00;87,35;buy;USD;Vanguard;ETF;Real Estate;2024-03-03;0,00;0,00
+GLD;SPDR Gold Shares;25,00;198,74;buy;USD;SPDR;ETF;Commodities;2024-03-04;0,00;0,00
+SLV;iShares Silver Trust;85,00;22,45;buy;USD;iShares;ETF;Commodities;2024-03-05;0,00;0,00
+USO;United States Oil Fund LP;48,00;68,92;buy;USD;USO;ETF;Commodities;2024-03-06;0,00;0,00

@@ -13,6 +13,7 @@ from app.utils.portfolio_utils import (
 from app.utils.yfinance_utils import get_isin_data
 from app.utils.db_utils import update_price_in_db
 
+
 import pandas as pd
 import logging
 from datetime import datetime
@@ -768,14 +769,6 @@ def get_portfolios_api():
 
 def upload_csv():
     """Upload and process CSV data"""
-    # Apply rate limiting in production
-    from flask import current_app
-    if hasattr(current_app, 'limiter'):
-        try:
-            current_app.limiter.check_request_limits("10 per hour")
-        except Exception:
-            from flask import jsonify
-            return jsonify({'success': False, 'message': 'Rate limit exceeded. Please try again later.'}), 429
     
     logger.info(f"CSV upload attempt - session content: {dict(session)}")
     

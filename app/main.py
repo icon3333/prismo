@@ -29,64 +29,7 @@ def create_app(config_name=None):
             JSON_SORT_KEYS=False
         )
     
-    # Add security headers with Flask-Talisman (production only)
-    if config_name == 'production':
-        from flask_talisman import Talisman
-        from flask_limiter import Limiter
-        from flask_limiter.util import get_remote_address
-        
-        # Content Security Policy for the portfolio app
-        csp = {
-            'default-src': "'self'",
-            'script-src': [
-                "'self'",
-                "'unsafe-inline'",  # Needed for some inline scripts
-                "https://cdn.jsdelivr.net",
-                "https://cdnjs.cloudflare.com"
-            ],
-            'style-src': [
-                "'self'",
-                "'unsafe-inline'"  # Needed for inline styles
-            ],
-            'img-src': [
-                "'self'",
-                "data:",
-                "https:"
-            ],
-            'font-src': [
-                "'self'",
-                "https://fonts.gstatic.com"
-            ],
-            'connect-src': "'self'"
-        }
-        
-        Talisman(
-            app,
-            force_https=True,
-            strict_transport_security=True,
-            strict_transport_security_max_age=31536000,  # 1 year
-            content_security_policy=csp,
-            referrer_policy='strict-origin-when-cross-origin',
-            feature_policy={
-                'geolocation': "'none'",
-                'microphone': "'none'",
-                'camera': "'none'"
-            }
-        )
-        logger.info("Security headers configured with Flask-Talisman")
-        
-        # Add rate limiting
-        limiter = Limiter(
-            key_func=get_remote_address,
-            app=app,
-            default_limits=["200 per hour", "50 per minute"],
-            storage_uri="memory://",  # Use memory storage for single-user app
-            strategy="fixed-window"
-        )
-        
-        # Store limiter in app for use in routes
-        app.limiter = limiter
-        logger.info("Rate limiting configured with Flask-Limiter")
+    # Security headers disabled for demo
     
     # Add context processor for datetime
     @app.context_processor

@@ -3,7 +3,7 @@ from flask import (
     request, flash, session, jsonify, current_app
 )
 from app.database.db_manager import query_db, execute_db, backup_database, get_db
-from app.utils.security import rate_limit
+
 import sqlite3
 import logging
 from datetime import datetime
@@ -36,7 +36,6 @@ def index():
 
 
 @account_bp.route('/create', methods=['POST'])
-@rate_limit("10 per minute")
 def create_account():
     """Create a new account"""
     username = request.form.get('username', '').strip()
@@ -151,7 +150,6 @@ def reset_account_settings():
 
 
 @account_bp.route('/delete', methods=['POST'])
-@rate_limit("5 per minute")
 def delete_account():
     """Delete an account and all associated data"""
     if 'account_id' not in session:

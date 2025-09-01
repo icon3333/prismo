@@ -1,0 +1,65 @@
+# Database files - DO NOT COMMIT
+*.db
+*.sqlite
+*.sqlite3
+
+# Database backups and instance directory
+app/database/backups/
+instance/
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.backup.*
+
+# Python cache and virtual environments
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox/
+.cache/
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Test coverage
+.coverage
+htmlcov/

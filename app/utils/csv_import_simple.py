@@ -10,6 +10,8 @@ import io
 import yfinance as yf
 from typing import Dict, Any, Tuple, Optional
 from app.db_manager import query_db, execute_db, backup_database, get_db
+from app.utils.yfinance_utils import get_exchange_rate
+from app.utils.db_utils import update_price_in_db
 
 logger = logging.getLogger(__name__)
 
@@ -43,63 +45,121 @@ def normalize_simple(identifier: str) -> str:
 
 def fetch_price_simple(identifier: str) -> Dict[str, Any]:
     """
-    Simple price fetching optimized for concurrent processing.
-    Each call runs independently - no need to wait for others to complete.
-    Cost/Time: Fast execution with 2-second timeout per symbol, runs concurrently [[memory:6980966]]
+    Enhanced price fetching with EUR conversion for CSV import integration.
+    Uses existing robust yfinance utilities to avoid session issues.
+    Cost/Time: Fast execution with proper timeout handling, runs concurrently [[memory:6980966]]
     """
     try:
         logger.debug(f"Fetching price for {identifier}")
         
-        # Configure yfinance session with shorter timeout for concurrent processing
-        import yfinance as yf
-        import requests
+        # Use the existing robust yfinance data fetching that handles sessions properly
+        from app.utils.yfinance_utils import get_isin_data
         
-        # Create a session with aggressive timeout since we're running concurrently
-        session = requests.Session()
-        session.timeout = 2  # 2 second timeout (shorter since we don't block others)
+        # Get comprehensive price data using the existing robust function
+        result = get_isin_data(identifier)
         
-        ticker = yf.Ticker(identifier, session=session)
-        
-        try:
-            # Try fast history first (often quicker than info)
-            hist = ticker.history(period="1d", timeout=2)
-            if not hist.empty:
-                last_price = float(hist['Close'].iloc[-1])
-                return {
-                    'price': last_price,
-                    'currency': 'USD',  # Default currency for fast path
-                    'success': True
-                }
-        except:
-            pass  # Fallback to info
-        
-        try:
-            # Fallback to info if history fails
-            info = ticker.info
-            
-            if not info:
-                return {'price': None, 'currency': 'USD', 'error': 'No data available'}
-            
-            price = info.get('regularMarketPrice') or info.get('currentPrice')
-            currency = info.get('currency', 'USD')
-            
-            if price and price > 0:
-                return {
-                    'price': float(price),
-                    'currency': currency,
-                    'country': info.get('country'),
-                    'success': True
-                }
-            else:
-                return {'price': None, 'currency': currency, 'error': 'No valid price found'}
+        if result.get('success'):
+            return {
+                'price': result.get('price'),
+                'currency': result.get('currency', 'USD'),
+                'price_eur': result.get('price_eur'),
+                'country': result.get('country'),
+                'success': True
+            }
+        else:
+            # Fallback to simple yfinance call without custom session
+            try:
+                import yfinance as yf
                 
-        except:
-            # Return immediately if fetch fails - other stocks continue processing
-            return {'price': None, 'currency': 'USD', 'error': 'API timeout'}
+                # Let yfinance handle its own session management
+                ticker = yf.Ticker(identifier)
+                price = None
+                currency = 'USD'
+                country = None
+                
+                try:
+                    # Try info first for comprehensive data
+                    info = ticker.info
+                    
+                    if info:
+                        price = info.get('regularMarketPrice') or info.get('currentPrice')
+                        currency = info.get('currency', 'USD') or 'USD'
+                        country = info.get('country')
+                        
+                        if price and price > 0:
+                            price = float(price)
+                        else:
+                            price = None
+                except:
+                    # Fallback to history if info fails
+                    try:
+                        hist = ticker.history(period="1d")
+                        if not hist.empty:
+                            price = float(hist['Close'].iloc[-1])
+                            currency = 'USD'  # Default for history fallback
+                    except:
+                        pass
+                
+                # If we got a price, calculate EUR conversion
+                if price is not None and price > 0:
+                    try:
+                        # Convert to EUR using existing exchange rate function
+                        if currency != 'EUR':
+                            exchange_rate = get_exchange_rate(currency, 'EUR')
+                            price_eur = price * exchange_rate
+                            logger.debug(f"Converted {price:.2f} {currency} to {price_eur:.2f} EUR (rate: {exchange_rate})")
+                        else:
+                            price_eur = price
+                        
+                        return {
+                            'price': price,
+                            'currency': currency,
+                            'price_eur': price_eur,
+                            'country': country,
+                            'success': True
+                        }
+                    except Exception as e:
+                        logger.warning(f"EUR conversion failed for {identifier}: {e}")
+                        # Return without EUR conversion if it fails
+                        return {
+                            'price': price,
+                            'currency': currency,
+                            'price_eur': price,  # Fallback: use original price
+                            'country': country,
+                            'success': True
+                        }
+                
+                # No price found in fallback
+                return {
+                    'price': None,
+                    'currency': currency,
+                    'price_eur': None,
+                    'country': country,
+                    'error': 'No valid price found',
+                    'success': False
+                }
+                
+            except Exception as fallback_error:
+                logger.debug(f"Fallback price fetch failed for {identifier}: {fallback_error}")
+                return {
+                    'price': None,
+                    'currency': 'USD',
+                    'price_eur': None,
+                    'country': None,
+                    'error': f"Primary and fallback fetch failed: {result.get('error', 'Unknown')}",
+                    'success': False
+                }
             
     except Exception as e:
         logger.debug(f"Price fetch failed for {identifier}: {e}")
-        return {'price': None, 'currency': 'USD', 'error': str(e)}
+        return {
+            'price': None,
+            'currency': 'USD',
+            'price_eur': None,
+            'country': None,
+            'error': str(e),
+            'success': False
+        }
 
 def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -> bool:
     """
@@ -183,15 +243,20 @@ def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -
                 )
                 logger.info(f"Added new position: {transaction_data['identifier']} - {transaction_data['shares']} shares")
         
-        # Update market price if we have current price data
-        if transaction_data.get('current_price'):
-            execute_db(
-                """INSERT OR REPLACE INTO market_prices 
-                   (identifier, price, currency, last_updated) 
-                   VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
-                (transaction_data['identifier'], transaction_data['current_price'], 
-                 transaction_data.get('currency', 'USD'))
-            )
+        # Update market price using robust database function if we have current price data
+        if transaction_data.get('current_price') and transaction_data.get('price_eur'):
+            try:
+                # Use the existing robust database update function
+                update_price_in_db(
+                    identifier=transaction_data['identifier'],
+                    price=float(transaction_data['current_price']),
+                    currency=transaction_data.get('currency', 'USD'),
+                    price_eur=float(transaction_data['price_eur']),
+                    country=transaction_data.get('country')
+                )
+                logger.debug(f"Updated market price for {transaction_data['identifier']}: {transaction_data['current_price']} {transaction_data.get('currency', 'USD')}")
+            except Exception as e:
+                logger.warning(f"Failed to update market price for {transaction_data['identifier']}: {e}")
         
         return True
         
@@ -321,13 +386,14 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
                     # Fetch current price (this is the API call) [[memory:6980966]]
                     price_data = fetch_price_simple(identifier)
                     
-                    # Prepare transaction data - continue even if price fetch fails
+                    # Prepare transaction data with enhanced price information
                     transaction = {
                         'identifier': identifier,
                         'name': str(row['holdingname']).strip(),
                         'shares': shares,
                         'price': price,
                         'current_price': price_data.get('price'),
+                        'price_eur': price_data.get('price_eur'),
                         'currency': price_data.get('currency', row.get('currency', 'USD')),
                         'country': price_data.get('country')
                     }
@@ -370,8 +436,13 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
                     
                     if result['success']:
                         success_msg = f"✓ {result['identifier']}"
-                        if result.get('price_data', {}).get('error'):
-                            success_msg += f" (price: {result['price_data']['error']})"
+                        price_data = result.get('price_data', {})
+                        if price_data.get('success') and price_data.get('price'):
+                            price = price_data['price']
+                            currency = price_data.get('currency', 'USD')
+                            success_msg += f" (price: {price:.2f} {currency})"
+                        elif price_data.get('error'):
+                            success_msg += f" (price: {price_data['error']})"
                         update_simple_progress(processed, total_stocks, success_msg)
                     else:
                         if 'error' in result:

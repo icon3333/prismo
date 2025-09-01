@@ -408,8 +408,18 @@
                     <!-- Simplified loading indicator -->
                     <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
                         <div class="loading-container">
-                            <span id="upload-percentage"
-                                class="is-size-4 has-text-weight-semibold has-text-primary">0%</span>
+                            <div class="is-flex is-justify-content-center is-align-items-center" style="gap: 10px;">
+                                <span id="upload-percentage"
+                                    class="is-size-4 has-text-weight-semibold has-text-primary">0%</span>
+                                <button id="cancel-upload-btn" 
+                                    class="button is-small is-danger is-outlined" 
+                                    title="Cancel upload">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-times"></i>
+                                    </span>
+                                    <span>Cancel</span>
+                                </button>
+                            </div>
                             <p class="is-size-7 has-text-grey mt-2">Processing file, please wait...</p>
                         </div>
                     </div>

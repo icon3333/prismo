@@ -68,9 +68,8 @@ def get_background_db():
             from flask import current_app
             _db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
         except RuntimeError:
-            # If no application context, use the default path
-            _db_path = 'app/database/portfolio.db'
-            logger.warning(f"No application context available, using default database path: {_db_path}")
+            # If no application context, fail fast instead of using potentially wrong database
+            raise RuntimeError("No database path available - ensure Flask app context is available in background operations")
     
     # Ensure the database directory exists
     db_dir = os.path.dirname(_db_path)
@@ -119,7 +118,7 @@ def init_db(app):
         
         db = get_db()
         # Use safe schema that doesn't drop existing tables
-        with app.open_resource('database/schema_safe.sql', mode='r') as f:
+        with app.open_resource('../instance/schema.sql', mode='r') as f:
             db.cursor().executescript(f.read())
         
         # Add the identifier_mappings table if it doesn't exist
@@ -159,8 +158,8 @@ def init_db(app):
             tables = [row[0] for row in cursor.fetchall()]
 
             if not tables or 'accounts' not in tables:
-                logger.info("Initializing database schema from schema_safe.sql ...")
-                schema_path = os.path.join(os.path.dirname(__file__), 'schema_safe.sql')
+                logger.info("Initializing database schema from schema.sql ...")
+                schema_path = os.path.join('instance', 'schema.sql')
                 with open(schema_path, 'r', encoding='utf-8') as f:
                     db.executescript(f.read())
                 db.commit()
@@ -256,8 +255,8 @@ def backup_database():
     """
     try:
         db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        # Use backups folder in app/database
-        backup_dir = os.path.join(os.path.dirname(__file__), 'backups')
+        # Use backups folder in instance
+        backup_dir = os.path.join('instance', 'backups')
         
         # Create backup directory if it doesn't exist
         os.makedirs(backup_dir, exist_ok=True)

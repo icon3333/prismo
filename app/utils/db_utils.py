@@ -2,7 +2,7 @@
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Union
-from app.database.db_manager import query_db, execute_db, get_background_db
+from app.db_manager import query_db, execute_db, get_background_db
 
 logger = logging.getLogger(__name__)
 

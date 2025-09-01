@@ -1,5 +1,5 @@
 from flask import Flask, render_template
-from app.database.db_manager import init_db
+from app.db_manager import init_db
 from app.routes.main_routes import main_bp
 from app.routes.account_routes import account_bp
 from app.routes.portfolio_routes import portfolio_bp

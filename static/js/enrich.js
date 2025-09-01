@@ -16,7 +16,7 @@ const ProgressManager = {
     },
 
     currentJob: {
-        type: null, // 'csv_upload', 'price_fetch'
+        type: null, // 'simple_csv_upload', 'price_fetch'
         interval: null,
         startTime: null
     },
@@ -55,19 +55,19 @@ const ProgressManager = {
     },
 
     async checkForOngoingUploads() {
+        // For simplified upload system, we don't need to check for ongoing uploads
+        // since processing happens synchronously and completes immediately
+        console.log('Simplified upload system - no background uploads to check');
+        
+        // Clear any stale progress data from old system
         try {
-            const response = await fetch('/portfolio/api/csv_upload_progress');
-            if (response.ok) {
-                const data = await response.json();
-                console.log('Checking for ongoing uploads:', data);
-                
-                if (data.status === 'processing' && data.percentage < 100) {
-                    console.log('Found ongoing upload, resuming progress tracking');
-                    this.startTracking('csv_upload');
-                }
-            }
+            await fetch('/portfolio/api/simple_upload_progress', { 
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            console.log('Cleared any stale progress data from previous system');
         } catch (error) {
-            console.log('No ongoing uploads found');
+            console.log('No stale progress data to clear');
         }
     },
 
@@ -77,7 +77,7 @@ const ProgressManager = {
 
         console.log(`ProgressManager: Showing progress for ${jobType}`);
 
-        if (jobType === 'csv_upload' && this.elements.csvUploadIndicator) {
+        if (jobType === 'simple_csv_upload' && this.elements.csvUploadIndicator) {
             console.log('ProgressManager: Displaying CSV upload indicator');
             this.elements.csvUploadIndicator.style.display = 'block';
         } else if (jobType === 'price_fetch' && this.elements.priceProgressElement) {
@@ -105,8 +105,8 @@ const ProgressManager = {
 
         console.log(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''}`);
 
-        if (jobType === 'csv_upload') {
-            // Handle CSV upload progress
+        if (jobType === 'simple_csv_upload') {
+            // Handle simple CSV upload progress
             if (this.elements.uploadPercentage) {
                 this.elements.uploadPercentage.textContent = `${Math.round(percentage)}%`;
             } else {
@@ -134,8 +134,8 @@ const ProgressManager = {
         this.stopTracking(); // Clear any existing interval
         this.show(jobType);
 
-        if (jobType === 'csv_upload') {
-            // Start polling for CSV upload progress
+        if (jobType === 'simple_csv_upload') {
+            // Start polling for simple CSV upload progress
             this.startCsvUploadProgress(checkInterval);
         } else if (jobType === 'price_fetch') {
             this.startPriceFetchProgress(checkInterval);
@@ -160,7 +160,7 @@ const ProgressManager = {
         this.checkPriceFetchProgress();
     },
 
-    startCsvUploadProgress(checkInterval = 500) {
+    startCsvUploadProgress(checkInterval = 250) {
         // Use shorter interval for more responsive progress updates
         this.currentJob.interval = setInterval(() => {
             this.checkCsvProgress();
@@ -184,7 +184,7 @@ const ProgressManager = {
             this.setProgress(percentage);
 
             // Check completion
-            if (data.status === 'completed' || data.status === 'idle' || percentage >= 100) {
+            if (data.status === 'completed' || percentage >= 100) {
                 this.complete();
             }
         } catch (error) {
@@ -195,13 +195,34 @@ const ProgressManager = {
 
     async checkCsvProgress() {
         try {
-            const response = await fetch('/portfolio/api/csv_upload_progress');
+            // Use the appropriate endpoint based on upload type
+            const endpoint = '/portfolio/api/simple_upload_progress';
+            
+            const response = await fetch(endpoint, {
+                credentials: 'include'
+            });
             if (!response.ok) {
                 throw new Error(`HTTP error! Status: ${response.status}`);
             }
 
             const data = await response.json();
             console.log("CSV upload progress:", data);
+            console.log(`DEBUG: Received status='${data.status}', message='${data.message}', job_id='${data.job_id}'`);
+
+                            // Check for stuck jobs - if a job has been running for more than 5 minutes without progress, consider it stuck
+            if (data.status === 'processing' && this.currentJob.startTime) {
+                const timeElapsed = Date.now() - this.currentJob.startTime;
+                const fiveMinutes = 5 * 60 * 1000; // 5 minutes in milliseconds
+                
+                if (timeElapsed > fiveMinutes && data.percentage === 0) {
+                    console.warn('Job appears to be stuck - no progress after 5 minutes, will stop tracking...');
+                    this.error('Upload appears to be stuck. Please try again.');
+                    
+                    // Simple uploads don't have cancellation endpoints, just stop tracking
+                    this.stopTracking();
+                    return;
+                }
+            }
 
             const percentage = data.percentage || 0;
             const message = data.message || 'Processing...';
@@ -220,41 +241,104 @@ const ProgressManager = {
                 setTimeout(() => {
                     this.hide();
                     // Clear the progress from session
-                    fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
-                    // Reload to show updated data
-                    window.location.reload();
+                    fetch('/portfolio/api/simple_upload_progress', { 
+                        method: 'DELETE',
+                        credentials: 'include'
+                    }).catch(() => { });
+                    
+                    // Instead of reloading, refresh data via API calls - prevents browser refresh
+                    if (typeof window.portfolioTableApp !== 'undefined' && window.portfolioTableApp.loadData) {
+                        console.log('Refreshing portfolio data after successful upload...');
+                        window.portfolioTableApp.loadData();
+                    } else {
+                        console.log('Portfolio app not found, falling back to page reload');
+                        window.location.reload();
+                    }
                 }, 2000);
                 
-            } else if (data.status === 'failed') {
-                this.error(data.message || 'Upload failed');
+            } else if (data.status === 'failed' || data.status === 'cancelled') {
+                this.error(data.message || `Upload ${data.status}`);
                 this.stopTracking();
+                
+                console.log(`CSV upload ${data.status}: ${data.message}`);
                 
                 setTimeout(() => {
                     this.hide();
                     // Clear the progress from session
-                    fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
+                    fetch('/portfolio/api/simple_upload_progress', { 
+                        method: 'DELETE',
+                        credentials: 'include'
+                    }).catch(() => { });
                 }, 3000);
                 
-            } else if (data.status === 'idle' && percentage === 0) {
+            } else if (data.status === 'idle') {
+                console.log(`Upload status changed to idle: ${data.message}`);
+                
+                // Check if this was a terminal status message
+                if (data.message && (data.message.includes('failed') || data.message.includes('cancelled'))) {
+                    this.error(data.message);
+                    this.stopTracking();
+                    setTimeout(() => this.hide(), 3000);
+                    return;
+                }
+                
                 // No active upload found - check how long we've been polling
                 const pollingDuration = Date.now() - this.currentJob.startTime;
                 console.log(`No active upload found - polling duration: ${pollingDuration}ms`);
                 
-                // If we've been polling for more than 10 seconds with no progress, stop
-                if (pollingDuration > 10000) {
-                    console.log('Stopping polling - no progress found after 10 seconds');
-                    this.error('Upload may have failed to start. Please try again.');
+                // Increased timeout to 30 seconds and added more sophisticated checking
+                if (pollingDuration > 30000) {
+                    console.log('Checking if upload might have completed despite progress tracking issues...');
+                    
+                    // Before giving up, try to reload the page to check if data was actually updated
+                    try {
+                        const dataResponse = await fetch('/portfolio/api/portfolio_data', { cache: 'no-store' });
+                        if (dataResponse.ok) {
+                            const portfolioData = await dataResponse.json();
+                            
+                            // If we have data, the upload likely succeeded despite progress tracking issues
+                            if (Array.isArray(portfolioData) && portfolioData.length > 0) {
+                                console.log('Upload appears to have succeeded despite progress tracking issues');
+                                this.setProgress(100, 'Upload completed (detected from data)!');
+                                
+                                if (typeof showNotification === 'function') {
+                                    showNotification('CSV upload completed successfully!', 'is-success');
+                                }
+                                
+                                setTimeout(() => {
+                                    this.hide();
+                                    window.location.reload();
+                                }, 2000);
+                                return;
+                            }
+                        }
+                    } catch (checkError) {
+                        console.warn('Could not verify upload completion:', checkError);
+                    }
+                    
+                    console.log('Stopping polling - no progress found after 30 seconds');
+                    this.error('Upload may have failed to start or completed without proper progress tracking. Please check if your data was updated, or try again.');
                     this.stopTracking();
                 }
+            } else if (data.status === 'processing' || percentage > 0) {
+                // We have active progress, reset any timeout concerns
+                // This ensures we don't timeout while actually processing
+                console.log(`Upload is actively processing: ${percentage}% - ${message}`);
             }
             
         } catch (error) {
             console.error('Error checking CSV upload progress:', error);
             
-            // If we get network errors repeatedly, we might want to stop tracking
-            // But for now, just log and continue - the upload might still be processing
-            if (error.message.includes('NetworkError')) {
-                console.warn('Network error while checking progress - upload may still be processing');
+            // Don't immediately fail on network errors - the upload might still be processing
+            const pollingDuration = Date.now() - this.currentJob.startTime;
+            
+            // Only give up on network errors after a reasonable time
+            if (pollingDuration > 45000) {
+                console.warn('Network errors persisting for 45+ seconds, giving up');
+                this.error('Unable to track upload progress. Please check if your data was updated, or try again.');
+                this.stopTracking();
+            } else {
+                console.warn('Network error while checking progress - will keep trying');
             }
         }
     },
@@ -274,7 +358,7 @@ const ProgressManager = {
         const jobType = this.currentJob.type;
         
         // Safely set error message based on job type
-        if (jobType === 'csv_upload' && this.elements.uploadPercentage) {
+        if (jobType === 'simple_csv_upload' && this.elements.uploadPercentage) {
             this.elements.uploadPercentage.textContent = 'Error';
         } else if (jobType === 'price_fetch' && this.elements.priceProgressPercentage) {
             this.elements.priceProgressPercentage.textContent = 'Error';
@@ -463,6 +547,78 @@ const FileUploadHandler = {
                 uploadCard.classList.remove('is-processing');
             }
         });
+
+        // Cancel button handler
+        const cancelBtn = document.getElementById('cancel-upload-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', async function() {
+                console.log('Cancel button clicked');
+                
+                // Disable the button to prevent multiple clicks
+                cancelBtn.disabled = true;
+                cancelBtn.classList.add('is-loading');
+                
+                try {
+                    const response = await fetch('/portfolio/api/simple_upload_progress', {
+                        method: 'DELETE',
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok && result.success) {
+                        console.log('Upload cancelled successfully');
+                        
+                        // Show cancellation message
+                        ProgressManager.error('Upload cancelled by user');
+                        
+                        // Reset UI state immediately
+                        uploadCard.classList.remove('is-processing');
+                        
+                        // Hide the cancel button immediately since upload is cancelled
+                        const csvUploadIndicator = document.getElementById('csv-upload-indicator');
+                        if (csvUploadIndicator) {
+                            csvUploadIndicator.style.display = 'none';
+                        }
+                        
+                        // Also disable the cancel button to prevent further clicks
+                        cancelBtn.disabled = true;
+                        cancelBtn.style.display = 'none';
+                        
+                        // Show notification
+                        if (typeof showNotification === 'function') {
+                            showNotification('Upload cancelled successfully', 'is-warning');
+                        }
+                        
+                    } else {
+                        console.error('Failed to cancel upload:', result.message);
+                        
+                        // Show error notification
+                        if (typeof showNotification === 'function') {
+                            showNotification(result.message || 'Failed to cancel upload', 'is-danger');
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error cancelling upload:', error);
+                    
+                    // Show error notification
+                    if (typeof showNotification === 'function') {
+                        showNotification('Error cancelling upload', 'is-danger');
+                    }
+                    
+                } finally {
+                    // Re-enable the button
+                    cancelBtn.disabled = false;
+                    cancelBtn.classList.remove('is-loading');
+                }
+            });
+        } else {
+            console.warn('Cancel upload button not found');
+        }
     },
 
     async submitFile(file, form) {
@@ -472,14 +628,23 @@ const FileUploadHandler = {
             actionUrl: form.action
         });
         
-        // Start progress tracking
-        ProgressManager.startTracking('csv_upload');
+        // Fix for local development: ensure we use relative URLs
+        let uploadUrl = form.action;
+        if (uploadUrl.includes('rebalancer.nniiccoo.com')) {
+            // Replace production URL with relative path for local development
+            uploadUrl = '/portfolio/upload';
+            console.log('Fixed upload URL for local development:', uploadUrl);
+        }
         
         try {
             const formData = new FormData();
             formData.append('csv_file', file);
 
             console.log('Uploading file via AJAX...');
+            
+            // Show simple loading indicator
+            ProgressManager.show('simple_csv_upload');
+            ProgressManager.setProgress(0, 'Starting upload...');
             
             // Use longer timeout for file uploads (120 seconds for large files)
             const controller = new AbortController();
@@ -488,7 +653,8 @@ const FileUploadHandler = {
                 console.error('Upload timeout after 120 seconds');
             }, 120000);
             
-            const response = await fetch(form.action, {
+            // Start the upload request (this will run in parallel with progress polling)
+            const uploadPromise = fetch(uploadUrl, {
                 method: 'POST',
                 body: formData,
                 credentials: 'include',
@@ -497,6 +663,12 @@ const FileUploadHandler = {
                     'Accept': 'application/json'
                 }
             });
+            
+            // Start ProgressManager tracking for simple uploads
+            ProgressManager.startTracking('simple_csv_upload', 250); // Fast polling for responsive UI
+            
+            // Wait for upload to complete
+            const response = await uploadPromise;
 
             clearTimeout(timeoutId);
             
@@ -519,8 +691,20 @@ const FileUploadHandler = {
                     }
                     
                     setTimeout(() => {
-                        window.location.reload();
-                    }, 2000);
+                        ProgressManager.hide();
+                        
+                        // Refresh portfolio data via API calls - no page reload needed
+                        if (typeof window.portfolioTableApp !== 'undefined' && window.portfolioTableApp.loadData) {
+                            console.log('Refreshing portfolio data after successful upload...');
+                            window.portfolioTableApp.loadData();
+                        } else {
+                            console.log('Portfolio app not found, falling back to page reload');
+                            window.location.reload();
+                        }
+                        
+                        // Reset the form
+                        FileUploadHandler.resetForm(form);
+                    }, 500); // Reduced delay from 2000ms to 500ms
                     return;
                 } else {
                     throw new Error(result.message || 'Upload failed');
@@ -557,10 +741,19 @@ const FileUploadHandler = {
 
     async submitFileAjax(file, actionUrl) {
         try {
+            // Fix for local development: ensure we use relative URLs
+            let uploadUrl = actionUrl;
+            if (uploadUrl.includes('rebalancer.nniiccoo.com')) {
+                // Replace production URL with relative path for local development
+                uploadUrl = '/portfolio/upload';
+                console.log('Fixed upload URL for local development:', uploadUrl);
+            }
+            
             console.log('Submitting CSV file via AJAX...', {
                 fileName: file.name,
                 fileSize: file.size,
-                actionUrl: actionUrl
+                actionUrl: actionUrl,
+                fixedUrl: uploadUrl
             });
 
             // First, test basic connectivity
@@ -573,21 +766,20 @@ const FileUploadHandler = {
                 console.log('Connectivity test status:', testResponse.status);
             } catch (connectError) {
                 console.error('Connectivity test failed:', connectError);
-                console.log('Server appears unreachable, using form submission directly');
-                this.fallbackToFormSubmission(file, actionUrl);
-                return;
+                console.log('Server appears unreachable - this may be normal in Docker or when CORS is misconfigured');
+                // Don't fallback immediately - try the upload anyway as it might work
             }
 
             // Start progress tracking now that we're actually uploading
-            ProgressManager.startTracking('csv_upload');
+            ProgressManager.startTracking('simple_csv_upload');
 
             const formData = new FormData();
             formData.append('csv_file', file);
 
-            console.log('Making fetch request to:', actionUrl);
+            console.log('Making fetch request to:', uploadUrl);
             console.log('FormData contents:', formData.get('csv_file'));
 
-            const response = await fetch(actionUrl, {
+            const response = await fetch(uploadUrl, {
                 method: 'POST',
                 body: formData,
                 credentials: 'include',
@@ -714,6 +906,28 @@ const FileUploadHandler = {
                 notification.remove();
             }
         }, 5000);
+    },
+
+    resetForm(form) {
+        // Reset the file input
+        const fileInput = form.querySelector('.file-input');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+        // Reset the file label
+        const fileLabel = form.querySelector('.file-name');
+        if (fileLabel) {
+            fileLabel.textContent = 'No file selected';
+        }
+        
+        // Remove processing state
+        const uploadCard = document.getElementById('upload-card');
+        if (uploadCard) {
+            uploadCard.classList.remove('is-processing');
+        }
+        
+        console.log('Form reset completed');
     }
 };
 

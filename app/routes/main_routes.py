@@ -1,5 +1,5 @@
 from app.utils.portfolio_utils import get_portfolio_data
-from app.database.db_manager import query_db
+from app.db_manager import query_db
 from flask import Blueprint, render_template, redirect, url_for, session, request, flash, jsonify
 import logging
 import json

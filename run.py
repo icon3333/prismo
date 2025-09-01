@@ -48,7 +48,7 @@ def setup_environment_interactive():
         db_name = input("   Database name [portfolio_db]: ") or "portfolio_db"
         database_url = f"postgresql://{db_user}:{db_pass}@{db_host}/{db_name}"
     else:
-        database_url = "sqlite:///app/database/portfolio.db"
+        database_url = "sqlite:///instance/portfolio.db"
     
     # Flask environment
     print("\n3. FLASK_ENV:")
@@ -114,7 +114,7 @@ def setup_environment(production=False):
     
     # Default database configuration (SQLite)
     print("\n2. DATABASE_URL: Using SQLite (default)")
-    database_url = "sqlite:///app/database/portfolio.db"
+    database_url = "sqlite:///instance/portfolio.db"
     print(f"   Value: {database_url}")
     
     # Default Flask environment

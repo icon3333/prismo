@@ -2,7 +2,7 @@ import pandas as pd
 import logging
 import io
 from flask import session
-from app.database.db_manager import query_db, execute_db, backup_database, get_db
+from app.db_manager import query_db, execute_db, backup_database, get_db
 from app.utils.db_utils import update_price_in_db
 from app.utils.yfinance_utils import get_isin_data
 from app.utils.data_processing import clear_data_caches
@@ -53,18 +53,17 @@ def process_csv_data(account_id, file_content):
     db = None
     cursor = None
     try:
-        # Initialize progress tracking
-        update_csv_progress(0, 100, "Starting CSV processing...", "processing")
+        logger.info(f"DEBUG: Starting process_csv_data for account_id: {account_id}")
+        logger.info(f"DEBUG: File content length: {len(file_content)} characters")
         
+        # Note: Initial progress is now set in upload endpoint to fix race condition
+        # Start with backup progress since upload endpoint already set status to "processing"
         db = get_db()
         cursor = db.cursor()
         
         # CRITICAL: Always create backup before processing [[memory:7528819]]
         logger.info("Creating automatic backup before CSV processing...")
         backup_database()
-        update_csv_progress(5, 100, "Backup created, processing CSV...", "processing")
-        
-        update_csv_progress(10, 100, "Reading CSV file...", "processing")
         
         # Add small delay to ensure progress is captured
         import time
@@ -76,8 +75,7 @@ def process_csv_data(account_id, file_content):
                          thousands='.')
         df.columns = df.columns.str.lower()
         
-        update_csv_progress(20, 100, "Validating CSV columns...", "processing")
-        time.sleep(0.1)
+        logger.info(f"DEBUG: Successfully parsed CSV with {len(df)} rows and columns: {list(df.columns)}")
 
         essential_columns = {
             "identifier": ["identifier", "isin", "symbol"],
@@ -124,8 +122,7 @@ def process_csv_data(account_id, file_content):
 
         df = df.rename(columns=column_mapping)
         
-        update_csv_progress(30, 100, "Preparing data...", "processing")
-        time.sleep(0.1)
+
 
         if 'currency' not in df.columns:
             df['currency'] = 'EUR'
@@ -226,11 +223,18 @@ def process_csv_data(account_id, file_content):
 
         company_positions = {}
 
-        update_csv_progress(40, 100, "Processing buy transactions...", "processing")
-        time.sleep(0.1)
+        # Early progress update for initial processing
+        total_transactions = len(df)
+        update_csv_progress(0, total_transactions, f"Processing {total_transactions} transactions...", "processing")
         
         logger.info("FIRST PASS: Processing buy and transferin transactions")
+        processed_transactions = 0
         for idx, row in df.iterrows():
+            processed_transactions += 1
+            # Update progress every 10 transactions to avoid spam
+            if processed_transactions % 10 == 0 or processed_transactions == total_transactions:
+                progress_msg = f"Processing transaction {processed_transactions}/{total_transactions}: {row['holdingname'][:30]}..."
+                update_csv_progress(processed_transactions, total_transactions, progress_msg, "processing")
             company_name = row['holdingname']
             transaction_type = row['type']
             if transaction_type == 'dividend':
@@ -274,8 +278,7 @@ def process_csv_data(account_id, file_content):
             logger.info(
                 f"Buy/TransferIn: {company_name}, +{shares} @ {price}, total shares: {company['total_shares']}, total invested: {company['total_invested']:.2f}")
 
-        update_csv_progress(50, 100, "Processing sell transactions...", "processing")
-        time.sleep(0.1)
+
         
         logger.info("SECOND PASS: Processing sell and transferout transactions")
         for idx, row in df.iterrows():
@@ -370,8 +373,7 @@ def process_csv_data(account_id, file_content):
 
         csv_company_names = set(df['holdingname'])
         
-        update_csv_progress(60, 100, "Updating database...", "processing")
-        time.sleep(0.1)
+
         
         # Track companies that should be removed (either not in CSV or have zero shares)
         companies_with_zero_shares = set()
@@ -555,6 +557,8 @@ def process_csv_data(account_id, file_content):
 
         db.commit()
         clear_data_caches()
+        
+        logger.info(f"DEBUG: After database commit - positions_added: {len(positions_added)}, positions_updated: {len(positions_updated)}, positions_removed: {len(positions_removed)}")
 
         all_identifiers = set()
         for company_name in positions_added + positions_updated:
@@ -565,9 +569,17 @@ def process_csv_data(account_id, file_content):
             )
             if company and company['identifier']:
                 all_identifiers.add(company['identifier'])
+                logger.info(f"DEBUG: Found identifier for {company_name}: {company['identifier']}")
+            else:
+                logger.info(f"DEBUG: No identifier found for company: {company_name}")
+
+        logger.info(f"DEBUG: Found {len(all_identifiers)} identifiers for price updates: {list(all_identifiers)}")
+        logger.info(f"DEBUG: positions_added: {positions_added}")
+        logger.info(f"DEBUG: positions_updated: {positions_updated}")
 
         if all_identifiers:
-            update_csv_progress(80, 100, "Updating prices and metadata...", "processing")
+            logger.info(f"DEBUG: Starting price updates for {len(all_identifiers)} identifiers")
+            update_csv_progress(0, len(all_identifiers), "Starting price updates...", "processing")
             time.sleep(0.1)
             logger.info(
                 f"Updating prices and metadata for {len(all_identifiers)} companies")
@@ -575,19 +587,33 @@ def process_csv_data(account_id, file_content):
             total_identifiers = len(all_identifiers)
             processed_identifiers = 0
             
+            # Progress calculation: 0-100% based purely on API calls completed [[memory:6980966]]
             for identifier in all_identifiers:
                 processed_identifiers += 1
-                progress_percentage = 80 + int((processed_identifiers / total_identifiers) * 15)  # 80-95% range
-                update_csv_progress(progress_percentage, 100, f"Fetching price {processed_identifiers}/{total_identifiers}: {identifier}", "processing")
+                # Calculate progress: (api_calls_completed / total_api_calls) * 100%
+                progress_percentage = int((processed_identifiers / total_identifiers) * 100)
+                
+                update_csv_progress(
+                    processed_identifiers, 
+                    total_identifiers, 
+                    f"API call {processed_identifiers}/{total_identifiers}: Fetching {identifier[:20]}...", 
+                    "processing"
+                )
+                logger.info(f"DEBUG: Updated progress to {processed_identifiers}/{total_identifiers} ({int((processed_identifiers / total_identifiers) * 100)}%)")
+                
+                logger.info(f"Making API call {processed_identifiers}/{total_identifiers} for {identifier}")
+                
                 try:
+                    # This is the actual API call - 1 call per stock
                     result = get_isin_data(identifier)
+                    
                     if result['success'] and result.get('price') is not None:
                         price = result.get('price')
                         currency = result.get('currency', 'USD')
                         price_eur = result.get('price_eur', price)
                         country = result.get('country')
                         logger.info(
-                            f"Updating metadata for {identifier}: Country: {country}")
+                            f"API call successful for {identifier}: {price_eur} EUR")
                         if not update_price_in_db(identifier, price, currency, price_eur, country):
                             logger.warning(
                                 f"Failed to update price and metadata in database for {identifier}")
@@ -596,15 +622,22 @@ def process_csv_data(account_id, file_content):
                         error_reason = "No price data returned" if result.get(
                             'success') else result.get('error', 'Unknown error')
                         logger.warning(
-                            f"Failed to fetch price for {identifier}: {error_reason}")
+                            f"API call failed for {identifier}: {error_reason}")
                         failed_prices.append(identifier)
                 except Exception as e:
                     logger.error(
-                        f"Error updating price for {identifier}: {str(e)}")
+                        f"API call exception for {identifier}: {str(e)}")
                     failed_prices.append(identifier)
 
-        # Final completion with longer persistence
-        update_csv_progress(100, 100, "CSV import completed successfully!", "completed")
+        # Final completion with longer persistence  
+        logger.info(f"DEBUG: Finalizing CSV processing. all_identifiers length: {len(all_identifiers)}")
+        if all_identifiers:
+            logger.info(f"DEBUG: Completing with {len(all_identifiers)}/{len(all_identifiers)}")
+            update_csv_progress(len(all_identifiers), len(all_identifiers), "CSV import completed successfully!", "completed")
+        else:
+            logger.info("DEBUG: No identifiers processed, completing with 1/1")
+            update_csv_progress(1, 1, "CSV import completed successfully!", "completed")
+        logger.info("DEBUG: Final progress update completed")
         
         # Keep the completion status for a bit longer for frontend to catch it
         time.sleep(0.5)
@@ -625,10 +658,92 @@ def process_csv_data(account_id, file_content):
 
     except Exception as e:
         logger.error(f"Error processing CSV: {str(e)}", exc_info=True)
-        update_csv_progress(0, 100, f"Error: {str(e)}", "failed")
+        update_csv_progress(0, 1, f"Error: {str(e)}", "failed")
         if db:
             db.rollback()
         return False, str(e), {}
     finally:
         if cursor:
             cursor.close()
+
+
+def update_csv_progress_background(job_id: str, current: int, total: int, message: str = "Processing...", status: str = "processing"):
+    """Update CSV upload progress in database for background jobs"""
+    percentage = int((current / total) * 100) if total > 0 else 0
+    
+    try:
+        from app.utils.db_utils import execute_background_db
+        from datetime import datetime
+        
+        logger.info(f"DEBUG: Attempting to update background progress - Job: {job_id}, Current: {current}, Total: {total}, Percentage: {percentage}")
+        
+        # First check if the job exists
+        from app.utils.db_utils import query_background_db
+        existing_job = query_background_db("SELECT id, status FROM background_jobs WHERE id = ?", (job_id,), one=True)
+        logger.info(f"DEBUG: Existing job status before update: {existing_job}")
+        
+        rows_affected = execute_background_db(
+            "UPDATE background_jobs SET progress = ?, result = ?, updated_at = ? WHERE id = ?",
+            (percentage, message, datetime.now(), job_id)
+        )
+        
+        logger.info(f"CSV Progress (Background): {percentage}% - {message} (Status: {status}) - Job ID: {job_id} - Rows affected: {rows_affected}")
+        
+        if rows_affected == 0:
+            logger.warning(f"DEBUG: No rows were updated for job_id {job_id}! Job may not exist in database.")
+            # Check what jobs exist
+            all_jobs = query_background_db("SELECT id, status FROM background_jobs ORDER BY created_at DESC LIMIT 5")
+            logger.warning(f"DEBUG: Recent jobs in database: {all_jobs}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to update background progress for job {job_id}: {e}", exc_info=True)
+
+
+def process_csv_data_background(account_id: int, file_content: str, job_id: str):
+    """
+    Process CSV data in background thread using database-based progress tracking.
+    This version doesn't use Flask session which isn't available in background threads.
+    """
+    logger.info(f"DEBUG: process_csv_data_background starting - account_id: {account_id}, job_id: {job_id}")
+    logger.info(f"DEBUG: File content length: {len(file_content)} characters")
+    
+    # CRITICAL: Always create backup before processing [[memory:7528819]]
+    logger.info("Creating automatic backup before CSV processing...")
+    backup_database()
+        
+    # Temporarily replace the progress function to use background database updates
+    original_update_csv_progress = globals().get('update_csv_progress')
+    
+    def background_progress_wrapper(current, total, message="Processing...", status="processing"):
+        logger.info(f"DEBUG: Background wrapper called with current={current}, total={total}, message='{message}', status='{status}'")
+        
+        # First update the progress - this ensures users see progress even if job gets cancelled
+        update_csv_progress_background(job_id, current, total, message, status)
+        
+        # THEN check if job was cancelled (after progress is recorded)
+        from app.utils.batch_processing import get_job_status
+        job_status = get_job_status(job_id)
+        if job_status.get('status') == 'cancelled':
+            logger.info(f"DEBUG: Job {job_id} was cancelled, stopping processing")
+            raise KeyboardInterrupt("Upload cancelled by user")
+    
+    # Replace the global function temporarily
+    globals()['update_csv_progress'] = background_progress_wrapper
+    
+    try:
+        # Call the original processing logic which now has the correct 0-100% API call progress
+        success, message, result = process_csv_data(account_id, file_content)
+        return success, message, result
+    except KeyboardInterrupt as e:
+        logger.info(f"CSV processing cancelled for job {job_id}: {str(e)}")
+        # For cancelled jobs, update the final status to show it was cancelled
+        update_csv_progress_background(job_id, 0, 1, f"Cancelled: {str(e)}", "cancelled")
+        return False, f"Processing cancelled: {str(e)}", {}
+    except Exception as e:
+        logger.error(f"Error processing CSV in background: {str(e)}", exc_info=True)
+        update_csv_progress_background(job_id, 0, 1, f"Error: {str(e)}", "failed")
+        return False, str(e), {}
+    finally:
+        # Restore the original function
+        if original_update_csv_progress:
+            globals()['update_csv_progress'] = original_update_csv_progress

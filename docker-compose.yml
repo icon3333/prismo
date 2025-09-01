@@ -4,7 +4,8 @@ services:
     container_name: portfolio_rebalancer
     restart: unless-stopped
     ports:
-      - "8065:8065"
+      - "8065:8065"  # Main application port
+      - "80:8065"    # Also expose on standard HTTP port for convenience
     volumes:
       # Mount app/database directory for persistence
       - ./app/database:/app/database

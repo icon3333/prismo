@@ -1,12 +1,12 @@
 from flask import (
     request, flash, session, jsonify, redirect, url_for, Response, g
 )
-from app.database.db_manager import query_db, execute_db, backup_database, get_db
+from app.db_manager import query_db, execute_db, backup_database, get_db
 from app.utils.db_utils import (
     load_portfolio_data, process_portfolio_dataframe, update_price_in_db, update_batch_prices_in_db
 )
 from app.utils.yfinance_utils import get_isin_data
-from app.utils.batch_processing import start_batch_process, get_job_status
+from app.utils.batch_processing import start_batch_process, get_job_status, start_csv_processing_job
 from app.utils.portfolio_utils import (
     get_portfolio_data, process_csv_data, has_companies_in_default, get_stock_info
 )
@@ -769,18 +769,21 @@ def get_portfolios_api():
 
 
 def upload_csv():
-    """Upload and process CSV data"""
+    """
+    Upload and process CSV data using background job architecture.
+    This endpoint validates the file and starts background processing,
+    returning immediately to enable real-time progress tracking.
+    """
+    logger.info(f"CSV upload request - session content: {dict(session)}")
     
-    logger.info(f"CSV upload attempt - session content: {dict(session)}")
-    
-    # Determine if this is an AJAX request by checking Accept header or presence of certain headers
-    # Modern fetch() requests don't set X-Requested-With, so we check if JSON is accepted
+    # Determine if this is an AJAX request
     accept_header = request.headers.get('Accept', '')
     is_ajax = ('application/json' in accept_header or 
                request.headers.get('X-Requested-With') == 'XMLHttpRequest')
     
     logger.info(f"Request headers: Accept='{accept_header}', X-Requested-With='{request.headers.get('X-Requested-With')}', is_ajax={is_ajax}")
 
+    # Authentication check
     if 'account_id' not in session:
         logger.warning("CSV upload failed - no account_id in session")
         if is_ajax:
@@ -791,7 +794,7 @@ def upload_csv():
     account_id = session['account_id']
     logger.info(f"CSV upload for account_id: {account_id}")
 
-    # Check if file was uploaded
+    # File validation
     if 'csv_file' not in request.files:
         logger.warning("CSV upload failed - no csv_file in request.files")
         if is_ajax:
@@ -802,7 +805,6 @@ def upload_csv():
     file = request.files['csv_file']
     logger.info(f"CSV file received: {file.filename}, size: {file.content_length if hasattr(file, 'content_length') else 'unknown'}")
 
-    # Check if file is empty
     if file.filename == '':
         logger.warning("CSV upload failed - empty filename")
         if is_ajax:
@@ -810,132 +812,71 @@ def upload_csv():
         flash('No file selected', 'error')
         return redirect(url_for('portfolio.enrich'))
 
-    # Process the file
+    # Process the file using background job architecture
     try:
-        logger.info("Starting CSV file processing...")
+        # Read and validate file content
+        file_content = file.read().decode('utf-8-sig')  # Handle BOM
+        if not file_content.strip():
+            logger.warning("CSV upload failed - file is empty")
+            if is_ajax:
+                return jsonify({'success': False, 'message': 'The uploaded CSV file is empty'}), 400
+            flash('The uploaded CSV file is empty', 'error')
+            return redirect(url_for('portfolio.enrich'))
+
+        logger.info(f"CSV file content length: {len(file_content)} characters")
         
-        # Initialize progress tracking immediately [[memory:6980966]]
-        # Set initial progress to let frontend know upload has started
+        # Clear any stale progress from previous uploads
+        if 'csv_upload_progress' in session:
+            del session['csv_upload_progress']
+            session.modified = True
+        
+        # Set initial progress to indicate upload is starting - FIXES RACE CONDITION
         from app.utils.portfolio_processing import update_csv_progress
-        update_csv_progress(1, 100, "Upload received, starting processing...", "processing")
+        update_csv_progress(0, 100, "Upload received, preparing to process...", "processing")
+        
+        # Ensure session is properly configured
+        session.permanent = True
+        session.modified = True
         
         # Create backup (automatic backups must always be enabled) [[memory:7528819]]
         backup_database()
-
-        # Read file content
-        file_content = file.read().decode('utf-8')
-        logger.info(f"CSV file content length: {len(file_content)} characters")
-
-        # Try to process the data (this will handle all progress tracking)
-        success, message, result = process_csv_data(account_id, file_content)
-
-        if success:
-            # Show detailed success message
-            message_parts = []
-            if result.get('added'):
-                message_parts.append(
-                    f"Added {len(result['added'])} new positions")
-            if result.get('updated'):
-                message_parts.append(
-                    f"Updated {len(result['updated'])} existing positions")
-            if result.get('removed'):
-                message_parts.append(
-                    f"Removed {len(result['removed'])} positions with zero shares")
-
-            success_message = f"CSV data imported successfully. {' | '.join(message_parts)}"
-            
-            if is_ajax:
-                return jsonify({'success': True, 'message': success_message})
-            else:
-                flash(success_message, 'success')
-
-            # Show warnings if any
-            warnings = []
-            if result.get('failed'):
-                warnings.append(
-                    f"Failed to process {len(result['failed'])} companies")
-
-            # If there are failed price fetches, only report the ones from this session
-            if result.get('failed_prices') and result.get('added'):
-                # Get only the failed prices from this upload session
-                # by checking if the companies are also in the 'added' list
-                current_failed_prices = []
-
-                # Map company names to their identifiers
-                company_identifiers = {}
-                for company_name in result.get('added', []):
-                    company = query_db(
-                        'SELECT identifier FROM companies WHERE name = ? AND account_id = ?',
-                        [company_name, account_id],
-                        one=True
-                    )
-                    if company and isinstance(company, dict) and company.get('identifier'):
-                        company_identifiers[company['identifier']] = company_name
-
-                # Now filter the failed_prices to only those that match our newly added companies
-                session_failed_prices = []
-                for identifier in result.get('failed_prices', []):
-                    if identifier in company_identifiers:
-                        session_failed_prices.append(identifier)
-
-                # Only report and log the failures from this session
-                if session_failed_prices:
-                    current_failure_count = len(session_failed_prices)
-                    logger.warning(
-                        f"Failed to fetch prices for {current_failure_count} identifiers from this upload: {', '.join(session_failed_prices)}")
-                    warnings.append(
-                        f"Failed to fetch prices for {current_failure_count} identifiers from this upload. Check logs for details.")
-
-            # Show price update success message if relevant
-            added_count = len(result.get('added', []))
-            if added_count > 0:
-                # Calculate the success count - if session_failed_prices exists, use it, otherwise assume all succeeded
-                failure_count = len(session_failed_prices) if 'session_failed_prices' in locals(
-                ) and session_failed_prices else 0
-                prices_updated_count = added_count - failure_count
-                if prices_updated_count > 0:
-                    if not is_ajax:
-                        flash(
-                            f"Successfully updated prices for {prices_updated_count} out of {added_count} newly added companies", 'success')
-
-            if warnings and not is_ajax:
-                flash(' | '.join(warnings), 'warning')
-
-            # Set session variable to indicate we should use "-" as the default portfolio
-            session['use_default_portfolio'] = True
-            
-        else:
-            # process_csv_data already sets failure progress, just log it
-            logger.error(f"CSV processing failed: {message}")
-            
-            if is_ajax:
-                return jsonify({'success': False, 'message': message})
-            else:
-                flash(message, 'error')
-
-    except Exception as e:
-        logger.error(f"Error processing CSV: {str(e)}", exc_info=True)
-        error_message = f'Error processing CSV: {str(e)}'
+        logger.info("Database backup created before CSV processing")
         
-        # Set error progress manually since process_csv_data wasn't reached
-        session['csv_upload_progress'] = {
-            'current': 0,
-            'total': 100,
-            'percentage': 0,
-            'status': 'failed',
-            'message': error_message
-        }
+        # Dispatch processing to background thread - THIS IS THE KEY FIX
+        job_id = start_csv_processing_job(account_id, file_content)
+        
+        # Store job_id in session for progress tracking
+        session['csv_upload_job_id'] = job_id
         session.modified = True
         
+        logger.info(f"CSV processing successfully dispatched to background job: {job_id}")
+        
+        # Return immediate success response - allows session cookie to be updated
         if is_ajax:
-            return jsonify({'success': False, 'message': error_message})
+            return jsonify({
+                'success': True, 
+                'message': 'CSV upload started successfully. Processing in background...'
+            })
+        else:
+            flash('CSV upload started successfully. Processing in background...', 'info')
+            return redirect(url_for('portfolio.enrich'))
+
+    except Exception as e:
+        logger.error(f"Error initiating CSV upload: {str(e)}", exc_info=True)
+        error_message = f'Error starting CSV processing: {str(e)}'
+        
+        # Set error status in session
+        try:
+            from app.utils.portfolio_processing import update_csv_progress
+            update_csv_progress(0, 100, error_message, "failed")
+        except Exception as session_error:
+            logger.error(f"Failed to update error status in session: {session_error}")
+        
+        if is_ajax:
+            return jsonify({'success': False, 'message': error_message}), 500
         else:
             flash(error_message, 'error')
-
-    if is_ajax:
-        return jsonify({'success': True, 'message': 'CSV uploaded successfully'})
-    else:
-        return redirect(url_for('portfolio.enrich'))
+            return redirect(url_for('portfolio.enrich'))
 
 
 def update_portfolio_api():
@@ -1251,59 +1192,134 @@ def manage_portfolios():
 
 
 def csv_upload_progress():
-    """API endpoint to get/clear progress of CSV upload operation"""
+    """API endpoint to get/clear progress of CSV upload operation using database tracking"""
     if 'account_id' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
 
     try:
         if request.method == 'GET':
-            # Check if there's any CSV upload progress in session
-            progress_data = session.get('csv_upload_progress', {
+            # Check for job_id in session
+            job_id = session.get('csv_upload_job_id')
+            
+            if job_id:
+                # Get progress from database using existing function
+                from app.utils.batch_processing import get_job_status
+                job_status = get_job_status(job_id)
+                
+                logger.info(f"DEBUG: Session has job_id={job_id}, job_status={job_status.get('status')}")
+                
+                # IMMEDIATELY clear failed/cancelled jobs from session to prevent infinite loops
+                if job_status.get('status') in ['failed', 'cancelled', 'completed']:
+                    logger.info(f"DEBUG: Job {job_id} has terminal status '{job_status.get('status')}', clearing from session IMMEDIATELY")
+                    if 'csv_upload_job_id' in session:
+                        del session['csv_upload_job_id']
+                        session.modified = True
+                    
+                    # Return idle status for terminal jobs to stop polling
+                    return jsonify({
+                        'current': 0,
+                        'total': 0,
+                        'percentage': 0,
+                        'status': 'idle',
+                        'message': f'Upload {job_status.get("status")}: {job_status.get("message", "")}'
+                    })
+                
+                if job_status.get('status') != 'not_found':
+                    # Check if job was cancelled or failed - clean up session immediately
+                    if job_status.get('status') in ['cancelled', 'failed']:
+                        logger.info(f"DEBUG: Job {job_id} has terminal status '{job_status.get('status')}', clearing from session")
+                        if 'csv_upload_job_id' in session:
+                            del session['csv_upload_job_id']
+                            session.modified = True
+                        
+                        # Return idle status to stop frontend polling
+                        return jsonify({
+                            'current': 0,
+                            'total': 0,
+                            'percentage': 0,
+                            'status': 'idle',
+                            'message': f'Upload {job_status.get("status")}'
+                        })
+                    
+                    # Convert database format to frontend format
+                    progress_data = {
+                        'current': job_status.get('progress', 0),
+                        'total': job_status.get('total', 100),
+                        'percentage': job_status.get('progress', 0),
+                        'status': 'processing' if job_status.get('status') == 'processing' else job_status.get('status', 'idle'),
+                        'message': job_status.get('message', 'Processing...'),
+                        'job_id': job_id
+                    }
+                    
+                    logger.info(f"DEBUG: CSV progress API returning for account {session['account_id']}: {progress_data}")
+                    logger.info(f"DEBUG: Original job_status from database: {job_status}")
+                    
+                    # This logic moved to earlier in the function for immediate cleanup
+                    
+                    return jsonify(progress_data)
+            
+            # No job_id or job not found - return idle status
+            progress_data = {
                 'current': 0,
                 'total': 0,
                 'percentage': 0,
                 'status': 'idle',
                 'message': 'No active upload'
-            })
-            
-            # Add more detailed logging
-            logger.debug(f"CSV progress requested for account {session['account_id']}: {progress_data}")
-            
-            # If we have timestamp info, check if the progress is stale
-            if progress_data.get('timestamp'):
-                import time
-                age = time.time() - progress_data['timestamp']
-                logger.debug(f"Progress data age: {age:.2f} seconds")
-                
-                # If completed status is older than 30 seconds, mark as idle
-                if progress_data['status'] == 'completed' and age > 30:
-                    progress_data = {
-                        'current': 0,
-                        'total': 0,
-                        'percentage': 0,
-                        'status': 'idle',
-                        'message': 'No active upload'
-                    }
-                    # Clear stale progress from session
-                    if 'csv_upload_progress' in session:
-                        del session['csv_upload_progress']
-                        session.modified = True
+            }
             
             return jsonify(progress_data)
         
         elif request.method == 'DELETE':
-            # Clear CSV upload progress from session
+            # Clear CSV upload job from session
+            job_id = session.get('csv_upload_job_id')
+            if job_id:
+                logger.info(f"Manually clearing CSV upload job {job_id} for account {session['account_id']}")
+                del session['csv_upload_job_id']
+                session.modified = True
+            
+            # Also clear legacy session progress if exists
             if 'csv_upload_progress' in session:
-                logger.info(f"Clearing CSV upload progress for account {session['account_id']}")
                 del session['csv_upload_progress']
                 session.modified = True
-            return jsonify({'message': 'CSV upload progress cleared'})
+                
+            return jsonify({'message': f'CSV upload progress cleared (was tracking job_id: {job_id})'})
     
     except Exception as e:
         logger.error(f"Error handling CSV upload progress: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
     return jsonify({'error': 'Method not allowed'}), 405
+
+
+def cancel_csv_upload():
+    """API endpoint to cancel ongoing CSV upload"""
+    if 'account_id' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        # Get job_id from session
+        job_id = session.get('csv_upload_job_id')
+        
+        if not job_id:
+            return jsonify({'success': False, 'message': 'No active upload to cancel'}), 400
+        
+        # Cancel the background job by marking it as cancelled in database
+        from app.utils.batch_processing import cancel_background_job
+        success = cancel_background_job(job_id)
+        
+        if success:
+            # Clear the job_id from session
+            session.pop('csv_upload_job_id', None)
+            session.modified = True
+            
+            logger.info(f"CSV upload cancelled for account_id: {session['account_id']}, job_id: {job_id}")
+            return jsonify({'success': True, 'message': 'Upload cancelled successfully'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to cancel upload'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error cancelling CSV upload: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 def get_portfolio_metrics():

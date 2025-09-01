@@ -9,7 +9,7 @@ of the default normalized one.
 
 import logging
 from typing import Optional, Dict, List
-from app.database.db_manager import query_db, execute_db
+from app.db_manager import query_db, execute_db
 
 logger = logging.getLogger(__name__)
 

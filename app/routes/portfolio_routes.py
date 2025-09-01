@@ -3,10 +3,10 @@ from flask import (
     request, flash, session, jsonify, current_app
 )
 import logging
-from app.database.db_manager import query_db
+from app.db_manager import query_db
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, get_portfolio_metrics
+    get_allocate_portfolio_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -246,7 +246,10 @@ portfolio_bp.add_url_rule('/api/portfolio_data',
 portfolio_bp.add_url_rule('/api/allocate/portfolio-data',
                           view_func=get_allocate_portfolio_data)
 portfolio_bp.add_url_rule('/api/portfolios', view_func=get_portfolios_api)
-portfolio_bp.add_url_rule('/upload', view_func=upload_csv, methods=['POST'])
+# Simple upload - no background complexity
+from app.routes.simple_upload import upload_csv_simple, get_simple_upload_progress
+portfolio_bp.add_url_rule('/upload', 'upload_csv', upload_csv_simple, methods=['POST'])
+portfolio_bp.add_url_rule('/api/simple_upload_progress', 'simple_upload_progress', get_simple_upload_progress, methods=['GET', 'DELETE'])
 portfolio_bp.add_url_rule('/api/update_portfolio',
                           view_func=update_portfolio_api, methods=['POST'])
 portfolio_bp.add_url_rule('/manage_portfolios',
@@ -263,6 +266,8 @@ portfolio_bp.add_url_rule('/api/price_fetch_progress',
                           view_func=price_fetch_progress, methods=['GET'])
 portfolio_bp.add_url_rule('/api/csv_upload_progress',
                           view_func=csv_upload_progress, methods=['GET', 'DELETE'])
+portfolio_bp.add_url_rule('/api/cancel_csv_upload',
+                          view_func=cancel_csv_upload, methods=['POST'])
 portfolio_bp.add_url_rule('/api/price_update_status/<string:job_id>',
                           view_func=price_update_status, methods=['GET'])
 portfolio_bp.add_url_rule('/api/portfolio_metrics',

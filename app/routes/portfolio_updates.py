@@ -1,5 +1,5 @@
 from flask import request, session, jsonify
-from app.database.db_manager import query_db, backup_database, get_db
+from app.db_manager import query_db, backup_database, get_db
 from app.utils.portfolio_utils import get_stock_info
 from app.utils.db_utils import update_price_in_db
 from app.utils.batch_processing import start_batch_process, get_job_status, get_latest_job_progress

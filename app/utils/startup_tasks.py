@@ -3,7 +3,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from flask import current_app
-from app.database.db_manager import query_db, backup_database
+from app.db_manager import query_db, backup_database
 from app.utils.batch_processing import start_batch_process
 
 logger = logging.getLogger(__name__)

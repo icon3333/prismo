@@ -2,7 +2,7 @@ from flask import (
     Blueprint, render_template, redirect, url_for,
     request, flash, session, jsonify, current_app
 )
-from app.database.db_manager import query_db, execute_db, backup_database, get_db
+from app.db_manager import query_db, execute_db, backup_database, get_db
 
 import sqlite3
 import logging

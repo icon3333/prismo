@@ -12,8 +12,12 @@ correct identifier format before database storage, eliminating dual-identifier p
 import logging
 import yfinance as yf
 from typing import Dict, Any, Optional
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
+
+# Cache for identifier test results to avoid repeated API calls
+_identifier_cache = {}
 
 
 def normalize_identifier(identifier: str) -> str:
@@ -143,6 +147,7 @@ def _resolve_ambiguous_identifier(identifier: str) -> str:
 def _test_yfinance_format(identifier: str) -> bool:
     """
     Test if a specific identifier format works with yfinance.
+    Uses caching and timeouts to prevent repeated slow API calls.
     
     Args:
         identifier: Identifier to test
@@ -150,34 +155,53 @@ def _test_yfinance_format(identifier: str) -> bool:
     Returns:
         True if identifier returns valid data from yfinance
     """
-    try:
-        logger.debug(f"Testing yfinance format: '{identifier}'")
-        
-        ticker = yf.Ticker(identifier)
-        
-        # Try to get info with timeout protection
+    # Check cache first to avoid repeated API calls
+    if identifier in _identifier_cache:
+        logger.debug(f"Using cached result for '{identifier}': {_identifier_cache[identifier]}")
+        return _identifier_cache[identifier]
+    
+    import time
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    
+    def _quick_test(id_to_test):
+        """Quick test with minimal timeout"""
         try:
+            ticker = yf.Ticker(id_to_test)
+            # Use fast method - just check if basic info is accessible
             info = ticker.info
-        except Exception as e:
-            logger.debug(f"Info fetch failed for '{identifier}': {e}")
-            return False
-        
-        # Check if info is valid and has price data
-        if not info or not isinstance(info, dict):
-            logger.debug(f"Empty or invalid info for '{identifier}'")
-            return False
-        
-        # Look for price indicators
-        price = info.get('regularMarketPrice') or info.get('currentPrice')
-        if price is not None and price > 0:
-            logger.debug(f"Valid price found for '{identifier}': {price}")
-            return True
-        else:
-            logger.debug(f"No valid price for '{identifier}'")
-            return False
+            if not info or not isinstance(info, dict):
+                return False
             
+            # Quick check for price indicators
+            price = info.get('regularMarketPrice') or info.get('currentPrice')
+            return price is not None and price > 0
+            
+        except Exception:
+            return False
+    
+    try:
+        logger.debug(f"Testing yfinance format: '{identifier}' with 3s timeout")
+        
+        # Use thread pool with timeout to prevent hanging
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_quick_test, identifier)
+            try:
+                result = future.result(timeout=3.0)  # 3 second timeout
+                logger.debug(f"Test result for '{identifier}': {result}")
+                
+                # Cache the result to avoid repeated calls
+                _identifier_cache[identifier] = result
+                return result
+            except TimeoutError:
+                logger.warning(f"Timeout testing '{identifier}' - assuming invalid")
+                # Cache negative result to avoid retrying
+                _identifier_cache[identifier] = False
+                return False
+                
     except Exception as e:
         logger.debug(f"Exception testing '{identifier}': {e}")
+        # Cache negative result to avoid retrying
+        _identifier_cache[identifier] = False
         return False
 
 

@@ -50,7 +50,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp)
     
     # Initialize the database
-    from app.database.db_manager import init_db, migrate_database
+    from app.db_manager import init_db, migrate_database
     init_db(app)
     
     # Run database migrations
@@ -81,7 +81,7 @@ def create_app(config_name=None):
         """Health check endpoint for Docker and load balancers."""
         try:
             # Check database connectivity
-            from app.database.db_manager import query_db
+            from app.db_manager import query_db
             query_db("SELECT 1", one=True)
             
             return jsonify({

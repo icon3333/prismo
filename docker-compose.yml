@@ -6,8 +6,8 @@ services:
     ports:
       - "8065:8065"
     volumes:
-      # Mount local /data directory for persistence
-      - /data:/data
+      # Create and mount local data directory for persistence
+      - ./data:/data
       # Mount environment file
       - ./.env:/app/.env:ro
     environment:
@@ -25,37 +25,7 @@ services:
       start_period: 40s
     networks:
       - portfolio_network
-      - socket_proxy
-
-  # Autoheal service for automatic container recovery
-  autoheal:
-    image: willfarrell/autoheal:latest
-    container_name: portfolio_autoheal
-    restart: unless-stopped
-    cap_drop: [ALL]
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      - AUTOHEAL_CONTAINER_LABEL=autoheal
-      - AUTOHEAL_INTERVAL=30
-      - AUTOHEAL_START_PERIOD=60
-      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
-      - AUTOHEAL_ONLY_MONITOR_RUNNING=true
-      - DOCKER_SOCK=tcp://socket-proxy:2375
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "autoheal"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-    networks:
-      - socket_proxy
-    depends_on:
-      - portfolio-app
 
 networks:
   portfolio_network:
     driver: bridge
-  socket_proxy:
-    external: true

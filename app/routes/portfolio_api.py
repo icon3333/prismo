@@ -800,7 +800,23 @@ def upload_csv():
         return redirect(url_for('portfolio.enrich'))
 
     file = request.files['csv_file']
-    logger.info(f"CSV file received: {file.filename}, size: {file.content_length if hasattr(file, 'content_length') else 'unknown'}")
+    
+    # Check file size if available
+    file_size = None
+    if hasattr(file, 'content_length') and file.content_length:
+        file_size = file.content_length
+    
+    logger.info(f"CSV file received: {file.filename}, size: {file_size if file_size else 'unknown'}")
+    
+    # File size limit (50MB)
+    max_size = 50 * 1024 * 1024  # 50MB
+    if file_size and file_size > max_size:
+        error_message = f"File too large ({file_size / 1024 / 1024:.1f}MB). Maximum allowed size is 50MB."
+        logger.warning(error_message)
+        if is_ajax:
+            return jsonify({'success': False, 'message': error_message}), 413
+        flash(error_message, 'error')
+        return redirect(url_for('portfolio.enrich'))
 
     # Check if file is empty
     if file.filename == '':
@@ -814,17 +830,51 @@ def upload_csv():
     try:
         logger.info("Starting CSV file processing...")
         
+        # Initialize progress immediately
+        session['csv_upload_progress'] = {
+            'current': 0,
+            'total': 100,
+            'percentage': 0,
+            'status': 'processing',
+            'message': 'Starting upload processing...',
+            'timestamp': __import__('time').time()
+        }
+        session.modified = True
+        
         # Create backup
         backup_database()
 
-        # Read file content
-        file_content = file.read().decode('utf-8')
+        # Read file content with size check
+        file_content = file.read()
+        
+        # Check actual file size after reading
+        actual_size = len(file_content)
+        if actual_size > max_size:
+            error_message = f"File content too large ({actual_size / 1024 / 1024:.1f}MB). Maximum allowed size is 50MB."
+            logger.warning(error_message)
+            if is_ajax:
+                return jsonify({'success': False, 'message': error_message}), 413
+            flash(error_message, 'error')
+            return redirect(url_for('portfolio.enrich'))
+        
+        file_content = file_content.decode('utf-8')
         logger.info(f"CSV file content length: {len(file_content)} characters")
 
         # Try to process the data (this will handle all progress tracking)
         success, message, result = process_csv_data(account_id, file_content)
 
         if success:
+            # Set completion progress
+            session['csv_upload_progress'] = {
+                'current': 100,
+                'total': 100,
+                'percentage': 100,
+                'status': 'completed',
+                'message': 'Upload completed successfully!',
+                'timestamp': __import__('time').time()
+            }
+            session.modified = True
+            
             # Show detailed success message
             message_parts = []
             if result.get('added'):
@@ -900,7 +950,17 @@ def upload_csv():
             session['use_default_portfolio'] = True
             
         else:
-            # process_csv_data already sets failure progress, just log it
+            # Set failure progress
+            session['csv_upload_progress'] = {
+                'current': 0,
+                'total': 100,
+                'percentage': 0,
+                'status': 'failed',
+                'message': message,
+                'timestamp': __import__('time').time()
+            }
+            session.modified = True
+            
             logger.error(f"CSV processing failed: {message}")
             
             if is_ajax:
@@ -918,7 +978,8 @@ def upload_csv():
             'total': 100,
             'percentage': 0,
             'status': 'failed',
-            'message': error_message
+            'message': error_message,
+            'timestamp': __import__('time').time()
         }
         session.modified = True
         

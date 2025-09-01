@@ -1,0 +1,71 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+README.md
+DEPLOYMENT.md
+DOCKER_DEPLOYMENT.md
+
+# Test files
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment and backup files
+.env.backup.*
+.env.local
+.env.development
+.env.test
+
+# Database backups (keep main db, ignore backups)
+app/database/backups/
+instance/
+
+# Python cache and virtual environments
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox/
+.cache/
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

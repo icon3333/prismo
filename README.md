@@ -39,13 +39,13 @@ cd portfolio-rebalancing-flask
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the application (will automatically set up environment if needed)
-python run.py --port 5000
+# Run the application (will automatically set up everything)
+./app.sh
 ```
 
 The app will automatically detect if you need environment setup and run the interactive configuration on first launch!
 
-Visit `http://localhost:5000` to access the application.
+Visit `http://localhost:8065` to access the application.
 
 ## 🎯 How to Use with Parqet
 

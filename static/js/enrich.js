@@ -33,7 +33,28 @@ const ProgressManager = {
         }
 
         this.hide();
+        
+        // Check for ongoing upload progress on page load
+        this.checkForOngoingUploads();
+        
         return true;
+    },
+
+    async checkForOngoingUploads() {
+        try {
+            const response = await fetch('/portfolio/api/csv_upload_progress');
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Checking for ongoing uploads:', data);
+                
+                if (data.status === 'processing' && data.percentage < 100) {
+                    console.log('Found ongoing upload, resuming progress tracking');
+                    this.startTracking('csv_upload');
+                }
+            }
+        } catch (error) {
+            console.log('No ongoing uploads found');
+        }
     },
 
     show(jobType = 'price_fetch') {
@@ -356,12 +377,18 @@ const FileUploadHandler = {
                 fileLabel.textContent = fileName;
                 console.log(`File selected: ${fileName}, size: ${fileSize} bytes`);
 
+                // Prevent multiple submissions by checking if already processing
+                if (uploadCard.classList.contains('is-processing')) {
+                    console.log('Upload already in progress, ignoring duplicate event');
+                    return;
+                }
+
                 // Add a class to the card to indicate processing
                 uploadCard.classList.add('is-processing');
                 console.log('Added is-processing class to upload card');
 
-                // Submit file via AJAX instead of form submission
-                FileUploadHandler.submitFileAjax(fileInput.files[0], uploadForm.action);
+                // Try AJAX upload first, with immediate fallback to form submission
+                FileUploadHandler.submitFileWithFallback(fileInput.files[0], uploadForm);
             } else {
                 fileLabel.textContent = 'No file selected';
                 console.log('No file selected');
@@ -378,6 +405,71 @@ const FileUploadHandler = {
         });
     },
 
+    async submitFileWithFallback(file, form) {
+        console.log('Attempting file upload with AJAX fallback to form submission');
+        
+        // Start progress tracking optimistically
+        ProgressManager.startTracking('csv_upload');
+        
+        try {
+            // Try AJAX with a short timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+            
+            const formData = new FormData();
+            formData.append('csv_file', file);
+
+            console.log('Trying AJAX upload with 3s timeout...');
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json, text/html, */*'
+                }
+            });
+
+            clearTimeout(timeoutId);
+            
+            console.log('AJAX upload succeeded, status:', response.status);
+            
+            // Handle successful AJAX response
+            if (response.ok) {
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const result = await response.json();
+                    if (result.success) {
+                        ProgressManager.setProgress(100, 'Upload completed successfully!');
+                        setTimeout(() => window.location.reload(), 1500);
+                        return;
+                    }
+                }
+            }
+            
+            // If we get here, AJAX didn't work as expected, fall back
+            throw new Error('AJAX response was not successful');
+            
+        } catch (error) {
+            console.warn('AJAX upload failed, falling back to form submission:', error.message);
+            ProgressManager.complete();
+            
+            // Remove the processing class and submit the form normally
+            const uploadCard = document.getElementById('upload-card');
+            if (uploadCard) {
+                uploadCard.classList.remove('is-processing');
+            }
+            
+            console.log('Submitting form directly');
+            
+            // Start a simple progress indication for form submission
+            ProgressManager.startTracking('csv_upload');
+            ProgressManager.setProgress(10, 'Uploading file...');
+            
+            form.submit();
+        }
+    },
+
     async submitFileAjax(file, actionUrl) {
         try {
             console.log('Submitting CSV file via AJAX...', {
@@ -385,6 +477,21 @@ const FileUploadHandler = {
                 fileSize: file.size,
                 actionUrl: actionUrl
             });
+
+            // First, test basic connectivity
+            console.log('Testing server connectivity...');
+            try {
+                const testResponse = await fetch('/portfolio/api/portfolios', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                console.log('Connectivity test status:', testResponse.status);
+            } catch (connectError) {
+                console.error('Connectivity test failed:', connectError);
+                console.log('Server appears unreachable, using form submission directly');
+                this.fallbackToFormSubmission(file, actionUrl);
+                return;
+            }
 
             // Start progress tracking now that we're actually uploading
             ProgressManager.startTracking('csv_upload');
@@ -465,28 +572,42 @@ const FileUploadHandler = {
     fallbackToFormSubmission(file, actionUrl) {
         console.log('Using fallback form submission for CSV upload');
         
-        // Create a hidden form for submission
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = actionUrl;
-        form.enctype = 'multipart/form-data';
-        form.style.display = 'none';
+        // Since AJAX failed, let's try a direct approach
+        // Reset the processing state first
+        const uploadCard = document.getElementById('upload-card');
+        if (uploadCard) {
+            uploadCard.classList.remove('is-processing');
+        }
         
-        // Create file input
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.name = 'csv_file';
-        
-        // Create a new FileList with our file
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        fileInput.files = dataTransfer.files;
-        
-        form.appendChild(fileInput);
-        document.body.appendChild(form);
-        
-        // Submit the form
-        form.submit();
+        // Get the original form and submit it normally
+        const originalForm = document.querySelector('form[action*="upload"]');
+        if (originalForm) {
+            console.log('Submitting original form directly');
+            originalForm.submit();
+        } else {
+            // Fallback: create a new form
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = actionUrl;
+            form.enctype = 'multipart/form-data';
+            form.style.display = 'none';
+            
+            // Create file input
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.name = 'csv_file';
+            
+            // Create a new FileList with our file
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            
+            form.appendChild(fileInput);
+            document.body.appendChild(form);
+            
+            // Submit the form
+            form.submit();
+        }
     },
 
     showErrorMessage(message) {

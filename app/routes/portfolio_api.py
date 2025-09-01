@@ -814,36 +814,15 @@ def upload_csv():
     try:
         logger.info("Starting CSV file processing...")
         
-        # Set initial progress
-        session['csv_upload_progress'] = {
-            'current': 0,
-            'total': 100,
-            'percentage': 0,
-            'status': 'processing',
-            'message': 'Starting upload...'
-        }
-        
         # Create backup
         backup_database()
-        
-        # Update progress
-        session['csv_upload_progress']['percentage'] = 10
-        session['csv_upload_progress']['message'] = 'Reading file...'
 
         # Read file content
         file_content = file.read().decode('utf-8')
         logger.info(f"CSV file content length: {len(file_content)} characters")
-        
-        # Update progress
-        session['csv_upload_progress']['percentage'] = 30
-        session['csv_upload_progress']['message'] = 'Processing data...'
 
-        # Try to process the data
+        # Try to process the data (this will handle all progress tracking)
         success, message, result = process_csv_data(account_id, file_content)
-        
-        # Update progress
-        session['csv_upload_progress']['percentage'] = 90
-        session['csv_upload_progress']['message'] = 'Finalizing...'
 
         if success:
             # Show detailed success message
@@ -859,15 +838,6 @@ def upload_csv():
                     f"Removed {len(result['removed'])} positions with zero shares")
 
             success_message = f"CSV data imported successfully. {' | '.join(message_parts)}"
-            
-            # Set final progress
-            session['csv_upload_progress'] = {
-                'current': 100,
-                'total': 100,
-                'percentage': 100,
-                'status': 'completed',
-                'message': 'Upload completed successfully!'
-            }
             
             if is_ajax:
                 return jsonify({'success': True, 'message': success_message})
@@ -930,14 +900,8 @@ def upload_csv():
             session['use_default_portfolio'] = True
             
         else:
-            # Set failed progress
-            session['csv_upload_progress'] = {
-                'current': 0,
-                'total': 100,
-                'percentage': 0,
-                'status': 'failed',
-                'message': message
-            }
+            # process_csv_data already sets failure progress, just log it
+            logger.error(f"CSV processing failed: {message}")
             
             if is_ajax:
                 return jsonify({'success': False, 'message': message})
@@ -948,7 +912,7 @@ def upload_csv():
         logger.error(f"Error processing CSV: {str(e)}", exc_info=True)
         error_message = f'Error processing CSV: {str(e)}'
         
-        # Set error progress
+        # Set error progress manually since process_csv_data wasn't reached
         session['csv_upload_progress'] = {
             'current': 0,
             'total': 100,
@@ -956,6 +920,7 @@ def upload_csv():
             'status': 'failed',
             'message': error_message
         }
+        session.modified = True
         
         if is_ajax:
             return jsonify({'success': False, 'message': error_message})

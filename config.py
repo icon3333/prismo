@@ -43,6 +43,7 @@ class Config:
     # Database backup settings
     DB_BACKUP_DIR = os.path.join('app', 'database', 'backups')
     MAX_BACKUP_FILES = 10
+    BACKUP_INTERVAL_HOURS = 6  # Automatic backup every 6 hours
 
     # Market data settings
     PRICE_UPDATE_INTERVAL = timedelta(hours=24)

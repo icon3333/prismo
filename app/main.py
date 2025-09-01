@@ -68,6 +68,14 @@ def create_app(config_name=None):
     except Exception as e:
         logger.error(f"Automatic price update failed: {e}")
     
+    # Trigger automatic database backup on startup
+    try:
+        with app.app_context():
+            from app.utils.startup_tasks import schedule_automatic_backups
+            schedule_automatic_backups()
+    except Exception as e:
+        logger.error(f"Automatic backup setup failed: {e}")
+    
     @app.route('/health')
     def health_check():
         """Health check endpoint for Docker and load balancers."""

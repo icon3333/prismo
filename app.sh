@@ -126,8 +126,8 @@ needs_rebuild() {
         return 0
     fi
     
-    # Check if Docker-related files changed
-    local docker_files=("Dockerfile" "docker-compose.yml" "requirements.txt" "app/database/schema_safe.sql")
+    # Check if Docker-related files changed (only core Docker files, not dependencies)
+    local docker_files=("Dockerfile" "docker-compose.yml" "app/database/schema_safe.sql")
     for file in "${docker_files[@]}"; do
         if [[ -f "$file" ]] && file_changed_since_build "$file"; then
             log_analyze "Docker file '$file' changed - rebuild needed"
@@ -158,8 +158,8 @@ needs_rebuild() {
 
 # Check if update is needed
 needs_update() {
-    # Check if code files changed
-    local code_files=("app/" "templates/" "static/" "config.py" ".env" "run.py")
+    # Check if code files changed (including requirements.txt for quick dependency updates)
+    local code_files=("app/" "templates/" "static/" "config.py" ".env" "run.py" "requirements.txt")
     for file in "${code_files[@]}"; do
         if [[ -e "$file" ]] && file_changed_since_build "$file"; then
             log_analyze "Code file '$file' changed - update needed"

@@ -778,6 +778,8 @@ def upload_csv():
     accept_header = request.headers.get('Accept', '')
     is_ajax = ('application/json' in accept_header or 
                request.headers.get('X-Requested-With') == 'XMLHttpRequest')
+    
+    logger.info(f"Request headers: Accept='{accept_header}', X-Requested-With='{request.headers.get('X-Requested-With')}', is_ajax={is_ajax}")
 
     if 'account_id' not in session:
         logger.warning("CSV upload failed - no account_id in session")

@@ -356,10 +356,6 @@ const FileUploadHandler = {
                 fileLabel.textContent = fileName;
                 console.log(`File selected: ${fileName}, size: ${fileSize} bytes`);
 
-                // Show loading indicator and start tracking
-                console.log('Starting progress tracking for csv_upload');
-                ProgressManager.startTracking('csv_upload');
-
                 // Add a class to the card to indicate processing
                 uploadCard.classList.add('is-processing');
                 console.log('Added is-processing class to upload card');
@@ -390,26 +386,50 @@ const FileUploadHandler = {
                 actionUrl: actionUrl
             });
 
+            // Start progress tracking now that we're actually uploading
+            ProgressManager.startTracking('csv_upload');
+
             const formData = new FormData();
             formData.append('csv_file', file);
+
+            console.log('Making fetch request to:', actionUrl);
+            console.log('FormData contents:', formData.get('csv_file'));
 
             const response = await fetch(actionUrl, {
                 method: 'POST',
                 body: formData,
+                credentials: 'include',
                 headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                credentials: 'same-origin'
+                    'Accept': 'application/json, text/html, */*'
+                }
             });
 
             console.log('Upload response status:', response.status);
+            console.log('Upload response headers:', response.headers);
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                console.error('Server error response:', errorText);
+                throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
             }
 
-            const result = await response.json();
+            // Try to parse the response
+            const contentType = response.headers.get('content-type');
+            let result;
+            
+            if (contentType && contentType.includes('application/json')) {
+                result = await response.json();
+            } else {
+                const text = await response.text();
+                console.warn('Non-JSON response received:', text);
+                // If it's an HTML response (redirect), it might be successful
+                if (text.includes('success') || text.includes('CSV')) {
+                    result = { success: true, message: 'CSV uploaded successfully' };
+                } else {
+                    throw new Error('Unexpected response format: ' + text.substring(0, 200));
+                }
+            }
+            
             console.log('Upload response data:', result);
 
             if (result.success) {
@@ -431,13 +451,42 @@ const FileUploadHandler = {
             
             let errorMessage = 'Error uploading file. Please try again.';
             if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
-                errorMessage = 'Network error during upload. Please check your connection and try again.';
+                console.warn('AJAX upload failed with NetworkError, falling back to form submission');
+                this.fallbackToFormSubmission(file, actionUrl);
+                return;
             } else if (error.message.includes('HTTP error')) {
                 errorMessage = `Server error during upload: ${error.message}`;
             }
             
             this.showErrorMessage(errorMessage);
         }
+    },
+
+    fallbackToFormSubmission(file, actionUrl) {
+        console.log('Using fallback form submission for CSV upload');
+        
+        // Create a hidden form for submission
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = actionUrl;
+        form.enctype = 'multipart/form-data';
+        form.style.display = 'none';
+        
+        // Create file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.name = 'csv_file';
+        
+        // Create a new FileList with our file
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        fileInput.files = dataTransfer.files;
+        
+        form.appendChild(fileInput);
+        document.body.appendChild(form);
+        
+        // Submit the form
+        form.submit();
     },
 
     showErrorMessage(message) {

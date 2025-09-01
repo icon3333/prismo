@@ -1260,12 +1260,38 @@ def csv_upload_progress():
                 'status': 'idle',
                 'message': 'No active upload'
             })
+            
+            # Add more detailed logging
+            logger.debug(f"CSV progress requested for account {session['account_id']}: {progress_data}")
+            
+            # If we have timestamp info, check if the progress is stale
+            if progress_data.get('timestamp'):
+                import time
+                age = time.time() - progress_data['timestamp']
+                logger.debug(f"Progress data age: {age:.2f} seconds")
+                
+                # If completed status is older than 30 seconds, mark as idle
+                if progress_data['status'] == 'completed' and age > 30:
+                    progress_data = {
+                        'current': 0,
+                        'total': 0,
+                        'percentage': 0,
+                        'status': 'idle',
+                        'message': 'No active upload'
+                    }
+                    # Clear stale progress from session
+                    if 'csv_upload_progress' in session:
+                        del session['csv_upload_progress']
+                        session.modified = True
+            
             return jsonify(progress_data)
         
         elif request.method == 'DELETE':
             # Clear CSV upload progress from session
             if 'csv_upload_progress' in session:
+                logger.info(f"Clearing CSV upload progress for account {session['account_id']}")
                 del session['csv_upload_progress']
+                session.modified = True
             return jsonify({'message': 'CSV upload progress cleared'})
     
     except Exception as e:

@@ -6,10 +6,13 @@
 // Centralized Progress Manager - handles all progress tracking
 const ProgressManager = {
     elements: {
-        progressElement: null,
-        progressPercentage: null,
-        progressBar: null,
-        uploadPercentage: null // Added for CSV upload percentage
+        // Price fetch elements
+        priceProgressElement: null,
+        priceProgressPercentage: null,
+        priceProgressBar: null,
+        // CSV upload elements
+        csvUploadIndicator: null,
+        uploadPercentage: null
     },
 
     currentJob: {
@@ -19,13 +22,24 @@ const ProgressManager = {
     },
 
     init() {
-        // Initialize elements based on job type
+        console.log('ProgressManager: Initializing...');
+        
+        // Initialize price fetch elements
         this.elements.priceProgressElement = document.getElementById('price-fetch-progress');
         this.elements.priceProgressPercentage = document.getElementById('progress-percentage');
         this.elements.priceProgressBar = document.getElementById('progress-bar');
 
+        // Initialize CSV upload elements
         this.elements.csvUploadIndicator = document.getElementById('csv-upload-indicator');
-        this.elements.uploadPercentage = document.getElementById('upload-percentage'); // Get the percentage element
+        this.elements.uploadPercentage = document.getElementById('upload-percentage');
+
+        console.log('ProgressManager: Elements found:', {
+            priceProgressElement: !!this.elements.priceProgressElement,
+            priceProgressPercentage: !!this.elements.priceProgressPercentage,
+            priceProgressBar: !!this.elements.priceProgressBar,
+            csvUploadIndicator: !!this.elements.csvUploadIndicator,
+            uploadPercentage: !!this.elements.uploadPercentage
+        });
 
         if (!this.elements.priceProgressElement && !this.elements.csvUploadIndicator) {
             console.warn('No progress or indicator elements found - some features may be disabled');
@@ -92,18 +106,27 @@ const ProgressManager = {
         console.log(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''}`);
 
         if (jobType === 'csv_upload') {
-            // Updated to handle percentage display
+            // Handle CSV upload progress
             if (this.elements.uploadPercentage) {
                 this.elements.uploadPercentage.textContent = `${Math.round(percentage)}%`;
+            } else {
+                console.warn('ProgressManager: uploadPercentage element not found for CSV progress');
             }
             return;
         } else if (jobType === 'price_fetch') {
+            // Handle price fetch progress
             if (this.elements.priceProgressPercentage) {
                 this.elements.priceProgressPercentage.textContent = `${Math.round(percentage)}%`;
+            } else {
+                console.warn('ProgressManager: priceProgressPercentage element not found for price progress');
             }
             if (this.elements.priceProgressBar) {
                 this.elements.priceProgressBar.value = percentage;
+            } else {
+                console.warn('ProgressManager: priceProgressBar element not found for price progress');
             }
+        } else {
+            console.warn(`ProgressManager: Unknown job type: ${jobType}`);
         }
     },
 
@@ -137,7 +160,8 @@ const ProgressManager = {
         this.checkPriceFetchProgress();
     },
 
-    startCsvUploadProgress(checkInterval = 500) {
+    startCsvUploadProgress(checkInterval = 1000) {
+        // Use longer interval to reduce server load
         this.currentJob.interval = setInterval(() => {
             this.checkCsvProgress();
         }, checkInterval);
@@ -184,34 +208,47 @@ const ProgressManager = {
             this.setProgress(percentage, message);
 
             // Check completion
-            if (data.status === 'completed' || data.status === 'failed') {
-                if (data.status === 'completed') {
-                    this.setProgress(100, 'Upload completed successfully!');
-                } else {
-                    this.setProgress(0, 'Upload failed');
-                }
-
-                // Stop tracking immediately to prevent further polling
+            if (data.status === 'completed') {
+                this.setProgress(100, 'Upload completed successfully!');
                 this.stopTracking();
                 
-                // Hide progress after a brief delay
+                // Show success notification
+                if (typeof showNotification === 'function') {
+                    showNotification('CSV upload completed successfully!', 'is-success');
+                }
+                
                 setTimeout(() => {
                     this.hide();
-                    // Clear the progress from session after completion
+                    // Clear the progress from session
                     fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
-
-                    // Reload the page to show updated data
-                    if (data.status === 'completed') {
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
-                    }
-                }, 1500);
+                    // Reload to show updated data
+                    window.location.reload();
+                }, 2000);
+                
+            } else if (data.status === 'failed') {
+                this.error(data.message || 'Upload failed');
+                this.stopTracking();
+                
+                setTimeout(() => {
+                    this.hide();
+                    // Clear the progress from session
+                    fetch('/portfolio/api/csv_upload_progress', { method: 'DELETE' }).catch(() => { });
+                }, 3000);
+                
+            } else if (data.status === 'idle' && percentage === 0) {
+                // No active upload found - this might mean the upload completed outside our polling
+                console.log('No active upload found - checking if this is expected');
+                // Don't immediately stop - let it continue polling for a bit in case upload just started
             }
+            
         } catch (error) {
             console.error('Error checking CSV upload progress:', error);
-            // Don't set progress to 0 on error, just log it
-            // This prevents the progress from resetting during temporary network issues
+            
+            // If we get network errors repeatedly, we might want to stop tracking
+            // But for now, just log and continue - the upload might still be processing
+            if (error.message.includes('NetworkError')) {
+                console.warn('Network error while checking progress - upload may still be processing');
+            }
         }
     },
 
@@ -226,10 +263,26 @@ const ProgressManager = {
 
     error(message = 'Operation failed') {
         console.error('Progress error:', message);
-        this.elements.progressPercentage.textContent = 'Error';
+        
+        const jobType = this.currentJob.type;
+        
+        // Safely set error message based on job type
+        if (jobType === 'csv_upload' && this.elements.uploadPercentage) {
+            this.elements.uploadPercentage.textContent = 'Error';
+        } else if (jobType === 'price_fetch' && this.elements.priceProgressPercentage) {
+            this.elements.priceProgressPercentage.textContent = 'Error';
+        } else {
+            console.warn('ProgressManager: Could not display error message - no suitable element found');
+        }
+        
+        // Show user-friendly notification if available
+        if (typeof showNotification === 'function') {
+            showNotification(message, 'is-danger');
+        }
+        
         setTimeout(() => {
             this.hide();
-        }, 2000);
+        }, 3000); // Show error longer for user to read
     }
 };
 
@@ -326,9 +379,9 @@ const UpdateAllDataHandler = {
             }
         } catch (error) {
             console.error('Error updating all prices:', error);
-            ProgressManager.error();
+            ProgressManager.error(error.message || 'Error updating prices');
             if (typeof showNotification === 'function') {
-                showNotification('An error occurred while updating prices', 'is-danger');
+                showNotification(error.message || 'Error updating prices', 'is-danger');
             }
         } finally {
             // Re-enable the button
@@ -387,8 +440,8 @@ const FileUploadHandler = {
                 uploadCard.classList.add('is-processing');
                 console.log('Added is-processing class to upload card');
 
-                // Try AJAX upload first, with immediate fallback to form submission
-                FileUploadHandler.submitFileWithFallback(fileInput.files[0], uploadForm);
+                // Upload file using reliable AJAX method
+                FileUploadHandler.submitFile(fileInput.files[0], uploadForm);
             } else {
                 fileLabel.textContent = 'No file selected';
                 console.log('No file selected');
@@ -405,68 +458,93 @@ const FileUploadHandler = {
         });
     },
 
-    async submitFileWithFallback(file, form) {
-        console.log('Attempting file upload with AJAX fallback to form submission');
+    async submitFile(file, form) {
+        console.log('Starting CSV file upload:', {
+            fileName: file.name,
+            fileSize: file.size,
+            actionUrl: form.action
+        });
         
-        // Start progress tracking optimistically
+        // Start progress tracking
         ProgressManager.startTracking('csv_upload');
         
         try {
-            // Try AJAX with a short timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-            
             const formData = new FormData();
             formData.append('csv_file', file);
 
-            console.log('Trying AJAX upload with 3s timeout...');
+            console.log('Uploading file via AJAX...');
+            
+            // Use longer timeout for file uploads (30 seconds)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+                console.error('Upload timeout after 30 seconds');
+            }, 30000);
+            
             const response = await fetch(form.action, {
                 method: 'POST',
                 body: formData,
                 credentials: 'include',
                 signal: controller.signal,
                 headers: {
-                    'Accept': 'application/json, text/html, */*'
+                    'Accept': 'application/json'
                 }
             });
 
             clearTimeout(timeoutId);
             
-            console.log('AJAX upload succeeded, status:', response.status);
+            console.log('Upload response received:', {
+                status: response.status,
+                ok: response.ok,
+                contentType: response.headers.get('content-type')
+            });
             
-            // Handle successful AJAX response
             if (response.ok) {
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    const result = await response.json();
-                    if (result.success) {
-                        ProgressManager.setProgress(100, 'Upload completed successfully!');
-                        setTimeout(() => window.location.reload(), 1500);
-                        return;
+                const result = await response.json();
+                console.log('Upload result:', result);
+                
+                if (result.success) {
+                    ProgressManager.setProgress(100, 'Upload completed successfully!');
+                    
+                    // Show success notification
+                    if (typeof showNotification === 'function') {
+                        showNotification(result.message || 'CSV uploaded successfully!', 'is-success');
                     }
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                    return;
+                } else {
+                    throw new Error(result.message || 'Upload failed');
                 }
+            } else {
+                const errorText = await response.text();
+                throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
             }
             
-            // If we get here, AJAX didn't work as expected, fall back
-            throw new Error('AJAX response was not successful');
-            
         } catch (error) {
-            console.warn('AJAX upload failed, falling back to form submission:', error.message);
-            ProgressManager.complete();
+            console.error('Upload failed:', error);
             
-            // Remove the processing class and submit the form normally
+            let errorMessage = 'Upload failed';
+            if (error.name === 'AbortError') {
+                errorMessage = 'Upload timed out. Please try again with a smaller file.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            ProgressManager.error(errorMessage);
+            
+            // Show error notification
+            if (typeof showNotification === 'function') {
+                showNotification(errorMessage, 'is-danger');
+            }
+            
+            // Reset upload card state
             const uploadCard = document.getElementById('upload-card');
             if (uploadCard) {
                 uploadCard.classList.remove('is-processing');
             }
-            
-            console.log('Submitting form directly');
-            
-            // Start a simple progress indication for form submission
-            ProgressManager.startTracking('csv_upload');
-            ProgressManager.setProgress(10, 'Uploading file...');
-            
-            form.submit();
         }
     },
 

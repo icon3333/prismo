@@ -13,16 +13,26 @@ logger = logging.getLogger(__name__)
 
 
 def update_csv_progress(current, total, message="Processing...", status="processing"):
-    """Update CSV upload progress in session"""
+    """Update CSV upload progress in session with improved persistence"""
+    import time
     percentage = int((current / total) * 100) if total > 0 else 0
-    session['csv_upload_progress'] = {
+    
+    # Add timestamp for better tracking
+    progress_data = {
         'current': current,
         'total': total,
         'percentage': percentage,
         'status': status,
-        'message': message
+        'message': message,
+        'timestamp': time.time(),
+        'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
     }
+    
+    session['csv_upload_progress'] = progress_data
     session.modified = True
+    
+    # Log progress for debugging
+    logger.info(f"CSV Progress: {percentage}% - {message} (Status: {status})")
 
 
 def process_csv_data(account_id, file_content):
@@ -35,9 +45,17 @@ def process_csv_data(account_id, file_content):
         
         db = get_db()
         cursor = db.cursor()
+        
+        # CRITICAL: Always create backup before processing [[memory:7528819]]
+        logger.info("Creating automatic backup before CSV processing...")
         backup_database()
+        update_csv_progress(5, 100, "Backup created, processing CSV...", "processing")
         
         update_csv_progress(10, 100, "Reading CSV file...", "processing")
+        
+        # Add small delay to ensure progress is captured
+        import time
+        time.sleep(0.1)
 
         df = pd.read_csv(io.StringIO(file_content),
                          delimiter=';',
@@ -46,6 +64,7 @@ def process_csv_data(account_id, file_content):
         df.columns = df.columns.str.lower()
         
         update_csv_progress(20, 100, "Validating CSV columns...", "processing")
+        time.sleep(0.1)
 
         essential_columns = {
             "identifier": ["identifier", "isin", "symbol"],
@@ -93,6 +112,7 @@ def process_csv_data(account_id, file_content):
         df = df.rename(columns=column_mapping)
         
         update_csv_progress(30, 100, "Preparing data...", "processing")
+        time.sleep(0.1)
 
         if 'currency' not in df.columns:
             df['currency'] = 'EUR'
@@ -194,6 +214,7 @@ def process_csv_data(account_id, file_content):
         company_positions = {}
 
         update_csv_progress(40, 100, "Processing buy transactions...", "processing")
+        time.sleep(0.1)
         
         logger.info("FIRST PASS: Processing buy and transferin transactions")
         for idx, row in df.iterrows():
@@ -241,6 +262,7 @@ def process_csv_data(account_id, file_content):
                 f"Buy/TransferIn: {company_name}, +{shares} @ {price}, total shares: {company['total_shares']}, total invested: {company['total_invested']:.2f}")
 
         update_csv_progress(50, 100, "Processing sell transactions...", "processing")
+        time.sleep(0.1)
         
         logger.info("SECOND PASS: Processing sell and transferout transactions")
         for idx, row in df.iterrows():
@@ -336,6 +358,7 @@ def process_csv_data(account_id, file_content):
         csv_company_names = set(df['holdingname'])
         
         update_csv_progress(60, 100, "Updating database...", "processing")
+        time.sleep(0.1)
         
         # Track companies that should be removed (either not in CSV or have zero shares)
         companies_with_zero_shares = set()
@@ -525,6 +548,7 @@ def process_csv_data(account_id, file_content):
 
         if all_identifiers:
             update_csv_progress(80, 100, "Updating prices and metadata...", "processing")
+            time.sleep(0.1)
             logger.info(
                 f"Updating prices and metadata for {len(all_identifiers)} companies")
             for identifier in all_identifiers:
@@ -552,7 +576,11 @@ def process_csv_data(account_id, file_content):
                         f"Error updating price for {identifier}: {str(e)}")
                     failed_prices.append(identifier)
 
+        # Final completion with longer persistence
         update_csv_progress(100, 100, "CSV import completed successfully!", "completed")
+        
+        # Keep the completion status for a bit longer for frontend to catch it
+        time.sleep(0.5)
         
         message = "CSV data imported successfully with simple add/subtract calculation"
         if positions_removed:

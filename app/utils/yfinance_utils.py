@@ -80,24 +80,29 @@ def _is_likely_crypto(identifier: str) -> bool:
 
 def get_isin_data(identifier: str) -> Dict[str, Any]:
     """
-    Get stock/crypto data for a given pre-normalized identifier.
+    Get stock/crypto data using fallback pattern instead of pre-normalization.
     
-    Since identifiers are now pre-normalized by the identifier_normalization module,
-    this function is simplified to just fetch data using the exact identifier provided.
+    Uses the new fallback approach: try original identifier first, then crypto format
+    if rules suggest it. This replaces the expensive dual-testing during normalization.
     """
-    logger.info(f"Processing pre-normalized identifier: {identifier}")
+    from .identifier_normalization import fetch_price_with_crypto_fallback
+    
+    logger.info(f"Fetching data with fallback for identifier: {identifier}")
 
-    # Fetch data using the pre-normalized identifier
-    data = _fetch_yfinance_data_robust(identifier)
+    # Use the new fallback pattern
+    data = fetch_price_with_crypto_fallback(identifier)
     
     if not data:
-        logger.error(f"Failed to fetch data for pre-normalized identifier '{identifier}'")
+        logger.error(f"Failed to fetch data for identifier '{identifier}' with fallback")
         return {'success': False, 'error': f"Could not find data for identifier {identifier}."}
 
+    # Get the effective identifier used (original or crypto format)
+    effective_identifier = data.get('effective_identifier', identifier)
+    
     # Set crypto-specific fields if identifier ends with -USD (crypto format)
-    if identifier.endswith('-USD'):
+    if effective_identifier.endswith('-USD'):
         data['country'] = 'N/A'
-        logger.info(f"Detected crypto identifier: {identifier}")
+        logger.info(f"Using crypto identifier: {effective_identifier}")
 
     # --- Post-processing and Currency Conversion ---
 
@@ -119,6 +124,7 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         'price_eur': data.get('priceEUR'),
         'currency': currency,
         'country': data.get('country'),
+        'effective_identifier': effective_identifier,
     }
 
 

@@ -15,32 +15,24 @@ from app.utils.db_utils import update_price_in_db
 
 logger = logging.getLogger(__name__)
 
-# Pre-defined crypto symbols for fast identification
-KNOWN_CRYPTO_SYMBOLS = {
-    'BTC', 'ETH', 'ADA', 'SOL', 'BNB', 'DOT', 'MATIC', 'AVAX', 'ATOM', 'LINK',
-    'UNI', 'LTC', 'BCH', 'XLM', 'VET', 'ICP', 'FIL', 'TRX', 'ETC', 'XMR',
-    'ALGO', 'MANA', 'SAND', 'CRV', 'COMP', 'AAVE', 'MKR', 'SNX', 'YFI', 'SUSHI'
-}
+# Hardcoded crypto symbols removed - now using 5-rule system for better scalability
 
 def normalize_simple(identifier: str) -> str:
     """
-    Ultra-simple identifier normalization using heuristics first, API calls as fallback.
-    Much faster than the complex dual-testing approach.
+    Rule-based identifier normalization using 5-rule system.
+    No hardcoded symbols - uses same logic as main normalization module.
     """
     if not identifier or not identifier.strip():
         return identifier
     
     clean_id = identifier.strip().upper()
     
-    # Already in crypto format
-    if clean_id.endswith('-USD'):
-        return clean_id
+    # Use the same 5-rule system as main normalization
+    from .identifier_normalization import should_try_crypto_format
     
-    # Known crypto symbols
-    if clean_id in KNOWN_CRYPTO_SYMBOLS:
+    if should_try_crypto_format(clean_id):
         return f"{clean_id}-USD"
     
-    # Stock symbols (most common case)
     return clean_id
 
 def fetch_price_simple(identifier: str) -> Dict[str, Any]:
@@ -171,6 +163,11 @@ def consolidate_transactions_by_identifier(transactions_df: pd.DataFrame) -> Dic
     
     for idx, row in transactions_df.iterrows():
         try:
+            # Check for NaN identifier first - this prevents 'nan' from appearing in the portfolio
+            if pd.isna(row['identifier']) or not str(row['identifier']).strip():
+                logger.warning(f"Skipping transaction {idx}: missing or empty identifier")
+                continue
+                
             identifier = normalize_simple(str(row['identifier']))
             transaction_type = str(row['type']).lower()
             shares = float(row['shares'])

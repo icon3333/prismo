@@ -237,6 +237,12 @@ def process_csv_data(account_id, file_content):
                 update_csv_progress(processed_transactions, total_transactions, progress_msg, "processing")
             company_name = row['holdingname']
             transaction_type = row['type']
+            
+            # Check for NaN identifier first - this prevents 'nan' from appearing in the portfolio
+            if pd.isna(row['identifier']) or not str(row['identifier']).strip():
+                logger.warning(f"Skipping transaction {idx}: missing or empty identifier for {company_name}")
+                continue
+                
             if transaction_type == 'dividend':
                 logger.info(
                     f"Skipping dividend transaction for {company_name}")
@@ -284,6 +290,12 @@ def process_csv_data(account_id, file_content):
         for idx, row in df.iterrows():
             company_name = row['holdingname']
             transaction_type = row['type']
+            
+            # Check for NaN identifier for consistency (though second pass uses company_name)
+            if pd.isna(row['identifier']) or not str(row['identifier']).strip():
+                logger.warning(f"Skipping transaction {idx}: missing or empty identifier for {company_name}")
+                continue
+                
             if transaction_type == 'dividend':
                 logger.info(
                     f"Skipping dividend transaction for {company_name}")

@@ -1,31 +1,26 @@
 """
-Smart Identifier Normalization for Crypto/Stock Detection
+Simple Rule-Based Identifier Normalization for Crypto/Stock Detection
 
-This module implements intelligent identifier normalization that automatically detects
+This module implements simple rule-based identifier normalization that automatically detects
 and converts cryptocurrency symbols to their correct yfinance format (SYMBOL-USD)
 while preserving stock tickers and ISINs in their original format.
 
-Core concept: Test both stock and crypto formats during import to determine the
-correct identifier format before database storage, eliminating dual-identifier problems.
+Core concept: Use simple 5-rule system with fallback pattern instead of expensive dual-testing.
+Fallback approach tries original format first, then crypto format if rules suggest it.
 """
 
 import logging
-import yfinance as yf
 from typing import Dict, Any, Optional
-from functools import lru_cache
 
 logger = logging.getLogger(__name__)
-
-# Cache for identifier test results to avoid repeated API calls
-_identifier_cache = {}
 
 
 def normalize_identifier(identifier: str) -> str:
     """
-    Primary entry point for identifier normalization.
+    Primary entry point for identifier normalization using 5-rule system.
     
-    Routes identifiers through detection and resolution pipeline to determine
-    the correct format for database storage.
+    Simple rule-based approach that directly applies crypto format if rules suggest it,
+    avoiding expensive dual API testing during normalization.
     
     Args:
         identifier: Raw identifier from CSV/user input
@@ -37,172 +32,109 @@ def normalize_identifier(identifier: str) -> str:
         logger.warning("Empty identifier provided to normalize_identifier")
         return identifier
     
-    clean_identifier = identifier.strip()
+    clean_identifier = identifier.strip().upper()
     logger.info(f"Normalizing identifier: '{clean_identifier}'")
     
-    # Check if identifier needs ambiguity resolution
-    if _is_potentially_ambiguous(clean_identifier):
-        logger.info(f"'{clean_identifier}' is potentially ambiguous, resolving format")
-        normalized = _resolve_ambiguous_identifier(clean_identifier)
-        if normalized != clean_identifier:
-            logger.info(f"Normalized '{clean_identifier}' -> '{normalized}'")
-        return normalized
+    # Apply 5-rule system directly
+    if should_try_crypto_format(clean_identifier):
+        crypto_format = f"{clean_identifier}-USD"
+        logger.info(f"Applying crypto format: '{clean_identifier}' -> '{crypto_format}'")
+        return crypto_format
     else:
-        logger.info(f"'{clean_identifier}' is not ambiguous, using as-is")
+        logger.info(f"Using stock format: '{clean_identifier}'")
         return clean_identifier
 
 
-def _is_potentially_ambiguous(identifier: str) -> bool:
+def should_try_crypto_format(identifier: str) -> bool:
     """
-    Identify identifiers that could be either stock or crypto.
+    Simple 5-rule crypto detection system.
     
-    Rules:
-    - ISINs (12 chars, alphanumeric): Not ambiguous (stock)
-    - Exchange suffixes (.PA, .L): Not ambiguous (stock)
-    - Short alphabetic (≤5 chars): Potentially ambiguous
-    - Others: Not ambiguous
+    Rules (in order):
+    1. Already ends with -USD? → Use as-is (False)
+    2. Is ISIN (12 chars)? → Stock format (False) 
+    3. Has exchange suffix (.)? → Stock format (False)
+    4. Is ≤6 chars alphabetic? → Try crypto fallback (True)
+    5. Default → Stock format (False)
     
     Args:
         identifier: Cleaned identifier string
         
     Returns:
-        True if identifier could be either stock or crypto
+        True if identifier should get crypto fallback attempt
     """
     clean_id = identifier.upper().strip()
     
-    # ISINs are 12 characters - not ambiguous (clearly stock)
+    # Rule 1: Already crypto format
+    if clean_id.endswith('-USD'):
+        logger.debug(f"'{identifier}' already crypto format")
+        return False
+    
+    # Rule 2: ISIN format (12 chars starting with 2 letters)
     if len(clean_id) == 12 and clean_id[:2].isalpha() and clean_id[2:].isalnum():
-        logger.debug(f"'{identifier}' identified as ISIN (not ambiguous)")
+        logger.debug(f"'{identifier}' identified as ISIN (stock format)")
         return False
     
-    # Exchange suffixes indicate stock - not ambiguous
+    # Rule 3: Exchange suffix
     if '.' in clean_id:
-        logger.debug(f"'{identifier}' has exchange suffix (not ambiguous)")
+        logger.debug(f"'{identifier}' has exchange suffix (stock format)")
         return False
-    
-    # Short alphabetic identifiers are potentially ambiguous
-    if len(clean_id) <= 5 and clean_id.isalpha():
-        logger.debug(f"'{identifier}' is short alphabetic (potentially ambiguous)")
+        
+    # Rule 4: Short alphabetic (main crypto pattern)
+    if len(clean_id) <= 6 and clean_id.isalpha():
+        logger.debug(f"'{identifier}' is ≤6 chars alphabetic (try crypto fallback)")
         return True
     
-    # Everything else is not ambiguous
-    logger.debug(f"'{identifier}' does not match ambiguous patterns")
+    # Rule 5: Default to stock format
+    logger.debug(f"'{identifier}' defaults to stock format")
     return False
 
 
-def _resolve_ambiguous_identifier(identifier: str) -> str:
+def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     """
-    Test both stock and crypto formats and choose the working one.
+    Universal fallback pattern - replaces dual testing with simple fallback.
     
     Process:
-    1. Test stock format: yfinance.Ticker(identifier).info
-    2. Test crypto format: yfinance.Ticker(f"{identifier}-USD").info
-    3. Apply resolution logic based on results
+    1. Try original identifier first (1 API call)
+    2. If failed and rules suggest crypto, try with -USD (1 more API call)
+    3. Return best result
     
-    Resolution Logic Matrix (Updated for Crypto Priority):
-    | Stock Works | Crypto Works | Decision | Rationale |
-    |-------------|--------------|----------|-----------|
-    | ✅ Yes      | ✅ Yes       | Use Crypto| Crypto format more reliable for crypto assets |
-    | ✅ Yes      | ❌ No        | Use Stock| Clear stock ticker |
-    | ❌ No       | ✅ Yes       | Use Crypto| Clear crypto symbol |
-    | ❌ No       | ❌ No        | Use Original| Preserve input, log warning |
+    This replaces the expensive dual-testing approach with a fast fallback pattern.
     
     Args:
-        identifier: Clean identifier to resolve
+        identifier: Identifier to fetch price for
         
     Returns:
-        Resolved identifier in correct format
+        Price data dictionary with success status
     """
-    clean_id = identifier.upper().strip()
-    stock_format = clean_id
-    crypto_format = f"{clean_id}-USD"
+    from .yfinance_utils import _fetch_yfinance_data_robust
     
-    logger.info(f"Testing formats for '{identifier}': stock='{stock_format}', crypto='{crypto_format}'")
+    logger.info(f"Fetching price with crypto fallback for: '{identifier}'")
     
-    # Test both formats
-    stock_works = _test_yfinance_format(stock_format)
-    crypto_works = _test_yfinance_format(crypto_format)
+    # Always try original identifier first
+    result = _fetch_yfinance_data_robust(identifier)
     
-    logger.info(f"Format test results - stock: {stock_works}, crypto: {crypto_works}")
+    # If failed and rules suggest crypto, try with -USD
+    if not result and should_try_crypto_format(identifier):
+        crypto_identifier = f"{identifier}-USD"
+        logger.info(f"Trying crypto fallback: {identifier} → {crypto_identifier}")
+        
+        result = _fetch_yfinance_data_robust(crypto_identifier)
+        
+        if result:
+            logger.info(f"Crypto fallback successful for: {crypto_identifier}")
+            return {**result, 'effective_identifier': crypto_identifier}
     
-    # Apply resolution logic - prefer crypto format when both work
-    if stock_works and crypto_works:
-        # Both work - prefer crypto (more reliable for crypto assets, avoids dual format issues)
-        logger.info(f"Both formats work for '{identifier}', choosing crypto format: '{crypto_format}'")
-        return crypto_format
-    elif stock_works and not crypto_works:
-        # Only stock works - clear stock ticker
-        logger.info(f"Only stock format works for '{identifier}': '{stock_format}'")
-        return stock_format
-    elif not stock_works and crypto_works:
-        # Only crypto works - clear crypto symbol
-        logger.info(f"Only crypto format works for '{identifier}': '{crypto_format}'")
-        return crypto_format
+    if result:
+        logger.info(f"Original format successful for: {identifier}")
+        return {**result, 'effective_identifier': identifier}
     else:
-        # Neither works - preserve original and log warning
-        logger.warning(f"Neither format works for '{identifier}', preserving original")
-        return identifier
+        logger.warning(f"Both original and crypto fallback failed for: {identifier}")
+        return {}
 
 
-def _test_yfinance_format(identifier: str) -> bool:
-    """
-    Test if a specific identifier format works with yfinance.
-    Uses caching and timeouts to prevent repeated slow API calls.
-    
-    Args:
-        identifier: Identifier to test
-        
-    Returns:
-        True if identifier returns valid data from yfinance
-    """
-    # Check cache first to avoid repeated API calls
-    if identifier in _identifier_cache:
-        logger.debug(f"Using cached result for '{identifier}': {_identifier_cache[identifier]}")
-        return _identifier_cache[identifier]
-    
-    import time
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError
-    
-    def _quick_test(id_to_test):
-        """Quick test with minimal timeout"""
-        try:
-            ticker = yf.Ticker(id_to_test)
-            # Use fast method - just check if basic info is accessible
-            info = ticker.info
-            if not info or not isinstance(info, dict):
-                return False
-            
-            # Quick check for price indicators
-            price = info.get('regularMarketPrice') or info.get('currentPrice')
-            return price is not None and price > 0
-            
-        except Exception:
-            return False
-    
-    try:
-        logger.debug(f"Testing yfinance format: '{identifier}' with 3s timeout")
-        
-        # Use thread pool with timeout to prevent hanging
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_quick_test, identifier)
-            try:
-                result = future.result(timeout=3.0)  # 3 second timeout
-                logger.debug(f"Test result for '{identifier}': {result}")
-                
-                # Cache the result to avoid repeated calls
-                _identifier_cache[identifier] = result
-                return result
-            except TimeoutError:
-                logger.warning(f"Timeout testing '{identifier}' - assuming invalid")
-                # Cache negative result to avoid retrying
-                _identifier_cache[identifier] = False
-                return False
-                
-    except Exception as e:
-        logger.debug(f"Exception testing '{identifier}': {e}")
-        # Cache negative result to avoid retrying
-        _identifier_cache[identifier] = False
-        return False
+# Legacy dual testing function removed
+# Dual testing has been replaced with simple fallback pattern in fetch_price_with_crypto_fallback()
+# This eliminates the expensive 2-API-calls-per-identifier approach during normalization
 
 
 def cleanup_crypto_duplicates() -> Dict[str, Any]:

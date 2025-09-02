@@ -161,9 +161,207 @@ def fetch_price_simple(identifier: str) -> Dict[str, Any]:
             'success': False
         }
 
+def consolidate_transactions_by_identifier(transactions_df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """
+    Consolidate transactions by identifier, handling Buy/TransferIn vs Sell/TransferOut.
+    Calculate net positions and weighted average prices using amount summation approach.
+    Cost/Time: O(n) processing with efficient grouping, avoids exchange rate API calls [[memory:6980966]]
+    """
+    consolidated = {}
+    
+    for idx, row in transactions_df.iterrows():
+        try:
+            identifier = normalize_simple(str(row['identifier']))
+            transaction_type = str(row['type']).lower()
+            shares = float(row['shares'])
+            price = float(row['price'])
+            # Use amount column if available, otherwise calculate from shares * price
+            amount = float(row.get('amount', shares * price))
+            
+            # Skip zero or negative shares
+            if shares <= 0:
+                continue
+            
+            # Determine if this is additive or subtractive
+            is_additive = transaction_type in ['buy', 'transferin']
+            is_subtractive = transaction_type in ['sell', 'transferout']
+            
+            if not (is_additive or is_subtractive):
+                continue  # Skip unknown transaction types
+            
+            if identifier not in consolidated:
+                consolidated[identifier] = {
+                    'identifier': identifier,
+                    'name': str(row['holdingname']).strip(),
+                    'buy_shares': 0.0,
+                    'buy_amount': 0.0,
+                    'sell_shares': 0.0,
+                    'sell_amount': 0.0,
+                    'currency': row.get('currency', 'EUR')
+                }
+            
+            position = consolidated[identifier]
+            
+            if is_additive:
+                position['buy_shares'] += shares
+                position['buy_amount'] += amount
+            elif is_subtractive:
+                position['sell_shares'] += shares
+                position['sell_amount'] += amount
+            
+        except Exception as e:
+            logger.warning(f"Failed to process transaction {idx}: {e}")
+            continue
+    
+    # Calculate final consolidated positions
+    final_positions = {}
+    for identifier, position in consolidated.items():
+        net_shares = position['buy_shares'] - position['sell_shares']
+        net_amount = position['buy_amount'] - position['sell_amount']
+        
+        # Only keep positions with positive net shares
+        if net_shares > 0:
+            # Calculate weighted average price for remaining position
+            if position['buy_shares'] > 0:
+                weighted_avg_price = position['buy_amount'] / position['buy_shares']
+            else:
+                weighted_avg_price = 0.0
+            
+            final_positions[identifier] = {
+                'identifier': identifier,
+                'name': position['name'],
+                'net_shares': net_shares,
+                'total_amount': net_amount,
+                'weighted_avg_price': weighted_avg_price,
+                'currency': position['currency']
+            }
+            
+            logger.info(f"Consolidated {identifier}: {net_shares:.6f} shares, €{net_amount:.2f} total, €{weighted_avg_price:.6f} avg price")
+    
+    return final_positions
+
+def save_consolidated_position(account_id: int, position_data: Dict[str, Any]) -> bool:
+    """
+    Save consolidated position data to database.
+    Position data contains final net shares, total amount, and weighted average price.
+    """
+    try:
+        from app.utils.db_utils import query_db, execute_db
+        
+        # Get default portfolio for this account
+        portfolio = query_db(
+            "SELECT id FROM portfolios WHERE account_id = ? AND name = '-'",
+            (account_id,), one=True
+        )
+        
+        if not portfolio:
+            # Create default portfolio if it doesn't exist
+            execute_db(
+                "INSERT INTO portfolios (name, account_id) VALUES (?, ?)",
+                ('-', account_id)
+            )
+            portfolio = query_db(
+                "SELECT id FROM portfolios WHERE account_id = ? AND name = '-'",
+                (account_id,), one=True
+            )
+        
+        portfolio_id = portfolio['id']
+        
+        # Check if company already exists
+        existing_company = query_db(
+            "SELECT id, name FROM companies WHERE account_id = ? AND identifier = ?",
+            (account_id, position_data['identifier']),
+            one=True
+        )
+        
+        if existing_company:
+            company_id = existing_company['id']
+            
+            # Get existing override status to preserve user manual edits
+            existing_shares_data = query_db(
+                "SELECT shares, override_share FROM company_shares WHERE company_id = ?",
+                (company_id,), one=True
+            )
+            
+            if existing_shares_data:
+                preserve_override = existing_shares_data.get('override_share', False)
+                
+                if preserve_override:
+                    # User has manually edited - preserve their override, don't update shares
+                    logger.info(f"Preserving user manual override for {position_data['identifier']} - shares not updated from CSV")
+                else:
+                    # Update with consolidated position
+                    execute_db(
+                        "UPDATE company_shares SET shares = ? WHERE company_id = ?",
+                        (position_data['net_shares'], company_id)
+                    )
+                    # Update total_invested with total amount
+                    execute_db(
+                        "UPDATE companies SET total_invested = ? WHERE id = ?",
+                        (position_data['total_amount'], company_id)
+                    )
+                    logger.info(f"Updated consolidated position for {position_data['identifier']}: {position_data['net_shares']:.6f} shares, €{position_data['total_amount']:.2f} total, €{position_data['weighted_avg_price']:.6f} avg price")
+            else:
+                # Insert shares record for existing company
+                execute_db(
+                    "INSERT INTO company_shares (company_id, shares) VALUES (?, ?)",
+                    (company_id, position_data['net_shares'])
+                )
+                execute_db(
+                    "UPDATE companies SET total_invested = ? WHERE id = ?",
+                    (position_data['total_amount'], company_id)
+                )
+                logger.info(f"Added consolidated shares for existing company {position_data['identifier']}: {position_data['net_shares']:.6f} shares")
+        else:
+            # Insert new company
+            execute_db(
+                """INSERT INTO companies 
+                   (name, identifier, category, portfolio_id, account_id, total_invested)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (position_data['name'], position_data['identifier'], '',
+                 portfolio_id, account_id, position_data['total_amount'])
+            )
+            
+            # Get the new company ID
+            new_company = query_db(
+                "SELECT id FROM companies WHERE account_id = ? AND identifier = ?",
+                (account_id, position_data['identifier']),
+                one=True
+            )
+            
+            if new_company:
+                # Insert shares record
+                execute_db(
+                    "INSERT INTO company_shares (company_id, shares) VALUES (?, ?)",
+                    (new_company['id'], position_data['net_shares'])
+                )
+                logger.info(f"Added new consolidated position: {position_data['identifier']} - {position_data['net_shares']:.6f} shares, €{position_data['total_amount']:.2f} total")
+        
+        # Update market price using robust database function if we have current price data
+        if position_data.get('current_price') and position_data.get('price_eur'):
+            try:
+                # Use the existing robust database update function
+                update_price_in_db(
+                    identifier=position_data['identifier'],
+                    price=float(position_data['current_price']),
+                    currency=position_data.get('currency', 'USD'),
+                    price_eur=float(position_data['price_eur']),
+                    country=position_data.get('country')
+                )
+                logger.debug(f"Updated market price for {position_data['identifier']}: {position_data['current_price']} {position_data.get('currency', 'USD')}")
+            except Exception as e:
+                logger.warning(f"Failed to update market price for {position_data['identifier']}: {e}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to save consolidated position: {e}")
+        return False
+
 def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -> bool:
     """
-    Save transaction to database using the correct companies + company_shares structure.
+    Save transaction using REPLACE semantics (not additive).
+    CSV represents current portfolio state, not new transactions to add.
     """
     try:
         from app.utils.db_utils import query_db, execute_db
@@ -197,22 +395,28 @@ def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -
         if existing_company:
             company_id = existing_company['id']
             
-            # Get existing shares
-            existing_shares = query_db(
-                "SELECT shares FROM company_shares WHERE company_id = ?",
+            # Get existing override status to preserve user manual edits
+            existing_shares_data = query_db(
+                "SELECT shares, override_share FROM company_shares WHERE company_id = ?",
                 (company_id,), one=True
             )
             
-            if existing_shares:
-                # Update existing shares
-                new_shares = existing_shares['shares'] + transaction_data['shares']
-                execute_db(
-                    "UPDATE company_shares SET shares = ? WHERE company_id = ?",
-                    (new_shares, company_id)
-                )
-                logger.info(f"Updated shares for {transaction_data['identifier']}: {new_shares}")
+            if existing_shares_data:
+                preserve_override = existing_shares_data.get('override_share', False)
+                
+                if preserve_override:
+                    # User has manually edited - preserve their override, don't update shares
+                    logger.info(f"Preserving user manual override for {transaction_data['identifier']} - shares not updated from CSV")
+                else:
+                    # Normal case: REPLACE with CSV value (not add)
+                    new_shares = transaction_data['shares']  # Direct replacement
+                    execute_db(
+                        "UPDATE company_shares SET shares = ? WHERE company_id = ?",
+                        (new_shares, company_id)
+                    )
+                    logger.info(f"Replaced shares for {transaction_data['identifier']}: {new_shares} (was {existing_shares_data['shares']})")
             else:
-                # Insert shares record
+                # Insert shares record for existing company
                 execute_db(
                     "INSERT INTO company_shares (company_id, shares) VALUES (?, ?)",
                     (company_id, transaction_data['shares'])
@@ -293,11 +497,13 @@ def update_simple_progress(current: int, total: int, message: str = "Processing.
 
 def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
     """
-    Main CSV import function - simple, direct processing.
-    Real-time progress tracking based on actual API calls.
+    Main CSV import function - portfolio replacement with transaction consolidation.
+    CSV transactions are consolidated by identifier, handling Buy/TransferIn vs Sell/TransferOut properly.
+    Calculates weighted average prices and net positions using amount summation approach.
+    Avoids exchange rate discrepancies by using pre-converted amounts from CSV.
     """
     try:
-        logger.info(f"Starting simple CSV import for account {account_id}")
+        logger.info(f"Starting CSV portfolio replacement for account {account_id}")
         
         # Initialize progress (only if in request context)
         try:
@@ -306,7 +512,7 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
                 'current': 0,
                 'total': 0,
                 'percentage': 0,
-                'message': 'Starting import...',
+                'message': 'Starting portfolio replacement...',
                 'status': 'processing'
             }
             session.modified = True
@@ -342,20 +548,20 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
         
         # Fill optional columns with defaults
         if 'currency' not in df.columns:
-            df['currency'] = 'USD'
+            df['currency'] = 'EUR'  # Default to EUR since amounts are typically pre-converted
         if 'date' not in df.columns:
             df['date'] = pd.Timestamp.now()
+        if 'amount' not in df.columns:
+            # Calculate amount from shares * price if not provided
+            df['amount'] = df['shares'] * df['price']
         
-        # Count valid transactions for accurate progress
+        # Filter and validate transactions - now including Sell and TransferOut
         valid_transactions = []
         for idx, row in df.iterrows():
             try:
-                # Skip dividend transactions
-                if row.get('type', '').lower() in ['dividend', 'div']:
-                    continue
-                
-                # Only process buy/transferin transactions
-                if row.get('type', '').lower() not in ['buy', 'transferin', 'purchase']:
+                # Process Buy, Sell, TransferIn, TransferOut transactions
+                transaction_type = str(row.get('type', '')).lower()
+                if transaction_type not in ['buy', 'sell', 'transferin', 'transferout']:
                     continue
                 
                 # Basic validation
@@ -367,12 +573,36 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
             except:
                 continue
         
-        total_stocks = len(valid_transactions)
+        if not valid_transactions:
+            return False, "No valid transactions found in CSV"
+        
+        # Convert to DataFrame for easier processing
+        transactions_df = pd.DataFrame(valid_transactions)
+        
+        # CRITICAL: Consolidate transactions by identifier with weighted price calculation [[memory:6980966]]
+        logger.info("Consolidating transactions by identifier with amount summation approach...")
+        consolidated_positions = consolidate_transactions_by_identifier(transactions_df)
+        
+        if not consolidated_positions:
+            return False, "No net positive positions after consolidation"
+        
+        total_stocks = len(consolidated_positions)
         processed = 0
         errors = []
         
-        update_simple_progress(0, total_stocks, f"Starting concurrent processing of {total_stocks} positions...")
-        logger.info(f"Processing {total_stocks} valid positions with concurrent price fetching...")
+        # Get current portfolio state for cleanup later
+        current_positions = get_current_portfolio_positions(account_id)
+        csv_identifiers = set(consolidated_positions.keys())
+        
+        # Calculate total operations for progress tracking (positions + cleanup)
+        positions_to_remove = current_positions - csv_identifiers
+        total_operations = total_stocks + len(positions_to_remove)
+        
+        update_simple_progress(0, total_operations, f"Starting portfolio replacement: {total_stocks} consolidated positions to process, {len(positions_to_remove)} to remove...")
+        logger.info(f"Portfolio replacement: {total_stocks} consolidated positions to process, {len(positions_to_remove)} existing positions to remove")
+        
+        # Start database transaction for atomic operations
+        db = get_db()
         
         # Process transactions concurrently for faster execution
         import concurrent.futures
@@ -382,103 +612,119 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
         # Thread-safe counters and progress tracking
         progress_lock = threading.Lock()
         
-        def process_transaction(row_data):
-            """Process a single transaction with price fetching"""
-            idx, row = row_data
+        def process_consolidated_position(position_data):
+            """Process a single consolidated position with price fetching"""
+            identifier = position_data['identifier']
             
             # CRITICAL: Create Flask application context for this thread
             with app.app_context():
                 try:
-                    # Basic data validation
-                    shares = float(row['shares'])
-                    price = float(row['price'])
-                    
-                    # Simple identifier normalization
-                    identifier = normalize_simple(str(row['identifier']))
-                    
                     # Fetch current price (this is the API call) [[memory:6980966]]
                     price_data = fetch_price_simple(identifier)
                     
-                    # Prepare transaction data with enhanced price information
-                    transaction = {
-                        'identifier': identifier,
-                        'name': str(row['holdingname']).strip(),
-                        'shares': shares,
-                        'price': price,
+                    # Enhance position data with current market price information
+                    enhanced_position = {
+                        **position_data,
                         'current_price': price_data.get('price'),
                         'price_eur': price_data.get('price_eur'),
-                        'currency': price_data.get('currency', row.get('currency', 'USD')),
+                        'currency': price_data.get('currency', position_data.get('currency', 'EUR')),
                         'country': price_data.get('country')
                     }
                     
-                    # Save to database (now with proper app context)
-                    save_success = save_transaction_simple(account_id, transaction)
+                    # Save consolidated position to database
+                    save_success = save_consolidated_position(account_id, enhanced_position)
                     
                     return {
                         'success': save_success,
                         'identifier': identifier,
                         'price_data': price_data,
-                        'idx': idx
+                        'position': enhanced_position
                     }
                     
                 except Exception as e:
                     return {
                         'success': False,
-                        'identifier': row.get('identifier', f'row_{idx}'),
+                        'identifier': identifier,
                         'error': str(e),
-                        'idx': idx
+                        'position': position_data
                     }
         
         # Get current Flask app for thread context
         from flask import current_app
         app = current_app._get_current_object()
         
-        # Use ThreadPoolExecutor for concurrent processing
-        # Limit to 5 concurrent threads to avoid overwhelming yfinance API
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            # Submit all tasks
-            future_to_row = {executor.submit(process_transaction, (idx, row)): idx 
-                           for idx, row in enumerate(valid_transactions)}
-            
-            # Process results as they complete
-            for future in concurrent.futures.as_completed(future_to_row):
-                result = future.result()
+        # Start atomic transaction
+        try:
+            # Use ThreadPoolExecutor for concurrent processing
+            # Limit to 5 concurrent threads to avoid overwhelming yfinance API
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                # Submit all consolidated positions
+                future_to_position = {executor.submit(process_consolidated_position, position): position['identifier'] 
+                                   for position in consolidated_positions.values()}
                 
-                with progress_lock:
-                    processed += 1
+                # Process results as they complete
+                for future in concurrent.futures.as_completed(future_to_position):
+                    result = future.result()
                     
-                    if result['success']:
-                        success_msg = f"✓ {result['identifier']}"
-                        price_data = result.get('price_data', {})
-                        if price_data.get('success') and price_data.get('price'):
-                            price = price_data['price']
-                            currency = price_data.get('currency', 'USD')
-                            success_msg += f" (price: {price:.2f} {currency})"
-                        elif price_data.get('error'):
-                            success_msg += f" (price: {price_data['error']})"
-                        update_simple_progress(processed, total_stocks, success_msg)
-                    else:
-                        if 'error' in result:
-                            error_msg = f"Position {result['idx'] + 1}: {result['error']}"
-                            errors.append(error_msg)
-                            logger.warning(error_msg)
-                            update_simple_progress(processed, total_stocks, f"✗ {result['identifier']} (error)")
+                    with progress_lock:
+                        processed += 1
+                        
+                        if result['success']:
+                            position = result['position']
+                            success_msg = f"✓ {result['identifier']} ({position['net_shares']:.2f} shares, €{position['total_amount']:.2f})"
+                            price_data = result.get('price_data', {})
+                            if price_data.get('success') and price_data.get('price'):
+                                price = price_data['price']
+                                currency = price_data.get('currency', 'USD')
+                                success_msg += f" [market: {price:.2f} {currency}]"
+                            elif price_data.get('error'):
+                                success_msg += f" [market: {price_data['error']}]"
+                            update_simple_progress(processed, total_operations, success_msg)
                         else:
-                            update_simple_progress(processed, total_stocks, f"✗ {result['identifier']} (save failed)")
-                
-                logger.debug(f"Completed {processed}/{total_stocks} transactions")
+                            if 'error' in result:
+                                error_msg = f"Position {result['identifier']}: {result['error']}"
+                                errors.append(error_msg)
+                                logger.warning(error_msg)
+                                update_simple_progress(processed, total_operations, f"✗ {result['identifier']} (error)")
+                            else:
+                                update_simple_progress(processed, total_operations, f"✗ {result['identifier']} (save failed)")
+                    
+                    logger.debug(f"Completed {processed}/{total_stocks} consolidated positions")
+            
+            # Step 2: Clean up positions not in CSV (portfolio replacement behavior)
+            removed_count = 0
+            for identifier in positions_to_remove:
+                if remove_position_completely(account_id, identifier):
+                    removed_count += 1
+                    with progress_lock:
+                        processed += 1
+                        update_simple_progress(processed, total_operations, f"Removed position: {identifier}")
+                else:
+                    with progress_lock:
+                        processed += 1
+                        update_simple_progress(processed, total_operations, f"Failed to remove: {identifier}")
+            
+            # Commit the transaction
+            db.commit()
+            logger.info(f"Portfolio replacement completed successfully - {removed_count} positions removed")
         
-        # Mark progress as completed
-        update_simple_progress(total_stocks, total_stocks, "Import completed successfully!")
+            # Mark progress as completed
+            update_simple_progress(total_operations, total_operations, f"Portfolio replacement completed! Removed {removed_count} old positions.")
+            
+        except Exception as e:
+            # Rollback on any error
+            db.rollback()
+            logger.error(f"Portfolio replacement failed, rolled back: {e}")
+            raise
         
         # Clear progress after completion (only if in request context)
         try:
             from flask import session
             session['simple_upload_progress'] = {
-                'current': total_stocks,
-                'total': total_stocks,
+                'current': total_operations,
+                'total': total_operations,
                 'percentage': 100,
-                'message': 'Import completed successfully!',
+                'message': f'Portfolio replacement completed! Removed {removed_count} old positions.',
                 'status': 'completed'
             }
             session.modified = True
@@ -487,22 +733,92 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
             logger.debug("Working outside request context - skipping final session update")
         
         # Prepare result message
-        if processed == 0:
-            return False, "No valid transactions found to import"
+        if total_stocks == 0:
+            return False, "No valid positions found in CSV to import"
         
-        message = f"Successfully imported {processed}/{total_stocks} transactions"
+        successful_imports = processed - removed_count
+        message = f"Portfolio replacement completed: {successful_imports}/{total_stocks} consolidated positions processed"
+        if removed_count > 0:
+            message += f", {removed_count} old positions removed"
         if errors:
             message += f" ({len(errors)} errors)"
             if len(errors) <= 5:  # Show first 5 errors
                 message += f": {'; '.join(errors[:5])}"
         
-        logger.info(f"CSV import completed: {message}")
+        logger.info(f"Portfolio replacement completed: {message}")
         return True, message
         
     except Exception as e:
         error_msg = f"CSV import failed: {str(e)}"
         logger.error(error_msg)
         return False, error_msg
+
+def get_current_portfolio_positions(account_id: int) -> set:
+    """Get all current position identifiers for the account."""
+    try:
+        from app.utils.db_utils import query_db
+        
+        positions = query_db(
+            """SELECT DISTINCT c.identifier 
+               FROM companies c 
+               JOIN company_shares cs ON c.id = cs.company_id 
+               WHERE c.account_id = ? AND cs.shares > 0""",
+            (account_id,)
+        )
+        
+        return {pos['identifier'] for pos in positions if pos['identifier']}
+    except Exception as e:
+        logger.error(f"Failed to get current portfolio positions: {e}")
+        return set()
+
+def remove_position_completely(account_id: int, identifier: str) -> bool:
+    """Remove a position completely from the portfolio."""
+    try:
+        from app.utils.db_utils import query_db, execute_db
+        
+        # Find the company
+        company = query_db(
+            "SELECT id FROM companies WHERE account_id = ? AND identifier = ?",
+            (account_id, identifier), one=True
+        )
+        
+        if not company:
+            return True  # Already removed
+        
+        company_id = company['id']
+        
+        # Check if user has manual override - preserve if they do
+        shares_data = query_db(
+            "SELECT override_share FROM company_shares WHERE company_id = ?",
+            (company_id,), one=True
+        )
+        
+        if shares_data and shares_data.get('override_share', False):
+            logger.info(f"Preserving position {identifier} - user has manual override")
+            return True  # Don't remove user overrides
+        
+        # Remove shares first
+        execute_db("DELETE FROM company_shares WHERE company_id = ?", (company_id,))
+        
+        # Remove company
+        execute_db("DELETE FROM companies WHERE id = ?", (company_id,))
+        
+        # Clean up market prices if no other accounts use this identifier
+        other_companies = query_db(
+            "SELECT COUNT(*) as count FROM companies WHERE identifier = ? AND account_id != ?",
+            (identifier, account_id), one=True
+        )
+        
+        if other_companies and other_companies['count'] == 0:
+            execute_db("DELETE FROM market_prices WHERE identifier = ?", (identifier,))
+            logger.info(f"Removed market price data for {identifier} (no other accounts use it)")
+        
+        logger.info(f"Removed position: {identifier}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to remove position {identifier}: {e}")
+        return False
 
 def validate_csv_format(file_content: str) -> Tuple[bool, str]:
     """

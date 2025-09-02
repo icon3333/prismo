@@ -12,7 +12,9 @@ const ProgressManager = {
         priceProgressBar: null,
         // CSV upload elements
         csvUploadIndicator: null,
-        uploadPercentage: null
+        uploadPercentage: null,
+        uploadProgressBar: null,
+        uploadStatusMessage: null
     },
 
     currentJob: {
@@ -32,13 +34,17 @@ const ProgressManager = {
         // Initialize CSV upload elements
         this.elements.csvUploadIndicator = document.getElementById('csv-upload-indicator');
         this.elements.uploadPercentage = document.getElementById('upload-percentage');
+        this.elements.uploadProgressBar = document.getElementById('upload-progress-bar');
+        this.elements.uploadStatusMessage = document.getElementById('upload-status-message');
 
         console.log('ProgressManager: Elements found:', {
             priceProgressElement: !!this.elements.priceProgressElement,
             priceProgressPercentage: !!this.elements.priceProgressPercentage,
             priceProgressBar: !!this.elements.priceProgressBar,
             csvUploadIndicator: !!this.elements.csvUploadIndicator,
-            uploadPercentage: !!this.elements.uploadPercentage
+            uploadPercentage: !!this.elements.uploadPercentage,
+            uploadProgressBar: !!this.elements.uploadProgressBar,
+            uploadStatusMessage: !!this.elements.uploadStatusMessage
         });
 
         if (!this.elements.priceProgressElement && !this.elements.csvUploadIndicator) {
@@ -112,6 +118,38 @@ const ProgressManager = {
             } else {
                 console.warn('ProgressManager: uploadPercentage element not found for CSV progress');
             }
+            
+            // Update progress bar [[memory:6980966]]
+            if (this.elements.uploadProgressBar) {
+                this.elements.uploadProgressBar.value = percentage;
+                // Add smooth transition effect
+                this.elements.uploadProgressBar.style.transition = 'value 0.3s ease';
+            } else {
+                console.warn('ProgressManager: uploadProgressBar element not found for CSV progress');
+            }
+            
+            // Update status message if provided
+            if (message && this.elements.uploadStatusMessage) {
+                // Format message for better display
+                if (message.includes('✓')) {
+                    // Success message - show completed item
+                    this.elements.uploadStatusMessage.textContent = message;
+                    this.elements.uploadStatusMessage.className = 'is-size-7 has-text-success mb-0';
+                } else if (message.includes('failed') || message.includes('error')) {
+                    // Error message
+                    this.elements.uploadStatusMessage.textContent = message;
+                    this.elements.uploadStatusMessage.className = 'is-size-7 has-text-danger mb-0';
+                } else if (message.includes('completed') || message.includes('success')) {
+                    // Completion message
+                    this.elements.uploadStatusMessage.textContent = message;
+                    this.elements.uploadStatusMessage.className = 'is-size-7 has-text-success mb-0';
+                } else {
+                    // Normal processing message
+                    this.elements.uploadStatusMessage.textContent = message;
+                    this.elements.uploadStatusMessage.className = 'is-size-7 has-text-grey mb-0';
+                }
+            }
+            
             return;
         } else if (jobType === 'price_fetch') {
             // Handle price fetch progress
@@ -253,6 +291,13 @@ const ProgressManager = {
                     } else {
                         console.log('Portfolio app not found, falling back to page reload');
                         window.location.reload();
+                    }
+                    
+                    // Reset the upload form
+                    const form = document.querySelector('form[action*="upload"]');
+                    if (form && typeof FileUploadHandler !== 'undefined' && FileUploadHandler.resetForm) {
+                        console.log('Form reset completed');
+                        FileUploadHandler.resetForm(form);
                     }
                 }, 2000);
                 
@@ -664,10 +709,7 @@ const FileUploadHandler = {
                 }
             });
             
-            // Start ProgressManager tracking for simple uploads
-            ProgressManager.startTracking('simple_csv_upload', 250); // Fast polling for responsive UI
-            
-            // Wait for upload to complete
+            // Wait for upload to start (should return immediately with job_id)
             const response = await uploadPromise;
 
             clearTimeout(timeoutId);
@@ -683,28 +725,16 @@ const FileUploadHandler = {
                 console.log('Upload result:', result);
                 
                 if (result.success) {
-                    ProgressManager.setProgress(100, 'Upload completed successfully!');
+                    console.log('Upload started successfully, job_id:', result.job_id);
                     
-                    // Show success notification
-                    if (typeof showNotification === 'function') {
-                        showNotification(result.message || 'CSV uploaded successfully!', 'is-success');
-                    }
+                    // Update progress message to show upload has started
+                    ProgressManager.setProgress(0, 'Upload started, processing...');
                     
-                    setTimeout(() => {
-                        ProgressManager.hide();
-                        
-                        // Refresh portfolio data via API calls - no page reload needed
-                        if (typeof window.portfolioTableApp !== 'undefined' && window.portfolioTableApp.loadData) {
-                            console.log('Refreshing portfolio data after successful upload...');
-                            window.portfolioTableApp.loadData();
-                        } else {
-                            console.log('Portfolio app not found, falling back to page reload');
-                            window.location.reload();
-                        }
-                        
-                        // Reset the form
-                        FileUploadHandler.resetForm(form);
-                    }, 500); // Reduced delay from 2000ms to 500ms
+                    // Start ProgressManager tracking for background uploads
+                    ProgressManager.startTracking('simple_csv_upload', 250); // Fast polling for responsive UI
+                    
+                    // The ProgressManager will handle the rest via polling
+                    // When polling detects completion, it will call the success handlers
                     return;
                 } else {
                     throw new Error(result.message || 'Upload failed');

@@ -197,4 +197,4 @@ if __name__ == '__main__':
     # Run the application with the specified port
     # Debug mode should be controlled by FLASK_ENV, not hardcoded
     debug_mode = os.environ.get('FLASK_ENV', 'development') == 'development'
-    app.run(host='0.0.0.0', port=args.port, debug=debug_mode)
+    app.run(host='0.0.0.0', port=args.port, debug=debug_mode, threaded=True)

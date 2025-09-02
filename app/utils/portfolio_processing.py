@@ -711,9 +711,7 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str)
     logger.info("Creating automatic backup before CSV processing...")
     backup_database()
         
-    # Temporarily replace the progress function to use background database updates
-    original_update_csv_progress = globals().get('update_csv_progress')
-    
+    # Create a progress function that updates the database
     def background_progress_wrapper(current, total, message="Processing...", status="processing"):
         logger.info(f"DEBUG: Background wrapper called with current={current}, total={total}, message='{message}', status='{status}'")
         
@@ -727,13 +725,20 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str)
             logger.info(f"DEBUG: Job {job_id} was cancelled, stopping processing")
             raise KeyboardInterrupt("Upload cancelled by user")
     
-    # Replace the global function temporarily
-    globals()['update_csv_progress'] = background_progress_wrapper
+    # Import the simple CSV import function and inject our progress function
+    from app.utils.csv_import_simple import import_csv_simple
+    
+    # Temporarily replace the global update_csv_progress function in the simple import module
+    import app.utils.csv_import_simple as csv_module
+    original_update_csv_progress = getattr(csv_module, 'update_csv_progress', None)
+    
+    # Inject our background progress function
+    csv_module.update_csv_progress = background_progress_wrapper
     
     try:
-        # Call the original processing logic which now has the correct 0-100% API call progress
-        success, message, result = process_csv_data(account_id, file_content)
-        return success, message, result
+        # Call the simple CSV import which now uses our background progress tracking
+        success, message = import_csv_simple(account_id, file_content)
+        return success, message, {}
     except KeyboardInterrupt as e:
         logger.info(f"CSV processing cancelled for job {job_id}: {str(e)}")
         # For cancelled jobs, update the final status to show it was cancelled
@@ -744,6 +749,8 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str)
         update_csv_progress_background(job_id, 0, 1, f"Error: {str(e)}", "failed")
         return False, str(e), {}
     finally:
-        # Restore the original function
+        # Restore the original function if it existed
         if original_update_csv_progress:
-            globals()['update_csv_progress'] = original_update_csv_progress
+            csv_module.update_csv_progress = original_update_csv_progress
+        elif hasattr(csv_module, 'update_csv_progress'):
+            delattr(csv_module, 'update_csv_progress')

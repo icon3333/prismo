@@ -265,19 +265,29 @@ def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -
         return False
 
 def update_simple_progress(current: int, total: int, message: str = "Processing..."):
-    """Update progress in Flask session for simple upload."""
-    from flask import session
+    """Update progress - works with both session and background processing."""
     try:
-        percentage = int((current / total) * 100) if total > 0 else 0
-        session['simple_upload_progress'] = {
-            'current': current,
-            'total': total,
-            'percentage': percentage,
-            'message': message,
-            'status': 'processing'
-        }
-        session.modified = True
-        logger.info(f"Simple Progress: {percentage}% ({current}/{total}) - {message}")
+        # Try to use the global update_csv_progress function if it exists (background mode)
+        if 'update_csv_progress' in globals():
+            globals()['update_csv_progress'](current, total, message, "processing")
+        else:
+            # Fall back to session-based progress (original mode, only if in request context)
+            try:
+                from flask import session
+                percentage = int((current / total) * 100) if total > 0 else 0
+                session['simple_upload_progress'] = {
+                    'current': current,
+                    'total': total,
+                    'percentage': percentage,
+                    'message': message,
+                    'status': 'processing'
+                }
+                session.modified = True
+                logger.info(f"Simple Progress: {percentage}% ({current}/{total}) - {message}")
+            except RuntimeError:
+                # Working outside of request context (background thread) - just log
+                percentage = int((current / total) * 100) if total > 0 else 0
+                logger.info(f"Simple Progress: {percentage}% ({current}/{total}) - {message}")
     except Exception as e:
         logger.warning(f"Failed to update progress: {e}")
 
@@ -286,20 +296,23 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
     Main CSV import function - simple, direct processing.
     Real-time progress tracking based on actual API calls.
     """
-    from flask import session
-    
     try:
         logger.info(f"Starting simple CSV import for account {account_id}")
         
-        # Initialize progress
-        session['simple_upload_progress'] = {
-            'current': 0,
-            'total': 0,
-            'percentage': 0,
-            'message': 'Starting import...',
-            'status': 'processing'
-        }
-        session.modified = True
+        # Initialize progress (only if in request context)
+        try:
+            from flask import session
+            session['simple_upload_progress'] = {
+                'current': 0,
+                'total': 0,
+                'percentage': 0,
+                'message': 'Starting import...',
+                'status': 'processing'
+            }
+            session.modified = True
+        except RuntimeError:
+            # Working outside of request context (background thread) - skip session updates
+            logger.debug("Working outside request context - skipping session updates")
         
         # CRITICAL: Always backup before processing [[memory:7528819]]
         logger.info("Creating automatic backup before CSV processing...")
@@ -458,15 +471,20 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
         # Mark progress as completed
         update_simple_progress(total_stocks, total_stocks, "Import completed successfully!")
         
-        # Clear progress after completion
-        session['simple_upload_progress'] = {
-            'current': total_stocks,
-            'total': total_stocks,
-            'percentage': 100,
-            'message': 'Import completed successfully!',
-            'status': 'completed'
-        }
-        session.modified = True
+        # Clear progress after completion (only if in request context)
+        try:
+            from flask import session
+            session['simple_upload_progress'] = {
+                'current': total_stocks,
+                'total': total_stocks,
+                'percentage': 100,
+                'message': 'Import completed successfully!',
+                'status': 'completed'
+            }
+            session.modified = True
+        except RuntimeError:
+            # Working outside of request context (background thread) - skip session updates
+            logger.debug("Working outside request context - skipping final session update")
         
         # Prepare result message
         if processed == 0:

@@ -405,12 +405,21 @@
                         <p class="help">Upload a CSV file with your portfolio data.</p>
                     </div>
 
-                    <!-- Simplified loading indicator -->
+                    <!-- Enhanced loading indicator with progress bar -->
                     <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
                         <div class="loading-container">
+                            <!-- Progress header with percentage -->
+                            <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+                                <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
+                                <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
+                            </div>
+                            
+                            <!-- Visual progress bar -->
+                            <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
+                            
+                            <!-- Status message and controls -->
                             <div class="is-flex is-justify-content-center is-align-items-center" style="gap: 10px;">
-                                <span id="upload-percentage"
-                                    class="is-size-4 has-text-weight-semibold has-text-primary">0%</span>
+                                <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
                                 <button id="cancel-upload-btn" 
                                     class="button is-small is-danger is-outlined" 
                                     title="Cancel upload">
@@ -420,7 +429,6 @@
                                     <span>Cancel</span>
                                 </button>
                             </div>
-                            <p class="is-size-7 has-text-grey mt-2">Processing file, please wait...</p>
                         </div>
                     </div>
 

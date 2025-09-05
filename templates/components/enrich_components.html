@@ -776,6 +776,14 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
+                                <th @click="sortBy('price_eur')" class="is-sortable">
+                                    Price (EUR)
+                                    <span class="column-health" :class="getHealthColorClass(priceHealthPercentage)"
+                                        v-text="priceHealthPercentage + '%'"></span>
+                                    <span class="icon is-small ml-1" v-if="sortColumn === 'price_eur'">
+                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
+                                    </span>
+                                </th>
                                 <th @click="sortBy('portfolio')" class="is-sortable">
                                     Portfolio
                                     <span class="column-health" :class="getHealthColorClass(portfolioHealthPercentage)"
@@ -804,14 +812,6 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('price_eur')" class="is-sortable">
-                                    Price (EUR)
-                                    <span class="column-health" :class="getHealthColorClass(priceHealthPercentage)"
-                                        v-text="priceHealthPercentage + '%'"></span>
-                                    <span class="icon is-small ml-1" v-if="sortColumn === 'price_eur'">
-                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
-                                    </span>
-                                </th>
                                 <th @click="sortBy('total_value')" class="is-sortable">
                                     Total Value
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'total_value'">
@@ -821,12 +821,6 @@
                                 <th @click="sortBy('total_invested')" class="is-sortable">
                                     Total Invested
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'total_invested'">
-                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
-                                    </span>
-                                </th>
-                                <th @click="sortBy('last_updated')" class="is-sortable">
-                                    Last Update
-                                    <span class="icon is-small ml-1" v-if="sortColumn === 'last_updated'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
@@ -854,6 +848,9 @@
                                 </td>
                                 <td>
                                     <span v-text="item.company"></span>
+                                </td>
+                                <td :class="{'has-text-danger': !item.price_eur}" class="has-tooltip-top" :data-tooltip="formatDateAgo(item.last_updated)">
+                                    <span v-text="item.price_eur ? formatCurrency(item.price_eur) : 'No price'"></span>
                                 </td>
                                 <td class="input-column">
                                     <div class="select is-small">
@@ -908,17 +905,11 @@
                                                saveSharesChange(item, newShares); 
                                            }" :title="getSharesTitle(item)">
                                 </td>
-                                <td :class="{'has-text-danger': !item.price_eur}">
-                                    <span v-text="item.price_eur ? formatCurrency(item.price_eur) : 'No price'"></span>
-                                </td>
                                 <td>
                                     <span v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                 </td>
                                 <td>
                                     <span v-text="formatCurrency(item.total_invested)"></span>
-                                </td>
-                                <td>
-                                    <span v-text="formatDateAgo(item.last_updated)"></span>
                                 </td>
                             </tr>
                         </tbody>

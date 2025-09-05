@@ -199,7 +199,7 @@ def verify_schema(db):
     # Check companies table structure
     columns_check = cursor.execute("PRAGMA table_info(companies)").fetchall()
     col_names = [col[1] for col in columns_check]
-    required_columns = ['id', 'name', 'identifier', 'category', 'portfolio_id', 'account_id', 'total_invested']
+    required_columns = ['id', 'name', 'identifier', 'category', 'portfolio_id', 'account_id', 'total_invested', 'override_country', 'country_manually_edited', 'country_manual_edit_date']
     missing_columns = [col for col in required_columns if col not in col_names]
     if missing_columns:
         logger.warning(f"Missing columns in 'companies' table: {missing_columns}")
@@ -355,6 +355,18 @@ def migrate_database():
             cursor.execute("ALTER TABLE company_shares ADD COLUMN csv_modified_after_edit BOOLEAN DEFAULT 0")
             db.commit()
             logger.info("Successfully added user-edited shares tracking columns")
+        
+        # Check if we need to add the new columns for country override
+        try:
+            cursor.execute("SELECT override_country FROM companies LIMIT 1")
+        except Exception:
+            # Columns don't exist, add them
+            logger.info("Adding country override columns to companies table")
+            cursor.execute("ALTER TABLE companies ADD COLUMN override_country TEXT")
+            cursor.execute("ALTER TABLE companies ADD COLUMN country_manually_edited BOOLEAN DEFAULT 0")
+            cursor.execute("ALTER TABLE companies ADD COLUMN country_manual_edit_date DATETIME")
+            db.commit()
+            logger.info("Successfully added country override columns")
     
     except Exception as e:
         logger.error(f"Error during database migration: {e}")

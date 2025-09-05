@@ -22,7 +22,7 @@ portfolio_data_section %}
 
 <!-- Portfolio Data Section -->
 <h2 class="section-title">Portfolio Data</h2>
-{{ portfolio_data_section(portfolios) }}
+{{ portfolio_data_section(portfolios, countries) }}
 
 <!-- Hidden data elements for JavaScript -->
 <script id="portfolios-data" type="application/json">{{ portfolios|tojson|safe }}</script>

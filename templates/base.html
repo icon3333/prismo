@@ -15,12 +15,7 @@
     <!-- Bulma Tooltip Extension -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-tooltip@3.0.2/dist/css/bulma-tooltip.min.css">
 
-    <!-- ApexCharts -->
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
-
-    <!-- Chart Configuration -->
-    <script
-        src="{{ url_for('static', filename='js/apex_chart_config.js') }}?v=colorfix2{{ range(1, 10000) | random }}"></script>
+    <!-- External libraries will be loaded at the bottom before our scripts -->
 
     <!-- Custom CSS (overrides) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1, 10000) | random }}">
@@ -95,16 +90,17 @@
     <!-- Footer -->
     {% include 'components/footer.html' %}
 
-    <!-- Vue.js (for components that need it) -->
+    <!-- External Libraries - Load in correct order -->
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
-
-    <!-- Axios for AJAX requests -->
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-
-    <!-- jsPDF for PDF generation -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-    <!-- Main JavaScript -->
+    <!-- Chart Configuration (depends on ApexCharts) -->
+    <script src="{{ url_for('static', filename='js/apex_chart_config.js') }}?v=colorfix2{{ range(1, 10000) | random }}"></script>
+
+    <!-- Main JavaScript (depends on Vue) -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
     {% block scripts %}{% endblock %}

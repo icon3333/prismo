@@ -1,6 +1,5 @@
 {% macro head_extras() %}
-<!-- Add Lodash -->
-<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+<!-- Lodash is now loaded in base.html -->
 <style>
     /* Improved layout and spacing consistency */
     .card {
@@ -240,18 +239,28 @@
         max-width: 90px;
     }
 
-    /* Styling for user-edited shares */
-    .shares-user-edited {
+    /* Centralized styling for user-edited fields (shares and country) */
+    .user-edited-field,
+    .shares-user-edited,
+    .country-user-edited {
         color: #ff7f00 !important;
-        /* Orange color for user-edited shares */
+        /* Orange color for user-edited fields */
         font-weight: 600;
     }
 
-    /* Styling for shares modified by CSV after user edit */
+    /* Centralized styling for CSV-modified fields after user edit */
+    .csv-modified-field,
     .shares-csv-modified {
         color: #dc3545 !important;
         /* Red color for CSV-modified after user edit */
         font-weight: 600;
+    }
+
+    /* Centralized styling for error/missing data */
+    .error-field,
+    .has-text-danger {
+        color: #dc3545 !important;
+        /* Red color for missing/error states */
     }
 
     /* Modal styling improvements */
@@ -571,7 +580,7 @@
 </div>
 {% endmacro %}
 
-{% macro portfolio_data_section(portfolios) %}
+{% macro portfolio_data_section(portfolios, countries) %}
 <div class="mb-5">
     <div id="portfolio-editor" class="portfolio-editor">
         <!-- Vue.js component will be mounted here -->
@@ -634,6 +643,13 @@
                                     </span>
                                     <span>Download as CSV</span>
                                 </button>
+                                <!-- DEBUG: Temporary debug button - no longer needed -->
+                                <!-- <button class="button is-warning" @click="forceOptionStyling" style="height: 2em;">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-bug"></i>
+                                    </span>
+                                    <span>Debug Countries</span>
+                                </button> -->
                             </div>
                         </div>
 
@@ -704,8 +720,19 @@
                                             placeholder="Category">
                                     </div>
                                     <div class="control">
+                                        <div class="select is-small">
+                                            <select v-model="bulkCountry">
+                                                <option value="">Select Country</option>
+                                                <!-- Server-side rendering like portfolios -->
+                                                {% for country in countries %}
+                                                <option value="{{ country }}">{{ country }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control">
                                         <button class="button is-small is-primary" @click="applyBulkChanges"
-                                            :disabled="(!bulkPortfolio && !bulkCategory) || isBulkProcessing"
+                                            :disabled="(!bulkPortfolio && !bulkCategory && !bulkCountry) || isBulkProcessing"
                                             :class="{'is-loading': isBulkProcessing}">
                                             Apply Changes
                                         </button>
@@ -762,6 +789,12 @@
                                     <span class="column-health" :class="getHealthColorClass(categoryHealthPercentage)"
                                         v-text="categoryHealthPercentage + '%'"></span>
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'category'">
+                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
+                                    </span>
+                                </th>
+                                <th @click="sortBy('country')" class="is-sortable">
+                                    Country
+                                    <span class="icon is-small ml-1" v-if="sortColumn === 'country'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
@@ -835,6 +868,35 @@
                                 <td class="input-column">
                                     <input class="input is-small" type="text" v-model="item.category"
                                         @blur="saveCategoryChange(item)">
+                                </td>
+                                <td class="input-column">
+                                    <div class="field has-addons">
+                                        <div class="control is-expanded">
+                                            <div class="select is-small is-fullwidth">
+                                                <select v-model="item.effective_country" 
+                                                        @change="saveCountryChange(item)"
+                                                        :class="{ 
+                                                            'country-user-edited': item.country_manually_edited,
+                                                            'has-text-danger': !item.effective_country || item.effective_country === 'N/A'
+                                                        }">
+                                                    <option value="">Select Country</option>
+                                                    <!-- Server-side rendering like portfolios -->
+                                                    {% for country in countries %}
+                                                    <option value="{{ country }}">{{ country }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="control" v-if="item.country_manually_edited">
+                                            <button class="button is-small" 
+                                                    @click="resetCountry(item)"
+                                                    title="Reset to yfinance data">
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-undo"></i>
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="input-column">
                                     <input class="input is-small" :class="{ 

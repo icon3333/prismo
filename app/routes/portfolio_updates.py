@@ -189,10 +189,31 @@ def update_single_portfolio_api(company_id):
                            company_id, account_id], one=True)
         if not company:
             return jsonify({'error': 'Company not found or access denied'}), 404
+        
+        # Apply the update
         with get_db() as db:
             cursor = db.cursor()
             from .portfolio_api import _apply_company_update
             _apply_company_update(cursor, company_id, data, account_id)
+            
+        # If this is a country reset, fetch and return the updated company data
+        if data.get('reset_country', False):
+            from app.utils.portfolio_utils import get_portfolio_data
+            portfolio_data = get_portfolio_data(account_id)
+            
+            # Find the updated company in the portfolio data
+            updated_company = next((item for item in portfolio_data if item['id'] == company_id), None)
+            
+            if updated_company:
+                return jsonify({
+                    'success': True, 
+                    'message': 'Company updated successfully',
+                    'data': {
+                        'effective_country': updated_company['effective_country'],
+                        'country_manually_edited': updated_company['country_manually_edited']
+                    }
+                })
+        
         return jsonify({'success': True, 'message': 'Company updated successfully'})
     except Exception as e:
         logger.error(f"Error updating company {company_id}: {str(e)}")

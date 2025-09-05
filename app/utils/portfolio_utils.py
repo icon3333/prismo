@@ -65,7 +65,10 @@ def get_portfolio_data(account_id):
                     'price_eur': float(row['price_eur']) if row.get('price_eur') is not None else None,
                     'currency': row.get('currency'),
                     'country': row.get('country'),
-
+                    'override_country': row.get('override_country'),
+                    'effective_country': row.get('override_country') or row.get('country'),
+                    'country_manually_edited': bool(row.get('country_manually_edited', False)),
+                    'country_manual_edit_date': row.get('country_manual_edit_date'),
                     'total_invested': float(row['total_invested']) if row.get('total_invested') is not None else 0,
                     'last_updated': row['last_updated'] if isinstance(row['last_updated'], str) else
                     (row['last_updated'].isoformat() if row.get('last_updated') is not None else None)

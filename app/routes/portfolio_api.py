@@ -192,6 +192,32 @@ def _apply_company_update(cursor, company_id, data, account_id):
         except Exception as e:
             logger.error(f"Error fetching price for '{new_identifier}': {str(e)}")
 
+    # Handle country updates
+    if 'country' in data or 'reset_country' in data:
+        if data.get('reset_country', False):
+            # Reset country to yfinance data
+            cursor.execute('''
+                UPDATE companies 
+                SET override_country = NULL,
+                    country_manually_edited = 0,
+                    country_manual_edit_date = NULL
+                WHERE id = ?
+            ''', [company_id])
+            logger.info(f"Reset country override for company {company_id}")
+        elif 'country' in data:
+            country = data.get('country')
+            is_user_edit = data.get('is_country_user_edit', False)
+            
+            if is_user_edit:
+                cursor.execute('''
+                    UPDATE companies 
+                    SET override_country = ?, 
+                        country_manual_edit_date = CURRENT_TIMESTAMP,
+                        country_manually_edited = 1
+                    WHERE id = ?
+                ''', [country, company_id])
+                logger.info(f"User updated country to '{country}' for company {company_id}")
+
     if 'shares' in data or 'override_share' in data:
         shares = data.get('shares')
         override = data.get('override_share')

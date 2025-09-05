@@ -602,6 +602,37 @@ p {
   display: none;
 }
 
+/* Ensure select option visibility in all themes - Both server and Vue rendered */
+select option,
+.select select option {
+  background-color: var(--bg) !important;
+  color: var(--text-color) !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+/* Additional browser-specific fixes for dropdown options */
+select option:checked,
+.select select option:checked {
+  background-color: var(--primary-light) !important;
+  color: var(--text-color) !important;
+}
+
+select option:hover,
+.select select option:hover {
+  background-color: var(--section-bg) !important;
+  color: var(--text-color) !important;
+}
+
+/* Force select styling for better cross-browser compatibility */
+select,
+.select select {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--bg) !important;
+  color: var(--text-color) !important;
+}
+
 /* Form field styling */
 .field {
   margin-bottom: var(--space-md);
@@ -1790,6 +1821,50 @@ p {
   }
 
   /* Specific dark mode adjustments */
+  
+  /* Fix select dropdown option visibility in dark mode - All selects */
+  select,
+  .select select {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+  
+  select option,
+  .select select option {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+  
+  /* Force color inheritance for dynamically created options */
+  select option[value],
+  .select select option[value] {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+  }
+  
+  /* Specific targeting for Vue-rendered country options */
+  select[v-model] option,
+  select[v-model*="country"] option,
+  select[v-model*="effective_country"] option {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    font-size: inherit !important;
+  }
+  
+  /* Force browser default overrides */
+  * {
+    color-scheme: dark light;
+  }
+  
+  /* Country options styling for manually edited dropdowns */
+  .country-user-edited option {
+    color: #ff7f00 !important;
+  }
+  
   .table tr {
     background-color: var(--card-bg);
   }

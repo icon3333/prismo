@@ -1090,12 +1090,10 @@ class PortfolioTableApp {
                     selectedItemIds: [],
                     bulkPortfolio: '',
                     bulkCategory: '',
+                    bulkCountry: '',
                     isBulkProcessing: false
+                    // Country options now server-rendered like portfolios
                 };
-            },
-            mounted() {
-                // Link DOM elements to Vue model for two-way binding
-                this.syncUIWithVueModel();
             },
             computed: {
                 healthColorClass() {
@@ -1854,6 +1852,7 @@ class PortfolioTableApp {
                     this.selectedItemIds = [];
                     this.bulkPortfolio = '';
                     this.bulkCategory = '';
+                    this.bulkCountry = '';
                 },
 
                 async applyBulkChanges() {
@@ -1864,9 +1863,9 @@ class PortfolioTableApp {
                         return;
                     }
 
-                    if (!this.bulkPortfolio && !this.bulkCategory) {
+                    if (!this.bulkPortfolio && !this.bulkCategory && !this.bulkCountry) {
                         if (typeof showNotification === 'function') {
-                            showNotification('Please select a portfolio or enter a category', 'is-warning');
+                            showNotification('Please select a portfolio, enter a category, or select a country', 'is-warning');
                         }
                         return;
                     }
@@ -1885,6 +1884,8 @@ class PortfolioTableApp {
                             company: item.company,
                             portfolio: this.bulkPortfolio || item.portfolio,
                             category: this.bulkCategory !== '' ? this.bulkCategory : item.category,
+                            country: this.bulkCountry !== '' ? this.bulkCountry : item.effective_country,
+                            is_country_user_edit: this.bulkCountry !== '',
                             identifier: item.identifier
                         }));
 
@@ -1906,6 +1907,7 @@ class PortfolioTableApp {
                             const changesText = [];
                             if (this.bulkPortfolio) changesText.push(`portfolio to "${this.bulkPortfolio}"`);
                             if (this.bulkCategory !== '') changesText.push(`category to "${this.bulkCategory}"`);
+                            if (this.bulkCountry !== '') changesText.push(`country to "${this.bulkCountry}"`);
 
                             if (typeof showNotification === 'function') {
                                 showNotification(
@@ -1930,9 +1932,93 @@ class PortfolioTableApp {
                     } finally {
                         this.isBulkProcessing = false;
                     }
+                },
+
+                // Countries are now server-rendered like portfolios - no need for API calls or styling
+
+                async saveCountryChange(item) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for country change');
+                        return;
+                    }
+
+                    try {
+                        console.log('Sending country update request for item ID:', item.id, 'Country:', item.effective_country);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                country: item.effective_country,
+                                is_country_user_edit: true
+                            })
+                        });
+
+                        const result = await response.json();
+                        console.log('Country update response:', result);
+
+                        if (result.success) {
+                            item.country_manually_edited = true;
+                            item.country_manual_edit_date = new Date().toISOString();
+                            if (typeof showNotification === 'function') {
+                                showNotification('Country updated successfully', 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Country update failed');
+                        }
+                    } catch (error) {
+                        console.error('Country update error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update country: ' + error.message, 'is-danger');
+                        }
+                    }
+                },
+
+                async resetCountry(item) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for country reset');
+                        return;
+                    }
+
+                    try {
+                        console.log('Resetting country for item ID:', item.id);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                reset_country: true
+                            })
+                        });
+
+                        const result = await response.json();
+                        console.log('Country reset response:', result);
+
+                        if (result.success && result.data) {
+                            // Update the item with the response data from server
+                            item.effective_country = result.data.effective_country;
+                            item.country_manually_edited = false;
+                            item.country_manual_edit_date = null;
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Country reset to "${item.effective_country}" from yfinance`, 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Country reset failed');
+                        }
+                    } catch (error) {
+                        console.error('Country reset error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to reset country: ' + error.message, 'is-danger');
+                        }
+                    }
                 }
             },
             mounted() {
+                // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)
+                this.syncUIWithVueModel();
+                
                 console.log('Vue component mounted. Methods available:', Object.keys(this.$options.methods).join(', '));
                 console.log('Initial portfolio options:', this.portfolioOptions);
 
@@ -1977,9 +2063,9 @@ class PortfolioTableApp {
                         // Fall back to options passed from template if API fails
                         if (Array.isArray(this.portfolioOptions)) {
                             console.log('Falling back to template-provided portfolio options');
-                            this.companies = this.companies.filter(p => p && p !== '-');
+                            this.portfolioOptions = this.portfolioOptions.filter(p => p && p !== '-');
                         } else {
-                            this.companies = [];
+                            this.portfolioOptions = [];
                         }
                     })
                     .finally(() => {
@@ -1991,6 +2077,9 @@ class PortfolioTableApp {
                             this.syncUIWithVueModel();
                         }, 1000);
                     });
+
+                // Countries are now server-rendered like portfolios - no need to load them
+                console.log('Country options are now server-rendered like portfolios');
 
                 // Add event listeners for the delete confirmation modal and update price modal
                 document.addEventListener('keydown', (e) => {
@@ -2089,6 +2178,25 @@ const ModalPortfolioManager = {
 
 // Main initialization function
 document.addEventListener('DOMContentLoaded', function () {
+    // Check if required libraries are loaded
+    const requiredLibraries = {
+        'Vue': typeof Vue,
+        'Axios': typeof axios,
+        'Lodash': typeof _
+    };
+    
+    const missingLibraries = Object.entries(requiredLibraries)
+        .filter(([name, type]) => type === 'undefined')
+        .map(([name]) => name);
+    
+    if (missingLibraries.length > 0) {
+        console.error('Missing required libraries:', missingLibraries);
+        console.error('Cannot initialize Vue components. Please check CDN connections.');
+        return;
+    }
+    
+    console.log('All required libraries loaded successfully:', Object.keys(requiredLibraries));
+
     // Initialize the centralized progress manager first
     if (!ProgressManager.init()) {
         console.warn('ProgressManager initialization failed - some features may not work');
@@ -2124,11 +2232,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize Vue apps (if their mount points exist)
     if (document.getElementById('portfolio-table-app')) {
-        // Create global portfolioTableApp instance to ensure it's accessible outside this scope
-        window.portfolioTableApp = new PortfolioTableApp(portfolios, defaultPortfolio);
+        try {
+            // Create global portfolioTableApp instance to ensure it's accessible outside this scope
+            window.portfolioTableApp = new PortfolioTableApp(portfolios, defaultPortfolio);
 
-        // Log that the app has been initialized
-        console.log('PortfolioTableApp initialized globally as window.portfolioTableApp');
+            // Log that the app has been initialized
+            console.log('PortfolioTableApp initialized globally as window.portfolioTableApp');
+        } catch (error) {
+            console.error('Failed to initialize PortfolioTableApp:', error);
+        }
     }
 
     // The update-all button action is now handled via a Vue method

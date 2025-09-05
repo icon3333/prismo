@@ -82,10 +82,38 @@ def enrich():
     logger.info(
         f"Retrieved {len(portfolios)} portfolios from the portfolios table: {[p['name'] for p in portfolios]}")
 
+    # Get comprehensive country list from REST Countries API (server-side like portfolios)
+    # NO hardcoded fallbacks - always use live API data
+    import requests
+    response = requests.get('https://restcountries.com/v3.1/all?fields=name', timeout=10)
+    
+    if response.status_code == 200:
+        api_countries = response.json()
+        countries = ['(crypto)']  # Always include crypto first
+        
+        # Extract country names and sort them
+        country_names = []
+        for country in api_countries:
+            if 'name' in country and 'common' in country['name']:
+                name = country['name']['common']
+                # Skip duplicates and clean up names
+                if name not in country_names and name != '(crypto)':
+                    country_names.append(name)
+        
+        # Sort alphabetically and add to list
+        country_names.sort()
+        countries.extend(country_names)
+        
+        logger.info(f"Successfully loaded {len(countries)} countries from REST Countries API")
+    else:
+        logger.error(f"Failed to load countries from API: HTTP {response.status_code}")
+        countries = ['(crypto)']  # Only crypto if API fails - no hardcoded countries
+
     # Log template variables for debugging
-    logger.debug(f"Template variables:")
-    logger.debug(f"- portfolio_data: {portfolio_data}")
-    logger.debug(f"- portfolios: {[p['name'] for p in portfolios]}")
+    logger.info(f"Template variables for enrich page:")
+    logger.info(f"- portfolio_data: {len(portfolio_data)} items")
+    logger.info(f"- portfolios: {[p['name'] for p in portfolios]}")
+    logger.info(f"- countries: {len(countries)} countries loaded - first 5: {countries[:5]}")
 
     # Calculate metrics safely handling None values
     last_updates = [item['last_updated']
@@ -105,6 +133,7 @@ def enrich():
     return render_template('pages/enrich.html',
                            portfolio_data=portfolio_data,
                            portfolios=[p['name'] for p in portfolios],
+                           countries=countries,
                            use_default_portfolio=use_default_portfolio,
                            metrics={
                                'total': total_items,

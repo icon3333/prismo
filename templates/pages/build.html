@@ -241,19 +241,19 @@
 
           <!-- Position List -->
           <div class="table-responsive mt-4">
-            <table class="table is-fullwidth">
+            <table class="table is-fullwidth unified-table">
               <thead>
                 <tr>
-                  <th>Company</th>
-                  <th>Weight %</th>
-                  <th>Allocation Amount</th>
-                  <th width="70"></th>
+                  <th class="col-company">Company</th>
+                  <th class="col-percentage">Weight %</th>
+                  <th class="col-currency">Allocation Amount</th>
+                  <th class="col-checkbox"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="(position, pIndex) in sortedPositions(portfolio.positions)" :key="pIndex"
                   :class="{'placeholder-position': position.isPlaceholder}">
-                  <td>
+                  <td class="col-company">
                     <div v-if="position.isPlaceholder" class="remaining-positions-text">
                       ${ position.companyName }
                     </div>
@@ -261,16 +261,16 @@
                       ${ position.companyName || 'Select a company' }
                     </div>
                   </td>
-                  <td>
+                  <td class="col-percentage">
                     <input class="input" type="text" :value="(position.weight || 0).toFixed(0)"
                       @change="updateManualWeight(index, pIndex, $event.target.value)" @focus="$event.target.select()"
                       :disabled="portfolio.evenSplit">
                   </td>
-                  <td>
+                  <td class="col-currency">
                     <input class="input" type="text" :value="formatCurrency(calculatePositionAmount(index, pIndex))"
                       readonly>
                   </td>
-                  <td class="has-text-centered">
+                  <td class="col-checkbox has-text-centered">
                     <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded"
                       style="width: 36px; height: 36px; padding: 0;" @click="removePosition(index, pIndex)"
                       title="Remove position">
@@ -325,14 +325,14 @@
 
     <!-- Summary Table -->
     <div class="table-responsive">
-      <table class="table is-fullwidth">
+      <table class="table is-fullwidth unified-table">
         <thead>
           <tr>
-            <th>Portfolio</th>
-            <th>Position</th>
-            <th>Global %</th>
-            <th>Portfolio %</th>
-            <th>To Be Invested</th>
+            <th class="col-input-small">Portfolio</th>
+            <th class="col-company">Position</th>
+            <th class="col-percentage">Global %</th>
+            <th class="col-percentage">Portfolio %</th>
+            <th class="col-currency">To Be Invested</th>
           </tr>
         </thead>
         <tbody>

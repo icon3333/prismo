@@ -227,17 +227,7 @@
         cursor: pointer;
     }
 
-    /* Centralized styling for portfolio, category, and shares inputs */
-    .portfolio-table .input-column {
-        width: 110px;
-    }
-
-    .portfolio-table .input-column .select,
-    .portfolio-table .input-column .select select,
-    .portfolio-table .input-column .input {
-        width: 100%;
-        max-width: 90px;
-    }
+    /* Note: Column width styling moved to custom.css unified system */
 
     /* Centralized styling for user-edited fields (shares and country) */
     .user-edited-field,
@@ -752,16 +742,16 @@
 
                 <!-- Portfolio table with better structure -->
                 <div v-if="!loading && filteredPortfolioItems.length > 0" class="table-container">
-                    <table class="table is-striped is-hoverable is-fullwidth portfolio-table">
+                    <table class="table is-striped is-hoverable is-fullwidth unified-table portfolio-table">
                         <thead>
                             <tr>
-                                <th style="width: 40px;">
+                                <th class="col-checkbox">
                                     <label class="checkbox">
                                         <input type="checkbox" :checked="allFilteredSelected" @change="toggleSelectAll"
                                             :indeterminate.prop="someFilteredSelected && !allFilteredSelected">
                                     </label>
                                 </th>
-                                <th @click="sortBy('identifier')" class="is-sortable">
+                                <th @click="sortBy('identifier')" class="is-sortable col-identifier">
                                     Identifier
                                     <span class="icon is-small has-tooltip-right"
                                         data-tooltip="Supported formats: Stock tickers (AAPL), Crypto (BTC-USD), or ISINs (US0378331005)">
@@ -771,13 +761,13 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('company')" class="is-sortable">
+                                <th @click="sortBy('company')" class="is-sortable col-company">
                                     Company
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'company'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('price_eur')" class="is-sortable">
+                                <th @click="sortBy('price_eur')" class="is-sortable col-price">
                                     Price (EUR)
                                     <span class="column-health" :class="getHealthColorClass(priceHealthPercentage)"
                                         v-text="priceHealthPercentage + '%'"></span>
@@ -785,7 +775,7 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('portfolio')" class="is-sortable">
+                                <th @click="sortBy('portfolio')" class="is-sortable col-input-small">
                                     Portfolio
                                     <span class="column-health" :class="getHealthColorClass(portfolioHealthPercentage)"
                                         v-text="portfolioHealthPercentage + '%'"></span>
@@ -793,7 +783,7 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('category')" class="is-sortable">
+                                <th @click="sortBy('category')" class="is-sortable col-input-small">
                                     Category
                                     <span class="column-health" :class="getHealthColorClass(categoryHealthPercentage)"
                                         v-text="categoryHealthPercentage + '%'"></span>
@@ -801,25 +791,25 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('country')" class="is-sortable">
+                                <th @click="sortBy('country')" class="is-sortable col-input-small">
                                     Country
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'country'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('shares')" class="is-sortable">
+                                <th @click="sortBy('shares')" class="is-sortable col-input-medium">
                                     Shares
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'shares'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('total_value')" class="is-sortable">
+                                <th @click="sortBy('total_value')" class="is-sortable col-currency">
                                     Total Value
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'total_value'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('total_invested')" class="is-sortable">
+                                <th @click="sortBy('total_invested')" class="is-sortable col-currency">
                                     Total Invested
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'total_invested'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
@@ -829,22 +819,22 @@
                         </thead>
                         <tbody>
                             <tr v-for="item in filteredPortfolioItems" :key="item.id">
-                                <td>
+                                <td class="col-checkbox">
                                     <label class="checkbox">
                                         <input type="checkbox" :value="item.id" v-model="selectedItemIds">
                                     </label>
                                 </td>
-                                <td>
+                                <td class="col-identifier">
                                     <input class="input is-small" type="text" v-model="item.identifier"
                                         @blur="saveIdentifierChange(item)">
                                 </td>
-                                <td class="has-tooltip-top" :data-tooltip="item.company">
+                                <td class="col-company has-tooltip-top" :data-tooltip="item.company">
                                     <span class="truncate" v-text="item.company"></span>
                                 </td>
-                                <td :class="{'has-text-danger': !item.price_eur}" class="has-tooltip-top" :data-tooltip="formatDateAgo(item.last_updated)">
+                                <td class="col-price has-tooltip-top" :class="{'has-text-danger': !item.price_eur}" :data-tooltip="formatDateAgo(item.last_updated)">
                                     <span v-text="item.price_eur ? formatCurrency(item.price_eur) : 'No price'"></span>
                                 </td>
-                                <td class="input-column">
+                                <td class="col-input-small">
                                     <div class="select is-small">
                                         <select v-model="item.portfolio" @change="savePortfolioChange(item)">
                                             <!-- Special handling for the default portfolio value '-' -->
@@ -854,11 +844,11 @@
                                         </select>
                                     </div>
                                 </td>
-                                <td class="input-column">
+                                <td class="col-input-small">
                                     <input class="input is-small" type="text" v-model="item.category"
                                         @blur="saveCategoryChange(item)">
                                 </td>
-                                <td class="input-column">
+                                <td class="col-input-small">
                                     <div class="field has-addons">
                                         <div class="control is-expanded">
                                             <div class="select is-small is-fullwidth">
@@ -887,7 +877,7 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td class="input-column">
+                                <td class="col-input-medium">
                                     <input class="input is-small" :class="{ 
                                                'shares-user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
                                                'shares-csv-modified': item.is_manually_edited && item.csv_modified_after_edit
@@ -897,10 +887,10 @@
                                                saveSharesChange(item, newShares); 
                                            }" :title="getSharesTitle(item)">
                                 </td>
-                                <td>
+                                <td class="col-currency">
                                     <span v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                 </td>
-                                <td>
+                                <td class="col-currency">
                                     <span v-text="formatCurrency(item.total_invested)"></span>
                                 </td>
                             </tr>

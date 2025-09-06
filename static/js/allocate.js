@@ -281,17 +281,17 @@ document.addEventListener('DOMContentLoaded', function () {
             // Generate table HTML
             let tableHTML = `
             <div class="table-responsive">
-                <table class="table table-striped table-hover">
+                <table class="table table-striped table-hover unified-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Current Value</th>
-                            <th>Current Allocation</th>
-                            <th>Target Allocation</th>
-                            <th>Target Value</th>
-                            <th>Actions</th>
-                            <th>Value After Action</th>
-                            <th>Allocation After Action</th>
+                            <th class="col-company">Name</th>
+                            <th class="col-currency">Current Value</th>
+                            <th class="col-percentage">Current Allocation</th>
+                            <th class="col-percentage">Target Allocation</th>
+                            <th class="col-currency">Target Value</th>
+                            <th class="col-input-medium">Actions</th>
+                            <th class="col-currency">Value After Action</th>
+                            <th class="col-percentage">Allocation After Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -397,14 +397,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Add row to table
                 tableHTML += `
                     <tr ${positionDeficit > 0 ? 'class="table-warning"' : ''}>
-                        <td>${portfolioNameDisplay}</td>
-                        <td class="current-value">${this.formatCurrency(portfolio.currentValue)}</td>
-                        <td class="allocation-percentage">${this.formatPercentage(currentAllocation)}</td>
-                        <td class="target-value">${this.formatPercentage(portfolio.targetWeight || 0)}</td>
-                        <td class="target-value">${this.formatCurrency(portfolio.targetValue)}</td>
-                        <td class="${actionClass}">${actionText}</td>
-                        <td class="value-after">${this.formatCurrency(portfolio.valueAfterAction)}</td>
-                        <td class="allocation-after">${this.formatPercentage(allocationAfterAction)}</td>
+                        <td class="col-company">${portfolioNameDisplay}</td>
+                        <td class="col-currency current-value">${this.formatCurrency(portfolio.currentValue)}</td>
+                        <td class="col-percentage allocation-percentage">${this.formatPercentage(currentAllocation)}</td>
+                        <td class="col-percentage target-value">${this.formatPercentage(portfolio.targetWeight || 0)}</td>
+                        <td class="col-currency target-value">${this.formatCurrency(portfolio.targetValue)}</td>
+                        <td class="col-input-medium ${actionClass}">${actionText}</td>
+                        <td class="col-currency value-after">${this.formatCurrency(portfolio.valueAfterAction)}</td>
+                        <td class="col-percentage allocation-after">${this.formatPercentage(allocationAfterAction)}</td>
                     </tr>
                 `;
             });
@@ -412,14 +412,14 @@ document.addEventListener('DOMContentLoaded', function () {
             // Add total row
             tableHTML += `
                     <tr class="total-row">
-                        <td><strong>Total</strong></td>
-                        <td class="current-value"><strong>${this.formatCurrency(totalCurrentValue)}</strong></td>
-                        <td class="allocation-percentage"><strong>100%</strong></td>
-                        <td class="target-value"><strong>100%</strong></td>
-                        <td class="target-value"><strong>${this.formatCurrency(totalTargetValue)}</strong></td>
-                        <td class="actions-positive"><strong>${this.formatCurrency(totalAction)}</strong></td>
-                        <td class="value-after"><strong>${this.formatCurrency(totalValueAfter)}</strong></td>
-                        <td class="allocation-after"><strong>100%</strong></td>
+                        <td class="col-company"><strong>Total</strong></td>
+                        <td class="col-currency current-value"><strong>${this.formatCurrency(totalCurrentValue)}</strong></td>
+                        <td class="col-percentage allocation-percentage"><strong>100%</strong></td>
+                        <td class="col-percentage target-value"><strong>100%</strong></td>
+                        <td class="col-currency target-value"><strong>${this.formatCurrency(totalTargetValue)}</strong></td>
+                        <td class="col-input-medium actions-positive"><strong>${this.formatCurrency(totalAction)}</strong></td>
+                        <td class="col-currency value-after"><strong>${this.formatCurrency(totalValueAfter)}</strong></td>
+                        <td class="col-percentage allocation-after"><strong>100%</strong></td>
                     </tr>
                 </tbody>
             </table>

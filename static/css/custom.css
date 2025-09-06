@@ -100,6 +100,16 @@
   --transition-speed: 0.2s;
   --transition-func: ease;
   --transition: all var(--transition-speed) var(--transition-func);
+
+  /* Column Width System - Unified table column widths */
+  --col-checkbox: 45px;
+  --col-identifier: 100px;
+  --col-company: 120px;
+  --col-price: 100px;
+  --col-input-small: 120px;     /* For dropdowns/small inputs */
+  --col-input-medium: 140px;    /* For shares input */
+  --col-currency: 120px;        /* For currency values */
+  --col-percentage: 100px;      /* For percentage values */
 }
 
 /* ====================== 2. BASE STYLES ====================== */
@@ -2991,208 +3001,148 @@ select,
   }
 }
 
-/* ====================== ENRICH PAGE TABLE ENHANCEMENTS ====================== */
+/* ====================== UNIFIED TABLE SYSTEM ====================== */
 
-/* Portfolio table styling for enrich page */
-.portfolio-table th:nth-child(6),
-.portfolio-table td:nth-child(6) {
-  /* Country column - increase width for better readability */
-  min-width: 150px;
-  width: 150px;
+/* Unified table base class */
+.unified-table {
+  table-layout: fixed;
+  width: 100%;
 }
 
-.portfolio-table th:nth-child(1),
-.portfolio-table td:nth-child(1) {
-  /* Checkbox column - keep narrow */
-  width: 40px;
+/* Semantic column width classes */
+.unified-table .col-checkbox { 
+  width: var(--col-checkbox); 
   text-align: center;
 }
 
-.portfolio-table th:nth-child(2),
-.portfolio-table td:nth-child(2) {
-  /* Identifier column */
-  min-width: 100px;
-  width: 100px;
-  max-width: 100px;
+.unified-table .col-identifier { 
+  width: var(--col-identifier); 
 }
 
-.portfolio-table th:nth-child(3),
-.portfolio-table td:nth-child(3) {
-  /* Company column - 40% narrower than before */
-  min-width: 96px;
-  width: 96px;
-  max-width: 96px;
-  /* Removed truncation styles to prevent tooltip clipping - moved to .truncate on span */
+.unified-table .col-company { 
+  width: var(--col-company); 
 }
 
-.portfolio-table td:nth-child(3) span {
-  /* Ensure company name span takes full cell width */
-  display: block;
-  width: 100%;
-}
-
-.portfolio-table th:nth-child(4),
-.portfolio-table td:nth-child(4) {
-  /* Price column */
-  min-width: 100px;
-  width: 100px;
+.unified-table .col-price { 
+  width: var(--col-price); 
   text-align: right;
 }
 
-.portfolio-table th:nth-child(5),
-.portfolio-table td:nth-child(5) {
-  /* Portfolio column */
-  min-width: 131px;
-  width: 131px;
+.unified-table .col-input-small { 
+  width: var(--col-input-small); 
 }
 
-.portfolio-table th:nth-child(6),
-.portfolio-table td:nth-child(6) {
-  /* Category column */
-  min-width: 131px;
-  width: 131px;
-}
-
-.portfolio-table th:nth-child(7),
-.portfolio-table td:nth-child(7) {
-  /* Country column */
-  min-width: 131px;
-  width: 131px;
-}
-
-.portfolio-table th:nth-child(8),
-.portfolio-table td:nth-child(8) {
-  /* Shares column */
-  min-width: 131px;
-  width: 131px;
+.unified-table .col-input-medium { 
+  width: var(--col-input-medium); 
   text-align: right;
 }
 
-.portfolio-table th:nth-child(9),
-.portfolio-table td:nth-child(9) {
-  /* Total Value column */
-  min-width: 131px;
-  width: 131px;
+.unified-table .col-currency { 
+  width: var(--col-currency); 
   text-align: right;
 }
 
-.portfolio-table th:nth-child(10),
-.portfolio-table td:nth-child(10) {
-  /* Total Invested column */
-  min-width: 131px;
-  width: 131px;
+.unified-table .col-percentage { 
+  width: var(--col-percentage); 
   text-align: right;
 }
 
-/* Country column dropdown styling */
-.portfolio-table .country-dropdown {
-  min-width: 131px;
-  width: 100%;
-}
-
-/* Ensure proper table layout */
+/* Legacy portfolio-table support (for backward compatibility during transition) */
 .portfolio-table {
   table-layout: fixed;
   width: 100%;
 }
 
-/* Ensure table container allows tooltip overflow */
-.table-container {
-  overflow: visible;
+/* Company name span styling (preserve existing behavior) */
+.unified-table .col-company span,
+.portfolio-table td:nth-child(3) span {
+  display: block;
+  width: 100%;
 }
 
-.portfolio-table-container {
-  overflow: visible;
-}
-
-/* Improve spacing and visibility for input columns */
-.portfolio-table .input-column {
-  /* Add padding to the cell for better spacing */
+/* Input column styling for unified system */
+.unified-table .col-input-small,
+.unified-table .col-input-medium {
   padding: 4px 6px;
 }
 
-.portfolio-table .input-column .select,
-.portfolio-table .input-column .input {
-  /* Make controls fill available space with small margin */
+.unified-table .col-input-small .select,
+.unified-table .col-input-small .input,
+.unified-table .col-input-medium .select,
+.unified-table .col-input-medium .input {
   width: 100%;
   margin: 0;
 }
 
-.portfolio-table .input-column .select select {
-  /* Ensure dropdowns use full available width */
+.unified-table .col-input-small .select select,
+.unified-table .col-input-medium .select select {
   width: 100%;
   min-width: auto;
 }
 
-/* Responsive table improvements */
+/* Ensure consistent height for all inputs in unified tables */
+.unified-table .col-input-small .input.is-small,
+.unified-table .col-input-medium .input.is-small,
+.unified-table .col-input-small .select.is-small,
+.unified-table .col-input-medium .select.is-small {
+  height: 2.25em; /* Same as Bulma .is-small */
+  font-size: 0.875rem; /* Bulma .is-small font size */
+}
+
+.unified-table .col-input-small .select.is-small select,
+.unified-table .col-input-medium .select.is-small select {
+  height: 2.25em; /* Consistent with input height */
+  font-size: 0.875rem; /* Bulma .is-small font size */
+  padding: calc(0.375em - 1px) 2em calc(0.375em - 1px) calc(0.5em - 1px); /* Exact Bulma .is-small padding */
+}
+
+/* Legacy input column support */
+.portfolio-table .input-column {
+  padding: 4px 6px;
+}
+
+.portfolio-table .input-column .select.is-small,
+.portfolio-table .input-column .input.is-small {
+  width: 100%;
+  margin: 0;
+  height: 2.25em; /* Consistent height */
+  font-size: 0.875rem; /* Bulma .is-small font size */
+}
+
+.portfolio-table .input-column .select.is-small select {
+  width: 100%;
+  min-width: auto;
+  height: 2.25em; /* Consistent height */
+  font-size: 0.875rem; /* Bulma .is-small font size */
+  padding: calc(0.375em - 1px) 2em calc(0.375em - 1px) calc(0.5em - 1px); /* Exact Bulma .is-small padding */
+}
+
+/* Table container styling */
+.table-container,
+.portfolio-table-container {
+  overflow: visible;
+}
+
+/* Unified Responsive System */
 @media (max-width: 1200px) {
-  .portfolio-table th:nth-child(2),
-  .portfolio-table td:nth-child(2) {
-    /* Identifier column - smaller on medium screens */
-    min-width: 80px;
-    width: 80px;
-    max-width: 80px;
-  }
-  
-  .portfolio-table th:nth-child(3),
-  .portfolio-table td:nth-child(3) {
-    /* Company column - smaller on medium screens */
-    min-width: 80px;
-    width: 80px;
-    max-width: 80px;
-    /* Truncation handled by .truncate class on span */
-  }
-  
-  .portfolio-table th:nth-child(5),
-  .portfolio-table td:nth-child(5),
-  .portfolio-table th:nth-child(6),
-  .portfolio-table td:nth-child(6),
-  .portfolio-table th:nth-child(7),
-  .portfolio-table td:nth-child(7),
-  .portfolio-table th:nth-child(8),
-  .portfolio-table td:nth-child(8),
-  .portfolio-table th:nth-child(9),
-  .portfolio-table td:nth-child(9),
-  .portfolio-table th:nth-child(10),
-  .portfolio-table td:nth-child(10) {
-    /* Portfolio through Total Invested columns - smaller on medium screens */
-    min-width: 110px;
-    width: 110px;
+  :root {
+    --col-identifier: 80px;
+    --col-company: 100px;
+    --col-input-small: 110px;
+    --col-input-medium: 120px;
+    --col-currency: 110px;
   }
 }
 
 @media (max-width: 768px) {
-  .portfolio-table th:nth-child(2),
-  .portfolio-table td:nth-child(2) {
-    /* Identifier column - smallest on mobile */
-    min-width: 70px;
-    width: 70px;
-    max-width: 70px;
-  }
-  
-  .portfolio-table th:nth-child(3),
-  .portfolio-table td:nth-child(3) {
-    /* Company column - smallest on mobile */
-    min-width: 70px;
-    width: 70px;
-    max-width: 70px;
-    /* Truncation handled by .truncate class on span */
-  }
-  
-  .portfolio-table th:nth-child(5),
-  .portfolio-table td:nth-child(5),
-  .portfolio-table th:nth-child(6),
-  .portfolio-table td:nth-child(6),
-  .portfolio-table th:nth-child(7),
-  .portfolio-table td:nth-child(7),
-  .portfolio-table th:nth-child(8),
-  .portfolio-table td:nth-child(8),
-  .portfolio-table th:nth-child(9),
-  .portfolio-table td:nth-child(9),
-  .portfolio-table th:nth-child(10),
-  .portfolio-table td:nth-child(10) {
-    /* Portfolio through Total Invested columns - smallest on mobile */
-    min-width: 90px;
-    width: 90px;
+  :root {
+    --col-checkbox: 35px;
+    --col-identifier: 70px;
+    --col-company: 80px;
+    --col-price: 80px;
+    --col-input-small: 90px;
+    --col-input-medium: 100px;
+    --col-currency: 90px;
+    --col-percentage: 80px;
   }
 }

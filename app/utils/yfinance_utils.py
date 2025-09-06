@@ -120,11 +120,13 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
 
     return {
         'success': True,
-        'price': data.get('price'),
-        'price_eur': data.get('priceEUR'),
-        'currency': currency,
-        'country': data.get('country'),
-        'effective_identifier': effective_identifier,
+        'data': {
+            'currentPrice': data.get('price'),
+            'priceEUR': data.get('priceEUR'),
+            'currency': currency,
+            'country': data.get('country')
+        },
+        'modified_identifier': effective_identifier
     }
 
 

@@ -521,7 +521,7 @@
                         portfolioId: portfolioMap[portfolioName].id,
                         portfolioName: portfolioName,
                         // Include risk analysis fields
-                        country: item.country || 'Unknown',
+                        country: item.effective_country || item.country || 'Unknown',
 
                         exchange: item.exchange || 'Unknown'
                     });
@@ -1019,8 +1019,8 @@
                 return 'Crypto';
             }
 
-            // For non-crypto assets, use existing logic
-            return (company.country || '').trim() || 'Unknown';
+            // For non-crypto assets, use effective_country with fallback
+            return (company.effective_country || company.country || '').trim() || 'Unknown';
         }
 
         function updateDistributionCharts() {

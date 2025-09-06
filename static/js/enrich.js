@@ -1157,6 +1157,23 @@ class PortfolioTableApp {
                                 return direction * (aDate - bDate);
                             }
 
+                            // Handle country sorting specially
+                            if (this.sortColumn === 'country') {
+                                // Use effective_country for sorting to ensure consistency
+                                aVal = a.effective_country;
+                                bVal = b.effective_country;
+                                
+                                // Normalize country values for consistent sorting
+                                const normalizeCountry = (country) => {
+                                    if (!country || country === 'N/A' || country === '') return 'ZZZ_Unknown'; // Sort unknowns to end
+                                    if (country === '(crypto)') return 'AAA_Crypto'; // Sort crypto to beginning
+                                    return String(country).trim();
+                                };
+                                
+                                aVal = normalizeCountry(aVal);
+                                bVal = normalizeCountry(bVal);
+                            }
+
                             // String comparison for text fields
                             return direction * String(aVal).localeCompare(String(bVal));
                         });

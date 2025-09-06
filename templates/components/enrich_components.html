@@ -580,15 +580,15 @@
                 <p id="progress-percentage" class="has-text-centered has-text-weight-semibold mt-1">0%</p>
             </div>
             <div class="portfolio-controls-container mb-4">
-                <div class="controls-and-metrics-row">
-                    <!-- Controls moved to the left -->
-                    <div class="controls-group">
-                        <!-- Control Group with consistent spacing -->
-                        <div class="is-flex is-align-items-center" style="gap: var(--space-md);">
+                <div class="enrich-main-controls">
+                    <!-- Left side controls with unified styling -->
+                    <div class="enrich-controls-left">
+                        <!-- Group 1: Portfolio Filter and Company Search (Close spacing) -->
+                        <div class="enrich-control-group-close enrich-control-group-distant">
                             <!-- Portfolio Filter -->
                             <div class="control has-icons-left">
                                 <div class="select is-small">
-                                    <select id="filter-portfolio" style="height: 2em;">
+                                    <select id="filter-portfolio">
                                         <option value="">All Portfolios</option>
                                         {% for portfolio in portfolios %}
                                         <option value="{{ portfolio }}">{{ portfolio }}</option>
@@ -604,45 +604,43 @@
                             <div class="field has-addons mb-0">
                                 <div class="control has-icons-left">
                                     <input type="text" class="input is-small" id="company-search"
-                                        placeholder="Search company..." style="height: 2em;">
+                                        placeholder="Search company...">
                                     <span class="icon is-small is-left">
                                         <i class="fas fa-search"></i>
                                     </span>
                                 </div>
                                 <div class="control">
-                                    <button class="button is-small" id="clear-company-search" style="height: 2em;">
+                                    <button class="button is-small" id="clear-company-search">
                                         <span class="icon is-small">
                                             <i class="fas fa-times"></i>
                                         </span>
                                     </button>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Action buttons with consistent styling -->
-                            <div class="buttons are-small mb-0">
-                                <button class="button is-primary" id="update-all-data-btn" @click="updateAllData"
-                                    style="height: 2em;">
-                                    <span class="icon is-small">
-                                        <i class="fas fa-sync-alt"></i>
-                                    </span>
-                                    <span>Update all data</span>
-                                </button>
-                                <button class="button is-warning" @click="updateSelected" 
-                                    :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
-                                    :class="{'is-loading': isUpdatingSelected}"
-                                    style="height: 2em;">
-                                    <span class="icon is-small">
-                                        <i class="fas fa-sync"></i>
-                                    </span>
-                                    <span>Update Selected ({% raw %}{{ selectedItemIds.length }}{% endraw %})</span>
-                                </button>
-                                <button class="button is-info" @click="downloadCSV" style="height: 2em;">
-                                    <span class="icon is-small">
-                                        <i class="fas fa-download"></i>
-                                    </span>
-                                    <span>Download as CSV</span>
-                                </button>
-                            </div>
+                        <!-- Group 2: All Action Buttons (Close spacing within group) -->
+                        <div class="enrich-control-group-close enrich-control-group-distant">
+                            <button class="button is-primary" id="update-all-data-btn" @click="updateAllData">
+                                <span class="icon is-small">
+                                    <i class="fas fa-sync-alt"></i>
+                                </span>
+                                <span>Update all data</span>
+                            </button>
+                            <button class="button is-warning" @click="updateSelected" 
+                                :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
+                                :class="{'is-loading': isUpdatingSelected}">
+                                <span class="icon is-small">
+                                    <i class="fas fa-sync"></i>
+                                </span>
+                                <span>Update Selected ({% raw %}{{ selectedItemIds.length }}{% endraw %})</span>
+                            </button>
+                            <button class="button is-info" @click="downloadCSV">
+                                <span class="icon is-small">
+                                    <i class="fas fa-download"></i>
+                                </span>
+                                <span>Download as CSV</span>
+                            </button>
                         </div>
 
                         <!-- Hidden controls for Vue binding -->
@@ -651,20 +649,14 @@
                         </div>
                     </div>
 
-                    <!-- Metrics with consistent styling -->
-                    <div v-if="!loading && filteredPortfolioItems.length > 0" class="portfolio-metrics">
-                        <div class="metrics-item">
-                            <span class="metric-label">Total:</span>
-                            <span class="metric-value" v-text="metrics.total"></span>
-                        </div>
-                        <div class="metrics-item">
-                            <span class="metric-label">Value:</span>
-                            <span class="metric-value" v-text="formatCurrency(metrics.totalValue)"></span>
-                        </div>
-                        <div class="metrics-item">
-                            <span class="metric-label">Updated:</span>
-                            <span class="metric-value" v-text="formatDateAgo(metrics.lastUpdate)"></span>
-                        </div>
+                    <!-- Metrics Box (Distant spacing from controls) -->
+                    <div v-if="!loading && filteredPortfolioItems.length > 0" class="enrich-metrics-box">
+                        <span class="metric-label">Total:</span>
+                        <span class="metric-value" v-text="metrics.total"></span>
+                        <span class="metric-label">Value:</span>
+                        <span class="metric-value" v-text="formatCurrency(metrics.totalValue)"></span>
+                        <span class="metric-label">Updated:</span>
+                        <span class="metric-value" v-text="formatDateAgo(metrics.lastUpdate)"></span>
                     </div>
                 </div>
             </div>

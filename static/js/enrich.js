@@ -1091,7 +1091,8 @@ class PortfolioTableApp {
                     bulkPortfolio: '',
                     bulkCategory: '',
                     bulkCountry: '',
-                    isBulkProcessing: false
+                    isBulkProcessing: false,
+                    isUpdatingSelected: false
                     // Country options now server-rendered like portfolios
                 };
             },
@@ -1276,6 +1277,10 @@ class PortfolioTableApp {
 
                 updateAllData() {
                     UpdateAllDataHandler.run();
+                },
+
+                updateSelected() {
+                    this.updateSelectedPrices();
                 },
 
                 downloadCSV() {
@@ -1553,7 +1558,69 @@ class PortfolioTableApp {
                     }
                 },
 
+                async updateSelectedPrices() {
+                    if (this.selectedItemIds.length === 0) return;
 
+                    this.isUpdatingSelected = true;
+                    const selectedCount = this.selectedItemIds.length;
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    try {
+                        // Update each selected item
+                        for (const itemId of this.selectedItemIds) {
+                            try {
+                                const response = await fetch(`/portfolio/api/update_price/${itemId}`, {
+                                    method: 'POST'
+                                });
+                                const result = await response.json();
+
+                                if (response.ok) {
+                                    successCount++;
+                                } else {
+                                    errorCount++;
+                                    console.error(`Error updating item ${itemId}:`, result.error);
+                                }
+                            } catch (error) {
+                                errorCount++;
+                                console.error(`Network error updating item ${itemId}:`, error);
+                            }
+                        }
+
+                        // Refresh the data after all updates
+                        await this.loadData();
+
+                        // Show summary notification
+                        let message = '';
+                        if (successCount > 0 && errorCount === 0) {
+                            message = `Successfully updated ${successCount} price${successCount > 1 ? 's' : ''}`;
+                            if (typeof showNotification === 'function') {
+                                showNotification(message, 'is-success');
+                            }
+                        } else if (successCount > 0 && errorCount > 0) {
+                            message = `Updated ${successCount} price${successCount > 1 ? 's' : ''}, ${errorCount} failed`;
+                            if (typeof showNotification === 'function') {
+                                showNotification(message, 'is-warning');
+                            }
+                        } else {
+                            message = `Failed to update ${errorCount} price${errorCount > 1 ? 's' : ''}`;
+                            if (typeof showNotification === 'function') {
+                                showNotification(message, 'is-danger');
+                            }
+                        }
+
+                        // Clear selection after update
+                        this.selectedItemIds = [];
+
+                    } catch (error) {
+                        console.error('Error in bulk price update:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Network error during bulk update. Please try again.', 'is-danger');
+                        }
+                    } finally {
+                        this.isUpdatingSelected = false;
+                    }
+                },
 
                 async savePortfolioChange(item) {
                     console.log('savePortfolioChange called with item:', item);

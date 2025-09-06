@@ -1138,6 +1138,13 @@ select,
   width: 0.01em !important;
 }
 
+/* Truncation utility */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Text utilities */
 .has-text-centered {
   text-align: center !important;
@@ -1953,7 +1960,12 @@ select,
 .card-header .card-header-controls .button,
 .card-header .card-header-controls .select.is-small,
 .card-header .card-header-controls .select.is-small select,
-.card-header .card-header-controls .input.is-small {
+.card-header .card-header-controls .input.is-small,
+/* Bulk selection bar controls */
+.box .field.has-addons .button.is-small,
+.box .field.has-addons .select.is-small,
+.box .field.has-addons .select.is-small select,
+.box .field.has-addons .input.is-small {
   height: 2.25em;
   /* Use standard Bulma small height */
   font-size: var(--font-size-sm);
@@ -1963,13 +1975,15 @@ select,
 }
 
 /* Override Bulma's default button padding if needed for perfect height match */
-.card-header .card-header-controls .button {
+.card-header .card-header-controls .button,
+.box .field.has-addons .button.is-small {
   padding-top: calc(0.375em - 1px);
   padding-bottom: calc(0.375em - 1px);
 }
 
 /* Adjust icon container height within inputs/selects */
-.card-header .card-header-controls .control.has-icons-left .icon.is-left {
+.card-header .card-header-controls .control.has-icons-left .icon.is-left,
+.box .field.has-addons .control.has-icons-left .icon.is-left {
   height: 2.25em;
   /* Match control height */
   font-size: var(--font-size-sm);
@@ -1980,6 +1994,110 @@ select,
 .card-header .card-header-controls .control label.checkbox input[type="checkbox"] {
   vertical-align: middle;
   /* Improves alignment with text */
+}
+
+/* Bulk selection bar consistency */
+.box .field.has-addons {
+  margin-bottom: 0;
+  /* Match card header field spacing */
+}
+
+.box .field.has-addons .control {
+  align-items: center;
+  /* Ensure vertical alignment consistency */
+}
+
+/* Tooltip styling for table cells */
+.has-tooltip-top,
+.has-tooltip-right {
+  position: relative;
+  cursor: help;
+}
+
+/* Tooltip top */
+.has-tooltip-top::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  pointer-events: none;
+}
+
+.has-tooltip-top::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(0, 0, 0, 0.9);
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  pointer-events: none;
+}
+
+/* Tooltip right */
+.has-tooltip-right::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  pointer-events: none;
+  margin-left: var(--space-xs);
+}
+
+.has-tooltip-right::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 5px solid rgba(0, 0, 0, 0.9);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  pointer-events: none;
+  margin-left: calc(var(--space-xs) - 5px);
+}
+
+.has-tooltip-top:hover::before,
+.has-tooltip-top:hover::after,
+.has-tooltip-right:hover::before,
+.has-tooltip-right:hover::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* ApexCharts styling - Ensure charts are visible and responsive */
@@ -2870,5 +2988,211 @@ select,
 
   .apexcharts-datalabel-value {
     font-size: 20px !important;
+  }
+}
+
+/* ====================== ENRICH PAGE TABLE ENHANCEMENTS ====================== */
+
+/* Portfolio table styling for enrich page */
+.portfolio-table th:nth-child(6),
+.portfolio-table td:nth-child(6) {
+  /* Country column - increase width for better readability */
+  min-width: 150px;
+  width: 150px;
+}
+
+.portfolio-table th:nth-child(1),
+.portfolio-table td:nth-child(1) {
+  /* Checkbox column - keep narrow */
+  width: 40px;
+  text-align: center;
+}
+
+.portfolio-table th:nth-child(2),
+.portfolio-table td:nth-child(2) {
+  /* Identifier column */
+  min-width: 100px;
+  width: 100px;
+  max-width: 100px;
+}
+
+.portfolio-table th:nth-child(3),
+.portfolio-table td:nth-child(3) {
+  /* Company column - 40% narrower than before */
+  min-width: 96px;
+  width: 96px;
+  max-width: 96px;
+  /* Removed truncation styles to prevent tooltip clipping - moved to .truncate on span */
+}
+
+.portfolio-table td:nth-child(3) span {
+  /* Ensure company name span takes full cell width */
+  display: block;
+  width: 100%;
+}
+
+.portfolio-table th:nth-child(4),
+.portfolio-table td:nth-child(4) {
+  /* Price column */
+  min-width: 100px;
+  width: 100px;
+  text-align: right;
+}
+
+.portfolio-table th:nth-child(5),
+.portfolio-table td:nth-child(5) {
+  /* Portfolio column */
+  min-width: 131px;
+  width: 131px;
+}
+
+.portfolio-table th:nth-child(6),
+.portfolio-table td:nth-child(6) {
+  /* Category column */
+  min-width: 131px;
+  width: 131px;
+}
+
+.portfolio-table th:nth-child(7),
+.portfolio-table td:nth-child(7) {
+  /* Country column */
+  min-width: 131px;
+  width: 131px;
+}
+
+.portfolio-table th:nth-child(8),
+.portfolio-table td:nth-child(8) {
+  /* Shares column */
+  min-width: 131px;
+  width: 131px;
+  text-align: right;
+}
+
+.portfolio-table th:nth-child(9),
+.portfolio-table td:nth-child(9) {
+  /* Total Value column */
+  min-width: 131px;
+  width: 131px;
+  text-align: right;
+}
+
+.portfolio-table th:nth-child(10),
+.portfolio-table td:nth-child(10) {
+  /* Total Invested column */
+  min-width: 131px;
+  width: 131px;
+  text-align: right;
+}
+
+/* Country column dropdown styling */
+.portfolio-table .country-dropdown {
+  min-width: 131px;
+  width: 100%;
+}
+
+/* Ensure proper table layout */
+.portfolio-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Ensure table container allows tooltip overflow */
+.table-container {
+  overflow: visible;
+}
+
+.portfolio-table-container {
+  overflow: visible;
+}
+
+/* Improve spacing and visibility for input columns */
+.portfolio-table .input-column {
+  /* Add padding to the cell for better spacing */
+  padding: 4px 6px;
+}
+
+.portfolio-table .input-column .select,
+.portfolio-table .input-column .input {
+  /* Make controls fill available space with small margin */
+  width: 100%;
+  margin: 0;
+}
+
+.portfolio-table .input-column .select select {
+  /* Ensure dropdowns use full available width */
+  width: 100%;
+  min-width: auto;
+}
+
+/* Responsive table improvements */
+@media (max-width: 1200px) {
+  .portfolio-table th:nth-child(2),
+  .portfolio-table td:nth-child(2) {
+    /* Identifier column - smaller on medium screens */
+    min-width: 80px;
+    width: 80px;
+    max-width: 80px;
+  }
+  
+  .portfolio-table th:nth-child(3),
+  .portfolio-table td:nth-child(3) {
+    /* Company column - smaller on medium screens */
+    min-width: 80px;
+    width: 80px;
+    max-width: 80px;
+    /* Truncation handled by .truncate class on span */
+  }
+  
+  .portfolio-table th:nth-child(5),
+  .portfolio-table td:nth-child(5),
+  .portfolio-table th:nth-child(6),
+  .portfolio-table td:nth-child(6),
+  .portfolio-table th:nth-child(7),
+  .portfolio-table td:nth-child(7),
+  .portfolio-table th:nth-child(8),
+  .portfolio-table td:nth-child(8),
+  .portfolio-table th:nth-child(9),
+  .portfolio-table td:nth-child(9),
+  .portfolio-table th:nth-child(10),
+  .portfolio-table td:nth-child(10) {
+    /* Portfolio through Total Invested columns - smaller on medium screens */
+    min-width: 110px;
+    width: 110px;
+  }
+}
+
+@media (max-width: 768px) {
+  .portfolio-table th:nth-child(2),
+  .portfolio-table td:nth-child(2) {
+    /* Identifier column - smallest on mobile */
+    min-width: 70px;
+    width: 70px;
+    max-width: 70px;
+  }
+  
+  .portfolio-table th:nth-child(3),
+  .portfolio-table td:nth-child(3) {
+    /* Company column - smallest on mobile */
+    min-width: 70px;
+    width: 70px;
+    max-width: 70px;
+    /* Truncation handled by .truncate class on span */
+  }
+  
+  .portfolio-table th:nth-child(5),
+  .portfolio-table td:nth-child(5),
+  .portfolio-table th:nth-child(6),
+  .portfolio-table td:nth-child(6),
+  .portfolio-table th:nth-child(7),
+  .portfolio-table td:nth-child(7),
+  .portfolio-table th:nth-child(8),
+  .portfolio-table td:nth-child(8),
+  .portfolio-table th:nth-child(9),
+  .portfolio-table td:nth-child(9),
+  .portfolio-table th:nth-child(10),
+  .portfolio-table td:nth-child(10) {
+    /* Portfolio through Total Invested columns - smallest on mobile */
+    min-width: 90px;
+    width: 90px;
   }
 }

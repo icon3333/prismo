@@ -637,19 +637,21 @@
                                     </span>
                                     <span>Update all data</span>
                                 </button>
+                                <button class="button is-warning" @click="updateSelected" 
+                                    :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
+                                    :class="{'is-loading': isUpdatingSelected}"
+                                    style="height: 2em;">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-sync"></i>
+                                    </span>
+                                    <span>Update Selected ({% raw %}{{ selectedItemIds.length }}{% endraw %})</span>
+                                </button>
                                 <button class="button is-info" @click="downloadCSV" style="height: 2em;">
                                     <span class="icon is-small">
                                         <i class="fas fa-download"></i>
                                     </span>
                                     <span>Download as CSV</span>
                                 </button>
-                                <!-- DEBUG: Temporary debug button - no longer needed -->
-                                <!-- <button class="button is-warning" @click="forceOptionStyling" style="height: 2em;">
-                                    <span class="icon is-small">
-                                        <i class="fas fa-bug"></i>
-                                    </span>
-                                    <span>Debug Countries</span>
-                                </button> -->
                             </div>
                         </div>
 
@@ -759,7 +761,6 @@
                                             :indeterminate.prop="someFilteredSelected && !allFilteredSelected">
                                     </label>
                                 </th>
-                                <th>Update</th>
                                 <th @click="sortBy('identifier')" class="is-sortable">
                                     Identifier
                                     <span class="icon is-small has-tooltip-right"
@@ -834,20 +835,11 @@
                                     </label>
                                 </td>
                                 <td>
-                                    <button class="button is-small is-info" @click="confirmPriceUpdate(item)"
-                                        :class="{'is-loading': isUpdating && selectedItem.id === item.id}"
-                                        :disabled="isUpdating" title="Update price immediately">
-                                        <span class="icon is-small">
-                                            <i class="fas fa-sync"></i>
-                                        </span>
-                                    </button>
-                                </td>
-                                <td>
                                     <input class="input is-small" type="text" v-model="item.identifier"
                                         @blur="saveIdentifierChange(item)">
                                 </td>
-                                <td>
-                                    <span v-text="item.company"></span>
+                                <td class="has-tooltip-top" :data-tooltip="item.company">
+                                    <span class="truncate" v-text="item.company"></span>
                                 </td>
                                 <td :class="{'has-text-danger': !item.price_eur}" class="has-tooltip-top" :data-tooltip="formatDateAgo(item.last_updated)">
                                     <span v-text="item.price_eur ? formatCurrency(item.price_eur) : 'No price'"></span>

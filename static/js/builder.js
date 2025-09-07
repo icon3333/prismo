@@ -162,10 +162,10 @@ document.addEventListener('DOMContentLoaded', function () {
             for (const portfolio of this.portfolios) {
               // Calculate minimum positions needed
               this.calculateMinimumPositions(portfolio);
-              // Add placeholder positions if needed
-              this.ensureMinimumPositions(portfolio);
               // Set current positions from loaded companies
               portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
+              // Add placeholder positions if needed
+              this.ensureMinimumPositions(portfolio);
             }
           }
 
@@ -283,12 +283,12 @@ document.addEventListener('DOMContentLoaded', function () {
               // Only keep portfolios that have companies
               if (this.portfolioCompanies[portfolio.id] && this.portfolioCompanies[portfolio.id].length > 0) {
                 portfoliosWithCompanies.push(portfolio);
+                // Set current positions from loaded companies
+                portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
                 // Calculate minimum positions needed
                 this.calculateMinimumPositions(portfolio);
                 // Add placeholder positions if needed - this will not create actual company positions
                 this.ensureMinimumPositions(portfolio);
-                // Set current positions from loaded companies
-                portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
               } else {
                 console.log(`Skipping portfolio ${portfolio.name} (ID: ${portfolio.id}) because it has no companies`);
               }
@@ -532,13 +532,14 @@ document.addEventListener('DOMContentLoaded', function () {
           return total + parseFloat(position.weight || 0);
         }, 0);
 
-        // If we already have enough real positions OR real positions sum to 100%, we don't need placeholders
-        if (realPositionCount >= minPositions || realPositionsWeight >= 100) {
+        // Calculate actual number of positions remaining
+        // Use current positions for this specific portfolio minus already allocated positions in builder
+        const positionsRemaining = Math.max(0, (portfolio.currentPositions || 0) - realPositionCount);
+        
+        // If real positions sum to 100% OR there are no more positions to allocate, we don't need placeholders
+        if (realPositionsWeight >= 100 || positionsRemaining <= 0) {
           return;
         }
-
-        // Calculate actual number of positions remaining
-        const positionsRemaining = minPositions - realPositionCount;
 
         // Add a placeholder position that represents ALL remaining positions
         // The companyName shows total remaining for user information
@@ -673,7 +674,6 @@ document.addEventListener('DOMContentLoaded', function () {
         const portfolio = this.portfolios[portfolioIndex];
         const realPositions = portfolio.positions.filter(p => !p.isPlaceholder);
         const realPositionsCount = realPositions.length;
-        const minPositions = Math.ceil(portfolio.minPositions);
 
         // Calculate total weight of real positions
         const realPositionsWeight = realPositions.reduce((total, position) => {
@@ -685,7 +685,8 @@ document.addEventListener('DOMContentLoaded', function () {
           return 0;
         }
 
-        return Math.max(0, minPositions - realPositionsCount);
+        // Use current positions for this specific portfolio minus already allocated positions in builder
+        return Math.max(0, (portfolio.currentPositions || 0) - realPositionsCount);
       },
 
       // Get remaining weight percentage for manual allocation
@@ -1565,10 +1566,10 @@ document.addEventListener('DOMContentLoaded', function () {
         handler() {
           // Recalculate minimum positions when rules change
           this.portfolios.forEach((portfolio, index) => {
-            this.calculateMinimumPositions(portfolio);
-            this.ensureMinimumPositions(portfolio);
             // Update current positions count (in case companies were added/removed)
             portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
+            this.calculateMinimumPositions(portfolio);
+            this.ensureMinimumPositions(portfolio);
           });
           this.debouncedSave();
         },

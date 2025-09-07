@@ -177,11 +177,11 @@
                 readonly>
             </div>
             <div class="metric-group">
-              <label class="metric-label">Min</label>
+              <label class="metric-label">Min Positions</label>
               <input class="portfolio-allocation-input" type="text" :value="portfolio.minPositions.toFixed(2)" readonly>
             </div>
             <div class="metric-group">
-              <label class="metric-label">Current</label>
+              <label class="metric-label">Current Positions</label>
               <input class="portfolio-allocation-input" type="text" :value="portfolio.currentPositions || 0"
                      :class="{'has-text-danger': portfolio.currentPositions < portfolio.minPositions}" readonly>
             </div>
@@ -395,6 +395,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1000, 9999) | random }}"></script>
 <script src="{{ url_for('static', filename='js/builder.js') }}?v={{ range(1000, 9999) | random }}"></script>
 {% endblock %}

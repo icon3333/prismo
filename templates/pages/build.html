@@ -187,24 +187,6 @@
 
         <!-- Position Management (collapsible) -->
         <div v-if="isPortfolioExpanded(index)" class="mt-5">
-          <div class="columns is-variable is-4">
-            <div class="column is-4">
-              <div class="field">
-                <label class="checkbox">
-                  <input type="checkbox" v-model="portfolio.evenSplit" @change="updatePositionAllocations(index)">
-                  <span class="ml-2">Distribute evenly across positions</span>
-                </label>
-              </div>
-            </div>
-            <div class="column is-4">
-              <div class="field">
-                <label class="label">Maximum Weight per Position</label>
-                <input class="input" type="text"
-                  :value="(100 / Math.max(1, Math.ceil(portfolio.minPositions))).toFixed(0) + '%'" readonly>
-              </div>
-            </div>
-          </div>
-
           <!-- Add Position Section -->
           <div class="add-position-section">
             <div class="columns is-variable is-4">
@@ -233,6 +215,35 @@
                 <div v-if="getRemainingPositionsCount(index) > 0" class="notification is-warning py-3">
                   <span class="has-text-weight-medium">
                     ${ getRemainingPositionsCount(index) } positions remaining
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weight Management Options -->
+          <div class="columns is-variable is-4 mt-4">
+            <div class="column is-4">
+              <div class="field">
+                <label class="checkbox">
+                  <input type="checkbox" v-model="portfolio.evenSplit" @change="updatePositionAllocations(index)">
+                  <span class="ml-2">Distribute evenly across positions</span>
+                </label>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div class="field">
+                <label class="label">Maximum Weight per Position</label>
+                <input class="input" type="text"
+                  :value="(100 / Math.max(1, Math.ceil(portfolio.minPositions))).toFixed(0) + '%'" readonly>
+              </div>
+            </div>
+            <div class="column is-4">
+              <div v-if="!portfolio.evenSplit && portfolio.positions && portfolio.positions.length > 0" class="field">
+                <label class="label">Remaining to Allocate</label>
+                <div class="notification" :class="getRemainingWeightClass(index)">
+                  <span class="has-text-weight-medium">
+                    ${ getRemainingWeight(index).toFixed(1) }%
                   </span>
                 </div>
               </div>

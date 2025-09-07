@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     allocation: 0,
                     positions: [], // Start with empty positions - don't auto-create any for companies
                     selectedPosition: "", // Initialize the selectedPosition property
-                    evenSplit: true // Initialize evenSplit property
+                    evenSplit: false // Initialize evenSplit property - default to manual allocation
                   });
                   console.log(`Added portfolio ${portfolio.name} (ID: ${portfolio.id}) to this.portfolios`);
 
@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 allocation: 0,
                 positions: [],
                 selectedPosition: "", // Initialize selectedPosition
-                evenSplit: true // Default to even split
+                evenSplit: false // Default to manual allocation
               });
             }
           }
@@ -600,8 +600,11 @@ document.addEventListener('DOMContentLoaded', function () {
           const realPositionsCount = portfolio.positions.filter(p => !p.isPlaceholder).length + 1;
           initialWeight = 100 / realPositionsCount;
         } else {
-          // Start with zero weight for manual adjustment
-          initialWeight = 0;
+          // Start with a reasonable weight for manual adjustment (20% or remaining amount, whichever is smaller)
+          const currentRealPositions = portfolio.positions.filter(p => !p.isPlaceholder);
+          const usedWeight = currentRealPositions.reduce((total, pos) => total + (pos.weight || 0), 0);
+          const remainingWeight = 100 - usedWeight;
+          initialWeight = Math.min(20, Math.max(0, remainingWeight));
         }
 
         // Add new position
@@ -679,6 +682,28 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return Math.max(0, minPositions - realPositionsCount);
+      },
+
+      // Get remaining weight percentage for manual allocation
+      getRemainingWeight(portfolioIndex) {
+        const portfolio = this.portfolios[portfolioIndex];
+        if (!portfolio.positions) return 100;
+        
+        const realPositions = portfolio.positions.filter(p => !p.isPlaceholder);
+        const usedWeight = realPositions.reduce((total, pos) => total + (pos.weight || 0), 0);
+        return Math.max(0, 100 - usedWeight);
+      },
+
+      // Get CSS class for remaining weight indicator
+      getRemainingWeightClass(portfolioIndex) {
+        const remaining = this.getRemainingWeight(portfolioIndex);
+        if (remaining === 0) {
+          return 'is-success py-2';
+        } else if (remaining < 0) {
+          return 'is-danger py-2';
+        } else {
+          return 'is-info py-2';
+        }
       },
 
       // Update position details when company is selected

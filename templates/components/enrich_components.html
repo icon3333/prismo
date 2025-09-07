@@ -785,6 +785,8 @@
                                 </th>
                                 <th @click="sortBy('country')" class="is-sortable col-input-small">
                                     Country
+                                    <span class="column-health" :class="getHealthColorClass(countryHealthPercentage)"
+                                        v-text="countryHealthPercentage + '%'"></span>
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'country'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>

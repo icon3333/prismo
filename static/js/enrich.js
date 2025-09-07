@@ -1211,6 +1211,13 @@ class PortfolioTableApp {
                         item.price_eur && item.price_eur > 0
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
+                },
+                countryHealthPercentage() {
+                    if (this.filteredPortfolioItems.length === 0) return 0;
+                    const filledCount = this.filteredPortfolioItems.filter(item =>
+                        item.effective_country && item.effective_country.trim() !== '' && item.effective_country !== 'N/A'
+                    ).length;
+                    return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 }
             },
             watch: {

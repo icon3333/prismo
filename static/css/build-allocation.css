@@ -62,6 +62,268 @@
   font-size: 0.95rem;
 }
 
+/* Portfolio List - Aligned Two-Column Layout */
+.portfolio-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-width: 100%;
+}
+
+.portfolio-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-lg);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.portfolio-row:last-child {
+  border-bottom: none;
+}
+
+/* Portfolio Name Column */
+.portfolio-name-column {
+  flex: 0 0 200px; /* Fixed width for consistent alignment */
+  display: flex;
+  align-items: center;
+  min-height: 60px; /* Match the height of the data column */
+}
+
+.portfolio-name {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-color);
+  margin: 0;
+}
+
+/* Portfolio Data Column */
+.portfolio-data-column {
+  flex: 1;
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-md);
+}
+
+/* Portfolio Metrics - Single Line Layout */
+.portfolio-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.metric-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex: 0 0 auto;
+  min-width: 100px;
+}
+
+.metric-group:first-child {
+  flex: 0 0 auto; /* Toggle button */
+  min-width: auto;
+  margin-right: auto; /* Push to left, others to right */
+}
+
+/* Specific width adjustments for better alignment */
+.metric-group:nth-child(2) { /* Allocation % */
+  min-width: 120px;
+}
+
+.metric-group:nth-child(3) { /* Amount */
+  min-width: 140px;
+}
+
+.metric-group:nth-child(4) { /* Min */
+  min-width: 80px;
+}
+
+.metric-group:nth-child(5) { /* Current */
+  min-width: 80px;
+}
+
+.metric-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Unified Portfolio Allocation Input Styling - High Specificity to Override Other Rules */
+.portfolio-allocation-input,
+.unified-table .portfolio-allocation-input,
+.metric-group .portfolio-allocation-input,
+.col-percentage .portfolio-allocation-input,
+.col-currency .portfolio-allocation-input {
+  width: 100% !important;
+  padding: calc(var(--space-xs) + 2px) var(--space-sm) !important;
+  font-size: var(--font-size-base) !important;
+  border: 1px solid var(--border-color) !important;
+  background-color: var(--bg) !important;
+  border-radius: var(--border-radius) !important;
+  text-align: left !important;
+  font-weight: 400 !important;
+  transition: var(--transition) !important;
+  max-width: 100% !important;
+  display: block !important;
+  margin: 0 !important;
+  height: auto !important;
+}
+
+.portfolio-allocation-input:focus,
+.unified-table .portfolio-allocation-input:focus,
+.metric-group .portfolio-allocation-input:focus,
+.col-percentage .portfolio-allocation-input:focus,
+.col-currency .portfolio-allocation-input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px var(--primary-light) !important;
+  outline: none !important;
+}
+
+.portfolio-allocation-input[readonly],
+.unified-table .portfolio-allocation-input[readonly],
+.metric-group .portfolio-allocation-input[readonly],
+.col-percentage .portfolio-allocation-input[readonly],
+.col-currency .portfolio-allocation-input[readonly] {
+  background-color: var(--darker-bg) !important;
+  color: var(--text-muted) !important;
+  cursor: default !important;
+}
+
+.portfolio-allocation-input:disabled,
+.unified-table .portfolio-allocation-input:disabled,
+.metric-group .portfolio-allocation-input:disabled,
+.col-percentage .portfolio-allocation-input:disabled,
+.col-currency .portfolio-allocation-input:disabled {
+  background-color: var(--darker-bg) !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+}
+
+/* Portfolio Toggle in Metrics */
+.portfolio-toggle {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: var(--darker-bg);
+  transition: all var(--transition-speed) var(--transition-func);
+  border: 2px solid transparent;
+  margin-top: 1.5rem; /* Align with inputs */
+  align-self: flex-end; /* Align with the input fields */
+}
+
+.portfolio-toggle:hover {
+  background-color: var(--primary-light);
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
+.portfolio-toggle i {
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+/* Expanded Content - Minimalist Design */
+.portfolio-expanded-content {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Unified Action Bar */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  /* Removed background, border, and border-radius to remove visual box */
+}
+
+.action-group-left {
+  flex: 1;
+  max-width: 400px;
+}
+
+.action-group-right {
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+.action-group-right .field {
+  margin: 0;
+}
+
+.help-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+  font-style: italic;
+}
+
+/* Positions Table */
+.positions-table {
+  /* Removed border-radius, overflow, and border to remove visual box */
+}
+
+.positions-table .table {
+  margin: 0;
+  background-color: transparent;
+}
+
+.positions-table th {
+  background-color: transparent !important; /* Override global table header background */
+  color: var(--text-color);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+/* Also remove background from footer "Total" row */
+.positions-table tfoot th {
+  background-color: transparent !important;
+}
+
+.positions-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.positions-table tbody tr:hover {
+  background-color: var(--primary-light);
+}
+
+/* Open Positions Text */
+.open-positions-text {
+  font-style: italic;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.placeholder-position {
+  background-color: rgba(var(--primary-rgb), 0.1);
+}
+
+.placeholder-position .open-positions-text {
+  color: var(--primary);
+}
+
 /* Global Allocation Rules Card */
 .card {
   background-color: var(--card-bg);
@@ -123,34 +385,56 @@
   font-weight: 500;
 }
 
-/* Compact Box for Portfolio Items */
-.compact-box {
-  background-color: var(--card-bg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
-  margin-bottom: var(--space-lg);
-  padding: var(--space-lg);
-}
-
-/* Portfolio Toggle Button */
-.portfolio-toggle {
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background-color: var(--darker-bg);
-  transition: background-color var(--transition-speed) var(--transition-func);
-}
-
-.portfolio-toggle:hover {
-  background-color: var(--primary-light);
-}
-
-.portfolio-toggle i {
-  color: var(--primary);
+/* Responsive Design for Portfolio List */
+@media (max-width: 768px) {
+  .portfolio-row {
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  
+  .portfolio-name-column {
+    flex: none;
+    width: 100%;
+    min-height: auto;
+  }
+  
+  .portfolio-metrics {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: var(--space-sm);
+  }
+  
+  .metric-group {
+    flex: 1;
+    min-width: 80px;
+    max-width: none;
+  }
+  
+  .metric-group:first-child {
+    flex: 0 0 auto;
+    margin-right: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+  
+  /* Reset specific widths on mobile */
+  .metric-group:nth-child(2),
+  .metric-group:nth-child(3),
+  .metric-group:nth-child(4),
+  .metric-group:nth-child(5) {
+    min-width: 80px;
+  }
+  
+  .action-bar {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+  
+  .action-group-left,
+  .action-group-right {
+    width: 100%;
+    max-width: none;
+    min-width: auto;
+  }
 }
 
 /* Add Position Section */
@@ -311,4 +595,16 @@
 
 .portfolio-value-hint:active {
   transform: scale(0.98);
+}
+
+/* Red text for warnings on readonly inputs */
+.portfolio-allocation-input[readonly].has-text-danger {
+  color: hsl(348, 86%, 61%) !important; /* Bulma danger color */
+  font-weight: bold;
+}
+
+/* Red text for warnings (e.g., current < min positions) */
+.has-text-danger {
+  color: hsl(348, 86%, 61%) !important; /* Bulma danger color */
+  background-color: rgba(255, 255, 255, 0.95) !important; /* Ensure visibility */
 }

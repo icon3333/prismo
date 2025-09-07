@@ -150,47 +150,49 @@
     </div>
 
     <!-- Portfolio List -->
-    <div v-if="portfolios.length > 0">
-      <div v-for="(portfolio, index) in portfolios" :key="index" class="compact-box">
-        <!-- Portfolio Header -->
-        <div class="columns is-vcentered is-variable is-4">
-          <div class="column is-3">
-            <label class="label">${ getPortfolioName(portfolio.id) }</label>
-          </div>
-          <div class="column is-3">
-            <div class="field">
-              <label class="label">Allocation %</label>
-              <input class="input" type="text" :value="parseFloat(portfolio.allocation).toFixed(0)"
+    <div v-if="portfolios.length > 0" class="portfolio-list">
+      <div v-for="(portfolio, index) in portfolios" :key="index" class="portfolio-row">
+        <!-- Portfolio Name Column -->
+        <div class="portfolio-name-column">
+          <div class="portfolio-name">${ getPortfolioName(portfolio.id) }</div>
+        </div>
+        
+        <!-- Portfolio Data Column -->
+        <div class="portfolio-data-column">
+          <div class="portfolio-metrics">
+            <div class="metric-group">
+              <span class="portfolio-toggle" @click="togglePortfolioExpand(index)" :aria-expanded="isPortfolioExpanded(index)">
+                <i class="fas" :class="isPortfolioExpanded(index) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              </span>
+            </div>
+            <div class="metric-group">
+              <label class="metric-label">Allocation %</label>
+              <input class="portfolio-allocation-input" type="text" :value="parseFloat(portfolio.allocation).toFixed(0)"
                 @change="$event.target.value && $event.target.value.length > 0 ? portfolio.allocation = parseFloat($event.target.value) : null; updateAllocations()"
                 @focus="$event.target.select()">
             </div>
-          </div>
-          <div class="column is-3">
-            <div class="field">
-              <label class="label">Amount</label>
-              <input class="input" type="text" :value="formatCurrency(calculateAllocationAmount(portfolio.allocation))"
+            <div class="metric-group">
+              <label class="metric-label">Amount</label>
+              <input class="portfolio-allocation-input" type="text" :value="formatCurrency(calculateAllocationAmount(portfolio.allocation))"
                 readonly>
             </div>
-          </div>
-          <div class="column is-2">
-            <div class="field">
-              <label class="label">Min Positions</label>
-              <input class="input" type="text" :value="portfolio.minPositions.toFixed(2)" readonly>
+            <div class="metric-group">
+              <label class="metric-label">Min</label>
+              <input class="portfolio-allocation-input" type="text" :value="portfolio.minPositions.toFixed(2)" readonly>
+            </div>
+            <div class="metric-group">
+              <label class="metric-label">Current</label>
+              <input class="portfolio-allocation-input" type="text" :value="portfolio.currentPositions || 0"
+                     :class="{'has-text-danger': portfolio.currentPositions < portfolio.minPositions}" readonly>
             </div>
           </div>
-          <div class="column is-1 has-text-centered">
-            <span class="portfolio-toggle" @click="togglePortfolioExpand(index)">
-              <i class="fas" :class="isPortfolioExpanded(index) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-            </span>
-          </div>
-        </div>
 
-        <!-- Position Management (collapsible) -->
-        <div v-if="isPortfolioExpanded(index)" class="mt-5">
-          <!-- Add Position Section -->
-          <div class="add-position-section">
-            <div class="columns is-variable is-4">
-              <div class="column is-8">
+          <!-- Position Management (collapsible) - Now inside data column -->
+          <div v-if="isPortfolioExpanded(index)" class="portfolio-expanded-content">
+            
+            <!-- Unified Action Bar -->
+            <div class="action-bar">
+              <div class="action-group-left">
                 <div class="field has-addons">
                   <div class="control is-expanded">
                     <div class="select is-fullwidth">
@@ -211,97 +213,73 @@
                   </div>
                 </div>
               </div>
-              <div class="column is-4">
-                <div v-if="getRemainingPositionsCount(index) > 0" class="notification is-warning py-3">
-                  <span class="has-text-weight-medium">
-                    ${ getRemainingPositionsCount(index) } positions remaining
-                  </span>
+              
+              <div class="action-group-right">
+                <div class="field">
+                  <label class="checkbox">
+                    <input type="checkbox" v-model="portfolio.evenSplit" @change="updatePositionAllocations(index)">
+                    <span class="ml-2">Distribute Evenly</span>
+                  </label>
+                  <div class="help-text">
+                    Max weight per position: ${ (100 / Math.max(1, Math.ceil(portfolio.minPositions))).toFixed(0) }%
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <!-- Weight Management Options -->
-          <div class="columns is-variable is-4 mt-4">
-            <div class="column is-4">
-              <div class="field">
-                <label class="checkbox">
-                  <input type="checkbox" v-model="portfolio.evenSplit" @change="updatePositionAllocations(index)">
-                  <span class="ml-2">Distribute evenly across positions</span>
-                </label>
-              </div>
+            <!-- Refined Positions Table -->
+            <div class="positions-table">
+              <table class="table is-fullwidth unified-table">
+                <thead>
+                  <tr>
+                    <th class="col-company">Company</th>
+                    <th class="col-percentage">Weight %</th>
+                    <th class="col-currency">Allocation Amount</th>
+                    <th class="col-checkbox"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(position, pIndex) in sortedPositions(portfolio.positions)" :key="pIndex"
+                    :class="{'placeholder-position': position.isPlaceholder}">
+                    <td class="col-company">
+                      <div v-if="position.isPlaceholder" class="open-positions-text">
+                        ${ position.positionsRemaining } open positions
+                      </div>
+                      <div v-else>
+                        ${ position.companyName || 'Select a company' }
+                      </div>
+                    </td>
+                    <td class="col-percentage">
+                      <input class="portfolio-allocation-input" type="text" :value="(position.weight || 0).toFixed(0)"
+                        @change="updateManualWeight(index, pIndex, $event.target.value)" @focus="$event.target.select()"
+                        :disabled="portfolio.evenSplit">
+                    </td>
+                    <td class="col-currency">
+                      <input class="portfolio-allocation-input" type="text" :value="formatCurrency(calculatePositionAmount(index, pIndex))"
+                        readonly>
+                    </td>
+                    <td class="col-checkbox has-text-centered">
+                      <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded"
+                        style="width: 36px; height: 36px; padding: 0;" @click="removePosition(index, pIndex)"
+                        title="Remove position">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="portfolio.positions.length === 0">
+                    <td colspan="4" class="has-text-centered py-4">No positions added yet</td>
+                  </tr>
+                </tbody>
+                <tfoot v-if="portfolio.positions.length > 0">
+                  <tr>
+                    <th>Total</th>
+                    <th>${ calculateTotalWeight(index).toFixed(0) }%</th>
+                    <th>${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }</th>
+                    <th></th>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-            <div class="column is-4">
-              <div class="field">
-                <label class="label">Maximum Weight per Position</label>
-                <input class="input" type="text"
-                  :value="(100 / Math.max(1, Math.ceil(portfolio.minPositions))).toFixed(0) + '%'" readonly>
-              </div>
-            </div>
-            <div class="column is-4">
-              <div v-if="!portfolio.evenSplit && portfolio.positions && portfolio.positions.length > 0" class="field">
-                <label class="label">Remaining to Allocate</label>
-                <div class="notification" :class="getRemainingWeightClass(index)">
-                  <span class="has-text-weight-medium">
-                    ${ getRemainingWeight(index).toFixed(1) }%
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Position List -->
-          <div class="table-responsive mt-4">
-            <table class="table is-fullwidth unified-table">
-              <thead>
-                <tr>
-                  <th class="col-company">Company</th>
-                  <th class="col-percentage">Weight %</th>
-                  <th class="col-currency">Allocation Amount</th>
-                  <th class="col-checkbox"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(position, pIndex) in sortedPositions(portfolio.positions)" :key="pIndex"
-                  :class="{'placeholder-position': position.isPlaceholder}">
-                  <td class="col-company">
-                    <div v-if="position.isPlaceholder" class="remaining-positions-text">
-                      ${ position.companyName }
-                    </div>
-                    <div v-else>
-                      ${ position.companyName || 'Select a company' }
-                    </div>
-                  </td>
-                  <td class="col-percentage">
-                    <input class="input" type="text" :value="(position.weight || 0).toFixed(0)"
-                      @change="updateManualWeight(index, pIndex, $event.target.value)" @focus="$event.target.select()"
-                      :disabled="portfolio.evenSplit">
-                  </td>
-                  <td class="col-currency">
-                    <input class="input" type="text" :value="formatCurrency(calculatePositionAmount(index, pIndex))"
-                      readonly>
-                  </td>
-                  <td class="col-checkbox has-text-centered">
-                    <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded"
-                      style="width: 36px; height: 36px; padding: 0;" @click="removePosition(index, pIndex)"
-                      title="Remove position">
-                      <i class="fas fa-times"></i>
-                    </button>
-                  </td>
-                </tr>
-                <tr v-if="portfolio.positions.length === 0">
-                  <td colspan="4" class="has-text-centered py-4">No positions added yet.</td>
-                </tr>
-              </tbody>
-              <tfoot v-if="portfolio.positions.length > 0">
-                <tr>
-                  <th>Total</th>
-                  <th>${ calculateTotalWeight(index).toFixed(0) }%</th>
-                  <th>${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }</th>
-                  <th></th>
-                </tr>
-              </tfoot>
-            </table>
           </div>
         </div>
       </div>

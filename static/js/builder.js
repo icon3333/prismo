@@ -164,6 +164,8 @@ document.addEventListener('DOMContentLoaded', function () {
               this.calculateMinimumPositions(portfolio);
               // Add placeholder positions if needed
               this.ensureMinimumPositions(portfolio);
+              // Set current positions from loaded companies
+              portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
             }
           }
 
@@ -285,6 +287,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 this.calculateMinimumPositions(portfolio);
                 // Add placeholder positions if needed - this will not create actual company positions
                 this.ensureMinimumPositions(portfolio);
+                // Set current positions from loaded companies
+                portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
               } else {
                 console.log(`Skipping portfolio ${portfolio.name} (ID: ${portfolio.id}) because it has no companies`);
               }
@@ -694,17 +698,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return Math.max(0, 100 - usedWeight);
       },
 
-      // Get CSS class for remaining weight indicator
-      getRemainingWeightClass(portfolioIndex) {
-        const remaining = this.getRemainingWeight(portfolioIndex);
-        if (remaining === 0) {
-          return 'is-success py-2';
-        } else if (remaining < 0) {
-          return 'is-danger py-2';
-        } else {
-          return 'is-info py-2';
-        }
-      },
 
       // Update position details when company is selected
       updatePositionDetails(portfolioIndex, positionIndex) {
@@ -1574,6 +1567,8 @@ document.addEventListener('DOMContentLoaded', function () {
           this.portfolios.forEach((portfolio, index) => {
             this.calculateMinimumPositions(portfolio);
             this.ensureMinimumPositions(portfolio);
+            // Update current positions count (in case companies were added/removed)
+            portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
           });
           this.debouncedSave();
         },

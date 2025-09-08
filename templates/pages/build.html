@@ -150,7 +150,8 @@
     </div>
 
     <!-- Portfolio List -->
-    <div v-if="portfolios.length > 0" class="portfolio-list">
+    <div v-if="portfolios.length > 0" class="portfolio-list-container">
+      <div class="portfolio-list">
       <div v-for="(portfolio, index) in portfolios" :key="index" class="portfolio-row">
         <!-- Portfolio Name Column -->
         <div class="portfolio-name-column">
@@ -283,6 +284,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <div v-else class="notification is-info">

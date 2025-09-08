@@ -62,19 +62,24 @@
   font-size: 0.95rem;
 }
 
+.portfolio-list-container {
+  overflow-x: auto; /* Allow horizontal scrolling on smaller screens */
+  padding-bottom: 1rem; /* Make space for the scrollbar */
+}
+
 /* Portfolio List - Aligned Two-Column Layout */
 .portfolio-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  max-width: 100%;
+  gap: var(--space-xs);
+  width: 100%; /* Take full width of container */
 }
 
 .portfolio-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-lg);
-  padding: var(--space-sm) 0;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -100,10 +105,13 @@
 /* Portfolio Data Column */
 .portfolio-data-column {
   flex: 1;
+  min-width: 900px; /* Ensure enough space for metrics and expanded content */
   background-color: var(--card-bg);
   border-radius: var(--border-radius);
   box-shadow: var(--shadow);
   padding: var(--space-md);
+  /* Add overflow hidden to contain child elements */
+  overflow: hidden;
 }
 
 /* Portfolio Metrics - Single Line Layout */
@@ -111,15 +119,17 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-md);
+  gap: var(--space-lg);
   width: 100%;
+  /* Add margin to prevent overlap */
+  margin-bottom: var(--space-lg);
 }
 
 .metric-group {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  flex: 0 0 auto;
+  flex: 1; /* Allow metric groups to grow and fill space */
   min-width: 100px;
 }
 
@@ -131,19 +141,19 @@
 
 /* Specific width adjustments for better alignment */
 .metric-group:nth-child(2) { /* Allocation % */
-  min-width: 120px;
-}
-
-.metric-group:nth-child(3) { /* Amount */
   min-width: 140px;
 }
 
+.metric-group:nth-child(3) { /* Amount */
+  min-width: 160px;
+}
+
 .metric-group:nth-child(4) { /* Min */
-  min-width: 80px;
+  min-width: 120px;
 }
 
 .metric-group:nth-child(5) { /* Current */
-  min-width: 80px;
+  min-width: 120px;
 }
 
 .metric-label {
@@ -167,7 +177,7 @@
   border: 1px solid var(--border-color) !important;
   background-color: var(--bg) !important;
   border-radius: var(--border-radius) !important;
-  text-align: left !important;
+  text-align: center !important; /* Center text for better alignment */
   font-weight: 400 !important;
   transition: var(--transition) !important;
   max-width: 100% !important;
@@ -421,7 +431,7 @@
   .metric-group:nth-child(3),
   .metric-group:nth-child(4),
   .metric-group:nth-child(5) {
-    min-width: 80px;
+    min-width: 100px; /* Consistent mobile minimum width */
   }
   
   .action-bar {

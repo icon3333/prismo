@@ -1184,4 +1184,306 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize portfolio allocator
     const allocator = new PortfolioAllocator();
+
+    // Country Capacity Feature
+    let countryCapacityExpanded = false;
+    let countryCapacityData = null;
+
+    // Toggle country capacity expander
+    window.toggleCountryCapacityExpander = function() {
+        const content = document.getElementById('country-capacity-content');
+        const arrow = document.getElementById('country-capacity-arrow');
+        
+        countryCapacityExpanded = !countryCapacityExpanded;
+        
+        if (countryCapacityExpanded) {
+            content.style.display = 'block';
+            arrow.classList.remove('fa-angle-down');
+            arrow.classList.add('fa-angle-up');
+            
+            // Load data when expanded for the first time
+            if (!countryCapacityData) {
+                fetchCountryCapacityData();
+            }
+        } else {
+            content.style.display = 'none';
+            arrow.classList.remove('fa-angle-up');
+            arrow.classList.add('fa-angle-down');
+        }
+    };
+
+    // Fetch country capacity data from API
+    async function fetchCountryCapacityData() {
+        try {
+            const response = await fetch('/portfolio/api/allocate/country-capacity');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            countryCapacityData = await response.json();
+            console.log('Country capacity data loaded:', countryCapacityData);
+            renderCountryCapacityChart();
+        } catch (error) {
+            console.error('Error fetching country capacity data:', error);
+            showCountryCapacityError('Failed to load country capacity data. Please try again later.');
+        }
+    }
+
+    // Render country capacity bar chart
+    function renderCountryCapacityChart() {
+        const chartContainer = document.getElementById('country-capacity-chart');
+        
+        if (!chartContainer) return;
+        if (!countryCapacityData || !countryCapacityData.countries || countryCapacityData.countries.length === 0) {
+            showCountryCapacityEmpty();
+            return;
+        }
+
+        // Clear the loading spinner
+        chartContainer.innerHTML = '';
+
+        // Prepare data for the chart
+        const countries = countryCapacityData.countries;
+        const labels = countries.map(c => c.country);
+        const values = countries.map(c => c.remaining_capacity);
+
+        // Create chart options styled to match Portfolio Allocations table
+        const chartOptions = {
+            series: [{
+                name: 'Remaining Capacity',
+                data: values
+            }],
+            chart: {
+                type: 'bar',
+                height: Math.max(350, countries.length * 45), // Slightly more generous spacing
+                toolbar: {
+                    show: false
+                },
+                background: 'transparent',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                animations: {
+                    enabled: false // Remove animations for lightweight performance
+                }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 6, // Match CSS border-radius
+                    dataLabels: {
+                        position: 'top'
+                    },
+                    colors: {
+                        ranges: [{
+                            from: 0,
+                            to: 0,
+                            color: '#e0e0e0' // Muted color for zero values
+                        }]
+                    }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function(val) {
+                    return val > 0 ? `€${Math.round(val).toLocaleString()}` : '€0';
+                },
+                offsetX: 10,
+                style: {
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    colors: [getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333'] // Adaptive text color
+                }
+            },
+            xaxis: {
+                categories: labels,
+                title: {
+                    text: 'Remaining Investment Capacity (€)',
+                    style: {
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666' // Adaptive muted color
+                    }
+                },
+                labels: {
+                    formatter: function(val) {
+                        return `€${Math.round(val).toLocaleString()}`;
+                    },
+                    style: {
+                        fontSize: '12px',
+                        colors: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666' // Adaptive muted color
+                    }
+                },
+                axisBorder: {
+                    show: true,
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0' // Adaptive border color
+                },
+                axisTicks: {
+                    show: true,
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0' // Adaptive border color
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'Countries',
+                    style: {
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666' // Adaptive muted color
+                    }
+                },
+                labels: {
+                    style: {
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        colors: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333' // Adaptive text color
+                    }
+                }
+            },
+            title: {
+                text: `Country Investment Capacity (Max ${countryCapacityData.max_per_country_percent}% per country)`,
+                align: 'left',
+                margin: 20,
+                style: {
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333' // Adaptive text color
+                }
+            },
+            colors: ['#00c4a7'], // Use app primary color
+            tooltip: {
+                shared: false,
+                custom: function({series, seriesIndex, dataPointIndex, w}) {
+                    const country = countries[dataPointIndex];
+                    const remainingCapacity = series[seriesIndex][dataPointIndex];
+                    
+                    // Get adaptive colors for dark mode support
+                    const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || 'white';
+                    const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0';
+                    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
+                    const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666';
+                    
+                    let positionsHtml = '';
+                    if (country.positions && country.positions.length > 0) {
+                        positionsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${borderColor};">`;
+                        positionsHtml += `<div style="font-weight: 600; margin-bottom: 6px; color: ${textColor};">Current Positions:</div>`;
+                        
+                        country.positions.forEach(position => {
+                            positionsHtml += `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 12px;">
+                                    <span style="color: ${mutedColor};">${position.company_name}</span>
+                                    <span style="color: ${textColor}; font-weight: 500;">€${Math.round(position.value).toLocaleString()}</span>
+                                </div>
+                            `;
+                        });
+                        positionsHtml += '</div>';
+                    }
+                    
+                    return `
+                        <div style="
+                            background: ${bgColor}; 
+                            border: 1px solid ${borderColor}; 
+                            border-radius: 6px; 
+                            padding: 12px; 
+                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            min-width: 250px;
+                            max-width: 350px;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 8px; color: ${textColor}; font-size: 14px;">
+                                ${country.country}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">Remaining Capacity:</span>
+                                <span style="color: #00c4a7; font-weight: 600;">€${Math.round(remainingCapacity).toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">Currently Invested:</span>
+                                <span style="color: ${textColor}; font-weight: 500;">€${Math.round(country.current_invested).toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">Max Allowed:</span>
+                                <span style="color: ${textColor}; font-weight: 500;">€${Math.round(country.max_allowed).toLocaleString()}</span>
+                            </div>
+                            ${positionsHtml}
+                        </div>
+                    `;
+                }
+            },
+            grid: {
+                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0', // Adaptive border color
+                strokeDashArray: 0,
+                xaxis: {
+                    lines: {
+                        show: true
+                    }
+                },
+                yaxis: {
+                    lines: {
+                        show: false
+                    }
+                },
+                padding: {
+                    top: 0,
+                    right: 20,
+                    bottom: 0,
+                    left: 0
+                }
+            },
+            states: {
+                hover: {
+                    filter: {
+                        type: 'none' // Remove hover effects for lightweight performance
+                    }
+                }
+            },
+            responsive: [{
+                breakpoint: 768,
+                options: {
+                    chart: {
+                        height: Math.max(300, countries.length * 35)
+                    },
+                    title: {
+                        style: {
+                            fontSize: '14px'
+                        }
+                    }
+                }
+            }]
+        };
+
+        // Create and render the chart
+        try {
+            const chart = new ApexCharts(chartContainer, chartOptions);
+            chart.render();
+            console.log('Country capacity chart rendered successfully');
+        } catch (error) {
+            console.error('Error rendering country capacity chart:', error);
+            showCountryCapacityError('Failed to render chart. Please refresh the page.');
+        }
+    }
+
+    // Show error message in chart container
+    function showCountryCapacityError(message) {
+        const chartContainer = document.getElementById('country-capacity-chart');
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <div class="notification is-danger">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    ${message}
+                </div>
+            `;
+        }
+    }
+
+    // Show empty state message
+    function showCountryCapacityEmpty() {
+        const chartContainer = document.getElementById('country-capacity-chart');
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <div class="notification is-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    No country capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
+                </div>
+            `;
+        }
+    }
 });

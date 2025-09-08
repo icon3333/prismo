@@ -507,7 +507,7 @@
                             portfolioId: portfolioMap[portfolioName].id,
                             portfolioName: portfolioName,
                             // Include risk analysis fields
-                            country: item.country || 'Unknown',
+                            country: item.effective_country || 'Unknown',
 
                         });
 
@@ -786,7 +786,7 @@
 
                     // Ensure metadata fields exist
                     company.country = company.country || 'Unknown';
-
+                    company.effective_country = company.effective_country || company.country || 'Unknown';
                     company.category = company.category || 'Unknown';
 
                     return company;
@@ -1450,8 +1450,8 @@
                     return 'Crypto';
                 }
 
-                // For non-crypto assets, use existing logic
-                return (company.country || '').trim() || 'Unknown';
+                // For non-crypto assets, use effective_country (includes user overrides)
+                return (company.effective_country || '').trim() || 'Unknown';
             }
 
             // Calculate exposure data for heatmap with intelligent filtering

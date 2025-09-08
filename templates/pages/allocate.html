@@ -56,6 +56,44 @@
           </div>
         </div>
       </div>
+
+      <!-- Global Country Capacity Expander -->
+      <div class="card mt-4">
+        <div class="card-header" style="cursor: pointer;" onclick="toggleCountryCapacityExpander()">
+          <h3 class="card-header-title">
+            <i class="fas fa-globe mr-2"></i>
+            Global Country Capacity
+          </h3>
+          <button class="card-header-icon" aria-label="expand">
+            <span class="icon">
+              <i class="fas fa-angle-down" id="country-capacity-arrow"></i>
+            </span>
+          </button>
+        </div>
+        <div class="card-content" id="country-capacity-content" style="display: none;">
+          <div class="content">
+            <p class="subtitle is-6" style="color: var(--text-muted); margin-bottom: var(--space-md);">
+              Remaining investment capacity per country based on your allocation rules
+            </p>
+            <div class="table-responsive">
+              <div id="country-capacity-chart" style="
+                min-height: 300px; 
+                background-color: var(--card-bg);
+                border-radius: var(--border-radius);
+                padding: var(--space-md);
+                border: 1px solid var(--border-color);
+              ">
+                <!-- Chart will be rendered here -->
+                <div class="has-text-centered">
+                  <div class="spinner-border" role="status">
+                    <span class="is-sr-only">Loading country data...</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Detailed Overview Tab -->

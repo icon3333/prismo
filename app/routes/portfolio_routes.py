@@ -6,7 +6,7 @@ import logging
 from app.db_manager import query_db
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
+    get_allocate_portfolio_data, get_country_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -274,6 +274,8 @@ portfolio_bp.add_url_rule('/api/portfolio_data',
                           view_func=get_portfolio_data_api, methods=['GET'])
 portfolio_bp.add_url_rule('/api/allocate/portfolio-data',
                           view_func=get_allocate_portfolio_data)
+portfolio_bp.add_url_rule('/api/allocate/country-capacity',
+                          view_func=get_country_capacity_data)
 portfolio_bp.add_url_rule('/api/portfolios', view_func=get_portfolios_api)
 # Simple upload - no background complexity
 from app.routes.simple_upload import upload_csv_simple, get_simple_upload_progress

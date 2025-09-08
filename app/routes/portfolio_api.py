@@ -664,6 +664,124 @@ def get_portfolio_data_api():
         return jsonify({'error': f'Portfolio data could not be loaded: {str(e)}'}), 500
 
 
+def get_country_capacity_data():
+    """API endpoint to get country investment capacity data for the rebalancing feature"""
+    logger.info("API request for country investment capacity data")
+
+    if 'account_id' not in session:
+        logger.warning("No account_id in session")
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    account_id = session['account_id']
+    logger.info(f"Getting country capacity data for account_id: {account_id}")
+
+    try:
+        # Get budget settings from expanded_state (from build page)
+        budget_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'budgetData'], one=True)
+
+        rules_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'rules'], one=True)
+
+        # Parse budget and rules data
+        total_investable_capital = 0
+        max_per_country = 10  # Default value
+
+        if budget_data and isinstance(budget_data, dict):
+            try:
+                budget_json = json.loads(budget_data.get('variable_value', '{}'))
+                total_investable_capital = float(budget_json.get('totalInvestableCapital', 0))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse budget data: {e}")
+
+        if rules_data and isinstance(rules_data, dict):
+            try:
+                rules_json = json.loads(rules_data.get('variable_value', '{}'))
+                max_per_country = float(rules_json.get('maxPerCountry', 10))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse rules data: {e}")
+
+        logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Country: {max_per_country}%")
+
+        # Get all user's positions with individual company details by country
+        position_data = query_db('''
+            SELECT 
+                COALESCE(c.override_country, mp.country, 'Unknown') as country,
+                c.name as company_name,
+                p.name as portfolio_name,
+                COALESCE(cs.override_share, cs.shares, 0) as shares,
+                COALESCE(mp.price_eur, 0) as price,
+                (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)) as position_value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            WHERE c.account_id = ?
+            AND COALESCE(cs.override_share, cs.shares, 0) > 0
+            AND COALESCE(mp.price_eur, 0) > 0
+            ORDER BY COALESCE(c.override_country, mp.country, 'Unknown'), position_value DESC
+        ''', [account_id])
+
+        # Group positions by country
+        country_positions = {}
+        if position_data:
+            for row in position_data:
+                country = row['country']
+                if country not in country_positions:
+                    country_positions[country] = {
+                        'positions': [],
+                        'total_invested': 0
+                    }
+                
+                position_info = {
+                    'company_name': row['company_name'],
+                    'portfolio_name': row['portfolio_name'],
+                    'shares': float(row['shares']),
+                    'price': float(row['price']),
+                    'value': float(row['position_value'])
+                }
+                
+                country_positions[country]['positions'].append(position_info)
+                country_positions[country]['total_invested'] += position_info['value']
+
+        # Calculate remaining capacity for each country
+        country_capacity = []
+        if country_positions and total_investable_capital > 0:
+            max_per_country_amount = total_investable_capital * (max_per_country / 100)
+            
+            for country, data in country_positions.items():
+                current_invested = data['total_invested']
+                remaining_capacity = max(0, max_per_country_amount - current_invested)
+                
+                country_capacity.append({
+                    'country': country,
+                    'current_invested': current_invested,
+                    'max_allowed': max_per_country_amount,
+                    'remaining_capacity': remaining_capacity,
+                    'positions': data['positions']  # Include individual positions for hover
+                })
+
+        # Sort by remaining capacity (ascending - least to most capacity)
+        country_capacity.sort(key=lambda x: x['remaining_capacity'])
+
+        logger.info(f"Returning country capacity data for {len(country_capacity)} countries")
+        return jsonify({
+            'countries': country_capacity,
+            'total_investable_capital': total_investable_capital,
+            'max_per_country_percent': max_per_country
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting country capacity data: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 def get_portfolios_api():
     """API endpoint to get portfolios for an account"""
     logger.info("Accessing portfolios API")

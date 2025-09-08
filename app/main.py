@@ -60,21 +60,25 @@ def create_app(config_name=None):
     except Exception as e:
         logger.error(f"Database migration failed: {e}")
 
-    # Trigger automatic price update on startup if needed
-    try:
-        with app.app_context():
-            from app.utils.startup_tasks import auto_update_prices_if_needed
-            auto_update_prices_if_needed()
-    except Exception as e:
-        logger.error(f"Automatic price update failed: {e}")
-    
-    # Trigger automatic database backup on startup
-    try:
-        with app.app_context():
-            from app.utils.startup_tasks import schedule_automatic_backups
-            schedule_automatic_backups()
-    except Exception as e:
-        logger.error(f"Automatic backup setup failed: {e}")
+    # Only run startup tasks in the main process (not during Werkzeug reloader restart)
+    if not os.environ.get('WERKZEUG_RUN_MAIN'):
+        logger.info("Skipping startup tasks during reloader initialization")
+    else:
+        # Trigger automatic price update on startup if needed
+        try:
+            with app.app_context():
+                from app.utils.startup_tasks import auto_update_prices_if_needed
+                auto_update_prices_if_needed()
+        except Exception as e:
+            logger.error(f"Automatic price update failed: {e}")
+        
+        # Trigger automatic database backup on startup
+        try:
+            with app.app_context():
+                from app.utils.startup_tasks import schedule_automatic_backups
+                schedule_automatic_backups()
+        except Exception as e:
+            logger.error(f"Automatic backup setup failed: {e}")
     
     @app.route('/health')
     def health_check():

@@ -39,41 +39,54 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
     This function is designed to be run in a thread pool.
     """
     try:
-        logger.info(f"Processing identifier: {identifier}")
+        logger.info(f"🔄 Processing identifier: {identifier}")
         result = get_isin_data(identifier)
 
+        logger.debug(f"📊 Price fetch result for {identifier}: success={result.get('success')}, price={result.get('price')}, currency={result.get('currency')}")
+
         if result.get('success'):
-            # get_isin_data returns data directly, not nested in a 'data' field
-            price = result.get('price')
-            price_eur = result.get('price_eur')
+            # Extract price data from nested 'data' structure or fallback to top level
+            data = result.get('data', {})
+            price = data.get('currentPrice') or result.get('price')
+            price_eur = data.get('priceEUR') or result.get('price_eur')
+            currency = data.get('currency') or result.get('currency', 'USD')
+            country = data.get('country') or result.get('country')
+            modified_identifier = result.get('modified_identifier')
+
+            logger.debug(f"🔍 Extracted data: price={price}, currency={currency}, price_eur={price_eur}")
 
             if price is not None:
+                logger.debug(f"💰 Price data found for {identifier}: {price} {currency} ({price_eur} EUR)")
+                
                 # Update the price in the main database using background-specific function
+                logger.debug(f"💾 Attempting database update for {identifier}")
                 update_success = update_price_in_db_background(
                     identifier,
                     price,
-                    result.get('currency', 'USD'),
+                    currency,
                     price_eur or price,
-                    country=result.get('country'),
-                    modified_identifier=result.get('modified_identifier')
+                    country=country,
+                    modified_identifier=modified_identifier
                 )
+                
+                logger.debug(f"📝 Database update result for {identifier}: {update_success}")
+                
                 if update_success:
-                    logger.info(f"Successfully updated price for {identifier}")
+                    logger.info(f"✅ Successfully updated price for {identifier}")
                     return {'identifier': identifier, 'status': 'success'}
                 else:
-                    logger.warning(
-                        f"Failed to update price in database for {identifier}")
+                    logger.error(f"❌ Failed to update price in database for {identifier} - check database logs above")
                     return {'identifier': identifier, 'status': 'db_error', 'error': 'Failed to write to DB'}
             else:
-                logger.warning(f"No price data found for {identifier}")
+                logger.warning(f"⚠️ No price data found for {identifier} (price is None)")
+                logger.debug(f"🔍 Full result for {identifier}: {result}")
                 return {'identifier': identifier, 'status': 'no_price', 'error': 'No price data available'}
         else:
-            logger.warning(
-                f"Failed to fetch data for {identifier}: {result.get('error')}")
+            logger.warning(f"⚠️ Failed to fetch data for {identifier}: {result.get('error')}")
+            logger.debug(f"🔍 Full failed result for {identifier}: {result}")
             return {'identifier': identifier, 'status': 'fetch_error', 'error': result.get('error')}
     except Exception as e:
-        logger.error(
-            f"Unhandled error processing {identifier}: {e}", exc_info=True)
+        logger.error(f"💥 Unhandled error processing {identifier}: {e}", exc_info=True)
         return {'identifier': identifier, 'status': 'exception', 'error': str(e)}
 
 

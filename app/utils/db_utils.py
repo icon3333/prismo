@@ -40,22 +40,30 @@ def execute_background_db(query, args=()):
     This function doesn't require Flask application context.
     """
     try:
-        logger.debug(f"Executing background statement: {query}")
-        logger.debug(f"Statement args: {args}")
+        logger.debug(f"🗄️ Executing background statement: {query}")
+        logger.debug(f"📋 Statement args: {args}")
         
         db = get_background_db()
+        logger.debug(f"🔗 Got background database connection: {db}")
+        
         cursor = db.execute(query, args)
         rowcount = cursor.rowcount
+        logger.debug(f"📊 Statement executed, rowcount: {rowcount}")
+        
         db.commit()
+        logger.debug(f"✅ Database changes committed")
+        
         cursor.close()
         db.close()
         
-        logger.debug(f"Background statement affected {rowcount} rows")
+        logger.debug(f"📈 Background statement affected {rowcount} rows")
         return rowcount
     except Exception as e:
-        logger.error(f"Background database execute failed: {str(e)}")
-        logger.error(f"Statement was: {query}")
-        logger.error(f"Args were: {args}")
+        logger.error(f"💥 Background database execute failed: {str(e)}")
+        logger.error(f"📜 Statement was: {query}")
+        logger.error(f"📋 Args were: {args}")
+        logger.error(f"🚨 Exception type: {type(e).__name__}")
+        logger.error(f"🔍 Full exception details:", exc_info=True)
         raise
 
 
@@ -76,17 +84,19 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         Success status
     """
     try:
+        logger.debug(f"🛠️ Starting database update for identifier: {identifier}")
+        logger.debug(f"💰 Price data: {price} {currency} ({price_eur} EUR), country: {country}")
+        
         if not identifier or price is None:
-            logger.warning(
-                f"Missing identifier or price: {identifier}, {price}")
+            logger.warning(f"⚠️ Missing identifier or price: {identifier}, {price}")
             return False
 
         now = datetime.now().isoformat()
+        logger.debug(f"⏰ Timestamp: {now}")
 
         # If we have a modified identifier, update the company records first
         if modified_identifier:
-            logger.info(
-                f"⚠️ Updating identifier in database from {identifier} to {modified_identifier}")
+            logger.info(f"🔄 Updating identifier in database from {identifier} to {modified_identifier}")
 
             # Update identifier in companies table
             rows_updated = execute_background_db('''
@@ -95,41 +105,43 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                 WHERE identifier = ?
             ''', [modified_identifier, identifier])
 
-            logger.info(
-                f"Updated {rows_updated} company records with new identifier {modified_identifier}")
+            logger.info(f"✅ Updated {rows_updated} company records with new identifier {modified_identifier}")
 
             # Use the modified identifier for all subsequent operations
             identifier = modified_identifier
 
         # Check if the record exists in market_prices
+        logger.debug(f"🔍 Checking if price record exists for {identifier}")
         existing = query_background_db(
             'SELECT 1 FROM market_prices WHERE identifier = ?',
             [identifier],
             one=True
         )
+        logger.debug(f"📋 Existing record found: {bool(existing)}")
 
         if existing:
             # Update existing record
-            execute_background_db('''
+            logger.debug(f"🔄 Updating existing price record for {identifier}")
+            rows_affected = execute_background_db('''
                 UPDATE market_prices
                 SET price = ?, currency = ?, price_eur = ?, last_updated = ?,
                     country = ?
                 WHERE identifier = ?
             ''', [price, currency, price_eur, now, country, identifier])
-            logger.info(
-                f"Updated existing price record for {identifier} with additional data")
+            logger.info(f"✅ Updated existing price record for {identifier} ({rows_affected} rows affected)")
         else:
             # Insert new record
-            execute_background_db('''
+            logger.debug(f"➕ Creating new price record for {identifier}")
+            rows_affected = execute_background_db('''
                 INSERT INTO market_prices
                 (identifier, price, currency, price_eur, last_updated, country)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', [identifier, price, currency, price_eur, now, country])
-            logger.info(
-                f"Created new price record for {identifier} with additional data")
+            logger.info(f"✅ Created new price record for {identifier} ({rows_affected} rows affected)")
 
         # Update last_price_update in accounts table for all accounts that have this identifier
-        execute_background_db('''
+        logger.debug(f"🔄 Updating account timestamps for {identifier}")
+        accounts_affected = execute_background_db('''
             UPDATE accounts 
             SET last_price_update = ? 
             WHERE id IN (
@@ -138,14 +150,15 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                 WHERE identifier = ?
             )
         ''', [now, identifier])
+        logger.debug(f"📊 Updated {accounts_affected} account records with new timestamp")
 
-        logger.info(
-            f"Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) with country={country}")
+        logger.info(f"🎉 Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) with country={country}")
         return True
 
     except Exception as e:
-        logger.error(
-            f"Failed to update price in database for {identifier}: {str(e)}")
+        logger.error(f"💥 Failed to update price in database for {identifier}: {str(e)}")
+        logger.error(f"🚨 Exception type: {type(e).__name__}")
+        logger.error(f"🔍 Full exception details:", exc_info=True)
         return False
 
 

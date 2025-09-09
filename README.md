@@ -13,9 +13,12 @@ This tool was born out of necessity over several months of struggling with portf
 
 It's a portfolio rebalancer specifically designed to work with Parqet's data, helping you:
 - Import your Parqet portfolio data via CSV
-- Analyze current vs target allocations  
-- Get smart rebalancing recommendations
-- Visualize portfolio composition and performance
+- Enrich holdings with real-time market prices from yfinance
+- Build and set target allocations
+- Get smart rebalancing recommendations (buy/sell amounts)
+- Analyze portfolio composition, performance, and risks with visualizations
+
+Guided by a philosophy of **elegance, simplicity, and robustness**, it delivers 80% of the impact with 20% of the effort—focusing on automated, user-friendly features in a minimalistic, Apple-inspired UI.
 
 ## 🤓 The Backstory
 
@@ -36,165 +39,114 @@ It's definitely **experimental** and **vibe-coded** - meaning I learned as I wen
 git clone https://github.com/your-username/portfolio-rebalancing-flask.git
 cd portfolio-rebalancing-flask
 
+# Set up virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the application (will automatically set up everything)
+# Run the application (auto-sets up env and database)
 ./app.sh
 ```
 
-The app will automatically detect if you need environment setup and run the interactive configuration on first launch!
-
-Visit `http://localhost:8065` to access the application.
+The app auto-detects and configures everything on first launch. Visit `http://localhost:8065` to start.
 
 ## 🎯 How to Use with Parqet
 
-1. **Export your portfolio from Parqet**
-   - Go to your Parqet portfolio
-   - Export as CSV (use the native Parqet export function)
+1. **Export from Parqet**: Download your portfolio as a native CSV export.
 
-2. **Import into this tool**
-   - Start the application
-   - Navigate to "Build Portfolio" 
-   - Upload your Parqet CSV file
+2. **Import & Build**: Navigate to "Build Portfolio" → Upload CSV → Set target allocations.
 
-3. **Set target allocations**
-   - Define your desired allocation percentages
-   - The tool will calculate what trades you need to make
+3. **Enrich Data**: Go to "Enrich" to fetch/update real-time prices via yfinance.
 
-4. **Get rebalancing recommendations**
-   - See exactly how much to buy/sell of each position
-   - Copy the recommendations back to Parqet for execution
+4. **Rebalance**: Use "Allocate" for precise buy/sell recommendations based on your targets.
+
+5. **Analyze**: Check "Analyse" for portfolio visualizations and "Risk Overview" for global allocation insights.
+
+The workflow is designed to be intuitive—each page builds on the previous step, guiding you from raw data to actionable investment decisions.
 
 ## 📦 Installation
 
 ### Prerequisites
 
-- Python 3.12 or higher
+- Python 3.12+ (use `python3` command)
 - pip package manager
+- Optional: Docker for deployment
 
 ### Step-by-Step Installation
 
-1. **Clone the repository**
+1. **Clone and set up virtual environment** (as shown in Quick Start)
    ```bash
    git clone https://github.com/your-username/portfolio-rebalancing-flask.git
    cd portfolio-rebalancing-flask
+   python3 -m venv venv
+   source venv/bin/activate
    ```
 
-2. **Create a virtual environment** (recommended)
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
+2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Database setup** (automatic on first run)
-   - SQLite database will be created automatically
+3. **Database setup** (automatic on first run)
+   - SQLite database auto-initializes with proper schema
+   - Automatic backups are configured
 
 ## ⚙️ Configuration
 
-### Environment Variables
+The app auto-loads configuration from a `.env` file and handles database setup automatically.
 
-The application uses python-dotenv to automatically load environment variables from a `.env` file.
+### Manual Configuration (Optional)
 
-#### Option 1: Automatic Setup (Recommended)
+If you need custom settings:
 
-```bash
-# Just run the app - it will automatically set up environment if needed
-python run.py --port 5000
-```
+1. Copy the example: `cp env.example .env`
+2. Generate a secure key: `python3 -c 'import secrets; print(secrets.token_hex(32))'`
+3. Edit `.env` with your SECRET_KEY and other preferences
 
-Or run setup manually:
-```bash
-# Default setup (development, SQLite, auto-generated secret)
-python setup_env.py
-
-# Production setup 
-python setup_env.py --production
-
-# Interactive setup (prompts for all options)
-python setup_env.py --interactive
-```
-
-#### Option 2: Manual Setup
-
-1. Copy the example file:
-```bash
-cp .env.example .env
-```
-
-2. Edit `.env` and replace placeholder values:
-```bash
-# Generate a secure secret key
-SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-
-# Database configuration
-DATABASE_URL="sqlite:///app/database/portfolio.db"
-
-# Flask environment
-FLASK_ENV="development"  # or "production"
-```
+The app includes automatic backup management and price update scheduling.
 
 ## 🎯 Usage
 
-### Web Interface
+Start with `./app.sh` or `python3 run.py --port 8065`. Create/select an account, then navigate through:
 
-1. **Start the application**
-   ```bash
-   python run.py --port 5000
-   ```
+- **Build**: Upload Parqet CSV and define target allocations
+- **Enrich**: Update prices and metadata via yfinance integration  
+- **Allocate**: Get precise buy/sell trade recommendations
+- **Analyse**: View portfolio composition charts and metrics
+- **Risk Overview**: Global allocation and risk analysis
 
-2. **Access the dashboard** at `http://localhost:5000`
+### API Access
+Key endpoints for programmatic use:
+- `GET /api/portfolio` - Portfolio data
+- `GET /health` - System health check
+- Various update and analysis endpoints
 
-3. **Import your Parqet data**
-   - Navigate to "Build Portfolio"
-   - Upload your Parqet CSV export
-   - Set target allocations
-
-4. **Analyze and rebalance**
-   - View current allocations vs targets
-   - Get rebalancing recommendations
-   - Track performance over time
-
-### Parqet CSV Format Expected
-
-The tool expects the standard Parqet export format. Make sure to use Parqet's native CSV export function - custom formats won't work!
-
-### API Endpoints
-
-- `GET /api/portfolio` - Get portfolio data
-- `POST /api/portfolio/rebalance` - Calculate rebalancing
-- `GET /health` - Health check endpoint
+Expects standard Parqet CSV export format only.
 
 ## 🚀 Deployment
 
-> **📖 Complete deployment guide**: See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive production deployment instructions.
+### Production Deployment (Simple)
 
-### Quick Deployment Options
+For server deployment:
 
-#### Gunicorn (Recommended)
+1. **Pull updates**: `git pull origin main`
+2. **Deploy**: Run `./deploy.sh` 
+   - Auto-builds Docker image
+   - Restarts container via docker-compose
+   - Handles environment setup
+
+Access at `http://your-server:8065`
+
+### Docker Setup
+
+The included `docker-compose.yml` handles everything:
 ```bash
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:8000 run:app
+docker-compose up -d
 ```
 
-#### Docker
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-EXPOSE 8000
-
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "run:app"]
-```
+Data persists in `./instance` directory. The deploy script manages the full update cycle automatically.
 
 ## 🔒 Security
 

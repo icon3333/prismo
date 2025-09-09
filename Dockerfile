@@ -25,15 +25,8 @@ COPY . .
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
-# Ensure app directories exist with correct permissions\n\
+# Ensure app directories exist\n\
 mkdir -p /app/instance\n\
-# Set ownership for directories we can control (skip read-only mounts)\n\
-find /app -type d -not -path "/app/.env*" -exec chown app:app {} + 2>/dev/null || true\n\
-find /app -type f -not -path "/app/.env*" -not -path "/app/instance/*" -exec chown app:app {} + 2>/dev/null || true\n\
-# Set permissions for directories\n\
-find /app -type d -not -path "/app/.env*" -exec chmod 755 {} + 2>/dev/null || true\n\
-# Set executable permissions for Python files and scripts\n\
-find /app -name "*.py" -exec chmod 644 {} + 2>/dev/null || true\n\
 # Switch to app user and run the application\n\
 exec gosu app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 

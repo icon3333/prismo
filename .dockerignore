@@ -21,8 +21,7 @@ htmlcov/
 .env.development
 .env.test
 
-# Database backups (keep main db, ignore backups)
-app/database/backups/
+# Database and instance directories
 instance/
 *.db
 

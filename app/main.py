@@ -29,6 +29,11 @@ def create_app(config_name=None):
             JSON_SORT_KEYS=False
         )
     
+    # Ensure session configuration is properly set
+    logger.info(f"Session configuration: SECRET_KEY set: {bool(app.config.get('SECRET_KEY'))}")
+    logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
+    logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
+    
     # Security headers disabled for demo
     
     # Add context processor for datetime

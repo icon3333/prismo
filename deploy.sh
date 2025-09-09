@@ -48,6 +48,12 @@ print_message "Pulling latest changes from Git..."
 git checkout "$GIT_BRANCH" || { echo "Error: Failed to checkout branch."; exit 1; }
 git pull origin "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
 
+# 1.5 Ensure instance directory exists with correct host permissions
+print_message "Ensuring instance directory exists..."
+mkdir -p ./instance
+chown -R $(whoami):$(whoami) ./instance
+chmod -R 755 ./instance
+
 # 2. Build the Docker image (caching handles no-op if unchanged)
 print_message "Building Docker image..."
 docker compose -f "$COMPOSE_FILE" build --pull

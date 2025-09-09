@@ -125,6 +125,8 @@ def index():
     # Check if user has an account selected
     account_id = session.get('account_id')
     logger.info(f"Current account_id in session: {account_id}")
+    logger.info(f"Full session content: {dict(session)}")
+    logger.info(f"Session permanent: {session.permanent}")
 
     if account_id:
         # Get account information
@@ -203,6 +205,7 @@ def select_account(account_id):
         session.permanent = True  # Make session permanent
         session['account_id'] = account_id
         session['username'] = account['username']
+        session.modified = True  # Explicitly mark session as modified
         logger.info(
             f"Account selected: {account['username']} (ID: {account_id})")
         logger.info(f"Updated session: {dict(session)}")

@@ -6,16 +6,14 @@ services:
     ports:
       - "8065:8065"  # Main application port
     volumes:
-      # Mount app/database directory for persistence
-      - ./app/database:/app/database
-      # Mount instance directory for schema and database
+      # Mount instance directory for all persistent data
       - ./instance:/app/instance
       # Mount environment file
       - ./.env:/app/.env:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:///app/database/portfolio.db
+      - DATABASE_URL=sqlite:///app/instance/portfolio.db
     labels:
       # Enable autoheal monitoring
       - "autoheal=true"

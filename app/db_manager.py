@@ -117,36 +117,13 @@ def init_db(app):
         set_db_path(db_path)
         
         db = get_db()
-        # Use safe schema that doesn't drop existing tables - try multiple paths
-        schema_paths = [
-            'instance/schema.sql',          # Docker container path
-            '../instance/schema.sql',       # Relative from app directory
-            '/app/instance/schema.sql'      # Absolute Docker path
-        ]
-        
-        schema_loaded = False
-        for schema_path in schema_paths:
-            try:
-                if schema_path.startswith('/'):
-                    # Absolute path - use direct file open
-                    with open(schema_path, 'r', encoding='utf-8') as f:
-                        db.cursor().executescript(f.read())
-                        schema_loaded = True
-                        logger.info(f"Schema loaded from: {schema_path}")
-                        break
-                else:
-                    # Relative path - use Flask's open_resource
-                    with app.open_resource(schema_path, mode='r') as f:
-                        db.cursor().executescript(f.read())
-                        schema_loaded = True
-                        logger.info(f"Schema loaded from: {schema_path}")
-                        break
-            except (FileNotFoundError, OSError):
-                logger.debug(f"Schema not found at: {schema_path}")
-                continue
-        
-        if not schema_loaded:
-            logger.warning("Initial schema load skipped - will be created from fallback method")
+        # Load schema from the version-controlled file in app directory
+        try:
+            with app.open_resource('schema.sql', mode='r') as f:
+                db.cursor().executescript(f.read())
+            logger.info("Schema loaded from app/schema.sql")
+        except FileNotFoundError:
+            logger.warning("app/schema.sql not found - will use fallback table creation")
         
         # Add the identifier_mappings table if it doesn't exist
         db.execute('''
@@ -185,12 +162,15 @@ def init_db(app):
             tables = [row[0] for row in cursor.fetchall()]
 
             if not tables or 'accounts' not in tables:
-                logger.info("Initializing database schema from schema.sql ...")
-                schema_path = os.path.join('instance', 'schema.sql')
-                with open(schema_path, 'r', encoding='utf-8') as f:
-                    db.executescript(f.read())
-                db.commit()
-                logger.info("Database schema initialized.")
+                logger.info("Fallback: Initializing database schema from app/schema.sql ...")
+                try:
+                    with app.open_resource('schema.sql', mode='r') as f:
+                        db.executescript(f.read())
+                    db.commit()
+                    logger.info("Database schema initialized from app/schema.sql")
+                except FileNotFoundError:
+                    logger.error("CRITICAL: No schema file found. Database cannot be initialized.")
+                    raise
 
             # Verify that required columns exist, etc.
             verify_schema(db)

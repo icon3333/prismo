@@ -27,8 +27,10 @@ COPY . .
 RUN echo '#!/bin/bash\n\
 # Ensure app directories exist with correct permissions\n\
 mkdir -p /app/database/backups\n\
-chown -R app:app /app\n\
-chmod -R 755 /app\n\
+mkdir -p /app/instance\n\
+# Set ownership but skip read-only files\n\
+chown -R app:app /app || true\n\
+chmod -R 755 /app || true\n\
 # Switch to app user and run the application\n\
 exec gosu app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 

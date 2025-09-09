@@ -8,6 +8,8 @@ services:
     volumes:
       # Mount app/database directory for persistence
       - ./app/database:/app/database
+      # Mount instance directory for schema and database
+      - ./instance:/app/instance
       # Mount environment file
       - ./.env:/app/.env:ro
     environment:

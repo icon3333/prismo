@@ -23,6 +23,23 @@ errorlog = "-"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
+# Custom access log filter to suppress health check logs
+class HealthCheckFilter:
+    def filter(self, record):
+        # Suppress logs for successful health checks to reduce noise
+        return not (hasattr(record, 'args') and 
+                   record.args and 
+                   len(record.args) > 6 and 
+                   '/health' in str(record.args[6]) and 
+                   record.args[8] == 200)
+
+# Apply the filter to suppress health check access logs
+def when_ready(server):
+    # Add custom filter to Gunicorn's access logger
+    import logging
+    access_logger = logging.getLogger("gunicorn.access")
+    access_logger.addFilter(HealthCheckFilter())
+
 # Process naming
 proc_name = "portfolio_rebalancer"
 

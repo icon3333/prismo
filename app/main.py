@@ -3,14 +3,10 @@ import logging
 import os
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
-
 def create_app(config_name=None):
-    logging.basicConfig(level=logging.INFO)
     app = Flask(__name__,
                 template_folder='../templates',
                 static_folder='../static')
-    logger.info("Logger initialized at INFO level")
     
     # Load configuration from config.py
     from config import config
@@ -29,10 +25,37 @@ def create_app(config_name=None):
             JSON_SORT_KEYS=False
         )
     
+    # Configure logging based on environment
+    if app.config['DEBUG']:
+        app.logger.setLevel(logging.DEBUG)
+    else:
+        app.logger.setLevel(logging.WARNING)
+        
+        # Add file logging for production
+        if not app.debug:
+            from logging.handlers import RotatingFileHandler
+            
+            # Ensure log directory exists
+            log_dir = os.path.join(app.config.get('APP_DATA_DIR', 'instance'))
+            os.makedirs(log_dir, exist_ok=True)
+            
+            file_handler = RotatingFileHandler(
+                os.path.join(log_dir, 'app.log'), 
+                maxBytes=10240, 
+                backupCount=10
+            )
+            file_handler.setFormatter(logging.Formatter(
+                '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+            ))
+            file_handler.setLevel(logging.WARNING)
+            app.logger.addHandler(file_handler)
+    
+    app.logger.info("Application startup completed")
+    
     # Ensure session configuration is properly set
-    logger.info(f"Session configuration: SECRET_KEY set: {bool(app.config.get('SECRET_KEY'))}")
-    logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
-    logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
+    app.logger.info(f"Session configuration: SECRET_KEY set: {bool(app.config.get('SECRET_KEY'))}")
+    app.logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
+    app.logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
     
     # Security headers disabled for demo
     
@@ -63,11 +86,11 @@ def create_app(config_name=None):
         with app.app_context():
             migrate_database()
     except Exception as e:
-        logger.error(f"Database migration failed: {e}")
+        app.logger.error(f"Database migration failed: {e}")
 
     # Only run startup tasks in the main process (not during Werkzeug reloader restart)
     if not os.environ.get('WERKZEUG_RUN_MAIN'):
-        logger.info("Skipping startup tasks during reloader initialization")
+        app.logger.info("Skipping startup tasks during reloader initialization")
     else:
         # Trigger automatic price update on startup if needed
         try:
@@ -75,7 +98,7 @@ def create_app(config_name=None):
                 from app.utils.startup_tasks import auto_update_prices_if_needed
                 auto_update_prices_if_needed()
         except Exception as e:
-            logger.error(f"Automatic price update failed: {e}")
+            app.logger.error(f"Automatic price update failed: {e}")
         
         # Trigger automatic database backup on startup
         try:
@@ -83,7 +106,7 @@ def create_app(config_name=None):
                 from app.utils.startup_tasks import schedule_automatic_backups
                 schedule_automatic_backups()
         except Exception as e:
-            logger.error(f"Automatic backup setup failed: {e}")
+            app.logger.error(f"Automatic backup setup failed: {e}")
     
     @app.route('/health')
     def health_check():
@@ -93,13 +116,14 @@ def create_app(config_name=None):
             from app.db_manager import query_db
             query_db("SELECT 1", one=True)
             
+            # Only log health check failures, not successes (reduces log noise)
             return jsonify({
                 'status': 'healthy',
                 'timestamp': datetime.utcnow().isoformat(),
                 'database': 'connected'
             }), 200
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            app.logger.error(f"Health check failed: {e}")
             return jsonify({
                 'status': 'unhealthy',
                 'timestamp': datetime.utcnow().isoformat(),
@@ -120,7 +144,7 @@ def create_app(config_name=None):
             return jsonify(result)
                 
         except Exception as e:
-            logger.error(f"Error processing request: {str(e)}")
+            app.logger.error(f"Error processing request: {str(e)}")
             return jsonify({'error': str(e)})
     
     return app

@@ -65,7 +65,7 @@ class Config:
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True
-    SQLALCHEMY_ECHO = os.environ.get('SQLALCHEMY_ECHO', 'true').lower() == 'true'
+    SQLALCHEMY_ECHO = os.environ.get('SQLALCHEMY_ECHO', 'false').lower() == 'true'
     SESSION_COOKIE_SECURE = os.environ.get('SESSION_COOKIE_SECURE', 'false').lower() == 'true'  # Allow HTTP in development
     SESSION_COOKIE_SAMESITE = 'Lax'  # More permissive for local development
     SESSION_COOKIE_DOMAIN = None  # Allow cookies on localhost and IP addresses

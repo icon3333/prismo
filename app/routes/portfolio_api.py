@@ -801,7 +801,23 @@ def get_portfolios_api():
 
         # Get portfolio data from portfolios table, including all portfolios with non-null names
         if include_ids:
-            # Get portfolios from the portfolios table
+            # First, try to get the user-saved order from expanded_state
+            saved_order_ids = []
+            try:
+                saved_portfolios_data = query_db('''
+                    SELECT variable_value FROM expanded_state 
+                    WHERE account_id = ? AND page_name = 'build' AND variable_name = 'portfolios'
+                ''', [account_id], one=True)
+                
+                if saved_portfolios_data and isinstance(saved_portfolios_data, dict):
+                    saved_portfolios = json.loads(saved_portfolios_data['variable_value'])
+                    saved_order_ids = [p['id'] for p in saved_portfolios if 'id' in p]
+                    logger.info(f"Found saved portfolio order: {saved_order_ids}")
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                logger.warning(f"Could not parse saved portfolio order: {e}")
+                saved_order_ids = []
+
+            # Get portfolios from the portfolios table (without ORDER BY)
             if has_companies:
                 # Only get portfolios that have at least one company (don't require company_shares entries)
                 portfolios_from_table = query_db('''
@@ -809,7 +825,6 @@ def get_portfolios_api():
                     FROM portfolios p
                     JOIN companies c ON p.id = c.portfolio_id
                     WHERE p.account_id = ? AND p.name IS NOT NULL
-                    ORDER BY p.name
                 ''', [account_id])
                 logger.info(
                     f"Filtering for portfolios with associated companies")
@@ -818,14 +833,29 @@ def get_portfolios_api():
                 portfolios_from_table = query_db('''
                     SELECT id, name FROM portfolios 
                     WHERE account_id = ? AND name IS NOT NULL
-                    ORDER BY name
                 ''', [account_id])
 
-            # Convert to list of objects with id and name
+            # Convert to list of objects with id and name, applying saved order
             portfolios = []
             if portfolios_from_table:
-                portfolios = [{'id': p['id'], 'name': p['name']}
-                              for p in portfolios_from_table if isinstance(p, dict)]
+                portfolios_dict = {p['id']: {'id': p['id'], 'name': p['name']} 
+                                 for p in portfolios_from_table if isinstance(p, dict)}
+                
+                # If we have saved order, use it; otherwise fall back to name order
+                if saved_order_ids:
+                    # First add portfolios in saved order
+                    for portfolio_id in saved_order_ids:
+                        if portfolio_id in portfolios_dict:
+                            portfolios.append(portfolios_dict[portfolio_id])
+                    # Then add any remaining portfolios not in saved order
+                    for portfolio_id, portfolio_data in portfolios_dict.items():
+                        if portfolio_id not in saved_order_ids:
+                            portfolios.append(portfolio_data)
+                    logger.info(f"Applied saved portfolio order")
+                else:
+                    # Fall back to alphabetical order by name
+                    portfolios = sorted(portfolios_dict.values(), key=lambda x: x['name'])
+                    logger.info(f"No saved order found, using alphabetical order")
             logger.info(
                 f"Retrieved {len(portfolios)} portfolios with IDs: {portfolios}")
 

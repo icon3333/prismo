@@ -547,12 +547,27 @@ def import_data():
                         if state['page_name'] == 'build' and state['variable_name'] == 'portfolios':
                             try:
                                 portfolios_data = json.loads(variable_value)
-                                # Remap portfolio IDs within the JSON
+                                # Create a mapping from old portfolio ID to new portfolio data (ID + name)
+                                old_id_to_new_data = {}
+                                for old_id, new_id in old_to_new_portfolio_map.items():
+                                    # Get the correct name for the new portfolio ID from imported data
+                                    portfolio_name = None
+                                    for portfolio in data.get('portfolios', []):
+                                        if portfolio['id'] == old_id:
+                                            portfolio_name = portfolio['name']
+                                            break
+                                    if portfolio_name:
+                                        old_id_to_new_data[old_id] = {'id': new_id, 'name': portfolio_name}
+                                
+                                # Remap both portfolio IDs and names within the JSON
                                 for portfolio_item in portfolios_data:
                                     old_id = portfolio_item.get('id')
-                                    if old_id in old_to_new_portfolio_map:
-                                        portfolio_item['id'] = old_to_new_portfolio_map[old_id]
-                                        logger.info(f"Remapped portfolio ID {old_id} -> {old_to_new_portfolio_map[old_id]} in expanded_state")
+                                    if old_id in old_id_to_new_data:
+                                        new_data = old_id_to_new_data[old_id]
+                                        portfolio_item['id'] = new_data['id']
+                                        portfolio_item['name'] = new_data['name']
+                                        logger.info(f"Remapped portfolio ID {old_id} -> {new_data['id']} and name to '{new_data['name']}' in expanded_state")
+                                
                                 variable_value = json.dumps(portfolios_data)
                             except json.JSONDecodeError as e:
                                 logger.warning(f"Could not parse portfolios JSON for remapping: {e}")

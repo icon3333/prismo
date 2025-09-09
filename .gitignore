@@ -5,6 +5,7 @@
 
 # Database backups and instance directory
 app/database/backups/
+app/database_backup/
 instance/
 
 # Environment files

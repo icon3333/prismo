@@ -26,7 +26,6 @@ COPY . .
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
 # Ensure app directories exist with correct permissions\n\
-mkdir -p /app/database/backups\n\
 mkdir -p /app/instance\n\
 # Set ownership for directories we can control (skip read-only mounts)\n\
 find /app -type d -not -path "/app/.env*" -exec chown app:app {} + 2>/dev/null || true\n\

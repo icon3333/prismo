@@ -472,38 +472,34 @@ def import_data():
 
                 logger.info(f"Deleted {deleted_count} orphaned market prices")
 
-            # Import new data
+            # Import new data with ID remapping
             logger.info(f"Importing data for account {account_id}")
             data = import_data['data']
 
-            # Import portfolios
+            # Create ID mapping dictionaries
+            old_to_new_portfolio_map = {}
+            old_to_new_company_map = {}
+
+            # Import portfolios and create portfolio ID mapping
             if 'portfolios' in data and data['portfolios']:
                 for portfolio in data['portfolios']:
-                    db.execute('''
+                    old_portfolio_id = portfolio['id']
+                    cursor = db.execute('''
                         INSERT INTO portfolios (name, account_id)
                         VALUES (?, ?)
                     ''', [portfolio['name'], account_id])
+                    new_portfolio_id = cursor.lastrowid
+                    old_to_new_portfolio_map[old_portfolio_id] = new_portfolio_id
+                logger.info(f"Imported {len(old_to_new_portfolio_map)} portfolios with ID remapping")
 
-            # Import companies (need to map to new portfolio IDs)
-            portfolio_id_mapping = {}
+            # Import companies using portfolio mapping and create company ID mapping
             if 'companies' in data and data['companies']:
-                # First get the new portfolio IDs
-                new_portfolios = query_db('SELECT id, name FROM portfolios WHERE account_id = ?', [account_id])
-                portfolio_name_to_id = {p['name']: p['id'] for p in new_portfolios} if new_portfolios else {}
-
                 for company in data['companies']:
-                    # Map to new portfolio ID based on name
                     old_portfolio_id = company['portfolio_id']
+                    new_portfolio_id = old_to_new_portfolio_map.get(old_portfolio_id)
                     
-                    # Find portfolio name from imported data
-                    portfolio_name = '-'  # default
-                    for portfolio in data.get('portfolios', []):
-                        if portfolio['id'] == old_portfolio_id:
-                            portfolio_name = portfolio['name']
-                            break
-                    
-                    new_portfolio_id = portfolio_name_to_id.get(portfolio_name)
                     if new_portfolio_id:
+                        old_company_id = company['id']
                         cursor = db.execute('''
                             INSERT INTO companies (name, identifier, category, portfolio_id, account_id, 
                                                  total_invested, override_country, country_manually_edited, 
@@ -515,13 +511,16 @@ def import_data():
                             company.get('override_country'), company.get('country_manually_edited', 0),
                             company.get('country_manual_edit_date')
                         ])
-                        portfolio_id_mapping[company['id']] = cursor.lastrowid
+                        new_company_id = cursor.lastrowid
+                        old_to_new_company_map[old_company_id] = new_company_id
+                logger.info(f"Imported {len(old_to_new_company_map)} companies with ID remapping")
 
-            # Import company_shares
+            # Import company_shares using company mapping
             if 'company_shares' in data and data['company_shares']:
+                shares_imported = 0
                 for share in data['company_shares']:
                     old_company_id = share['company_id']
-                    new_company_id = portfolio_id_mapping.get(old_company_id)
+                    new_company_id = old_to_new_company_map.get(old_company_id)
                     if new_company_id:
                         db.execute('''
                             INSERT INTO company_shares (company_id, shares, override_share, 
@@ -533,33 +532,67 @@ def import_data():
                             share.get('manual_edit_date'), share.get('is_manually_edited', 0),
                             share.get('csv_modified_after_edit', 0)
                         ])
+                        shares_imported += 1
+                logger.info(f"Imported {shares_imported} company shares")
 
-            # Import expanded_state
+            # Import expanded_state with portfolio ID remapping
+            expanded_count = 0
             if 'expanded_state' in data and data['expanded_state']:
+                logger.info(f"Importing {len(data['expanded_state'])} expanded_state records with ID remapping")
                 for state in data['expanded_state']:
-                    db.execute('''
-                        INSERT INTO expanded_state (account_id, page_name, variable_name, 
-                                                  variable_type, variable_value, last_updated)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', [
-                        account_id, state['page_name'], state['variable_name'],
-                        state['variable_type'], state['variable_value'], 
-                        state.get('last_updated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
-                    ])
+                    try:
+                        variable_value = state['variable_value']
+                        
+                        # Special handling for portfolio allocation data
+                        if state['page_name'] == 'build' and state['variable_name'] == 'portfolios':
+                            try:
+                                portfolios_data = json.loads(variable_value)
+                                # Remap portfolio IDs within the JSON
+                                for portfolio_item in portfolios_data:
+                                    old_id = portfolio_item.get('id')
+                                    if old_id in old_to_new_portfolio_map:
+                                        portfolio_item['id'] = old_to_new_portfolio_map[old_id]
+                                        logger.info(f"Remapped portfolio ID {old_id} -> {old_to_new_portfolio_map[old_id]} in expanded_state")
+                                variable_value = json.dumps(portfolios_data)
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"Could not parse portfolios JSON for remapping: {e}")
+
+                        db.execute('''
+                            INSERT INTO expanded_state (account_id, page_name, variable_name, 
+                                                      variable_type, variable_value, last_updated)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', [
+                            account_id, state['page_name'], state['variable_name'],
+                            state['variable_type'], variable_value, 
+                            state.get('last_updated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                        ])
+                        expanded_count += 1
+                    except Exception as e:
+                        logger.error(f"Error importing expanded_state record {state.get('variable_name', 'unknown')}: {str(e)}")
+                        raise
+                logger.info(f"Successfully imported {expanded_count} expanded_state records")
 
             # Import identifier_mappings
+            mappings_count = 0
             if 'identifier_mappings' in data and data['identifier_mappings']:
+                logger.info(f"Importing {len(data['identifier_mappings'])} identifier_mappings records")
                 for mapping in data['identifier_mappings']:
-                    db.execute('''
-                        INSERT INTO identifier_mappings (account_id, csv_identifier, preferred_identifier, 
-                                                       company_name, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', [
-                        account_id, mapping['csv_identifier'], mapping['preferred_identifier'],
-                        mapping.get('company_name'), 
-                        mapping.get('created_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')),
-                        mapping.get('updated_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
-                    ])
+                    try:
+                        db.execute('''
+                            INSERT INTO identifier_mappings (account_id, csv_identifier, preferred_identifier, 
+                                                           company_name, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', [
+                            account_id, mapping['csv_identifier'], mapping['preferred_identifier'],
+                            mapping.get('company_name'), 
+                            mapping.get('created_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')),
+                            mapping.get('updated_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                        ])
+                        mappings_count += 1
+                    except Exception as e:
+                        logger.error(f"Error importing identifier_mapping record {mapping.get('csv_identifier', 'unknown')}: {str(e)}")
+                        raise
+                logger.info(f"Successfully imported {mappings_count} identifier_mappings records")
 
             # Update last_price_update timestamp
             db.execute(
@@ -567,7 +600,16 @@ def import_data():
                 [datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), account_id]
             )
 
-        flash('Account data imported successfully! Market prices will be updated in the background.', 'success')
+            # Verify import success
+            verification_expanded = query_db('SELECT COUNT(*) as count FROM expanded_state WHERE account_id = ?', [account_id])
+            verification_mappings = query_db('SELECT COUNT(*) as count FROM identifier_mappings WHERE account_id = ?', [account_id])
+            
+            expanded_imported = verification_expanded[0]['count'] if verification_expanded else 0
+            mappings_imported = verification_mappings[0]['count'] if verification_mappings else 0
+            
+            logger.info(f"Import verification: {expanded_imported} expanded_state, {mappings_imported} identifier_mappings imported for account {account_id}")
+
+        flash('Account data imported successfully! Portfolio allocations have been preserved.', 'success')
 
     except json.JSONDecodeError:
         flash('Invalid JSON file format', 'error')

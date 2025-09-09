@@ -27,11 +27,11 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s"
 class HealthCheckFilter:
     def filter(self, record):
         # Suppress logs for successful health checks to reduce noise
-        return not (hasattr(record, 'args') and 
-                   record.args and 
-                   len(record.args) > 6 and 
-                   '/health' in str(record.args[6]) and 
-                   record.args[8] == 200)
+        # Check if this is an access log message containing '/health'
+        if hasattr(record, 'getMessage'):
+            message = record.getMessage()
+            return not ('/health' in message and ' 200 ' in message)
+        return True
 
 # Apply the filter to suppress health check access logs
 def when_ready(server):

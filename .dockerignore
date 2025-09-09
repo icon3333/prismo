@@ -24,6 +24,7 @@ htmlcov/
 # Database backups (keep main db, ignore backups)
 app/database/backups/
 instance/
+*.db
 
 # Python cache and virtual environments
 venv/

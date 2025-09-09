@@ -46,7 +46,7 @@ fi
 # 1. Pull latest changes from Git
 print_message "Pulling latest changes from Git..."
 git checkout "$GIT_BRANCH" || { echo "Error: Failed to checkout branch."; exit 1; }
-git pull origin "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
+git pull github "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
 
 # 2. Build the Docker image (caching handles no-op if unchanged)
 print_message "Building Docker image..."

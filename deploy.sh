@@ -49,10 +49,16 @@ git checkout "$GIT_BRANCH" || { echo "Error: Failed to checkout branch."; exit 1
 git pull origin "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
 
 # 1.5 Ensure instance directory exists with correct host permissions
-print_message "Ensuring instance directory exists..."
-mkdir -p ./instance
+print_message "Ensuring instance directory exists with proper permissions..."
+mkdir -p ./instance ./instance/backups
+# Set ownership to current user
 chown -R $(whoami):$(whoami) ./instance
-chmod -R 777 ./instance
+# Set permissions to allow container app user (usually UID 1000) to read/write
+chmod -R 755 ./instance
+# If database exists, ensure it's writable
+if [ -f ./instance/portfolio.db ]; then
+    chmod 664 ./instance/portfolio.db
+fi
 
 # 2. Build the Docker image (caching handles no-op if unchanged)
 print_message "Building Docker image..."
@@ -65,5 +71,35 @@ docker compose -f "$COMPOSE_FILE" up -d --force-recreate "$SERVICE_NAME"
 # 4. Clean up old images
 print_message "Cleaning up old Docker images..."
 docker image prune -f
+
+# 5. Wait for container to be healthy and verify database
+print_message "Verifying deployment..."
+sleep 5
+
+# Check if container is running
+if docker compose -f "$COMPOSE_FILE" ps --services --filter "status=running" | grep -q "$SERVICE_NAME"; then
+    echo "✓ Container is running"
+    
+    # Check if database file was created in host instance directory
+    if [ -f ./instance/portfolio.db ]; then
+        echo "✓ Database file exists on host: $(ls -la ./instance/portfolio.db)"
+    else
+        echo "⚠ Database file not found on host yet - may still be initializing"
+    fi
+    
+    # Try to access the health endpoint
+    if curl -f http://localhost:8065/health >/dev/null 2>&1; then
+        echo "✓ Health check passed"
+    else
+        echo "⚠ Health check failed - app may still be starting"
+    fi
+else
+    echo "✗ Container is not running"
+    echo "Container status:"
+    docker compose -f "$COMPOSE_FILE" ps
+    echo "Recent logs:"
+    docker compose -f "$COMPOSE_FILE" logs --tail=20 "$SERVICE_NAME"
+    exit 1
+fi
 
 print_message "Deployment successful! App is running."

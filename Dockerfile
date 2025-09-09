@@ -25,8 +25,11 @@ COPY . .
 
 # Create entrypoint script
 RUN echo '#!/bin/bash\n\
-# Ensure app directories exist\n\
-mkdir -p /app/instance\n\
+# Ensure app directories exist with correct permissions\n\
+mkdir -p /app/instance /app/instance/backups\n\
+# Fix ownership and permissions for mounted volume\n\
+chown -R app:app /app/instance\n\
+chmod -R 755 /app/instance\n\
 # Switch to app user and run the application\n\
 exec gosu app "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 

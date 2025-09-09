@@ -115,6 +115,9 @@ def init_db(app):
         # Store the database path for background operations
         db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
         set_db_path(db_path)
+        logger.info(f"Database path configured: {db_path}")
+        logger.info(f"Database directory: {os.path.dirname(db_path)}")
+        logger.info(f"Database file exists: {os.path.exists(db_path)}")
         
         db = get_db()
         # Load schema from the version-controlled file in app directory

@@ -13,7 +13,7 @@ services:
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:///app/instance/portfolio.db
+      - APP_DATA_DIR=/app/instance
     labels:
       # Enable autoheal monitoring
       - "autoheal=true"

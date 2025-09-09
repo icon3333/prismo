@@ -52,7 +52,7 @@ git pull origin "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
 print_message "Ensuring instance directory exists..."
 mkdir -p ./instance
 chown -R $(whoami):$(whoami) ./instance
-chmod -R 755 ./instance
+chmod -R 777 ./instance
 
 # 2. Build the Docker image (caching handles no-op if unchanged)
 print_message "Building Docker image..."

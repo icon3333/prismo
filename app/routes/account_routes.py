@@ -66,11 +66,11 @@ def create_account():
 
         if new_account and isinstance(new_account, dict):
             account_id = new_account.get('id')
-            # Create default portfolio for the account
-            execute_db(
-                'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
-                ['-', account_id]
-            )
+            # Default portfolio creation disabled to avoid import conflicts
+            # execute_db(
+            #     'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
+            #     ['-', account_id]
+            # )
 
             # Update session to use the new account
             session['account_id'] = account_id
@@ -472,7 +472,7 @@ def import_data():
 
                 logger.info(f"Deleted {deleted_count} orphaned market prices")
 
-            # Import new data with ID remapping
+            # Import new data with name-based ID remapping
             logger.info(f"Importing data for account {account_id}")
             data = import_data['data']
 
@@ -480,17 +480,36 @@ def import_data():
             old_to_new_portfolio_map = {}
             old_to_new_company_map = {}
 
-            # Import portfolios and create portfolio ID mapping
+            # Import portfolios first, without building the map immediately
+            imported_portfolio_names = []  # Track names for verification
             if 'portfolios' in data and data['portfolios']:
                 for portfolio in data['portfolios']:
-                    old_portfolio_id = portfolio['id']
-                    cursor = db.execute('''
+                    name = portfolio['name']
+                    db.execute('''
                         INSERT INTO portfolios (name, account_id)
                         VALUES (?, ?)
-                    ''', [portfolio['name'], account_id])
-                    new_portfolio_id = cursor.lastrowid
-                    old_to_new_portfolio_map[old_portfolio_id] = new_portfolio_id
-                logger.info(f"Imported {len(old_to_new_portfolio_map)} portfolios with ID remapping")
+                    ''', [name, account_id])
+                    imported_portfolio_names.append(name)
+                logger.info(f"Inserted {len(imported_portfolio_names)} portfolios: {imported_portfolio_names}")
+
+            # Query newly inserted portfolios to build name-based map
+            cursor = db.execute('SELECT id, name FROM portfolios WHERE account_id = ?', [account_id])
+            db_portfolios = cursor.fetchall()
+            name_to_new_id_map = {row['name']: row['id'] for row in db_portfolios}
+
+            # Build old_to_new_portfolio_map using name matching
+            for old_portfolio in data.get('portfolios', []):
+                old_id = old_portfolio['id']
+                name = old_portfolio['name']
+                new_id = name_to_new_id_map.get(name)
+                if new_id is not None:
+                    old_to_new_portfolio_map[old_id] = new_id
+                    logger.info(f"Mapped old portfolio ID {old_id} (name: '{name}') to new ID {new_id}")
+                else:
+                    logger.warning(f"No matching portfolio found for name '{name}' (old ID: {old_id})")
+
+            if len(old_to_new_portfolio_map) != len(imported_portfolio_names):
+                flash('Warning: Some portfolios could not be mapped during import. Check logs.', 'warning')
 
             # Import companies using portfolio mapping and create company ID mapping
             if 'companies' in data and data['companies']:

@@ -50,11 +50,11 @@ git pull origin "$GIT_BRANCH" || { echo "Error: Git pull failed."; exit 1; }
 
 # 2. Build the Docker image (caching handles no-op if unchanged)
 print_message "Building Docker image..."
-docker-compose -f "$COMPOSE_FILE" build --pull
+docker compose -f "$COMPOSE_FILE" build --pull
 
 # 3. Restart the service (force-recreate ensures clean start)
 print_message "Restarting Docker container..."
-docker-compose -f "$COMPOSE_FILE" up -d --force-recreate "$SERVICE_NAME"
+docker compose -f "$COMPOSE_FILE" up -d --force-recreate "$SERVICE_NAME"
 
 # 4. Clean up old images
 print_message "Cleaning up old Docker images..."

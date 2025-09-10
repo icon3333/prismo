@@ -253,6 +253,22 @@
         /* Red color for missing/error states */
     }
 
+    /* Progress bar container positioning - visually under buttons but structurally outside Vue */
+    .progress-bar-container {
+        margin-top: 1rem;
+        padding: 0 var(--space-md);
+        /* Match the padding of portfolio-controls-container */
+        background-color: var(--bg);
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: var(--space-md);
+    }
+
+    /* Ensure progress element visibility when shown */
+    #price-fetch-progress[style*="block"] {
+        display: block !important;
+        visibility: visible !important;
+    }
+
     /* Modal styling improvements */
     .modal-card-head {
         background-color: var(--section-bg);
@@ -573,12 +589,15 @@
 {% macro portfolio_data_section(portfolios, countries) %}
 <div class="mb-5">
     <div id="portfolio-editor" class="portfolio-editor">
+        <!-- Progress Indicator positioned outside Vue app but visually under buttons -->
+        <div id="price-fetch-progress" style="display: none;" class="progress-bar-container">
+            <progress id="progress-bar" class="progress is-primary" value="0" max="100" style="width: 100%; height: 8px;"></progress>
+            <p id="progress-text" class="has-text-centered has-text-weight-medium mt-2" style="font-size: 0.9rem; color: #363636;">0 / 0 companies updated</p>
+            <p id="progress-percentage" class="is-hidden">0%</p>
+        </div>
+
         <!-- Vue.js component will be mounted here -->
         <div id="portfolio-table-app" v-cloak>
-            <div id="price-fetch-progress" style="display: none;" class="mb-4">
-                <progress id="progress-bar" class="progress is-info" value="0" max="100"></progress>
-                <p id="progress-percentage" class="has-text-centered has-text-weight-semibold mt-1">0%</p>
-            </div>
             <div class="portfolio-controls-container mb-4">
                 <div class="enrich-main-controls">
                     <!-- Left side controls with unified styling -->
@@ -894,6 +913,5 @@
             </div>
         </div>
     </div>
-</div>
 </div>
 {% endmacro %}

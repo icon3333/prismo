@@ -8,7 +8,7 @@ from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, manage_state,
     get_allocate_portfolio_data, get_country_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
 )
-from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, price_fetch_progress, price_update_status
+from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
 from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_default
 
@@ -293,6 +293,8 @@ portfolio_bp.add_url_rule(
     '/api/bulk_update', view_func=bulk_update, methods=['POST'])
 portfolio_bp.add_url_rule('/api/update_all_prices',
                           view_func=update_all_prices, methods=['POST'])
+portfolio_bp.add_url_rule('/api/update_selected_prices',
+                          view_func=update_selected_prices, methods=['POST'])
 portfolio_bp.add_url_rule('/api/price_fetch_progress',
                           view_func=price_fetch_progress, methods=['GET'])
 portfolio_bp.add_url_rule('/api/csv_upload_progress',

@@ -10,6 +10,7 @@ const ProgressManager = {
         priceProgressElement: null,
         priceProgressPercentage: null,
         priceProgressBar: null,
+        priceProgressText: null,
         // CSV upload elements
         csvUploadIndicator: null,
         uploadPercentage: null,
@@ -30,6 +31,7 @@ const ProgressManager = {
         this.elements.priceProgressElement = document.getElementById('price-fetch-progress');
         this.elements.priceProgressPercentage = document.getElementById('progress-percentage');
         this.elements.priceProgressBar = document.getElementById('progress-bar');
+        this.elements.priceProgressText = document.getElementById('progress-text');
 
         // Initialize CSV upload elements
         this.elements.csvUploadIndicator = document.getElementById('csv-upload-indicator');
@@ -41,11 +43,18 @@ const ProgressManager = {
             priceProgressElement: !!this.elements.priceProgressElement,
             priceProgressPercentage: !!this.elements.priceProgressPercentage,
             priceProgressBar: !!this.elements.priceProgressBar,
+            priceProgressText: !!this.elements.priceProgressText,
             csvUploadIndicator: !!this.elements.csvUploadIndicator,
             uploadPercentage: !!this.elements.uploadPercentage,
             uploadProgressBar: !!this.elements.uploadProgressBar,
             uploadStatusMessage: !!this.elements.uploadStatusMessage
         });
+        
+        // Debug: Log actual element visibility
+        if (this.elements.priceProgressElement) {
+            console.log('Progress element display style:', this.elements.priceProgressElement.style.display);
+            console.log('Progress element computed style:', window.getComputedStyle(this.elements.priceProgressElement).display);
+        }
 
         if (!this.elements.priceProgressElement && !this.elements.csvUploadIndicator) {
             console.warn('No progress or indicator elements found - some features may be disabled');
@@ -86,13 +95,22 @@ const ProgressManager = {
         if (jobType === 'simple_csv_upload' && this.elements.csvUploadIndicator) {
             console.log('ProgressManager: Displaying CSV upload indicator');
             this.elements.csvUploadIndicator.style.display = 'block';
-        } else if (jobType === 'price_fetch' && this.elements.priceProgressElement) {
+        } else if ((jobType === 'price_fetch' || jobType === 'selected_price_fetch') && this.elements.priceProgressElement) {
             console.log('ProgressManager: Displaying price fetch progress element');
             this.elements.priceProgressElement.style.display = 'block';
+            this.elements.priceProgressElement.style.visibility = 'visible';
+            this.elements.priceProgressElement.style.opacity = '1';
             this.elements.priceProgressElement.dataset.processing = 'true';
+            console.log('ProgressManager: Progress element visibility set:', {
+                display: this.elements.priceProgressElement.style.display,
+                visibility: this.elements.priceProgressElement.style.visibility,
+                opacity: this.elements.priceProgressElement.style.opacity
+            });
+        } else {
+            console.warn(`ProgressManager: Unhandled job type '${jobType}' or missing elements`);
         }
 
-        this.setProgress(0, 'Initializing...');
+        this.setProgress(0, 'Initializing...', 0, 0);
     },
 
     hide() {
@@ -106,10 +124,10 @@ const ProgressManager = {
         this.stopTracking();
     },
 
-    setProgress(percentage, message = null) {
+    setProgress(percentage, message = null, current = 0, total = 0) {
         const jobType = this.currentJob.type;
 
-        console.log(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''}`);
+        console.log(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''} (${current}/${total})`);
 
         if (jobType === 'simple_csv_upload') {
             // Handle simple CSV upload progress
@@ -151,8 +169,15 @@ const ProgressManager = {
             }
             
             return;
-        } else if (jobType === 'price_fetch') {
-            // Handle price fetch progress
+        } else if (jobType === 'price_fetch' || jobType === 'selected_price_fetch') {
+            // Handle price fetch progress (both all and selected)
+            console.log('ProgressManager: Updating price progress UI elements', {
+                hasProgressElement: !!this.elements.priceProgressElement,
+                hasProgressBar: !!this.elements.priceProgressBar,
+                hasProgressText: !!this.elements.priceProgressText,
+                percentage, current, total
+            });
+            
             if (this.elements.priceProgressPercentage) {
                 this.elements.priceProgressPercentage.textContent = `${Math.round(percentage)}%`;
             } else {
@@ -160,8 +185,19 @@ const ProgressManager = {
             }
             if (this.elements.priceProgressBar) {
                 this.elements.priceProgressBar.value = percentage;
+                // Add smooth transition effect
+                this.elements.priceProgressBar.style.transition = 'value 0.3s ease';
+                console.log('ProgressManager: Updated progress bar to', percentage + '%');
             } else {
                 console.warn('ProgressManager: priceProgressBar element not found for price progress');
+            }
+            
+            // Update company count text
+            if (this.elements.priceProgressText) {
+                this.elements.priceProgressText.textContent = `${current} / ${total} companies updated`;
+                console.log('ProgressManager: Updated progress text to', `${current} / ${total} companies updated`);
+            } else {
+                console.warn('ProgressManager: priceProgressText element not found for progress text');
             }
         } else {
             console.warn(`ProgressManager: Unknown job type: ${jobType}`);
@@ -219,7 +255,9 @@ const ProgressManager = {
             console.log("Price fetch progress:", data);
 
             const percentage = data.percentage || 0;
-            this.setProgress(percentage);
+            const current = data.current || 0;
+            const total = data.total || 0;
+            this.setProgress(percentage, null, current, total);
 
             // Check completion
             if (data.status === 'completed' || percentage >= 100) {
@@ -227,7 +265,7 @@ const ProgressManager = {
             }
         } catch (error) {
             console.error('Error checking price fetch progress:', error);
-            this.setProgress(0);
+            this.setProgress(0, null, 0, 0);
         }
     },
 
@@ -389,12 +427,13 @@ const ProgressManager = {
     },
 
     complete(finalPercentage = 100) {
-        this.setProgress(finalPercentage);
+        console.log('ProgressManager: Completing progress tracking');
+        this.setProgress(finalPercentage, 'Complete');
 
-        // Show completion briefly before hiding
+        // Ensure minimum display time so users can see completion
         setTimeout(() => {
             this.hide();
-        }, 1000);
+        }, 1500); // Increased to 1.5 seconds for better visibility
     },
 
     error(message = 'Operation failed') {
@@ -405,8 +444,13 @@ const ProgressManager = {
         // Safely set error message based on job type
         if (jobType === 'simple_csv_upload' && this.elements.uploadPercentage) {
             this.elements.uploadPercentage.textContent = 'Error';
-        } else if (jobType === 'price_fetch' && this.elements.priceProgressPercentage) {
-            this.elements.priceProgressPercentage.textContent = 'Error';
+        } else if ((jobType === 'price_fetch' || jobType === 'selected_price_fetch')) {
+            if (this.elements.priceProgressPercentage) {
+                this.elements.priceProgressPercentage.textContent = 'Error';
+            }
+            if (this.elements.priceProgressText) {
+                this.elements.priceProgressText.textContent = 'Update failed';
+            }
         } else {
             console.warn('ProgressManager: Could not display error message - no suitable element found');
         }
@@ -437,8 +481,8 @@ const UpdateAllDataHandler = {
             updateAllDataBtn.disabled = true;
             updateAllDataBtn.classList.add('is-loading');
 
-            // Start progress tracking for price fetch
-            ProgressManager.startTracking('price_fetch');
+            // Show progress bar (without starting conflicting generic polling)
+            ProgressManager.show('price_fetch');
 
             // Make the API call
             const response = await fetch('/portfolio/api/update_all_prices', {
@@ -475,7 +519,16 @@ const UpdateAllDataHandler = {
 
                                 // Update progress display if available
                                 if (statusResult.progress) {
-                                    ProgressManager.setProgress(statusResult.progress.percentage);
+                                    // Ensure we maintain the job type during status polling
+                                    if (!ProgressManager.currentJob.type) {
+                                        ProgressManager.currentJob.type = 'price_fetch';
+                                    }
+                                    ProgressManager.setProgress(
+                                        statusResult.progress.percentage,
+                                        null,
+                                        statusResult.progress.current || 0,
+                                        statusResult.progress.total || 0
+                                    );
                                 }
 
                                 // If job is completed, stop polling and reload data
@@ -523,6 +576,114 @@ const UpdateAllDataHandler = {
             // Re-enable the button
             updateAllDataBtn.disabled = false;
             updateAllDataBtn.classList.remove('is-loading');
+        }
+    }
+};
+
+const UpdateSelectedHandler = {
+    async run(selectedCompanyIds) {
+        console.log('UpdateSelectedHandler: Starting with company IDs:', selectedCompanyIds);
+
+        if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
+            console.error('No companies selected for update');
+            return;
+        }
+
+        try {
+            console.log('Starting selected price update for companies:', selectedCompanyIds);
+
+            // Show progress bar (without starting conflicting generic polling)
+            ProgressManager.show('selected_price_fetch');
+
+            // Make the API call
+            const response = await fetch('/portfolio/api/update_selected_prices', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ company_ids: selectedCompanyIds })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Show success notification
+                if (typeof showNotification === 'function') {
+                    showNotification(result.message || 'Started updating selected companies', 'is-success');
+                } else {
+                    console.log('Success:', result.message || 'Started updating selected companies');
+                }
+
+                // If there's a job ID, start polling for status updates
+                if (result.job_id) {
+                    const jobId = result.job_id;
+                    console.log('Selected update Job ID:', jobId);
+
+                    // Poll for job status (reuse same logic as update all)
+                    const statusInterval = setInterval(async () => {
+                        try {
+                            // Try fetching the job status first
+                            const statusResponse = await fetch(`/portfolio/api/price_update_status/${jobId}`);
+
+                            if (statusResponse.ok) {
+                                const statusResult = await statusResponse.json();
+                                console.log('Selected update job status:', statusResult);
+
+                                // Update progress display if available
+                                if (statusResult.progress) {
+                                    // Ensure we maintain the job type during status polling
+                                    if (!ProgressManager.currentJob.type) {
+                                        ProgressManager.currentJob.type = 'selected_price_fetch';
+                                    }
+                                    ProgressManager.setProgress(
+                                        statusResult.progress.percentage,
+                                        null,
+                                        statusResult.progress.current || 0,
+                                        statusResult.progress.total || 0
+                                    );
+                                }
+
+                                // If job is completed, stop polling and reload data
+                                if (statusResult.status === 'completed' || statusResult.is_complete) {
+                                    clearInterval(statusInterval);
+                                    ProgressManager.complete();
+
+                                    // Show completion notification
+                                    if (typeof showNotification === 'function') {
+                                        showNotification(`Selected companies update complete! Updated ${statusResult.progress?.current || 0} companies successfully.`, 'is-success');
+                                    }
+
+                                    // Reload the data
+                                    if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
+                                        await window.portfolioTableApp.loadData();
+                                        console.log('Portfolio data reloaded after selected update completion');
+                                    } else {
+                                        console.warn('portfolioTableApp.loadData is not available, reloading page instead');
+                                        window.location.reload();
+                                    }
+                                }
+                            } else {
+                                // Fall back to checking the progress endpoint if the status endpoint fails
+                                console.log("Falling back to progress endpoint check for selected update");
+                                // ProgressManager will handle this automatically
+                            }
+                        } catch (error) {
+                            console.error('Error checking selected update job status:', error);
+                            clearInterval(statusInterval);
+                            ProgressManager.error();
+                        }
+                    }, 1000);
+                }
+            } else {
+                ProgressManager.error();
+                throw new Error(result.error || 'Failed to start selected price update');
+            }
+        } catch (error) {
+            console.error('Error updating selected prices:', error);
+            ProgressManager.error(error.message || 'Error updating selected prices');
+            if (typeof showNotification === 'function') {
+                showNotification(error.message || 'Error updating selected prices', 'is-danger');
+            }
         }
     }
 };
@@ -1304,7 +1465,8 @@ class PortfolioTableApp {
                 },
 
                 updateSelected() {
-                    this.updateSelectedPrices();
+                    // Use the new async UpdateSelectedHandler instead of the old synchronous method
+                    UpdateSelectedHandler.run(this.selectedItemIds);
                 },
 
                 downloadCSV() {

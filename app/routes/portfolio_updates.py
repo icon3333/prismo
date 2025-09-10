@@ -123,6 +123,50 @@ def update_all_prices():
         return jsonify({'error': str(e)}), 500
 
 
+def update_selected_prices():
+    """API endpoint to update selected companies' prices"""
+    if 'account_id' not in session:
+        return jsonify({'error': 'Not authenticated. Please select an account from the home page.'}), 401
+
+    try:
+        account_id = session['account_id']
+        data = request.json
+        company_ids = data.get('company_ids', []) if data else []
+        
+        if not company_ids:
+            return jsonify({'error': 'No companies selected'}), 400
+
+        logger.info(f"Starting selected price update for account_id: {account_id}, company_ids: {company_ids}")
+
+        # Get unique identifiers for selected companies
+        placeholders = ','.join('?' * len(company_ids))
+        companies = query_db(f'''
+            SELECT DISTINCT c.identifier
+            FROM companies c
+            WHERE c.account_id = ? AND c.id IN ({placeholders}) AND c.identifier IS NOT NULL AND c.identifier != ''
+        ''', [account_id] + company_ids)
+        
+        if not companies:
+            return jsonify({'error': 'No valid identifiers found for selected companies'}), 400
+
+        identifiers = [company['identifier'] for company in companies]
+        logger.info(f"Found {len(identifiers)} unique identifiers to update: {identifiers}")
+
+        # Start the batch processing job (reuse existing batch process)
+        job_id = start_batch_process(identifiers)
+
+        return jsonify({
+            'success': True,
+            'message': f'Started updating prices for {len(identifiers)} selected companies',
+            'job_id': job_id,
+            'total_companies': len(identifiers)
+        })
+
+    except Exception as e:
+        logger.error(f"Error starting selected price update: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 def price_fetch_progress():
     """API endpoint to get progress of current price fetch operation"""
     if 'account_id' not in session:

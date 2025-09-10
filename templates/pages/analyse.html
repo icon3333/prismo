@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/loading_components.html" import loading_indicator %}
 
 {% block title %}Portfolio Analysis{% endblock %}
 
@@ -7,9 +8,8 @@
     <h1 class="title">Portfolio Analysis</h1>
 
     <!-- Loading indicator -->
-    <div id="loadingIndicator" class="has-text-centered my-6">
-        <p class="mb-3">Loading portfolio data...</p>
-        <progress class="progress is-info" max="100"></progress>
+    <div id="loadingIndicator">
+        {{ loading_indicator('Loading portfolio data...') }}
     </div>
 
     <div id="analysisContent" style="display: none;">

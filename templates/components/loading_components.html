@@ -1,0 +1,6 @@
+{% macro loading_indicator(message='Loading...') %}
+<div class="has-text-centered my-4">
+    <p class="mb-3">{{ message }}</p>
+    <progress class="progress is-info" max="100"></progress>
+</div>
+{% endmacro %}

@@ -36,7 +36,24 @@
       <h2 class="section-title">Investment Settings</h2>
       <!-- Investment Input in Global Overview -->
       <div class="card">
-        <div class="investment-input">
+        <div class="field">
+          <label class="label">Rebalancing Mode</label>
+          <div class="control">
+            <label class="radio">
+              <input type="radio" name="rebalance-mode" value="existing-only">
+              Rebalance Existing Capital
+            </label>
+            <label class="radio">
+              <input type="radio" name="rebalance-mode" value="new-only" checked>
+              New Capital only (no sales)
+            </label>
+            <label class="radio">
+              <input type="radio" name="rebalance-mode" value="new-with-sells">
+              New Capital (with sales)
+            </label>
+          </div>
+        </div>
+        <div class="investment-input" id="investment-input-container">
           <label class="label">Investment Amount:</label>
           <div class="input-group">
             <span class="input-group-text">€</span>

@@ -998,20 +998,11 @@ def upload_csv():
             return redirect(url_for('portfolio.enrich'))
 
         logger.info(f"CSV file content length: {len(file_content)} characters")
-        
-        # Clear any stale progress from previous uploads
-        if 'csv_upload_progress' in session:
-            del session['csv_upload_progress']
-            session.modified = True
-        
-        # Set initial progress to indicate upload is starting - FIXES RACE CONDITION
-        from app.utils.portfolio_processing import update_csv_progress
-        update_csv_progress(0, 100, "Upload received, preparing to process...", "processing")
-        
+
         # Ensure session is properly configured
         session.permanent = True
         session.modified = True
-        
+
         # Create backup (automatic backups must always be enabled) [[memory:7528819]]
         backup_database()
         logger.info("Database backup created before CSV processing")
@@ -1038,14 +1029,8 @@ def upload_csv():
     except Exception as e:
         logger.error(f"Error initiating CSV upload: {str(e)}", exc_info=True)
         error_message = f'Error starting CSV processing: {str(e)}'
-        
-        # Set error status in session
-        try:
-            from app.utils.portfolio_processing import update_csv_progress
-            update_csv_progress(0, 100, error_message, "failed")
-        except Exception as session_error:
-            logger.error(f"Failed to update error status in session: {session_error}")
-        
+        # Error will be tracked in background_jobs table if job was created
+
         if is_ajax:
             return jsonify({'success': False, 'message': error_message}), 500
         else:

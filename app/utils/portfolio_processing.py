@@ -12,59 +12,34 @@ from app.utils.identifier_mapping import get_preferred_identifier
 logger = logging.getLogger(__name__)
 
 
-def update_csv_progress(current, total, message="Processing...", status="processing"):
-    """Update CSV upload progress in session with improved persistence"""
-    import time
-    from flask import session
-    
-    percentage = int((current / total) * 100) if total > 0 else 0
-    
-    # Add timestamp for better tracking
-    progress_data = {
-        'current': current,
-        'total': total,
-        'percentage': percentage,
-        'status': status,
-        'message': message,
-        'timestamp': time.time(),
-        'updated_at': time.strftime('%Y-%m-%d %H:%M:%S')
-    }
-    
-    # Ensure session is available before updating
-    try:
-        session['csv_upload_progress'] = progress_data
-        session.modified = True
-        
-        # Force session to persist immediately (costs time but ensures reliability) [[memory:6980966]]
-        # This method ensures progress is immediately available for polling
-        import threading
-        if hasattr(session, '_get_current_object'):
-            session._get_current_object().modified = True
-            
-    except Exception as e:
-        logger.warning(f"Failed to update session progress: {e}")
-    
-    # Log progress for debugging
-    logger.info(f"CSV Progress: {percentage}% - {message} (Status: {status}) - Session modified: {session.modified if 'session' in locals() else 'Unknown'}")
+# DEPRECATED: Session-based progress tracking removed in favor of database-based tracking
+# All CSV upload progress now uses update_csv_progress_background() for thread-safe operation
+# See: update_csv_progress_background() at line 682
 
 
 def process_csv_data(account_id, file_content):
-    """Process and import CSV data into the database using simple +/- approach"""
+    """
+    DEPRECATED: This function uses session-based progress tracking which doesn't work in background threads.
+    Use process_csv_data_background() instead, which uses database-based progress tracking.
+
+    Process and import CSV data into the database using simple +/- approach.
+    """
+    logger.warning("DEPRECATED: process_csv_data() called. Use process_csv_data_background() instead.")
     db = None
     cursor = None
     try:
         logger.info(f"DEBUG: Starting process_csv_data for account_id: {account_id}")
         logger.info(f"DEBUG: File content length: {len(file_content)} characters")
-        
+
         # Note: Initial progress is now set in upload endpoint to fix race condition
         # Start with backup progress since upload endpoint already set status to "processing"
         db = get_db()
         cursor = db.cursor()
-        
+
         # CRITICAL: Always create backup before processing [[memory:7528819]]
         logger.info("Creating automatic backup before CSV processing...")
         backup_database()
-        
+
         # Add small delay to ensure progress is captured
         import time
         time.sleep(0.1)

@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
 import warnings
+from app.exceptions import PriceFetchError
 
 # Suppress specific yfinance warnings
 warnings.filterwarnings("ignore", message="^[Tt]he 'period'")
@@ -37,12 +38,51 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
             logger.warning(
                 f"Could not retrieve exchange rate for {from_currency}-{to_currency}")
             return 1.0 * base_rate  # Fallback
-    except Exception as e:
-        logger.error(
-            f"Error fetching exchange rate for {from_currency}-{to_currency}: {e}")
+    except (KeyError, IndexError, ValueError) as e:
+        # Expected errors - missing data, empty dataframe, invalid values
+        logger.warning(
+            f"Exchange rate data issue: {from_currency}→{to_currency}: {e.__class__.__name__}: {e}",
+            extra={'currency_from': from_currency, 'currency_to': to_currency}
+        )
         return 1.0 * base_rate  # Fallback
+    except Exception as e:
+        # Unexpected errors - log with full traceback
+        logger.exception(
+            f"Unexpected error fetching exchange rate: {from_currency}→{to_currency}"
+        )
+        # For single-user homeserver, log but don't crash - return fallback
+        return 1.0 * base_rate
 
 # --- Helper Functions for Identifier Detection ---
+
+
+def _is_valid_isin_format(identifier: str) -> bool:
+    """
+    Validate basic ISIN format requirements.
+
+    ISIN format: 2-letter country code + 9 alphanumeric chars + 1 check digit = 12 total
+    Example: US0378331005 (Apple)
+
+    This is a basic format check - it doesn't validate the checksum.
+
+    Args:
+        identifier: String to check
+
+    Returns:
+        True if identifier matches basic ISIN format
+    """
+    if not identifier or len(identifier) != 12:
+        return False
+
+    # First 2 characters must be letters (country code)
+    if not identifier[:2].isalpha():
+        return False
+
+    # Remaining 10 characters must be alphanumeric
+    if not identifier[2:].isalnum():
+        return False
+
+    return True
 
 
 def _is_likely_crypto(identifier: str) -> bool:
@@ -135,6 +175,15 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
     Robust yfinance data fetching using the exact same pattern as the working script.
     Handles yfinance session/cookie bugs by mimicking the working script's approach.
     """
+    # Pre-validate ISIN format if it looks like an ISIN (12 chars)
+    if len(identifier) == 12:
+        if not _is_valid_isin_format(identifier):
+            logger.warning(
+                f"Invalid ISIN format for '{identifier}': "
+                f"ISINs must be 12 characters with 2-letter country code"
+            )
+            return None
+
     try:
         # The working script shows this pattern works - follow it exactly
         ticker = yf.Ticker(identifier)
@@ -142,8 +191,13 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
         # The working script uses this exact pattern for error handling
         try:
             info = ticker.info
+        except (KeyError, ValueError, TypeError) as e:
+            # Expected data issues
+            logger.warning(f"Data error fetching ticker info for {identifier}: {e.__class__.__name__}: {e}")
+            info = {}
         except Exception as e:
-            logger.warning(f"Error fetching ticker info for {identifier}: {e}")
+            # Unexpected errors - still catch but log differently
+            logger.warning(f"Unexpected error fetching ticker info for {identifier}: {e.__class__.__name__}: {e}")
             info = {}
 
         # The working script checks for empty info like this
@@ -153,7 +207,7 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
 
         # The working script validates price data this way
         price = info.get('regularMarketPrice') or info.get('currentPrice')
-        
+
         # The working script only proceeds if price exists
         if price is not None:
             return {
@@ -164,10 +218,24 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
         else:
             logger.debug(f"No valid price found for '{identifier}'")
             return None
-            
+
+    except ValueError as e:
+        # ISIN validation errors from yfinance - expected for invalid ISINs
+        if "Invalid ISIN" in str(e):
+            logger.warning(
+                f"yfinance rejected identifier '{identifier}': {e}. "
+                f"This may be an invalid ISIN checksum or unrecognized identifier."
+            )
+        else:
+            logger.warning(f"Validation error for '{identifier}': {e}")
+        return None
+    except (requests.exceptions.RequestException, ConnectionError, TimeoutError) as e:
+        # Network errors - expected in homeserver environment
+        logger.warning(f"Network error for '{identifier}': {e.__class__.__name__}: {e}")
+        return None
     except Exception as e:
-        # The working script shows that this level of error handling works
-        logger.warning(f"yfinance lookup for '{identifier}' failed with error: {e}")
+        # Truly unexpected errors - log with traceback for debugging
+        logger.exception(f"Unexpected error in yfinance lookup for '{identifier}'")
         return None
 
 

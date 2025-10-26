@@ -12,6 +12,7 @@ from flask import current_app
 from app.utils.yfinance_utils import get_isin_data
 from app.utils.db_utils import update_price_in_db_background, query_background_db, execute_background_db
 from app.db_manager import get_db
+from app.exceptions import PriceFetchError, DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,10 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
     This function is designed to be run in a thread pool.
     """
     try:
-        logger.info(f"🔄 Processing identifier: {identifier}")
+        logger.info(f"Processing identifier: {identifier}")
         result = get_isin_data(identifier)
 
-        logger.debug(f"📊 Price fetch result for {identifier}: success={result.get('success')}, price={result.get('price')}, currency={result.get('currency')}")
+        logger.debug(f"Price fetch result for {identifier}: success={result.get('success')}, price={result.get('price')}, currency={result.get('currency')}")
 
         if result.get('success'):
             # Extract price data from nested 'data' structure or fallback to top level
@@ -53,13 +54,13 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
             country = data.get('country') or result.get('country')
             modified_identifier = result.get('modified_identifier')
 
-            logger.debug(f"🔍 Extracted data: price={price}, currency={currency}, price_eur={price_eur}")
+            logger.debug(f"Extracted data: price={price}, currency={currency}, price_eur={price_eur}")
 
             if price is not None:
-                logger.debug(f"💰 Price data found for {identifier}: {price} {currency} ({price_eur} EUR)")
-                
+                logger.debug(f"Price data found for {identifier}: {price} {currency} ({price_eur} EUR)")
+
                 # Update the price in the main database using background-specific function
-                logger.debug(f"💾 Attempting database update for {identifier}")
+                logger.debug(f"Attempting database update for {identifier}")
                 update_success = update_price_in_db_background(
                     identifier,
                     price,
@@ -68,26 +69,31 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
                     country=country,
                     modified_identifier=modified_identifier
                 )
-                
-                logger.debug(f"📝 Database update result for {identifier}: {update_success}")
-                
+
+                logger.debug(f"Database update result for {identifier}: {update_success}")
+
                 if update_success:
-                    logger.info(f"✅ Successfully updated price for {identifier}")
+                    logger.info(f"Successfully updated price for {identifier}")
                     return {'identifier': identifier, 'status': 'success'}
                 else:
-                    logger.error(f"❌ Failed to update price in database for {identifier} - check database logs above")
+                    logger.error(f"Failed to update price in database for {identifier}")
                     return {'identifier': identifier, 'status': 'db_error', 'error': 'Failed to write to DB'}
             else:
-                logger.warning(f"⚠️ No price data found for {identifier} (price is None)")
-                logger.debug(f"🔍 Full result for {identifier}: {result}")
+                logger.warning(f"No price data found for {identifier} (price is None)")
+                logger.debug(f"Full result for {identifier}: {result}")
                 return {'identifier': identifier, 'status': 'no_price', 'error': 'No price data available'}
         else:
-            logger.warning(f"⚠️ Failed to fetch data for {identifier}: {result.get('error')}")
-            logger.debug(f"🔍 Full failed result for {identifier}: {result}")
+            logger.warning(f"Failed to fetch data for {identifier}: {result.get('error')}")
+            logger.debug(f"Full failed result for {identifier}: {result}")
             return {'identifier': identifier, 'status': 'fetch_error', 'error': result.get('error')}
+    except (KeyError, ValueError, TypeError) as e:
+        # Expected data errors - malformed response, missing fields
+        logger.warning(f"Data error processing {identifier}: {e.__class__.__name__}: {e}")
+        return {'identifier': identifier, 'status': 'data_error', 'error': f"{e.__class__.__name__}: {e}"}
     except Exception as e:
-        logger.error(f"💥 Unhandled error processing {identifier}: {e}", exc_info=True)
-        return {'identifier': identifier, 'status': 'exception', 'error': str(e)}
+        # Unexpected errors - log with full traceback for debugging
+        logger.exception(f"Unexpected error processing {identifier}")
+        return {'identifier': identifier, 'status': 'exception', 'error': f"{e.__class__.__name__}: {e}"}
 
 
 def _run_csv_job(app, account_id: int, file_content: str, job_id: str):
@@ -197,6 +203,7 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
         processed_count = 0
         success_count = 0
         failure_count = 0
+        failed_identifiers = []  # Track which identifiers failed
 
         last_update_time = time.time()
 
@@ -206,11 +213,17 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
 
             for future in as_completed(future_to_identifier):
                 result = future.result()
+                identifier = future_to_identifier[future]  # Get the original identifier
 
                 if result.get('status') == 'success':
                     success_count += 1
                 else:
                     failure_count += 1
+                    # Collect failure details for user feedback
+                    failed_identifiers.append({
+                        'identifier': identifier,
+                        'error': result.get('error', 'Unknown error')
+                    })
 
                 processed_count += 1
 
@@ -220,16 +233,19 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
                     _update_job_progress_background(job_id, processed_count)
                     last_update_time = current_time
 
-        # Final update with summary
+        # Final update with summary including failed identifiers
         summary = {
             'total': total_items,
             'success_count': success_count,
             'failure_count': failure_count,
+            'failed': failed_identifiers,  # New: list of failed identifiers with errors
             'completion_time': datetime.now().isoformat()
         }
         _update_job_final_background(job_id, total_items, json.dumps(summary))
         logger.info(
             f"Batch job {job_id} complete. Success: {success_count}, Failed: {failure_count}")
+        if failed_identifiers:
+            logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
 
 
 def _update_job_progress_background(job_id: str, progress: int):

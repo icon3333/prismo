@@ -1934,40 +1934,31 @@ select,
   }
   
   /* ===== CENTRALIZED USER-EDITED FIELD STYLING ===== */
-  /* Orange color (#ff7f00) for all user-edited fields - NO bold for country */
+  /* Standardized, reusable classes for custom changed data - NO bold font */
 
-  /* Base class for all user-edited fields */
-  .user-edited-field {
+  /* User-edited: Any field manually changed by the user (orange, no bold) */
+  /* Applied to: shares, country, total value, or any future editable fields */
+  .user-edited,
+  .user-edited input,
+  .user-edited select,
+  .select .user-edited,
+  select.user-edited,
+  .user-edited option {
     color: #ff7f00 !important;
   }
 
-  /* Shares - user edited (orange with bold) */
-  .shares-user-edited {
-    color: #ff7f00 !important;
-    font-weight: 600;
-  }
-
-  /* Country - user edited (orange WITHOUT bold per user request) */
-  .select .country-user-edited,
-  select.country-user-edited,
-  .country-user-edited option {
-    color: #ff7f00 !important;
-    /* Orange color only, no bold - matches user requirement */
-  }
-
-  /* Total Value - user edited when no price available (orange, no bold) */
-  .total-value-user-edited {
-    color: #ff7f00 !important;
-  }
-
-  /* CSV-modified fields after user edit (red with bold) */
-  .csv-modified-field,
-  .shares-csv-modified {
+  /* CSV-modified: User edit exists BUT CSV uploaded with newer transactions (red, no bold) */
+  /* Warning indicator: "Your manual edit + new CSV data applied" */
+  .csv-modified,
+  .csv-modified input,
+  .csv-modified select,
+  .select .csv-modified,
+  select.csv-modified,
+  .csv-modified option {
     color: #dc3545 !important;
-    font-weight: 600;
   }
 
-  /* Error/missing data styling */
+  /* Error/missing data styling (separate concern - not related to user edits) */
   .error-field,
   .has-text-danger {
     color: #dc3545 !important;

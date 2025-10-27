@@ -882,7 +882,12 @@
             return { labels, values };
         }
 
-
+        // Helper function to truncate text to a maximum length
+        function truncateText(text, maxLength = 25) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
 
         // Create bar chart with rotated x-axis labels
         function createBarChart(chartId, labels, values, options = {}) {
@@ -966,9 +971,9 @@
                                 // Show up to 10 companies, sorted by value
                                 const displayCount = Math.min(companies.length, 10);
                                 companyList = companies.slice(0, displayCount).map(company =>
-                                    `<div style="margin: 2px 0; display: flex; justify-content: space-between;">
-                                        <span style="margin-right: 8px;">${company.name}</span>
-                                        <span style="font-weight: bold;">${company.percentage.toFixed(2)}%</span>
+                                    `<div style="margin: 2px 0; display: flex; justify-content: space-between; align-items: center; overflow: hidden;">
+                                        <span style="margin-right: 8px; overflow: hidden; white-space: nowrap;">${truncateText(company.name, 25)}</span>
+                                        <span style="font-weight: bold; flex-shrink: 0; white-space: nowrap;">${company.percentage.toFixed(2)}%</span>
                                     </div>`
                                 ).join('');
 
@@ -979,15 +984,15 @@
                                 companyList = '<div style="font-style: italic; color: #888;">No companies in this category</div>';
                             }
 
-                            return `<div style="padding: 12px; background: rgba(0,0,0,0.85); color: white; border-radius: 8px; font-size: 12px; max-width: 300px;">
+                            return `<div style="padding: 12px; background: rgba(0,0,0,0.85); color: white; border-radius: 8px; font-size: 12px; max-width: 300px; overflow: hidden; box-sizing: border-box;">
                                 <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
-                                    ${label}
+                                    ${truncateText(label, 25)}
                                 </div>
                                 <div style="margin-bottom: 8px;">
                                     <strong>Total Allocation: ${value.toFixed(2)}%</strong>
                                 </div>
                                 <div style="margin-bottom: 4px; font-weight: bold;">Companies (${companies.length}):</div>
-                                <div style="max-height: 200px; overflow-y: auto;">
+                                <div>
                                     ${companyList}
                                 </div>
                             </div>`;
@@ -995,7 +1000,7 @@
                             console.error('Tooltip error:', error);
                             const label = w.globals.labels[dataPointIndex];
                             const value = series[seriesIndex][dataPointIndex];
-                            return `<div style="padding: 8px;">${label}: ${value.toFixed(1)}%</div>`;
+                            return `<div style="padding: 8px;">${truncateText(label, 25)}: ${value.toFixed(1)}%</div>`;
                         }
                     }
                 },

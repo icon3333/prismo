@@ -844,10 +844,10 @@
                                     <div class="field has-addons">
                                         <div class="control is-expanded">
                                             <div class="select is-small is-fullwidth">
-                                                <select v-model="item.effective_country" 
+                                                <select v-model="item.effective_country"
                                                         @change="saveCountryChange(item)"
-                                                        :class="{ 
-                                                            'country-user-edited': item.country_manually_edited,
+                                                        :class="{
+                                                            'user-edited': item.country_manually_edited,
                                                             'has-text-danger': !item.effective_country || item.effective_country === 'N/A'
                                                         }">
                                                     <option value="">Select Country</option>
@@ -859,7 +859,7 @@
                                             </div>
                                         </div>
                                         <div class="control" v-if="item.country_manually_edited">
-                                            <button class="button is-small" 
+                                            <button class="button is-small"
                                                     @click="resetCountry(item)"
                                                     title="Reset to yfinance data">
                                                 <span class="icon is-small">
@@ -870,13 +870,13 @@
                                     </div>
                                 </td>
                                 <td class="col-input-medium">
-                                    <input class="input is-small" :class="{ 
-                                               'shares-user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
-                                               'shares-csv-modified': item.is_manually_edited && item.csv_modified_after_edit
-                                           }" type="text" :value="formatNumber(item.effective_shares)" @blur="(e) => { 
-                                               const newShares = parseFloat(e.target.value) || 0; 
+                                    <input class="input is-small" :class="{
+                                               'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
+                                               'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
+                                           }" type="text" :value="formatNumber(item.effective_shares)" @blur="(e) => {
+                                               const newShares = parseFloat(e.target.value) || 0;
                                                item.effective_shares = newShares;
-                                               saveSharesChange(item, newShares); 
+                                               saveSharesChange(item, newShares);
                                            }" :title="getSharesTitle(item)">
                                 </td>
                                 <td class="col-currency">
@@ -884,7 +884,7 @@
                                     <span v-if="item.price_eur" v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                     <!-- If no price but custom value exists, show it with styling -->
                                     <input v-else-if="item.is_custom_value && item.custom_total_value"
-                                           class="input is-small user-edited-field total-value-user-edited"
+                                           class="input is-small user-edited"
                                            type="text"
                                            :value="formatCurrency(item.custom_total_value)"
                                            @blur="(e) => saveTotalValueChange(item, e.target.value)"

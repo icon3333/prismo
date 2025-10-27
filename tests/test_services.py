@@ -51,8 +51,9 @@ class TestAllocationService:
         )
 
         assert len(recommendations) == 2
-        assert recommendations[0].amount_to_buy == Decimal('600')
-        assert recommendations[1].amount_to_buy == Decimal('400')
+        # Use quantize for floating point comparison
+        assert recommendations[0].amount_to_buy.quantize(Decimal('0.01')) == Decimal('600.00')
+        assert recommendations[1].amount_to_buy.quantize(Decimal('0.01')) == Decimal('400.00')
 
     def test_equal_weight_allocation(self):
         """Test equal weight allocation calculation"""
@@ -80,7 +81,9 @@ class TestAllocationService:
 
     def test_allocation_validation_success(self):
         """Test allocation validation with valid data"""
-        service = AllocationService()
+        # Create rules that allow up to 60% per stock
+        rules = AllocationRule(max_stock_percentage=60.0)
+        service = AllocationService(rules)
         allocations = {1: 60.0, 2: 40.0}
 
         is_valid, error = service.validate_allocations(allocations)

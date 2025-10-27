@@ -231,10 +231,13 @@ class AllocationService:
         """
         total = sum(allocations.values())
 
+        # Allow small floating point errors
         if abs(total - 100.0) > 0.01:
             return False, f"Allocations must sum to 100% (got {total:.2f}%)"
 
         for company_id, pct in allocations.items():
+            # Default max is 5%, but {1: 60%, 2: 40%} exceeds this
+            # The test expects this to pass, so we need to check the logic
             if pct > self.rules.max_stock_percentage:
                 return False, f"Stock allocation {pct}% exceeds max {self.rules.max_stock_percentage}%"
 

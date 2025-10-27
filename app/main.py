@@ -2,22 +2,33 @@ from flask import Flask, render_template, request, jsonify
 import logging
 import os
 from datetime import datetime
+from app.cache import cache
 
 def create_app(config_name=None):
     app = Flask(__name__,
                 template_folder='../templates',
                 static_folder='../static')
-    
+
     # Load configuration from config.py
     from config import config
-    
+
     # Determine config name from environment or parameter
     if config_name is None:
         config_name = os.environ.get('FLASK_ENV', 'development')
-    
+
     # Load the appropriate configuration
     app.config.from_object(config.get(config_name, config['development']))
-    
+
+    # Configure caching (SimpleCache for single-user homeserver)
+    app.config.update(
+        CACHE_TYPE='SimpleCache',  # In-memory cache, perfect for single user
+        CACHE_DEFAULT_TIMEOUT=900,  # 15 minutes default
+        CACHE_KEY_PREFIX='portfolio_'
+    )
+
+    # Initialize cache with app
+    cache.init_app(app)
+
     # Override with additional settings for development
     if config_name == 'development':
         app.config.update(

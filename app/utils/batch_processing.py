@@ -16,6 +16,10 @@ from app.exceptions import PriceFetchError, DatabaseError
 
 logger = logging.getLogger(__name__)
 
+# Threshold for async processing - use threads only for batches >= this size
+# For single-user homeserver, small batches are faster with synchronous processing
+ASYNC_THRESHOLD = 20
+
 # This list is just a reference. Actual ISINs will come from the database or user input
 ISIN_LIST = [
     'US88579Y1010',  # MMM
@@ -196,56 +200,124 @@ def start_csv_processing_job(account_id: int, file_content: str) -> str:
 def _run_batch_job(app, job_id: str, identifiers: List[str]):
     """
     The main logic for the background batch processing job.
-    Manages a thread pool and reports progress.
+
+    Smart execution: Uses sync processing for small batches (< ASYNC_THRESHOLD),
+    async threading for large batches. This optimizes performance for single-user
+    homeserver by avoiding thread overhead for small jobs.
     """
     with app.app_context():
         total_items = len(identifiers)
-        processed_count = 0
-        success_count = 0
-        failure_count = 0
-        failed_identifiers = []  # Track which identifiers failed
 
-        last_update_time = time.time()
+        # Decide execution mode based on batch size
+        use_async = total_items >= ASYNC_THRESHOLD
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_identifier = {executor.submit(
-                _process_single_identifier, i): i for i in identifiers}
+        if use_async:
+            logger.info(f"Processing {total_items} identifiers ASYNC (>= {ASYNC_THRESHOLD})")
+            _run_batch_async(job_id, identifiers, total_items)
+        else:
+            logger.info(f"Processing {total_items} identifiers SYNC (< {ASYNC_THRESHOLD})")
+            _run_batch_sync(job_id, identifiers, total_items)
 
-            for future in as_completed(future_to_identifier):
-                result = future.result()
-                identifier = future_to_identifier[future]  # Get the original identifier
 
-                if result.get('status') == 'success':
-                    success_count += 1
-                else:
-                    failure_count += 1
-                    # Collect failure details for user feedback
-                    failed_identifiers.append({
-                        'identifier': identifier,
-                        'error': result.get('error', 'Unknown error')
-                    })
+def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
+    """
+    Process identifiers synchronously (simple loop).
+    Faster for small batches due to no thread overhead.
+    """
+    processed_count = 0
+    success_count = 0
+    failure_count = 0
+    failed_identifiers = []
 
-                processed_count += 1
+    last_update_time = time.time()
 
-                # Batch progress updates to avoid excessive DB writes
-                current_time = time.time()
-                if current_time - last_update_time > 2:  # Update every 2 seconds
-                    _update_job_progress_background(job_id, processed_count)
-                    last_update_time = current_time
+    for identifier in identifiers:
+        result = _process_single_identifier(identifier)
 
-        # Final update with summary including failed identifiers
-        summary = {
-            'total': total_items,
-            'success_count': success_count,
-            'failure_count': failure_count,
-            'failed': failed_identifiers,  # New: list of failed identifiers with errors
-            'completion_time': datetime.now().isoformat()
-        }
-        _update_job_final_background(job_id, total_items, json.dumps(summary))
-        logger.info(
-            f"Batch job {job_id} complete. Success: {success_count}, Failed: {failure_count}")
-        if failed_identifiers:
-            logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
+        if result.get('status') == 'success':
+            success_count += 1
+        else:
+            failure_count += 1
+            failed_identifiers.append({
+                'identifier': identifier,
+                'error': result.get('error', 'Unknown error')
+            })
+
+        processed_count += 1
+
+        # Batch progress updates to avoid excessive DB writes
+        current_time = time.time()
+        if current_time - last_update_time > 2:  # Update every 2 seconds
+            _update_job_progress_background(job_id, processed_count)
+            last_update_time = current_time
+
+    # Final update
+    summary = {
+        'total': total_items,
+        'success_count': success_count,
+        'failure_count': failure_count,
+        'failed': failed_identifiers,
+        'execution_mode': 'synchronous',
+        'completion_time': datetime.now().isoformat()
+    }
+    _update_job_final_background(job_id, total_items, json.dumps(summary))
+    logger.info(
+        f"Batch job {job_id} complete (SYNC). Success: {success_count}, Failed: {failure_count}")
+    if failed_identifiers:
+        logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
+
+
+def _run_batch_async(job_id: str, identifiers: List[str], total_items: int):
+    """
+    Process identifiers asynchronously (ThreadPoolExecutor).
+    More efficient for large batches with parallel execution.
+    """
+    processed_count = 0
+    success_count = 0
+    failure_count = 0
+    failed_identifiers = []
+
+    last_update_time = time.time()
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_identifier = {executor.submit(
+            _process_single_identifier, i): i for i in identifiers}
+
+        for future in as_completed(future_to_identifier):
+            result = future.result()
+            identifier = future_to_identifier[future]
+
+            if result.get('status') == 'success':
+                success_count += 1
+            else:
+                failure_count += 1
+                failed_identifiers.append({
+                    'identifier': identifier,
+                    'error': result.get('error', 'Unknown error')
+                })
+
+            processed_count += 1
+
+            # Batch progress updates to avoid excessive DB writes
+            current_time = time.time()
+            if current_time - last_update_time > 2:  # Update every 2 seconds
+                _update_job_progress_background(job_id, processed_count)
+                last_update_time = current_time
+
+    # Final update
+    summary = {
+        'total': total_items,
+        'success_count': success_count,
+        'failure_count': failure_count,
+        'failed': failed_identifiers,
+        'execution_mode': 'asynchronous',
+        'completion_time': datetime.now().isoformat()
+    }
+    _update_job_final_background(job_id, total_items, json.dumps(summary))
+    logger.info(
+        f"Batch job {job_id} complete (ASYNC). Success: {success_count}, Failed: {failure_count}")
+    if failed_identifiers:
+        logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
 
 
 def _update_job_progress_background(job_id: str, progress: int):

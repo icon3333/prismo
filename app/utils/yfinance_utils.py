@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 import warnings
 from app.exceptions import PriceFetchError
+from app.cache import cache
 
 # Suppress specific yfinance warnings
 warnings.filterwarnings("ignore", message="^[Tt]he 'period'")
@@ -13,8 +14,16 @@ logger = logging.getLogger(__name__)
 # --- Helper Functions ---
 
 
+@cache.memoize(timeout=3600)  # Cache for 1 hour - exchange rates change infrequently
 def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
-    """Fetch the exchange rate between two currencies."""
+    """
+    Fetch the exchange rate between two currencies.
+
+    Cached for 1 hour to reduce API calls. Exchange rates don't change frequently
+    enough to require real-time updates for a homeserver portfolio app.
+    """
+    logger.info(f"Fetching exchange rate (not cached): {from_currency} → {to_currency}")
+
     if from_currency == to_currency:
         return 1.0
 
@@ -118,16 +127,20 @@ def _is_likely_crypto(identifier: str) -> bool:
 # --- Main Data Fetching Function ---
 
 
+@cache.memoize(timeout=900)  # Cache for 15 minutes - good balance for stock prices
 def get_isin_data(identifier: str) -> Dict[str, Any]:
     """
     Get stock/crypto data using fallback pattern instead of pre-normalization.
-    
+
     Uses the new fallback approach: try original identifier first, then crypto format
     if rules suggest it. This replaces the expensive dual-testing during normalization.
+
+    Cached for 15 minutes to significantly reduce API calls while keeping prices
+    reasonably fresh for a homeserver portfolio app.
     """
     from .identifier_normalization import fetch_price_with_crypto_fallback
-    
-    logger.info(f"Fetching data with fallback for identifier: {identifier}")
+
+    logger.info(f"Fetching data (not cached) with fallback for identifier: {identifier}")
 
     # Use the new fallback pattern
     data = fetch_price_with_crypto_fallback(identifier)
@@ -248,8 +261,14 @@ def _fetch_yfinance_data(identifier: str) -> Optional[Dict[str, Any]]:
 # --- Other Utility Functions (can be expanded) ---
 
 
+@cache.memoize(timeout=900)  # Cache for 15 minutes
 def get_yfinance_info(identifier: str) -> Dict[str, Any]:
-    """Simple wrapper to get the full info dictionary from yfinance."""
+    """
+    Simple wrapper to get the full info dictionary from yfinance.
+
+    Cached for 15 minutes to reduce API load.
+    """
+    logger.info(f"Fetching yfinance info (not cached) for: {identifier}")
     try:
         ticker = yf.Ticker(identifier)
         return ticker.info

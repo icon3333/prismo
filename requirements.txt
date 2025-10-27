@@ -1,6 +1,7 @@
 # Flask and core dependencies
 Flask
 Werkzeug
+Flask-Caching
 
 # Data processing
 pandas
@@ -15,3 +16,8 @@ gunicorn
 
 # Utilities
 python-dotenv
+
+# Testing (development)
+pytest
+pytest-cov
+pytest-flask

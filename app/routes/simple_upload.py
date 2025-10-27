@@ -5,12 +5,15 @@ Uses background threads with database-based progress tracking for real-time upda
 
 import logging
 import threading
-from flask import request, session, jsonify, flash, redirect, url_for, current_app
+from flask import request, session, jsonify, flash, redirect, url_for, current_app, g
 from app.utils.csv_import_simple import validate_csv_format
 from app.utils.batch_processing import start_csv_processing_job
+from app.decorators import require_auth
+from app.utils.response_helpers import success_response, error_response, not_found_response, validation_error_response
 
 logger = logging.getLogger(__name__)
 
+@require_auth
 def get_simple_upload_progress():
     """
     Get or clear real-time progress for background upload using database tracking.
@@ -84,42 +87,28 @@ def get_simple_upload_progress():
         
     except Exception as e:
         logger.error(f"Error handling simple upload progress: {e}")
-        return jsonify({
-            'current': 0,
-            'total': 0,
-            'percentage': 0,
-            'message': 'Error handling progress',
-            'status': 'error'
-        }), 500
+        return error_response('Error handling progress', 500)
 
+@require_auth
 def upload_csv_simple():
     """
     Background CSV upload endpoint with real-time progress tracking.
     Starts background processing and returns immediately with job_id.
     """
-    logger.info(f"Background CSV upload request - account_id: {session.get('account_id')}")
-    
+    account_id = g.account_id
+    logger.info(f"Background CSV upload request - account_id: {account_id}")
+
     # Determine if this is an AJAX request
     accept_header = request.headers.get('Accept', '')
-    is_ajax = ('application/json' in accept_header or 
+    is_ajax = ('application/json' in accept_header or
                request.headers.get('X-Requested-With') == 'XMLHttpRequest')
-    
-    # Authentication check
-    if 'account_id' not in session:
-        logger.warning("CSV upload failed - no account_id in session")
-        if is_ajax:
-            return jsonify({'success': False, 'message': 'Please select an account first'}), 401
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('portfolio.enrich'))
-
-    account_id = session['account_id']
     logger.info(f"Processing CSV upload for account_id: {account_id}")
 
     # File validation
     if 'csv_file' not in request.files:
         logger.warning("CSV upload failed - no csv_file in request.files")
         if is_ajax:
-            return jsonify({'success': False, 'message': 'No file uploaded'}), 400
+            return error_response('No file uploaded', 400)
         flash('No file uploaded', 'error')
         return redirect(url_for('portfolio.enrich'))
 
@@ -129,7 +118,7 @@ def upload_csv_simple():
     if file.filename == '':
         logger.warning("CSV upload failed - empty filename")
         if is_ajax:
-            return jsonify({'success': False, 'message': 'No file selected'}), 400
+            return error_response('No file selected', 400)
         flash('No file selected', 'error')
         return redirect(url_for('portfolio.enrich'))
 
@@ -143,7 +132,7 @@ def upload_csv_simple():
         if not valid:
             logger.warning(f"CSV validation failed: {validation_message}")
             if is_ajax:
-                return jsonify({'success': False, 'message': validation_message}), 400
+                return validation_error_response('csv_file', validation_message)
             flash(validation_message, 'error')
             return redirect(url_for('portfolio.enrich'))
         
@@ -162,20 +151,18 @@ def upload_csv_simple():
             
             # Return immediate response with job_id
             if is_ajax:
-                return jsonify({
-                    'success': True, 
-                    'message': 'Upload started successfully',
-                    'job_id': job_id,
-                    'redirect': url_for('portfolio.enrich')
-                })
+                return success_response(
+                    data={'job_id': job_id, 'redirect': url_for('portfolio.enrich')},
+                    message='Upload started successfully'
+                )
             flash('Upload started successfully. Please wait for completion.', 'info')
             return redirect(url_for('portfolio.enrich'))
-                
+
         except Exception as e:
             error_msg = f"Failed to start CSV processing: {str(e)}"
             logger.error(error_msg, exc_info=True)
             if is_ajax:
-                return jsonify({'success': False, 'message': error_msg}), 500
+                return error_response(error_msg, 500)
             flash(error_msg, 'error')
             return redirect(url_for('portfolio.enrich'))
             
@@ -183,14 +170,14 @@ def upload_csv_simple():
         error_msg = "File encoding error. Please save your CSV as UTF-8."
         logger.error(error_msg)
         if is_ajax:
-            return jsonify({'success': False, 'message': error_msg}), 400
+            return error_response(error_msg, 400)
         flash(error_msg, 'error')
         return redirect(url_for('portfolio.enrich'))
-        
+
     except Exception as e:
         error_msg = f"Upload failed: {str(e)}"
         logger.error(f"Unexpected error during CSV upload: {e}", exc_info=True)
         if is_ajax:
-            return jsonify({'success': False, 'message': error_msg}), 500
+            return error_response(error_msg, 500)
         flash(error_msg, 'error')
         return redirect(url_for('portfolio.enrich'))

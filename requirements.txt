@@ -16,8 +16,3 @@ gunicorn
 
 # Utilities
 python-dotenv
-
-# Testing (development)
-pytest
-pytest-cov
-pytest-flask

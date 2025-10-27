@@ -140,53 +140,66 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
     """
     from .identifier_normalization import fetch_price_with_crypto_fallback
 
-    logger.info(f"Fetching data (not cached) with fallback for identifier: {identifier}")
+    logger.info(f"📥 get_isin_data called for: {identifier}")
 
-    # Use the new fallback pattern
-    data = fetch_price_with_crypto_fallback(identifier)
-    
-    if not data:
-        logger.error(f"Failed to fetch data for identifier '{identifier}' with fallback")
-        return {'success': False, 'error': f"Could not find data for identifier {identifier}."}
+    try:
+        # Use the new fallback pattern
+        data = fetch_price_with_crypto_fallback(identifier)
 
-    # Get the effective identifier used (original or crypto format)
-    effective_identifier = data.get('effective_identifier', identifier)
-    
-    # Set crypto-specific fields if identifier ends with -USD (crypto format)
-    if effective_identifier.endswith('-USD'):
-        data['country'] = 'N/A'
-        logger.info(f"Using crypto identifier: {effective_identifier}")
+        if not data:
+            error_msg = f"Cascade returned empty data for identifier {identifier}"
+            logger.error(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
 
-    # --- Post-processing and Currency Conversion ---
+        logger.debug(f"Cascade returned data keys: {list(data.keys())}")
 
-    price = data.get('price')
-    currency = data.get('currency', 'USD')
+        # Get the effective identifier used (original or crypto format)
+        effective_identifier = data.get('effective_identifier', identifier)
 
-    # Convert price to EUR if not already
-    if price is not None and currency != 'EUR':
-        exchange_rate = get_exchange_rate(currency, "EUR")
-        data['priceEUR'] = price * exchange_rate
-        logger.info(
-            f"Converted {price:.2f} {currency} to {data['priceEUR']:.2f} EUR (rate: {exchange_rate})")
-    elif price is not None:
-        data['priceEUR'] = price  # Already in EUR
+        # Set crypto-specific fields if identifier ends with -USD (crypto format)
+        if effective_identifier.endswith('-USD'):
+            data['country'] = 'N/A'
+            logger.info(f"Using crypto identifier: {effective_identifier}")
 
-    return {
-        'success': True,
-        'data': {
-            'currentPrice': data.get('price'),
-            'priceEUR': data.get('priceEUR'),
-            'currency': currency,
-            'country': data.get('country')
-        },
-        'modified_identifier': effective_identifier
-    }
+        # --- Post-processing and Currency Conversion ---
+
+        price = data.get('price')
+        currency = data.get('currency', 'USD')
+
+        # Convert price to EUR if not already
+        if price is not None and currency != 'EUR':
+            exchange_rate = get_exchange_rate(currency, "EUR")
+            data['priceEUR'] = price * exchange_rate
+            logger.info(
+                f"Converted {price:.2f} {currency} to {data['priceEUR']:.2f} EUR (rate: {exchange_rate})")
+        elif price is not None:
+            data['priceEUR'] = price  # Already in EUR
+
+        return {
+            'success': True,
+            'data': {
+                'currentPrice': data.get('price'),
+                'priceEUR': data.get('priceEUR'),
+                'currency': currency,
+                'country': data.get('country')
+            },
+            'modified_identifier': effective_identifier
+        }
+
+    except Exception as e:
+        error_msg = f"Exception in get_isin_data for {identifier}: {str(e)}"
+        logger.exception(error_msg)
+        return {'success': False, 'error': error_msg}
 
 
 def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
     """
-    Robust yfinance data fetching using the exact same pattern as the working script.
-    Handles yfinance session/cookie bugs by mimicking the working script's approach.
+    Simplified yfinance data fetching matching the working Colab script pattern.
+
+    Matches behavior from working script:
+    - Direct access to ticker.info (no aggressive exception handling)
+    - Multiple price field fallbacks (regularMarketPrice, currentPrice, previousClose)
+    - Clear logging showing which field was used
     """
     # Pre-validate ISIN format if it looks like an ISIN (12 chars)
     if len(identifier) == 12:
@@ -198,47 +211,58 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
             return None
 
     try:
-        # The working script shows this pattern works - follow it exactly
+        # Create ticker object (matches working script)
         ticker = yf.Ticker(identifier)
 
-        # The working script uses this exact pattern for error handling
-        try:
-            info = ticker.info
-        except (KeyError, ValueError, TypeError) as e:
-            # Expected data issues
-            logger.warning(f"Data error fetching ticker info for {identifier}: {e.__class__.__name__}: {e}")
-            info = {}
-        except Exception as e:
-            # Unexpected errors - still catch but log differently
-            logger.warning(f"Unexpected error fetching ticker info for {identifier}: {e.__class__.__name__}: {e}")
-            info = {}
+        # Access info directly like working script - no inner try/except
+        # Let exceptions propagate to outer handler
+        info = ticker.info
 
-        # The working script checks for empty info like this
-        if not info:
-            logger.debug(f"Empty info dictionary for '{identifier}'")
+        # Validate we got meaningful data
+        if not info or not isinstance(info, dict):
+            logger.debug(f"Empty or invalid info for '{identifier}'")
             return None
 
-        # The working script validates price data this way
-        price = info.get('regularMarketPrice') or info.get('currentPrice')
+        logger.debug(f"Got info for {identifier} with {len(info)} fields")
 
-        # The working script only proceeds if price exists
+        # Try multiple price fields (matches working script availability)
+        # Working script shows currentPrice and previousClose are available
+        regularMarketPrice = info.get('regularMarketPrice')
+        currentPrice = info.get('currentPrice')
+        previousClose = info.get('previousClose')
+
+        # Cascade through available price fields
+        price = regularMarketPrice or currentPrice or previousClose
+
+        # Log which field was used (helpful for debugging)
         if price is not None:
+            if regularMarketPrice:
+                source = 'regularMarketPrice'
+            elif currentPrice:
+                source = 'currentPrice'
+            else:
+                source = 'previousClose'
+
+            logger.info(f"✓ Found price for {identifier}: {price} (from {source})")
+
             return {
                 'price': price,
                 'currency': info.get('currency'),
                 'country': info.get('country'),
             }
         else:
-            logger.debug(f"No valid price found for '{identifier}'")
+            logger.debug(
+                f"No price available for '{identifier}' - "
+                f"regularMarketPrice={regularMarketPrice}, "
+                f"currentPrice={currentPrice}, "
+                f"previousClose={previousClose}"
+            )
             return None
 
     except ValueError as e:
-        # ISIN validation errors from yfinance - expected for invalid ISINs
+        # ISIN validation errors from yfinance
         if "Invalid ISIN" in str(e):
-            logger.warning(
-                f"yfinance rejected identifier '{identifier}': {e}. "
-                f"This may be an invalid ISIN checksum or unrecognized identifier."
-            )
+            logger.warning(f"yfinance rejected identifier '{identifier}': {e}")
         else:
             logger.warning(f"Validation error for '{identifier}': {e}")
         return None
@@ -247,7 +271,7 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
         logger.warning(f"Network error for '{identifier}': {e.__class__.__name__}: {e}")
         return None
     except Exception as e:
-        # Truly unexpected errors - log with traceback for debugging
+        # Unexpected errors - log with traceback for debugging
         logger.exception(f"Unexpected error in yfinance lookup for '{identifier}'")
         return None
 
@@ -291,3 +315,31 @@ def get_historical_prices(identifiers, years=5):
         return None
 
 # (Add other historical data functions as needed)
+
+
+# --- Cache Management Utilities ---
+
+def clear_identifier_cache(identifier: str = None):
+    """
+    Clear cached price data for specific identifier or entire cache.
+
+    Useful for testing and debugging when an identifier's cached failure
+    prevents retrying after code fixes.
+
+    Args:
+        identifier: If provided, clear cache for this identifier only.
+                   If None, clear entire cache.
+
+    Example:
+        clear_identifier_cache("TNK")  # Clear TNK's cache
+        clear_identifier_cache()       # Clear all price caches
+    """
+    if identifier:
+        # Clear specific identifier from both caches
+        cache.delete_memoized(get_isin_data, identifier)
+        cache.delete_memoized(get_yfinance_info, identifier)
+        logger.info(f"✓ Cleared cache for identifier: {identifier}")
+    else:
+        # Clear entire cache (use sparingly)
+        cache.clear()
+        logger.info(f"✓ Cleared entire price cache")

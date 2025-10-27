@@ -1,8 +1,9 @@
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    request, flash, session, jsonify, current_app, send_file
+    request, flash, session, jsonify, current_app, send_file, g
 )
 from app.db_manager import query_db, execute_db, backup_database, get_db
+from app.decorators import require_auth
 
 import sqlite3
 import logging
@@ -17,16 +18,11 @@ account_bp = Blueprint('account', __name__)
 
 
 @account_bp.route('/')
+@require_auth
 def index():
     """Account management page"""
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
+    account_id = g.account_id
+    account = g.account
 
     # Get all accounts for the account switcher
     all_accounts = query_db(
@@ -89,13 +85,10 @@ def create_account():
 
 
 @account_bp.route('/update', methods=['POST'])
+@require_auth
 def update_account():
     """Update account username"""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     new_username = request.form.get('new_username', '').strip()
 
     if not new_username:
@@ -128,13 +121,10 @@ def update_account():
 
 
 @account_bp.route('/reset-settings', methods=['POST'])
+@require_auth
 def reset_account_settings():
     """Reset all saved settings for the current account."""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
 
     try:
         # Create backup before making changes
@@ -152,13 +142,10 @@ def reset_account_settings():
 
 
 @account_bp.route('/delete', methods=['POST'])
+@require_auth
 def delete_account():
     """Delete an account and all associated data"""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     confirmation = request.form.get('confirmation', '')
 
     if confirmation != 'DELETE':
@@ -270,13 +257,10 @@ def delete_account():
 
 
 @account_bp.route('/delete-stocks-crypto', methods=['POST'])
+@require_auth
 def delete_stocks_crypto():
     """Delete all stocks and crypto data for the current account"""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
 
     try:
         # Create backup before making changes
@@ -336,13 +320,10 @@ def delete_stocks_crypto():
 
 
 @account_bp.route('/export')
+@require_auth
 def export_data():
     """Export all account data as JSON file"""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     username = session.get('username', 'unknown')
 
     try:
@@ -399,13 +380,10 @@ def export_data():
 
 
 @account_bp.route('/import', methods=['POST'])
+@require_auth
 def import_data():
     """Import account data from JSON file, overwriting existing data"""
-    if 'account_id' not in session:
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
 
     # Check if file was uploaded
     if 'import_file' not in request.files:

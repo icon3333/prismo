@@ -329,3 +329,390 @@ class PortfolioRepository:
             )
 
         return True
+
+    @staticmethod
+    def get_portfolio_allocation_data(
+        account_id: int,
+        portfolio_id: Optional[int] = None
+    ) -> List[Dict]:
+        """
+        Get portfolio data optimized for allocation calculations.
+
+        Returns all necessary data for rebalancing in a single query.
+        Used by AllocationService for rebalancing calculations.
+
+        Args:
+            account_id: Account ID
+            portfolio_id: Optional portfolio ID to filter (None = all portfolios)
+
+        Returns:
+            List of holdings with shares, prices, and portfolio info
+        """
+        logger.debug(f"Fetching allocation data for account {account_id}, portfolio {portfolio_id}")
+
+        query = '''
+            SELECT
+                c.id as company_id,
+                c.name,
+                c.identifier,
+                c.isin,
+                c.category,
+                c.country,
+                p.id as portfolio_id,
+                p.name as portfolio_name,
+                COALESCE(cs.shares, 0) as shares,
+                COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
+                cs.is_manually_edited,
+                cs.purchase_price,
+                cs.purchase_date,
+                mp.price_eur,
+                mp.currency,
+                mp.last_updated as price_updated,
+                (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)) as position_value
+            FROM companies c
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+        '''
+
+        params = [account_id]
+
+        if portfolio_id is not None:
+            query += ' AND p.id = ?'
+            params.append(portfolio_id)
+
+        query += ' ORDER BY p.name, c.name'
+
+        results = query_db(query, params)
+        return results if results else []
+
+    @staticmethod
+    def get_detailed_portfolio_summary(
+        account_id: int,
+        portfolio_id: Optional[int] = None
+    ) -> Dict:
+        """
+        Get detailed portfolio summary with statistics.
+
+        Calculates total value, number of holdings, asset allocation,
+        and country allocation in a single optimized query set.
+
+        Args:
+            account_id: Account ID
+            portfolio_id: Optional portfolio ID (None = all portfolios)
+
+        Returns:
+            Dict with summary statistics
+        """
+        logger.debug(f"Fetching detailed summary for account {account_id}, portfolio {portfolio_id}")
+
+        # Base query for holdings
+        holdings_query = '''
+            SELECT
+                c.id,
+                c.name,
+                c.category,
+                c.country,
+                COALESCE(cs.override_share, cs.shares, 0) as shares,
+                COALESCE(mp.price_eur, 0) as price_eur,
+                (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)) as value
+            FROM companies c
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+        '''
+
+        params = [account_id]
+        if portfolio_id is not None:
+            holdings_query += ' AND p.id = ?'
+            params.append(portfolio_id)
+
+        holdings = query_db(holdings_query, params)
+
+        if not holdings:
+            return {
+                'total_value': 0,
+                'num_holdings': 0,
+                'num_categories': 0,
+                'num_countries': 0,
+                'category_allocation': {},
+                'country_allocation': {}
+            }
+
+        # Calculate aggregations
+        total_value = sum(h['value'] for h in holdings)
+        num_holdings = len(holdings)
+
+        # Category allocation
+        category_allocation = {}
+        for holding in holdings:
+            category = holding['category'] or 'Unknown'
+            category_allocation[category] = category_allocation.get(category, 0) + holding['value']
+
+        # Country allocation
+        country_allocation = {}
+        for holding in holdings:
+            country = holding['country'] or 'Unknown'
+            country_allocation[country] = country_allocation.get(country, 0) + holding['value']
+
+        # Convert to percentages
+        if total_value > 0:
+            category_allocation = {
+                k: (v / total_value * 100)
+                for k, v in category_allocation.items()
+            }
+            country_allocation = {
+                k: (v / total_value * 100)
+                for k, v in country_allocation.items()
+            }
+
+        return {
+            'total_value': total_value,
+            'num_holdings': num_holdings,
+            'num_categories': len(category_allocation),
+            'num_countries': len(country_allocation),
+            'category_allocation': category_allocation,
+            'country_allocation': country_allocation
+        }
+
+    @staticmethod
+    def get_portfolios_list(account_id: int) -> List[Dict]:
+        """
+        Get list of all portfolios for an account.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            List of portfolio dicts with id and name
+        """
+        logger.debug(f"Fetching portfolios list for account {account_id}")
+
+        query = '''
+            SELECT
+                id,
+                name
+            FROM portfolios
+            WHERE account_id = ?
+            ORDER BY name
+        '''
+
+        results = query_db(query, [account_id])
+        return results if results else []
+
+    @staticmethod
+    def get_or_create_portfolio(account_id: int, portfolio_name: str) -> int:
+        """
+        Get portfolio ID by name, create if doesn't exist.
+
+        Args:
+            account_id: Account ID
+            portfolio_name: Portfolio name
+
+        Returns:
+            Portfolio ID
+        """
+        # Try to get existing
+        existing = query_db(
+            'SELECT id FROM portfolios WHERE account_id = ? AND name = ?',
+            [account_id, portfolio_name],
+            one=True
+        )
+
+        if existing:
+            return existing['id']
+
+        # Create new
+        logger.info(f"Creating new portfolio '{portfolio_name}' for account {account_id}")
+
+        result = execute_db(
+            'INSERT INTO portfolios (account_id, name) VALUES (?, ?)',
+            [account_id, portfolio_name]
+        )
+
+        if result and 'lastrowid' in result:
+            return result['lastrowid']
+
+        # Fallback: query again
+        created = query_db(
+            'SELECT id FROM portfolios WHERE account_id = ? AND name = ?',
+            [account_id, portfolio_name],
+            one=True
+        )
+
+        return created['id'] if created else None
+
+    @staticmethod
+    def delete_portfolio(portfolio_id: int, account_id: int) -> bool:
+        """
+        Delete a portfolio and optionally its holdings.
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Account ID (for security)
+
+        Returns:
+            True if successful
+        """
+        logger.warning(f"Deleting portfolio {portfolio_id} for account {account_id}")
+
+        # This will only delete the portfolio, not the companies
+        # Companies will need portfolio_id set to NULL or reassigned
+        execute_db(
+            'DELETE FROM portfolios WHERE id = ? AND account_id = ?',
+            [portfolio_id, account_id]
+        )
+
+        return True
+
+    @staticmethod
+    def rename_portfolio(
+        portfolio_id: int,
+        account_id: int,
+        new_name: str
+    ) -> bool:
+        """
+        Rename a portfolio.
+
+        Args:
+            portfolio_id: Portfolio ID
+            account_id: Account ID (for security)
+            new_name: New portfolio name
+
+        Returns:
+            True if successful
+        """
+        logger.info(f"Renaming portfolio {portfolio_id} to '{new_name}'")
+
+        result = execute_db(
+            'UPDATE portfolios SET name = ? WHERE id = ? AND account_id = ?',
+            [new_name, portfolio_id, account_id]
+        )
+
+        return result is not None and result.get('rowcount', 0) > 0
+
+    @staticmethod
+    def get_portfolio_data_with_enrichment(account_id: int) -> list:
+        """
+        Get enriched portfolio data with all fields needed for the frontend.
+
+        This is an optimized single-query replacement for get_portfolio_data().
+        Returns data in the format expected by the frontend, with computed fields
+        for effective shares, effective country, etc.
+
+        Args:
+            account_id: Account ID
+
+        Returns:
+            List of enriched portfolio items as dicts
+        """
+        logger.debug(f"Fetching enriched portfolio data for account {account_id}")
+
+        # Validate account exists
+        account = query_db('SELECT * FROM accounts WHERE id = ?', [account_id], one=True)
+        if not account:
+            logger.error(f"Account with ID {account_id} not found in database")
+            return []
+
+        # Check if any portfolios exist for this account
+        portfolios = query_db(
+            'SELECT COUNT(*) as count FROM portfolios WHERE account_id = ?',
+            [account_id],
+            one=True
+        )
+        if not portfolios or portfolios['count'] == 0:
+            logger.error(f"No portfolios found for account_id: {account_id}")
+            return []
+
+        # Single optimized query to fetch all data
+        query = '''
+            SELECT
+                c.id,
+                c.name,
+                c.identifier,
+                c.category,
+                c.total_invested,
+                c.override_country,
+                c.country_manually_edited,
+                c.country_manual_edit_date,
+                c.custom_total_value,
+                c.custom_price_eur,
+                c.is_custom_value,
+                c.custom_value_date,
+                p.name as portfolio_name,
+                cs.shares,
+                cs.override_share,
+                cs.manual_edit_date,
+                cs.is_manually_edited,
+                cs.csv_modified_after_edit,
+                mp.price_eur,
+                mp.currency,
+                mp.last_updated,
+                mp.country
+            FROM companies c
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+            ORDER BY p.name, c.name
+        '''
+
+        results = query_db(query, [account_id])
+
+        if not results:
+            logger.warning(f"No portfolio data found for account_id: {account_id}")
+            return []
+
+        # Transform raw database rows into enriched output format
+        portfolio_data = []
+        for row in results:
+            try:
+                # Calculate effective values
+                effective_shares = (
+                    float(row['override_share']) if row.get('override_share') is not None
+                    else (float(row['shares']) if row.get('shares') is not None else 0)
+                )
+
+                effective_country = row.get('override_country') or row.get('country')
+
+                # Format last_updated
+                last_updated = row.get('last_updated')
+                if last_updated and not isinstance(last_updated, str):
+                    last_updated = last_updated.isoformat()
+
+                item = {
+                    'id': row['id'],
+                    'company': row['name'],
+                    'identifier': row['identifier'],
+                    'portfolio': row.get('portfolio_name') or row.get('portfolio') or '',
+                    'category': row['category'],
+                    'shares': float(row['shares']) if row.get('shares') is not None else 0,
+                    'override_share': float(row['override_share']) if row.get('override_share') is not None else None,
+                    'effective_shares': effective_shares,
+                    'manual_edit_date': row.get('manual_edit_date'),
+                    'is_manually_edited': bool(row.get('is_manually_edited', False)),
+                    'csv_modified_after_edit': bool(row.get('csv_modified_after_edit', False)),
+                    'price_eur': float(row['price_eur']) if row.get('price_eur') is not None else None,
+                    'currency': row.get('currency'),
+                    'country': row.get('country'),
+                    'override_country': row.get('override_country'),
+                    'effective_country': effective_country,
+                    'country_manually_edited': bool(row.get('country_manually_edited', False)),
+                    'country_manual_edit_date': row.get('country_manual_edit_date'),
+                    'total_invested': float(row['total_invested']) if row.get('total_invested') is not None else 0,
+                    'last_updated': last_updated,
+                    'custom_total_value': float(row['custom_total_value']) if row.get('custom_total_value') is not None else None,
+                    'custom_price_eur': float(row['custom_price_eur']) if row.get('custom_price_eur') is not None else None,
+                    'is_custom_value': bool(row.get('is_custom_value', False)),
+                    'custom_value_date': row.get('custom_value_date')
+                }
+                portfolio_data.append(item)
+            except Exception as e:
+                logger.error(f"Error processing row: {row}")
+                logger.error(f"Error details: {str(e)}")
+                continue
+
+        logger.info(f"Returning {len(portfolio_data)} portfolio items")
+        return portfolio_data

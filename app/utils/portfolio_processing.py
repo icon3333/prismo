@@ -22,6 +22,10 @@ def process_csv_data(account_id, file_content):
     DEPRECATED: This function uses session-based progress tracking which doesn't work in background threads.
     Use process_csv_data_background() instead, which uses database-based progress tracking.
 
+    This function has been refactored into smaller modules in app/utils/csv_processing/.
+    See: parser.py, company_processor.py, portfolio_handler.py, share_calculator.py,
+    transaction_manager.py, price_updater.py
+
     Process and import CSV data into the database using simple +/- approach.
     """
     logger.warning("DEPRECATED: process_csv_data() called. Use process_csv_data_background() instead.")
@@ -654,6 +658,164 @@ def process_csv_data(account_id, file_content):
             cursor.close()
 
 
+def process_csv_data_refactored(account_id: int, file_content: str, progress_callback=None):
+    """
+    Refactored CSV processing using modular architecture.
+
+    This function uses the new modular csv_processing package for clean,
+    testable CSV import logic.
+
+    Args:
+        account_id: Account ID for this import
+        file_content: Raw CSV file content
+        progress_callback: Optional callback(current, total, message, status)
+
+    Returns:
+        Tuple[bool, str, dict]: (success, message, details)
+    """
+    from app.utils.csv_processing import (
+        parse_csv_file,
+        process_companies,
+        assign_portfolios,
+        calculate_share_changes,
+        apply_share_changes,
+        update_prices_from_csv
+    )
+    from app.utils.csv_processing.portfolio_handler import get_existing_overrides, get_user_edit_data
+    from app.utils.csv_processing.share_calculator import identify_companies_to_remove
+    from app.utils.data_processing import clear_data_caches
+
+    db = None
+    cursor = None
+
+    try:
+        logger.info(f"Starting refactored CSV processing for account_id: {account_id}")
+
+        # CRITICAL: Always create backup before processing
+        logger.info("Creating automatic backup before CSV processing...")
+        backup_database()
+
+        # Step 1: Parse CSV file
+        logger.info("Step 1: Parsing CSV file...")
+        if progress_callback:
+            progress_callback(0, 100, "Parsing CSV file...", "processing")
+
+        df = parse_csv_file(file_content)
+
+        # Step 2: Get database connection
+        db = get_db()
+        cursor = db.cursor()
+
+        # Step 3: Process companies and calculate positions
+        logger.info("Step 2: Processing company records...")
+        if progress_callback:
+            progress_callback(10, 100, "Processing company records...", "processing")
+
+        existing_company_map, company_positions = process_companies(df, account_id, cursor)
+
+        # Step 4: Get/create portfolios
+        logger.info("Step 3: Setting up portfolios...")
+        if progress_callback:
+            progress_callback(20, 100, "Setting up portfolios...", "processing")
+
+        default_portfolio_id = assign_portfolios(account_id, cursor)
+        override_map = get_existing_overrides(account_id)
+        user_edit_map = get_user_edit_data(account_id)
+
+        # Step 5: Calculate share changes
+        logger.info("Step 4: Calculating share changes...")
+        if progress_callback:
+            progress_callback(30, 100, "Calculating share changes...", "processing")
+
+        share_calculations = calculate_share_changes(df, company_positions, user_edit_map)
+
+        # Step 6: Identify companies to remove
+        csv_company_names = set(df['holdingname'])
+        db_company_names = {company['name'] for company in existing_company_map.values()}
+        companies_to_remove = identify_companies_to_remove(
+            csv_company_names, db_company_names, company_positions
+        )
+
+        # Step 7: Apply changes in transaction
+        logger.info("Step 5: Applying database changes...")
+        if progress_callback:
+            progress_callback(40, 100, "Applying database changes...", "processing")
+
+        results = apply_share_changes(
+            account_id=account_id,
+            company_positions=company_positions,
+            share_calculations=share_calculations,
+            existing_company_map=existing_company_map,
+            override_map=override_map,
+            default_portfolio_id=default_portfolio_id,
+            companies_to_remove=companies_to_remove,
+            cursor=cursor,
+            progress_callback=progress_callback
+        )
+
+        # Commit changes
+        db.commit()
+        clear_data_caches()
+
+        logger.info(
+            f"Database commit completed - added: {len(results['added'])}, "
+            f"updated: {len(results['updated'])}, removed: {len(results['removed'])}"
+        )
+
+        # Step 8: Update prices
+        logger.info("Step 6: Updating prices from external APIs...")
+        if progress_callback:
+            progress_callback(80, 100, "Starting price updates...", "processing")
+
+        positions_for_price_update = results['added'] + results['updated']
+        failed_prices = update_prices_from_csv(
+            account_id, positions_for_price_update, progress_callback
+        )
+
+        # Final completion
+        if progress_callback:
+            progress_callback(100, 100, "CSV import completed successfully!", "completed")
+
+        # Build result message
+        message = "CSV data imported successfully with simple add/subtract calculation"
+        if results['removed']:
+            removed_details = ', '.join(results['removed'])
+            if len(removed_details) > 100:
+                removed_details = removed_details[:97] + '...'
+            message += (
+                f". <strong>Removed {len(results['removed'])} companies</strong> "
+                f"that had zero shares or were not in the CSV: {removed_details}"
+            )
+
+        return True, message, {
+            'added': results['added'],
+            'updated': results['updated'],
+            'removed': results['removed'],
+            'failed_prices': failed_prices,
+        }
+
+    except ValueError as e:
+        # Validation errors from parsing
+        logger.error(f"Validation error in CSV: {str(e)}")
+        if progress_callback:
+            progress_callback(0, 1, f"Validation error: {str(e)}", "failed")
+        if db:
+            db.rollback()
+        return False, str(e), {}
+
+    except Exception as e:
+        logger.error(f"Error processing CSV: {str(e)}", exc_info=True)
+        if progress_callback:
+            progress_callback(0, 1, f"Error: {str(e)}", "failed")
+        if db:
+            db.rollback()
+        return False, str(e), {}
+
+    finally:
+        if cursor:
+            cursor.close()
+
+
 def update_csv_progress_background(job_id: str, current: int, total: int, message: str = "Processing...", status: str = "processing"):
     """Update CSV upload progress in database for background jobs"""
     percentage = int((current / total) * 100) if total > 0 else 0
@@ -686,46 +848,75 @@ def update_csv_progress_background(job_id: str, current: int, total: int, messag
         logger.warning(f"Failed to update background progress for job {job_id}: {e}", exc_info=True)
 
 
-def process_csv_data_background(account_id: int, file_content: str, job_id: str):
+def process_csv_data_background(account_id: int, file_content: str, job_id: str, use_refactored: bool = False):
     """
     Process CSV data in background thread using database-based progress tracking.
     This version doesn't use Flask session which isn't available in background threads.
+
+    Args:
+        account_id: Account ID for this import
+        file_content: Raw CSV file content
+        job_id: Background job ID for progress tracking
+        use_refactored: If True, use new modular csv_processing package (default: False for backward compatibility)
+
+    Returns:
+        Tuple[bool, str, dict]: (success, message, details)
     """
     logger.info(f"DEBUG: process_csv_data_background starting - account_id: {account_id}, job_id: {job_id}")
     logger.info(f"DEBUG: File content length: {len(file_content)} characters")
-    
-    # CRITICAL: Always create backup before processing [[memory:7528819]]
-    logger.info("Creating automatic backup before CSV processing...")
-    backup_database()
-        
+    logger.info(f"DEBUG: Using {'REFACTORED' if use_refactored else 'LEGACY'} CSV processing")
+
     # Create a progress function that updates the database
     def background_progress_wrapper(current, total, message="Processing...", status="processing"):
         logger.info(f"DEBUG: Background wrapper called with current={current}, total={total}, message='{message}', status='{status}'")
-        
+
         # First update the progress - this ensures users see progress even if job gets cancelled
         update_csv_progress_background(job_id, current, total, message, status)
-        
+
         # THEN check if job was cancelled (after progress is recorded)
         from app.utils.batch_processing import get_job_status
         job_status = get_job_status(job_id)
         if job_status.get('status') == 'cancelled':
             logger.info(f"DEBUG: Job {job_id} was cancelled, stopping processing")
             raise KeyboardInterrupt("Upload cancelled by user")
-    
-    # Import the simple CSV import function and inject our progress function
-    from app.utils.csv_import_simple import import_csv_simple
-    
-    # Temporarily replace the global update_csv_progress function in the simple import module
-    import app.utils.csv_import_simple as csv_module
-    original_update_csv_progress = getattr(csv_module, 'update_csv_progress', None)
-    
-    # Inject our background progress function
-    csv_module.update_csv_progress = background_progress_wrapper
-    
+
     try:
-        # Call the simple CSV import which now uses our background progress tracking
-        success, message = import_csv_simple(account_id, file_content)
-        return success, message, {}
+        if use_refactored:
+            # Use new refactored modular CSV processing
+            logger.info("Using refactored modular CSV processing")
+            success, message, details = process_csv_data_refactored(
+                account_id, file_content, background_progress_wrapper
+            )
+            return success, message, details
+        else:
+            # Use legacy simple CSV import for backward compatibility
+            logger.info("Using legacy CSV processing (csv_import_simple)")
+
+            # Import the simple CSV import function and inject our progress function
+            from app.utils.csv_import_simple import import_csv_simple
+
+            # Temporarily replace the global update_csv_progress function in the simple import module
+            import app.utils.csv_import_simple as csv_module
+            original_update_csv_progress = getattr(csv_module, 'update_csv_progress', None)
+
+            # Inject our background progress function
+            csv_module.update_csv_progress = background_progress_wrapper
+
+            try:
+                # CRITICAL: Always create backup before processing [[memory:7528819]]
+                logger.info("Creating automatic backup before CSV processing...")
+                backup_database()
+
+                # Call the simple CSV import which now uses our background progress tracking
+                success, message = import_csv_simple(account_id, file_content)
+                return success, message, {}
+            finally:
+                # Restore the original function if it existed
+                if original_update_csv_progress:
+                    csv_module.update_csv_progress = original_update_csv_progress
+                elif hasattr(csv_module, 'update_csv_progress'):
+                    delattr(csv_module, 'update_csv_progress')
+
     except KeyboardInterrupt as e:
         logger.info(f"CSV processing cancelled for job {job_id}: {str(e)}")
         # For cancelled jobs, update the final status to show it was cancelled
@@ -735,9 +926,3 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str)
         logger.error(f"Error processing CSV in background: {str(e)}", exc_info=True)
         update_csv_progress_background(job_id, 0, 1, f"Error: {str(e)}", "failed")
         return False, str(e), {}
-    finally:
-        # Restore the original function if it existed
-        if original_update_csv_progress:
-            csv_module.update_csv_progress = original_update_csv_progress
-        elif hasattr(csv_module, 'update_csv_progress'):
-            delattr(csv_module, 'update_csv_progress')

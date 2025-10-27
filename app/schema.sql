@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS companies (
  override_country TEXT,
  country_manually_edited BOOLEAN DEFAULT 0,
  country_manual_edit_date DATETIME,
+ custom_total_value REAL,
+ custom_price_eur REAL,
+ is_custom_value BOOLEAN DEFAULT 0,
+ custom_value_date DATETIME,
  FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
  FOREIGN KEY (account_id) REFERENCES accounts (id),
  UNIQUE (account_id, name)

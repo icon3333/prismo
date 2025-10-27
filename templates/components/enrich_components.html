@@ -229,29 +229,8 @@
 
     /* Note: Column width styling moved to custom.css unified system */
 
-    /* Centralized styling for user-edited fields (shares and country) */
-    .user-edited-field,
-    .shares-user-edited,
-    .country-user-edited {
-        color: #ff7f00 !important;
-        /* Orange color for user-edited fields */
-        font-weight: 600;
-    }
-
-    /* Centralized styling for CSV-modified fields after user edit */
-    .csv-modified-field,
-    .shares-csv-modified {
-        color: #dc3545 !important;
-        /* Red color for CSV-modified after user edit */
-        font-weight: 600;
-    }
-
-    /* Centralized styling for error/missing data */
-    .error-field,
-    .has-text-danger {
-        color: #dc3545 !important;
-        /* Red color for missing/error states */
-    }
+    /* Note: User-edited field styling moved to custom.css for centralization */
+    /* Keeping only enrich-specific styling here */
 
     /* Progress bar container positioning - visually under buttons but structurally outside Vue */
     .progress-bar-container {
@@ -901,7 +880,23 @@
                                            }" :title="getSharesTitle(item)">
                                 </td>
                                 <td class="col-currency">
-                                    <span v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
+                                    <!-- If price exists, show calculated value -->
+                                    <span v-if="item.price_eur" v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
+                                    <!-- If no price but custom value exists, show it with styling -->
+                                    <input v-else-if="item.is_custom_value && item.custom_total_value"
+                                           class="input is-small user-edited-field total-value-user-edited"
+                                           type="text"
+                                           :value="formatCurrency(item.custom_total_value)"
+                                           @blur="(e) => saveTotalValueChange(item, e.target.value)"
+                                           title="Custom total value - manually entered">
+                                    <!-- If no price and no custom value, show editable input -->
+                                    <input v-else
+                                           class="input is-small"
+                                           type="text"
+                                           value="€0.00"
+                                           @blur="(e) => saveTotalValueChange(item, e.target.value)"
+                                           placeholder="Enter value"
+                                           title="No price available - enter total value manually">
                                 </td>
                                 <td class="col-currency">
                                     <span v-text="formatCurrency(item.total_invested)"></span>

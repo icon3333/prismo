@@ -17,119 +17,98 @@ logger = logging.getLogger(__name__)
 
 def normalize_identifier(identifier: str) -> str:
     """
-    Primary entry point for identifier normalization using 5-rule system.
-    
-    Simple rule-based approach that directly applies crypto format if rules suggest it,
-    avoiding expensive dual API testing during normalization.
-    
+    Normalize identifier by cleaning up formatting only.
+
+    Strategy 1: No format conversion - stores identifier exactly as entered.
+    Cascade logic at fetch time determines correct format (stock vs crypto).
+
+    This function only does basic cleanup:
+    - Strip whitespace
+    - Convert to uppercase
+
+    No assumptions about whether it's crypto or stock.
+
     Args:
         identifier: Raw identifier from CSV/user input
-        
+
     Returns:
-        Normalized identifier for database storage
+        Cleaned identifier (trimmed, uppercase, no format changes)
     """
     if not identifier or not identifier.strip():
         logger.warning("Empty identifier provided to normalize_identifier")
         return identifier
-    
+
     clean_identifier = identifier.strip().upper()
-    logger.info(f"Normalizing identifier: '{clean_identifier}'")
-    
-    # Apply 5-rule system directly
-    if should_try_crypto_format(clean_identifier):
-        crypto_format = f"{clean_identifier}-USD"
-        logger.info(f"Applying crypto format: '{clean_identifier}' -> '{crypto_format}'")
-        return crypto_format
-    else:
-        logger.info(f"Using stock format: '{clean_identifier}'")
-        return clean_identifier
+    logger.info(f"Cleaned identifier: '{identifier}' -> '{clean_identifier}'")
+
+    return clean_identifier
 
 
 def should_try_crypto_format(identifier: str) -> bool:
     """
-    Simple 5-rule crypto detection system.
-    
-    Rules (in order):
-    1. Already ends with -USD? → Use as-is (False)
-    2. Is ISIN (12 chars)? → Stock format (False) 
-    3. Has exchange suffix (.)? → Stock format (False)
-    4. Is ≤6 chars alphabetic? → Try crypto fallback (True)
-    5. Default → Stock format (False)
-    
+    DEPRECATED: No longer used with Strategy 1 cascade approach.
+
+    This function used to determine if an identifier should be converted to
+    crypto format during normalization. With Strategy 1, we no longer guess
+    the format - instead, the cascade logic in fetch_price_with_crypto_fallback()
+    tries both formats automatically at fetch time.
+
+    Kept for backward compatibility but always returns False.
+
     Args:
-        identifier: Cleaned identifier string
-        
+        identifier: Identifier string
+
     Returns:
-        True if identifier should get crypto fallback attempt
+        False (deprecated, not used)
     """
-    clean_id = identifier.upper().strip()
-    
-    # Rule 1: Already crypto format
-    if clean_id.endswith('-USD'):
-        logger.debug(f"'{identifier}' already crypto format")
-        return False
-    
-    # Rule 2: ISIN format (12 chars starting with 2 letters)
-    if len(clean_id) == 12 and clean_id[:2].isalpha() and clean_id[2:].isalnum():
-        logger.debug(f"'{identifier}' identified as ISIN (stock format)")
-        return False
-    
-    # Rule 3: Exchange suffix
-    if '.' in clean_id:
-        logger.debug(f"'{identifier}' has exchange suffix (stock format)")
-        return False
-        
-    # Rule 4: Short alphabetic (main crypto pattern)
-    if len(clean_id) <= 6 and clean_id.isalpha():
-        logger.debug(f"'{identifier}' is ≤6 chars alphabetic (try crypto fallback)")
-        return True
-    
-    # Rule 5: Default to stock format
-    logger.debug(f"'{identifier}' defaults to stock format")
+    logger.debug(f"should_try_crypto_format called for '{identifier}' but is deprecated (always returns False)")
     return False
 
 
 def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     """
-    Universal fallback pattern - replaces dual testing with simple fallback.
-    
+    Strategy 1: Simple two-step cascade for price fetching.
+
     Process:
-    1. Try original identifier first (1 API call)
-    2. If failed and rules suggest crypto, try with -USD (1 more API call)
-    3. Return best result
-    
-    This replaces the expensive dual-testing approach with a fast fallback pattern.
-    
+    1. Try original identifier (1 API call)
+    2. If failed, try {identifier}-USD format (1 more API call)
+    3. Return result with effective_identifier
+
+    No guessing or rules - just try both formats and see what works.
+    The working format is returned as 'effective_identifier' and cached
+    by update_price_in_db() to avoid future cascade attempts.
+
     Args:
-        identifier: Identifier to fetch price for
-        
+        identifier: Identifier to fetch price for (cleaned but not converted)
+
     Returns:
-        Price data dictionary with success status
+        Price data dictionary with 'effective_identifier' showing which format worked
     """
     from .yfinance_utils import _fetch_yfinance_data_robust
-    
-    logger.info(f"Fetching price with crypto fallback for: '{identifier}'")
-    
-    # Always try original identifier first
+
+    logger.info(f"🔍 Two-step cascade for: '{identifier}'")
+
+    # Step 1: Try original identifier
+    logger.debug(f"  Step 1: Trying original format '{identifier}'")
     result = _fetch_yfinance_data_robust(identifier)
-    
-    # If failed and rules suggest crypto, try with -USD
-    if not result and should_try_crypto_format(identifier):
-        crypto_identifier = f"{identifier}-USD"
-        logger.info(f"Trying crypto fallback: {identifier} → {crypto_identifier}")
-        
-        result = _fetch_yfinance_data_robust(crypto_identifier)
-        
-        if result:
-            logger.info(f"Crypto fallback successful for: {crypto_identifier}")
-            return {**result, 'effective_identifier': crypto_identifier}
-    
+
     if result:
-        logger.info(f"Original format successful for: {identifier}")
+        logger.info(f"  ✓ Original format successful: {identifier}")
         return {**result, 'effective_identifier': identifier}
-    else:
-        logger.warning(f"Both original and crypto fallback failed for: {identifier}")
-        return {}
+
+    # Step 2: Try crypto format (-USD suffix)
+    crypto_identifier = f"{identifier}-USD"
+    logger.info(f"  Step 2: Original failed, trying crypto format: {identifier} → {crypto_identifier}")
+
+    result = _fetch_yfinance_data_robust(crypto_identifier)
+
+    if result:
+        logger.info(f"  ✓ Crypto format successful: {crypto_identifier}")
+        return {**result, 'effective_identifier': crypto_identifier}
+
+    # Both formats failed
+    logger.warning(f"  ✗ Both formats failed: '{identifier}' and '{crypto_identifier}'")
+    return {}
 
 
 # Legacy dual testing function removed

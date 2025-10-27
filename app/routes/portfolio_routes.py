@@ -1,9 +1,10 @@
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    request, flash, session, jsonify, current_app
+    request, flash, session, jsonify, current_app, g
 )
 import logging
 from app.db_manager import query_db
+from app.decorators import require_auth
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, manage_state,
     get_allocate_portfolio_data, get_country_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
@@ -29,27 +30,15 @@ def make_session_permanent():
 
 
 @portfolio_bp.route('/enrich')
+@require_auth
 def enrich():
     """Portfolio data enrichment page"""
     logger.info("Accessing enrich page")
 
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        logger.warning("No account_id in session")
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     logger.info(f"Loading enrich page for account_id: {account_id}")
 
-    # Verify account exists
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
-    if not account:
-        logger.warning(f"Account {account_id} not found")
-        flash('Account not found', 'error')
-        return redirect(url_for('main.index'))
-
+    account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
@@ -145,27 +134,15 @@ def enrich():
 
 
 @portfolio_bp.route('/risk_overview')
+@require_auth
 def risk_overview():
     """Risk overview page with global portfolio allocation visualizations"""
     logger.info("Accessing risk overview page")
 
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        logger.warning("No account_id in session")
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     logger.info(f"Loading risk overview page for account_id: {account_id}")
 
-    # Verify account exists
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
-    if not account:
-        logger.warning(f"Account {account_id} not found")
-        flash('Account not found', 'error')
-        return redirect(url_for('main.index'))
-
+    account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
@@ -173,27 +150,15 @@ def risk_overview():
 
 
 @portfolio_bp.route('/analyse')
+@require_auth
 def analyse():
     """Portfolio analysis page"""
     logger.info("Accessing analyse page")
 
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        logger.warning("No account_id in session")
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     logger.info(f"Loading analyse page for account_id: {account_id}")
 
-    # Verify account exists
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
-    if not account:
-        logger.warning(f"Account {account_id} not found")
-        flash('Account not found', 'error')
-        return redirect(url_for('main.index'))
-
+    account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
@@ -203,28 +168,16 @@ def analyse():
 
 
 @portfolio_bp.route('/build')
+@require_auth
 def build():
     """Portfolio Allocation Builder page"""
     logger.info("Accessing allocation builder page")
 
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        logger.warning("No account_id in session")
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     logger.info(
         f"Loading allocation builder page for account_id: {account_id}")
 
-    # Verify account exists
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
-    if not account:
-        logger.warning(f"Account {account_id} not found")
-        flash('Account not found', 'error')
-        return redirect(url_for('main.index'))
-
+    account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
@@ -237,28 +190,16 @@ def build():
 
 
 @portfolio_bp.route('/allocate')
+@require_auth
 def allocate():
     """Portfolio Rebalancer page"""
     logger.info("Accessing portfolio rebalancer page")
 
-    # Check if user is authenticated with an account
-    if 'account_id' not in session:
-        logger.warning("No account_id in session")
-        flash('Please select an account first', 'warning')
-        return redirect(url_for('main.index'))
-
-    account_id = session['account_id']
+    account_id = g.account_id
     logger.info(
         f"Loading portfolio rebalancer page for account_id: {account_id}")
 
-    # Verify account exists
-    account = query_db('SELECT * FROM accounts WHERE id = ?',
-                       [account_id], one=True)
-    if not account:
-        logger.warning(f"Account {account_id} not found")
-        flash('Account not found', 'error')
-        return redirect(url_for('main.index'))
-
+    account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 

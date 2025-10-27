@@ -481,9 +481,6 @@ const UpdateAllDataHandler = {
             updateAllDataBtn.disabled = true;
             updateAllDataBtn.classList.add('is-loading');
 
-            // Show progress bar (without starting conflicting generic polling)
-            ProgressManager.show('price_fetch');
-
             // Make the API call
             const response = await fetch('/portfolio/api/update_all_prices', {
                 method: 'POST',
@@ -502,46 +499,29 @@ const UpdateAllDataHandler = {
                     console.log('Success:', result.message || 'Started updating all prices and metadata');
                 }
 
-                // If there's a job ID, start polling for status updates
-                if (result.job_id) {
-                    const jobId = result.job_id;
-                    console.log('Job ID:', jobId);
+                // Start progress tracking using ProgressManager (same pattern as CSV upload)
+                console.log('Starting progress tracking for price fetch...');
+                ProgressManager.startTracking('price_fetch', 500);
 
-                    // Poll for job status
-                    const statusInterval = setInterval(async () => {
-                        try {
-                            // Try fetching the job status first
-                            const statusResponse = await fetch(`/portfolio/api/price_update_status/${jobId}`);
+                // Set up completion handler - check for completion status
+                const completionCheckInterval = setInterval(async () => {
+                    try {
+                        const progressResponse = await fetch('/portfolio/api/price_fetch_progress');
+                        if (progressResponse.ok) {
+                            const progressData = await progressResponse.json();
 
-                            if (statusResponse.ok) {
-                                const statusResult = await statusResponse.json();
-                                console.log('Job status:', statusResult);
+                            if (progressData.status === 'completed' || progressData.percentage >= 100) {
+                                clearInterval(completionCheckInterval);
+                                ProgressManager.stopTracking();
+                                ProgressManager.complete();
 
-                                // Update progress display if available
-                                if (statusResult.progress) {
-                                    // Ensure we maintain the job type during status polling
-                                    if (!ProgressManager.currentJob.type) {
-                                        ProgressManager.currentJob.type = 'price_fetch';
-                                    }
-                                    ProgressManager.setProgress(
-                                        statusResult.progress.percentage,
-                                        null,
-                                        statusResult.progress.current || 0,
-                                        statusResult.progress.total || 0
-                                    );
+                                // Show completion notification
+                                if (typeof showNotification === 'function') {
+                                    showNotification('Price update complete! Updated all companies successfully.', 'is-success');
                                 }
 
-                                // If job is completed, stop polling and reload data
-                                if (statusResult.status === 'completed' || statusResult.is_complete) {
-                                    clearInterval(statusInterval);
-                                    ProgressManager.complete();
-
-                                    // Show completion notification
-                                    if (typeof showNotification === 'function') {
-                                        showNotification(`Price update complete! Updated all companies successfully.`, 'is-success');
-                                    }
-
-                                    // Reload the data
+                                // Reload the data
+                                setTimeout(async () => {
                                     if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
                                         await window.portfolioTableApp.loadData();
                                         console.log('Portfolio data reloaded after price update completion');
@@ -549,19 +529,13 @@ const UpdateAllDataHandler = {
                                         console.warn('portfolioTableApp.loadData is not available, reloading page instead');
                                         window.location.reload();
                                     }
-                                }
-                            } else {
-                                // Fall back to checking the progress endpoint if the status endpoint fails
-                                console.log("Falling back to progress endpoint check");
-                                // ProgressManager will handle this automatically
+                                }, 1000);
                             }
-                        } catch (error) {
-                            console.error('Error checking job status:', error);
-                            clearInterval(statusInterval);
-                            ProgressManager.error();
                         }
-                    }, 1000);
-                }
+                    } catch (error) {
+                        console.error('Error checking completion status:', error);
+                    }
+                }, 1000);
             } else {
                 ProgressManager.error();
                 throw new Error(result.message || 'Failed to start price update');
@@ -592,9 +566,6 @@ const UpdateSelectedHandler = {
         try {
             console.log('Starting selected price update for companies:', selectedCompanyIds);
 
-            // Show progress bar (without starting conflicting generic polling)
-            ProgressManager.show('selected_price_fetch');
-
             // Make the API call
             const response = await fetch('/portfolio/api/update_selected_prices', {
                 method: 'POST',
@@ -614,46 +585,29 @@ const UpdateSelectedHandler = {
                     console.log('Success:', result.message || 'Started updating selected companies');
                 }
 
-                // If there's a job ID, start polling for status updates
-                if (result.job_id) {
-                    const jobId = result.job_id;
-                    console.log('Selected update Job ID:', jobId);
+                // Start progress tracking using ProgressManager (same pattern as CSV upload)
+                console.log('Starting progress tracking for selected price fetch...');
+                ProgressManager.startTracking('selected_price_fetch', 500);
 
-                    // Poll for job status (reuse same logic as update all)
-                    const statusInterval = setInterval(async () => {
-                        try {
-                            // Try fetching the job status first
-                            const statusResponse = await fetch(`/portfolio/api/price_update_status/${jobId}`);
+                // Set up completion handler - check for completion status
+                const completionCheckInterval = setInterval(async () => {
+                    try {
+                        const progressResponse = await fetch('/portfolio/api/price_fetch_progress');
+                        if (progressResponse.ok) {
+                            const progressData = await progressResponse.json();
 
-                            if (statusResponse.ok) {
-                                const statusResult = await statusResponse.json();
-                                console.log('Selected update job status:', statusResult);
+                            if (progressData.status === 'completed' || progressData.percentage >= 100) {
+                                clearInterval(completionCheckInterval);
+                                ProgressManager.stopTracking();
+                                ProgressManager.complete();
 
-                                // Update progress display if available
-                                if (statusResult.progress) {
-                                    // Ensure we maintain the job type during status polling
-                                    if (!ProgressManager.currentJob.type) {
-                                        ProgressManager.currentJob.type = 'selected_price_fetch';
-                                    }
-                                    ProgressManager.setProgress(
-                                        statusResult.progress.percentage,
-                                        null,
-                                        statusResult.progress.current || 0,
-                                        statusResult.progress.total || 0
-                                    );
+                                // Show completion notification
+                                if (typeof showNotification === 'function') {
+                                    showNotification(`Selected companies update complete! Updated ${progressData.current || 0} companies successfully.`, 'is-success');
                                 }
 
-                                // If job is completed, stop polling and reload data
-                                if (statusResult.status === 'completed' || statusResult.is_complete) {
-                                    clearInterval(statusInterval);
-                                    ProgressManager.complete();
-
-                                    // Show completion notification
-                                    if (typeof showNotification === 'function') {
-                                        showNotification(`Selected companies update complete! Updated ${statusResult.progress?.current || 0} companies successfully.`, 'is-success');
-                                    }
-
-                                    // Reload the data
+                                // Reload the data
+                                setTimeout(async () => {
                                     if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
                                         await window.portfolioTableApp.loadData();
                                         console.log('Portfolio data reloaded after selected update completion');
@@ -661,19 +615,13 @@ const UpdateSelectedHandler = {
                                         console.warn('portfolioTableApp.loadData is not available, reloading page instead');
                                         window.location.reload();
                                     }
-                                }
-                            } else {
-                                // Fall back to checking the progress endpoint if the status endpoint fails
-                                console.log("Falling back to progress endpoint check for selected update");
-                                // ProgressManager will handle this automatically
+                                }, 1000);
                             }
-                        } catch (error) {
-                            console.error('Error checking selected update job status:', error);
-                            clearInterval(statusInterval);
-                            ProgressManager.error();
                         }
-                    }, 1000);
-                }
+                    } catch (error) {
+                        console.error('Error checking completion status:', error);
+                    }
+                }, 1000);
             } else {
                 ProgressManager.error();
                 throw new Error(result.error || 'Failed to start selected price update');
@@ -2016,6 +1964,73 @@ class PortfolioTableApp {
                         console.error('Error updating shares:', error);
                         if (typeof showNotification === 'function') {
                             showNotification('Failed to update shares', 'is-danger');
+                        }
+                    }
+                },
+
+                async saveTotalValueChange(item, newTotalValue) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for total value change');
+                        return;
+                    }
+
+                    try {
+                        // Parse currency input (remove € symbol, spaces, and commas)
+                        const cleanValue = String(newTotalValue).replace(/[€\s,]/g, '').trim();
+                        const totalValue = parseFloat(cleanValue);
+
+                        if (isNaN(totalValue) || totalValue < 0) {
+                            if (typeof showNotification === 'function') {
+                                showNotification('Total value must be a valid positive number', 'is-warning');
+                            }
+                            return;
+                        }
+
+                        // Calculate custom price: total_value / shares
+                        const customPrice = item.effective_shares > 0
+                            ? totalValue / item.effective_shares
+                            : 0;
+
+                        console.log('Saving custom total value:', {
+                            company_id: item.id,
+                            total_value: totalValue,
+                            shares: item.effective_shares,
+                            calculated_custom_price: customPrice
+                        });
+
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                custom_total_value: totalValue,
+                                custom_price_eur: customPrice,
+                                is_custom_value_edit: true
+                            })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            // Update local item
+                            item.custom_total_value = totalValue;
+                            item.custom_price_eur = customPrice;
+                            item.is_custom_value = true;
+
+                            if (typeof showNotification === 'function') {
+                                showNotification('Total value updated successfully', 'is-success', 3000);
+                            }
+
+                            // Update metrics
+                            this.updateMetrics();
+                        } else {
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Error: ${result.error}`, 'is-danger');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error updating total value:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update total value', 'is-danger');
                         }
                     }
                 },

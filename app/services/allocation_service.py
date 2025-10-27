@@ -6,9 +6,10 @@ Philosophy: Simple, clear allocation calculations with flexible modes.
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from decimal import Decimal
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -265,3 +266,240 @@ class AllocationService:
             company_id: (pct / total) * 100
             for company_id, pct in allocations.items()
         }
+
+    @staticmethod
+    def get_portfolio_positions(
+        portfolio_data: List[Dict],
+        target_allocations: List[Dict]
+    ) -> Tuple[Dict[str, List[Dict]], Dict[str, Dict]]:
+        """
+        Get current positions grouped by portfolio with prices.
+
+        Processes raw portfolio data from repository and target allocations
+        from expanded_state into structured format ready for calculations.
+
+        Args:
+            portfolio_data: List of dicts from database query (portfolios, companies, shares, prices)
+            target_allocations: List of target portfolio configs from expanded_state
+
+        Returns:
+            Tuple of (portfolio_map, portfolio_builder_data):
+                - portfolio_map: Dict mapping portfolio_id to portfolio data with categories and positions
+                - portfolio_builder_data: Dict mapping portfolio_id to builder configuration
+        """
+        logger.info(f"Processing portfolio positions from {len(portfolio_data)} data rows")
+
+        # Create position target weights map
+        position_target_weights = {}
+        portfolio_builder_data = {}
+
+        for portfolio in target_allocations:
+            portfolio_id = portfolio.get('id')
+            if not portfolio_id:
+                continue
+
+            # Store complete builder configuration
+            portfolio_builder_data[portfolio_id] = {
+                'minPositions': portfolio.get('minPositions', 0),
+                'allocation': portfolio.get('allocation', 0),
+                'positions': portfolio.get('positions', []),
+                'name': portfolio.get('name', 'Unknown')
+            }
+
+            # Store target weights for real positions
+            for position in portfolio.get('positions', []):
+                if not position.get('isPlaceholder'):
+                    position_key = (portfolio_id, position.get('companyName'))
+                    position_target_weights[position_key] = position.get('weight', 0)
+
+        # Group data by portfolio and category
+        portfolio_map = {}
+
+        if portfolio_data:
+            for row in portfolio_data:
+                if isinstance(row, dict):
+                    pid = row['portfolio_id']
+                    pname = row['portfolio_name']
+                    portfolio = portfolio_map.setdefault(
+                        pid, {'name': pname, 'categories': {}, 'currentValue': 0})
+
+                    if row['company_name']:
+                        # Use 'Uncategorized' as default category
+                        category_name = row['category'] if row['category'] else 'Uncategorized'
+                        cat = portfolio['categories'].setdefault(
+                            category_name, {'positions': [], 'currentValue': 0})
+
+                        pos_value = (row['price_eur'] or 0) * (row['effective_shares'] or 0)
+                        portfolio['currentValue'] += pos_value
+                        cat['currentValue'] += pos_value
+
+                        target_weight = position_target_weights.get((pid, row['company_name']), 0)
+
+                        cat['positions'].append({
+                            'name': row['company_name'],
+                            'currentValue': pos_value,
+                            'targetAllocation': target_weight,
+                            'identifier': row['identifier']
+                        })
+
+        logger.info(f"Processed {len(portfolio_map)} portfolios with positions")
+        return portfolio_map, portfolio_builder_data
+
+    @staticmethod
+    def calculate_allocation_targets(
+        portfolio_map: Dict[str, Dict],
+        portfolio_builder_data: Dict[str, Dict],
+        target_allocations: List[Dict],
+        total_current_value: float
+    ) -> List[Dict]:
+        """
+        Calculate target allocations for each position based on portfolio targets.
+
+        Applies portfolio-level target weights and position-level target weights
+        to calculate exact target values for each position.
+
+        Args:
+            portfolio_map: Dict of portfolio data with current positions
+            portfolio_builder_data: Dict of builder configuration per portfolio
+            target_allocations: List of target portfolio allocations
+            total_current_value: Total value across all portfolios
+
+        Returns:
+            List of portfolio dicts with calculated target values for all positions
+        """
+        logger.info(f"Calculating allocation targets for total value: {total_current_value}")
+
+        result_portfolios = []
+
+        for portfolio_id, pdata in portfolio_map.items():
+            portfolio_name = pdata['name']
+
+            # Get target weight for this portfolio
+            portfolio_target_weight = 0
+            target_portfolio = next(
+                (p for p in target_allocations if p.get('id') == portfolio_id), None)
+            if target_portfolio:
+                portfolio_target_weight = target_portfolio.get('allocation', 0)
+                logger.debug(f"Portfolio {portfolio_name}: target weight {portfolio_target_weight}%")
+
+            # Get builder data
+            builder_data = portfolio_builder_data.get(portfolio_id, {})
+
+            portfolio_entry = {
+                'name': portfolio_name,
+                'currentValue': pdata['currentValue'],
+                'targetWeight': portfolio_target_weight,
+                'color': '',
+                'categories': [],
+                'minPositions': builder_data.get('minPositions', 0),
+                'builderPositions': builder_data.get('positions', []),
+                'builderAllocation': builder_data.get('allocation', 0)
+            }
+
+            # Add categories with positions
+            for cat_name, cat_data in pdata['categories'].items():
+                category_entry = {
+                    'name': cat_name,
+                    'positions': cat_data['positions'],
+                    'currentValue': cat_data['currentValue'],
+                    'positionCount': len(cat_data['positions'])
+                }
+                portfolio_entry['categories'].append(category_entry)
+
+            # Add placeholder positions based on builder configuration
+            builder_positions = builder_data.get('positions', [])
+            min_positions = builder_data.get('minPositions', 0)
+
+            # Count current real positions
+            current_positions_count = sum(
+                len(cat_data['positions']) for cat_data in pdata['categories'].values())
+            placeholder_position = next(
+                (pos for pos in builder_positions if pos.get('isPlaceholder')), None)
+
+            # Check if real positions already sum to 100%
+            real_builder_positions = [
+                pos for pos in builder_positions if not pos.get('isPlaceholder', False)]
+            total_real_weight = sum(pos.get('weight', 0) for pos in real_builder_positions)
+            real_positions_have_100_percent = round(total_real_weight) >= 100
+
+            logger.debug(
+                f"Portfolio {portfolio_name}: current_positions={current_positions_count}, "
+                f"min_positions={min_positions}, real_weight={total_real_weight}%")
+
+            if (placeholder_position and current_positions_count < min_positions
+                and not real_positions_have_100_percent):
+                positions_remaining = min_positions - current_positions_count
+
+                # Create Missing Positions category
+                missing_positions_category = {
+                    'name': 'Missing Positions',
+                    'positions': [{
+                        'name': f'Position Slot {i+1} (Unfilled)',
+                        'currentValue': 0,
+                        'targetAllocation': placeholder_position.get('weight', 0),
+                        'identifier': None,
+                        'isPlaceholder': True,
+                        'positionSlot': i+1
+                    } for i in range(positions_remaining)],
+                    'currentValue': 0,
+                    'positionCount': positions_remaining,
+                    'isPlaceholder': True
+                }
+                portfolio_entry['categories'].append(missing_positions_category)
+
+            # Calculate target values
+            portfolio_target_value = (portfolio_target_weight / 100) * total_current_value
+            portfolio_entry['targetValue'] = portfolio_target_value
+
+            # Calculate position-level target values
+            for cat in portfolio_entry['categories']:
+                cat_target_value = 0
+                for pos in cat['positions']:
+                    pos_target_value = (pos['targetAllocation'] / 100) * portfolio_target_value
+                    pos['targetValue'] = pos_target_value
+                    cat_target_value += pos_target_value
+
+                cat['targetValue'] = cat_target_value
+                cat['targetWeight'] = (
+                    cat_target_value / portfolio_target_value * 100
+                ) if portfolio_target_value > 0 else 0
+
+            portfolio_entry['targetAllocation_portfolio'] = portfolio_target_value
+            result_portfolios.append(portfolio_entry)
+
+        logger.info(f"Calculated targets for {len(result_portfolios)} portfolios")
+        return result_portfolios
+
+    @staticmethod
+    def generate_rebalancing_plan(
+        portfolios_with_targets: List[Dict]
+    ) -> Dict:
+        """
+        Generate complete rebalancing plan with buy/sell recommendations.
+
+        Analyzes the difference between current and target values to generate
+        actionable recommendations for rebalancing the portfolio.
+
+        Args:
+            portfolios_with_targets: List of portfolio dicts with target values calculated
+
+        Returns:
+            Dict with complete rebalancing plan in frontend-compatible format
+        """
+        logger.info("Generating rebalancing plan")
+
+        # This method currently just returns the portfolios structure
+        # Future enhancement: Add buy/sell recommendations, rebalancing suggestions
+        result = {
+            'portfolios': portfolios_with_targets
+        }
+
+        # Calculate summary statistics
+        total_value = sum(p['currentValue'] for p in portfolios_with_targets)
+        total_target_value = sum(p.get('targetValue', 0) for p in portfolios_with_targets)
+
+        logger.info(
+            f"Rebalancing plan: {len(portfolios_with_targets)} portfolios, "
+            f"total_value={total_value}, total_target={total_target_value}")
+
+        return result

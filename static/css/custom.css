@@ -1933,12 +1933,44 @@ select,
     color-scheme: dark light;
   }
   
-  /* Country styling for manually edited dropdowns - Higher specificity to override default select styling */
+  /* ===== CENTRALIZED USER-EDITED FIELD STYLING ===== */
+  /* Orange color (#ff7f00) for all user-edited fields - NO bold for country */
+
+  /* Base class for all user-edited fields */
+  .user-edited-field {
+    color: #ff7f00 !important;
+  }
+
+  /* Shares - user edited (orange with bold) */
+  .shares-user-edited {
+    color: #ff7f00 !important;
+    font-weight: 600;
+  }
+
+  /* Country - user edited (orange WITHOUT bold per user request) */
   .select .country-user-edited,
   select.country-user-edited,
   .country-user-edited option {
     color: #ff7f00 !important;
+    /* Orange color only, no bold - matches user requirement */
+  }
+
+  /* Total Value - user edited when no price available (orange, no bold) */
+  .total-value-user-edited {
+    color: #ff7f00 !important;
+  }
+
+  /* CSV-modified fields after user edit (red with bold) */
+  .csv-modified-field,
+  .shares-csv-modified {
+    color: #dc3545 !important;
     font-weight: 600;
+  }
+
+  /* Error/missing data styling */
+  .error-field,
+  .has-text-danger {
+    color: #dc3545 !important;
   }
   
   .table tr {

@@ -206,6 +206,67 @@ Ensure your DATABASE_URL is correctly set and the database is accessible.
 Check your internet connection and Yahoo Finance API availability.
 </details>
 
+## 🏗️ Architecture & Code Quality
+
+This project has evolved through three major phases:
+
+###  **Phase 1**: Initial Development
+- Basic Flask app with portfolio management
+- CSV import functionality
+- yfinance integration for prices
+- Simple allocation calculations
+
+### **Phase 2**: Performance & Architecture (Completed)
+- Introduced **Service Layer** (AllocationService, PortfolioService, PriceService)
+- Introduced **Repository Layer** (PortfolioRepository for data access)
+- Added **Flask-Caching** (15-min for prices, 1-hr for exchange rates)
+- Smart **batch processing** (sync for <20 items, async for ≥20)
+- **50-90% reduction in API calls** through strategic caching
+- Validated with **31+ unit tests**
+
+### **Phase 3**: Code Health & Maintainability (Completed)
+Focused refactoring for single-user homeserver deployment:
+
+**Phase 3a - Foundations** (22h):
+- ✅ `@require_auth` decorator (eliminated 90+ lines of duplicate code)
+- ✅ Response helpers for consistent API responses
+- ✅ AccountRepository & PriceRepository
+- ✅ Extended PortfolioRepository with allocation methods
+
+**Phase 3b - Core Refactoring** (44h):
+- ✅ Split 625-line `process_csv_data()` into 6 testable modules
+- ✅ Refactored 249-line allocation route → 87 lines (65% reduction)
+- ✅ Added two-phase validation for batch updates
+- ✅ Optimized portfolio data loading with single-query repository method
+
+**Phase 3c - Robust Testing** (18h):
+- ✅ Extended exceptions.py with 8 structured error types
+- ✅ Added error handling to all critical API routes
+- ✅ Created pragmatic test suite (50-60% coverage on critical paths)
+  - CSV processing tests
+  - Repository layer tests
+  - Allocation service tests
+
+**Total Impact**:
+- **~200 lines of duplicate code removed**
+- **625-line function → 6 testable modules**
+- **Consistent error handling** with proper HTTP status codes
+- **Test coverage** for critical business logic
+- **Cleaner architecture**: Routes → Services → Repositories → Database
+
+**Current Architecture**:
+```
+Routes (HTTP handling)
+  ↓
+Services (Business logic)
+  ↓
+Repositories (Data access)
+  ↓
+Database (SQLite)
+```
+
+**Philosophy**: Simple, Modular, Elegant, Efficient, Robust - optimized for single-user homeserver deployment.
+
 ---
 
 ⭐ **If you find this tool helpful for your Parqet portfolio management, please give it a star!**

@@ -21,11 +21,11 @@
     <!-- External libraries will be loaded at the bottom before our scripts -->
 
     <!-- Custom CSS (overrides) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1, 10000) | random }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v=restore-inline-20250128">
 
     <!-- Bulk Edit Styles -->
     <link rel="stylesheet"
-        href="{{ url_for('static', filename='css/bulk-edit.css') }}?v={{ range(1, 10000) | random }}">
+        href="{{ url_for('static', filename='css/bulk-edit.css') }}?v=restore-inline-20250128">
 
     {% block head_extras %}{% endblock %}
 

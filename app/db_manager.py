@@ -377,7 +377,20 @@ def migrate_database():
             cursor.execute("ALTER TABLE companies ADD COLUMN country_manual_edit_date DATETIME")
             db.commit()
             logger.info("Successfully added country override columns")
-    
+
+        # Check if we need to add the new columns for custom values (when no price is available)
+        try:
+            cursor.execute("SELECT custom_total_value FROM companies LIMIT 1")
+        except Exception:
+            # Columns don't exist, add them
+            logger.info("Adding custom value columns to companies table")
+            cursor.execute("ALTER TABLE companies ADD COLUMN custom_total_value REAL")
+            cursor.execute("ALTER TABLE companies ADD COLUMN custom_price_eur REAL")
+            cursor.execute("ALTER TABLE companies ADD COLUMN is_custom_value BOOLEAN DEFAULT 0")
+            cursor.execute("ALTER TABLE companies ADD COLUMN custom_value_date DATETIME")
+            db.commit()
+            logger.info("Successfully added custom value columns")
+
     except Exception as e:
         logger.error(f"Error during database migration: {e}")
         db.rollback()

@@ -18,6 +18,7 @@ from app.exceptions import (
     ValidationError, DataIntegrityError, ExternalAPIError, NotFoundError,
     CSVProcessingError, PriceFetchError
 )
+from app.utils.value_calculator import calculate_portfolio_total, calculate_item_value, has_price_or_custom_value
 
 
 import pandas as pd
@@ -96,23 +97,40 @@ def _apply_company_update(cursor, company_id, data, account_id):
     # Build the SET clause dynamically based on what data is provided
     set_clause_parts = []
     params = []
-    
+
     if 'identifier' in data:
         set_clause_parts.append('identifier = ?')
         params.append(data.get('identifier', ''))
-    
+
     if 'category' in data:
         set_clause_parts.append('category = ?')
         params.append(data.get('category', ''))
-    
+
     # Only update portfolio_id if portfolio is being changed
     if 'portfolio' in data:
         set_clause_parts.append('portfolio_id = ?')
         params.append(portfolio_id)
-    
+
+    # Handle custom total value when no price is available (MUST be before UPDATE execution)
+    if 'custom_total_value' in data or 'custom_price_eur' in data:
+        custom_total_value = data.get('custom_total_value')
+        custom_price = data.get('custom_price_eur')
+        is_custom_edit = data.get('is_custom_value_edit', False)
+
+        if is_custom_edit:
+            # User is manually entering a custom total value (when no market price exists)
+            set_clause_parts.append('custom_total_value = ?')
+            params.append(custom_total_value)
+            set_clause_parts.append('custom_price_eur = ?')
+            params.append(custom_price)
+            set_clause_parts.append('is_custom_value = ?')
+            params.append(1)
+            set_clause_parts.append('custom_value_date = CURRENT_TIMESTAMP')
+            logger.info(f"User set custom total value {custom_total_value} (price: {custom_price}) for company {company_id}")
+
     # Add the company_id for the WHERE clause
     params.append(company_id)
-    
+
     if set_clause_parts:
         set_clause = ', '.join(set_clause_parts)
         cursor.execute(f'UPDATE companies SET {set_clause} WHERE id = ?', params)
@@ -262,23 +280,6 @@ def _apply_company_update(cursor, company_id, data, account_id):
                     'INSERT INTO company_shares (company_id, shares, override_share) VALUES (?, ?, ?)',
                     [company_id, shares, override]
                 )
-
-    # Handle custom total value when no price is available
-    if 'custom_total_value' in data or 'custom_price_eur' in data:
-        custom_total_value = data.get('custom_total_value')
-        custom_price = data.get('custom_price_eur')
-        is_custom_edit = data.get('is_custom_value_edit', False)
-
-        if is_custom_edit:
-            # User is manually entering a custom total value (when no market price exists)
-            set_clause_parts.append('custom_total_value = ?')
-            params.append(custom_total_value)
-            set_clause_parts.append('custom_price_eur = ?')
-            params.append(custom_price)
-            set_clause_parts.append('is_custom_value = ?')
-            params.append(1)
-            set_clause_parts.append('custom_value_date = CURRENT_TIMESTAMP')
-            logger.info(f"User set custom total value {custom_total_value} (price: {custom_price}) for company {company_id}")
 
 # API endpoint to get and save state data
 
@@ -438,7 +439,10 @@ def get_allocate_portfolio_data():
                        c.category, c.name AS company_name, c.identifier,
                        cs.shares, cs.override_share,
                        COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
-                       mp.price_eur
+                       mp.price_eur,
+                       c.custom_total_value,
+                       c.custom_price_eur,
+                       c.is_custom_value
                 FROM portfolios p
                 LEFT JOIN companies c ON c.portfolio_id = p.id AND c.account_id = p.account_id
                 LEFT JOIN company_shares cs ON c.id = cs.company_id
@@ -577,20 +581,23 @@ def get_country_capacity_data():
 
         # Get all user's positions with individual company details by country
         position_data = query_db('''
-            SELECT 
+            SELECT
                 COALESCE(c.override_country, mp.country, 'Unknown') as country,
                 c.name as company_name,
                 p.name as portfolio_name,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
                 COALESCE(mp.price_eur, 0) as price,
-                (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)) as position_value
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as position_value
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
             LEFT JOIN portfolios p ON c.portfolio_id = p.id
             WHERE c.account_id = ?
             AND COALESCE(cs.override_share, cs.shares, 0) > 0
-            AND COALESCE(mp.price_eur, 0) > 0
+            AND (COALESCE(mp.price_eur, 0) > 0 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL))
             ORDER BY COALESCE(c.override_country, mp.country, 'Unknown'), position_value DESC
         ''', [account_id])
 
@@ -1446,24 +1453,25 @@ def get_portfolio_metrics():
     """Get portfolio metrics including total value"""
     try:
         account_id = g.account_id
-        
+
         # Get portfolio data using the same method as enrich page
-        from app.utils.portfolio_utils import get_portfolio_data
         portfolio_data = get_portfolio_data(account_id)
-        
-        # Calculate total value the same way as in enrich page
-        total_value = sum(
-            (item['price_eur'] or 0) * (item['effective_shares'] or 0)
-            for item in portfolio_data
+
+        # Calculate total value using centralized utility (handles custom values correctly)
+        total_value = float(calculate_portfolio_total(portfolio_data))
+
+        # Count items with missing prices (accounting for custom values)
+        # An item is considered to have a price if it has either market price or custom value
+        missing_prices = sum(
+            1 for item in portfolio_data
+            if not has_price_or_custom_value(item)
         )
-        
-        # Count items and missing prices for additional metrics
-        missing_prices = sum(1 for item in portfolio_data if not item['price_eur'])
+
         total_items = len(portfolio_data)
         health = int(((total_items - missing_prices) / total_items * 100) if total_items > 0 else 100)
-        
+
         last_updates = [item['last_updated'] for item in portfolio_data if item['last_updated'] is not None]
-        
+
         return jsonify({
             'total_value': total_value,
             'total_items': total_items,
@@ -1471,7 +1479,7 @@ def get_portfolio_metrics():
             'missing_prices': missing_prices,
             'last_update': max(last_updates) if last_updates else None
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting portfolio metrics: {str(e)}")
         return error_response('Failed to get portfolio metrics', 500)

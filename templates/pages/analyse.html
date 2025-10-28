@@ -62,6 +62,9 @@
 
     <!-- CSS has been moved to custom.css -->
 
+    <!-- Load centralized value calculator utility -->
+    <script src="{{ url_for('static', filename='js/utils/value-calculator.js') }}"></script>
+
     <!-- JavaScript for interactivity -->
     <script>
         /**
@@ -483,11 +486,13 @@
                     }
 
                     if (portfolioMap[portfolioName]) {
-                        // Calculate current value
+                        // Calculate current value using centralized utility (handles custom values)
+                        const currentValue = calculateItemValue(item);
+                        const totalInvested = item.total_invested || 0;
+
+                        // Keep these for individual display
                         const price = item.price_eur || 0;
                         const shares = item.effective_shares || 0;
-                        const currentValue = price * shares;
-                        const totalInvested = item.total_invested || 0;
 
                         // Get company name from the correct property
                         const companyName = item.company || item.name || 'Unknown';
@@ -779,9 +784,9 @@
 
                 // Ensure companies have calculated currentValue and metadata fields
                 return companies.map(company => {
-                    // Calculate currentValue if not already present
+                    // Calculate currentValue using centralized utility (handles custom values)
                     if (typeof company.currentValue === 'undefined') {
-                        company.currentValue = (company.price_eur || 0) * (company.effective_shares || 0);
+                        company.currentValue = calculateItemValue(company);
                     }
 
                     // Ensure metadata fields exist

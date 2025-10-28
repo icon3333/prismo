@@ -1239,8 +1239,9 @@ class PortfolioTableApp {
                         filtered = [...filtered].sort((a, b) => {
                             // Handle special cases for calculated fields
                             if (this.sortColumn === 'total_value') {
-                                const aValue = (a.price_eur || 0) * (a.effective_shares || 0);
-                                const bValue = (b.price_eur || 0) * (b.effective_shares || 0);
+                                // Use centralized calculator for consistent sorting
+                                const aValue = calculateItemValue(a);
+                                const bValue = calculateItemValue(b);
                                 return direction * (aValue - bValue);
                             }
 
@@ -1453,7 +1454,7 @@ class PortfolioTableApp {
                             this.escapeCSVField(item.category || ''),
                             item.effective_shares || 0,
                             item.price_eur || 0,
-                            (item.price_eur || 0) * (item.effective_shares || 0),
+                            calculateItemValue(item), // Use centralized calculator for CSV export
                             item.total_invested || 0,
                             this.escapeCSVField(item.last_updated || '')
                         ];
@@ -1603,7 +1604,8 @@ class PortfolioTableApp {
                     this.metrics = {
                         total: items.length,
                         health: items.length ? Math.round(((items.length - missingPriceItems.length) / items.length) * 100) : 100,
-                        totalValue: items.reduce((sum, item) => sum + ((item.price_eur || 0) * (item.effective_shares || 0)), 0),
+                        // Use centralized value calculator for consistency
+                        totalValue: calculatePortfolioTotal(items),
                         lastUpdate: items.reduce((latest, item) => !latest || (item.last_updated && item.last_updated > latest) ? item.last_updated : latest, null)
                     };
                 },
@@ -1617,7 +1619,8 @@ class PortfolioTableApp {
                     this.metrics = {
                         total: filteredItems.length,
                         health: filteredItems.length ? Math.round(((filteredItems.length - missingPriceItems.length) / filteredItems.length) * 100) : 100,
-                        totalValue: filteredItems.reduce((sum, item) => sum + ((item.price_eur || 0) * (item.effective_shares || 0)), 0),
+                        // Use centralized value calculator for consistency
+                        totalValue: calculatePortfolioTotal(filteredItems),
                         lastUpdate: filteredItems.reduce((latest, item) => !latest || (item.last_updated && item.last_updated > latest) ? item.last_updated : latest, null)
                     };
 

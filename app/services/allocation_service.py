@@ -10,6 +10,7 @@ from typing import List, Dict, Optional, Tuple
 from decimal import Decimal
 import logging
 import json
+from app.utils.value_calculator import calculate_item_value
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +330,9 @@ class AllocationService:
                         cat = portfolio['categories'].setdefault(
                             category_name, {'positions': [], 'currentValue': 0})
 
-                        pos_value = (row['price_eur'] or 0) * (row['effective_shares'] or 0)
+                        # Use centralized value calculator for consistency
+                        pos_value = float(calculate_item_value(row))
+
                         portfolio['currentValue'] += pos_value
                         cat['currentValue'] += pos_value
 

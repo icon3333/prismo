@@ -286,7 +286,8 @@ def update_single_portfolio_api(company_id):
             cursor = db.cursor()
             from .portfolio_api import _apply_company_update
             _apply_company_update(cursor, company_id, data, account_id)
-            
+            db.commit()
+
         # If this is a country reset, fetch and return the updated company data
         if data.get('reset_country', False):
             from app.utils.portfolio_utils import get_portfolio_data
@@ -338,6 +339,7 @@ def bulk_update():
                     updated += 1
                 except Exception as exc:
                     errors.append({'id': cid, 'error': str(exc)})
+            db.commit()
         if errors:
             return error_response(
                 f'{updated} items updated, {len(errors)} failed',

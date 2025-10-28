@@ -102,6 +102,9 @@
 
 {% include "components/analyse_components.html" %}
 
+<!-- Load centralized value calculator utility -->
+<script src="{{ url_for('static', filename='js/utils/value-calculator.js') }}"></script>
+
 <!-- JavaScript for Risk Overview -->
 <script>
     /**
@@ -499,31 +502,39 @@
                 }
 
                 if (portfolioMap[portfolioName]) {
-                    // Calculate current value
+                    // Calculate current value using centralized utility (handles custom values)
+                    const currentValue = calculateItemValue(item);
+                    const totalInvested = item.total_invested || 0;
+
+                    // Keep these for individual display
                     const price = item.price_eur || 0;
                     const shares = item.effective_shares || 0;
-                    const currentValue = price * shares;
-                    const totalInvested = item.total_invested || 0;
 
                     // Get company name from the correct property
                     const companyName = item.company || item.name || 'Unknown';
 
                     // Add company to portfolio with all needed fields
+                    // IMPORTANT: Include ALL fields needed by centralized value calculator
                     portfolioMap[portfolioName].companies.push({
                         id: item.id,
                         name: companyName,
                         category: item.category || 'Uncategorized',
                         shares: shares,
+                        effective_shares: shares, // Required by centralized calculator
                         priceEur: price,
-                        price_eur: price, // Include both naming conventions
-                        currentValue: currentValue, // Explicitly set currentValue
+                        price_eur: price, // Required by centralized calculator
+                        currentValue: currentValue, // Pre-calculated using centralized utility
                         totalInvested: totalInvested,
                         portfolioId: portfolioMap[portfolioName].id,
                         portfolioName: portfolioName,
                         // Include risk analysis fields
                         country: item.effective_country || item.country || 'Unknown',
-
-                        exchange: item.exchange || 'Unknown'
+                        exchange: item.exchange || 'Unknown',
+                        // Include custom value fields (required by centralized calculator)
+                        is_custom_value: item.is_custom_value || false,
+                        custom_total_value: item.custom_total_value || null,
+                        custom_price_eur: item.custom_price_eur || null,
+                        custom_value_date: item.custom_value_date || null
                     });
 
                     // Update portfolio totals
@@ -737,7 +748,7 @@
                         cleanedLabels,
                         cleanedValues,
                         {
-                            title: 'Portfolio Distribution',
+                            title: '',
                             showTotal: true,
                             height: 350
                             // Colors will be automatically assigned consistently based on labels
@@ -807,9 +818,9 @@
 
             // Ensure companies have calculated currentValue and metadata fields
             return companies.map(company => {
-                // Calculate currentValue if not already present
+                // Calculate currentValue using centralized utility (handles custom values)
                 if (typeof company.currentValue === 'undefined') {
-                    company.currentValue = (company.price_eur || 0) * (company.effective_shares || 0);
+                    company.currentValue = calculateItemValue(company);
                 }
 
                 // Ensure metadata fields exist

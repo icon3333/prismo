@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // For each available portfolio, add it and load its companies
             for (const portfolio of this.availablePortfolios) {
               console.log("Processing portfolio:", portfolio);
-              if (portfolio.id) {
+              if (portfolio.id && portfolio.name !== '-') {
                 try {
                   // Add this portfolio with default allocation
                   this.portfolios.push({
@@ -234,8 +234,8 @@ document.addEventListener('DOMContentLoaded', function () {
           if (response.data && response.data.portfolios) {
             savedPortfolios = JSON.parse(response.data.portfolios);
 
-            // Filter out portfolios without an ID
-            savedPortfolios = savedPortfolios.filter(p => p.id);
+            // Filter out portfolios without an ID and the "-" placeholder
+            savedPortfolios = savedPortfolios.filter(p => p.id && p.name !== '-');
 
             // Track which portfolio IDs we have from saved state
             savedPortfolioIds = new Set(savedPortfolios.map(p => p.id));
@@ -245,7 +245,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // Initialize this.portfolios with saved portfolios
           this.portfolios = savedPortfolios;
 
-          // Add any missing portfolios from availablePortfolios
+          // Add any missing portfolios from availablePortfolios (already filtered to exclude "-")
           for (const portfolio of this.availablePortfolios) {
             if (portfolio.id && !savedPortfolioIds.has(portfolio.id)) {
               console.log(`Adding missing portfolio to state: ${portfolio.name} (ID: ${portfolio.id})`);
@@ -263,7 +263,6 @@ document.addEventListener('DOMContentLoaded', function () {
           console.log('Final portfolio list after merging saved state:', this.portfolios);
 
           // Load companies for each portfolio (for dropdown only) and ensure placeholder positions exist
-          const portfoliosWithCompanies = [];
           for (const portfolio of this.portfolios) {
             if (portfolio.id) {
               // Initialize positions array if missing, but keep any existing positions
@@ -280,24 +279,20 @@ document.addEventListener('DOMContentLoaded', function () {
               // Load companies for dropdown selection only, don't auto-create positions
               await this.loadPortfolioCompanies(portfolio.id);
 
-              // Only keep portfolios that have companies
-              if (this.portfolioCompanies[portfolio.id] && this.portfolioCompanies[portfolio.id].length > 0) {
-                portfoliosWithCompanies.push(portfolio);
-                // Set current positions from loaded companies
-                portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
-                // Calculate minimum positions needed
-                this.calculateMinimumPositions(portfolio);
-                // Add placeholder positions if needed - this will not create actual company positions
-                this.ensureMinimumPositions(portfolio);
-              } else {
-                console.log(`Skipping portfolio ${portfolio.name} (ID: ${portfolio.id}) because it has no companies`);
-              }
+              // Set current positions from loaded companies (0 if no companies)
+              portfolio.currentPositions = this.portfolioCompanies[portfolio.id]?.length || 0;
+
+              // Calculate minimum positions needed
+              this.calculateMinimumPositions(portfolio);
+
+              // Add placeholder positions if needed - this will not create actual company positions
+              this.ensureMinimumPositions(portfolio);
+
+              console.log(`Loaded portfolio ${portfolio.name} (ID: ${portfolio.id}) with ${portfolio.currentPositions} companies`);
             }
           }
 
-          // Replace the portfolios array with only those that have companies
-          this.portfolios = portfoliosWithCompanies;
-          console.log('Final filtered portfolio list (only with companies):', this.portfolios);
+          console.log('Final portfolio list (all portfolios):', this.portfolios);
 
           // Force recalculation of all placeholder weights
           this.portfolios.forEach((portfolio, portfolioIndex) => {
@@ -325,10 +320,11 @@ document.addEventListener('DOMContentLoaded', function () {
       // Load available portfolios
       async loadAvailablePortfolios() {
         try {
-          // Add has_companies=true to only get portfolios that have companies with shares
-          const response = await axios.get('/portfolio/api/portfolios?include_ids=true&has_companies=true');
-          this.availablePortfolios = response.data;
-          console.log('Loaded portfolios with companies:', this.availablePortfolios);
+          // Load ALL portfolios, even those without companies
+          const response = await axios.get('/portfolio/api/portfolios?include_ids=true');
+          // Filter out the "-" placeholder portfolio
+          this.availablePortfolios = response.data.filter(p => p.name !== '-');
+          console.log('Loaded all portfolios (excluding "-" placeholder):', this.availablePortfolios);
 
           // Note: We don't auto-create positions for these portfolios
           // Positions will only be added when the user explicitly selects them from the dropdown
@@ -1085,34 +1081,60 @@ document.addEventListener('DOMContentLoaded', function () {
         // Convert to array for rendering - show each position individually
         const result = [];
 
-        // Add each real position individually
-        realPositions.forEach(position => {
-          const company = this.portfolioCompanies[portfolio.id]?.find(c => c.id === position.companyId);
-          result.push({
-            companyName: company ? company.name : (position.companyName || 'Unknown'),
-            weight: parseFloat(position.weight),
-            count: 1
-          });
-        });
-
         // Calculate total weight of real positions
         const totalRealWeight = realPositions.reduce((sum, pos) => sum + parseFloat(pos.weight || 0), 0);
 
-        // Add placeholder position if it exists and has remaining positions
-        // BUT ONLY if the real positions don't sum to 100%
-        if (placeholderPosition && placeholderPosition.positionsRemaining > 0 && totalRealWeight < 100) {
-          // Only show the placeholder if we don't have enough real positions
-          const realPositionCount = realPositions.length;
-          const minPositions = Math.ceil(portfolio.minPositions);
+        // Determine CASE 1 vs CASE 2
+        const hasDefinedPositions = realPositions.length > 0;
 
-          if (realPositionCount < minPositions) {
-            // Individual position weight (what each actual position would get)
-            const individualWeight = parseFloat(placeholderPosition.weight);
+        if (hasDefinedPositions) {
+          // CASE 1: Positions are defined (user has manually added companies)
+          // Show each real position individually
+          realPositions.forEach(position => {
+            const company = this.portfolioCompanies[portfolio.id]?.find(c => c.id === position.companyId);
+            result.push({
+              companyName: company ? company.name : (position.companyName || 'Unknown'),
+              weight: parseFloat(position.weight),
+              count: 1
+            });
+          });
+
+          // Add "remaining position (x)" line if needed
+          // Calculate remaining positions as: max(minPositions, currentPositions) - realPositionCount
+          const realPositionCount = realPositions.length;
+          const minPositions = portfolio.minPositions || 0;
+          const currentPositions = portfolio.currentPositions || 0;
+          const totalPositionsNeeded = Math.max(minPositions, currentPositions);
+          const remainingPositionsCount = totalPositionsNeeded - realPositionCount;
+
+          // Show ONLY if real positions don't sum to 100% AND we have remaining positions
+          if (remainingPositionsCount > 0 && totalRealWeight < 100) {
+            // Calculate remaining weight and divide by number of remaining positions
+            const remainingWeight = 100 - totalRealWeight;
+            const individualWeight = remainingWeight / remainingPositionsCount;
 
             result.push({
-              companyName: `Remaining positions (${placeholderPosition.positionsRemaining})`,
-              weight: individualWeight,  // Use weight per position for display
-              count: placeholderPosition.positionsRemaining,
+              companyName: `remaining position (${remainingPositionsCount})`,
+              weight: individualWeight,  // Weight per position for display
+              count: remainingPositionsCount,
+              isPlaceholder: true
+            });
+          }
+        } else {
+          // CASE 2: No positions defined (no companies manually added)
+          // Show only "positions (x)" line using max(minPositions, currentPositions)
+          const minPositions = portfolio.minPositions || 0;
+          const currentPositions = portfolio.currentPositions || 0;
+          const positionCount = Math.max(minPositions, currentPositions);
+
+          if (positionCount > 0) {
+            // Calculate weight per position as equal distribution
+            const weightPerPosition = 100 / positionCount;
+
+            result.push({
+              companyName: `positions (${positionCount})`,
+              weight: weightPerPosition,  // Weight per position for display
+              count: positionCount,
               isPlaceholder: true
             });
           }

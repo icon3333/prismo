@@ -8,6 +8,7 @@ Philosophy: Simple, testable calculations for portfolio analysis.
 from typing import List, Dict, Optional
 from decimal import Decimal
 import logging
+from app.utils.value_calculator import calculate_item_value, calculate_portfolio_total
 
 logger = logging.getLogger(__name__)
 
@@ -24,20 +25,15 @@ class PortfolioService:
         """
         Calculate total portfolio value from holdings.
 
+        Uses centralized value calculator to ensure consistency.
+
         Args:
             holdings: List of holdings with shares and price_eur
 
         Returns:
             Total portfolio value in EUR
         """
-        total = Decimal('0')
-
-        for holding in holdings:
-            shares = Decimal(str(holding.get('shares', 0)))
-            price = Decimal(str(holding.get('price_eur', 0)))
-            total += shares * price
-
-        return total
+        return calculate_portfolio_total(holdings)
 
     @staticmethod
     def calculate_asset_allocation(holdings: List[Dict]) -> Dict[str, Decimal]:
@@ -193,9 +189,9 @@ class PortfolioService:
 
         for holding in holdings:
             field_value = holding.get(field_name, 'Unknown')
-            shares = Decimal(str(holding.get('shares', 0)))
-            price = Decimal(str(holding.get('price_eur', 0)))
-            value = shares * price
+
+            # Use centralized value calculator for consistency
+            value = calculate_item_value(holding)
 
             if field_value not in field_values:
                 field_values[field_value] = Decimal('0')

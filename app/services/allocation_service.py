@@ -316,11 +316,27 @@ class AllocationService:
         # Group data by portfolio and category
         portfolio_map = {}
 
+        # STEP 1: Initialize portfolio_map with ALL portfolios from target_allocations
+        # This ensures empty portfolios with target allocations are included
+        for portfolio in target_allocations:
+            portfolio_id = portfolio.get('id')
+            portfolio_name = portfolio.get('name')
+            if portfolio_id and portfolio_name:
+                portfolio_map[portfolio_id] = {
+                    'name': portfolio_name,
+                    'categories': {},
+                    'currentValue': 0
+                }
+                logger.debug(f"Initialized portfolio {portfolio_name} (ID: {portfolio_id}) in portfolio_map")
+
+        # STEP 2: Add actual positions from database
         if portfolio_data:
             for row in portfolio_data:
                 if isinstance(row, dict):
                     pid = row['portfolio_id']
                     pname = row['portfolio_name']
+
+                    # Ensure portfolio exists in map (may already be initialized above)
                     portfolio = portfolio_map.setdefault(
                         pid, {'name': pname, 'categories': {}, 'currentValue': 0})
 

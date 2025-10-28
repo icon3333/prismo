@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', function () {
         constructor() {
             this.portfolioData = null;
             this.investmentAmount = 0;
-            this.rebalanceMode = 'new-only'; // 'existing-only', 'new-only', 'new-with-sells'
+            this.rebalanceMode = 'existing-only'; // 'existing-only', 'new-only', 'new-with-sells'
             this.categoriesExpanded = new Set(); // Track expanded categories
             this.selectedPortfolio = null; // Track selected portfolio
             this.init();
@@ -214,12 +214,15 @@ document.addEventListener('DOMContentLoaded', function () {
             defaultOption.textContent = 'Select a portfolio';
             portfolioSelect.appendChild(defaultOption);
 
-            // Add portfolio options - only show portfolios with defined target weights
+            // Add portfolio options - show all portfolios with target allocations (even if empty)
             this.portfolioData.portfolios.forEach(portfolio => {
-                if (portfolio.currentValue && portfolio.currentValue > 0 && portfolio.targetWeight > 0) {
+                if (portfolio.targetWeight > 0) {  // Show if has target allocation, even if empty
                     const option = document.createElement('option');
                     option.value = portfolio.name;
-                    option.textContent = portfolio.name;
+                    // Add "(Empty)" suffix for empty portfolios
+                    option.textContent = portfolio.currentValue > 0
+                        ? portfolio.name
+                        : `${portfolio.name} (Empty)`;
                     portfolioSelect.appendChild(option);
                 }
             });
@@ -293,14 +296,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            // Filter out portfolios with current value of 0 AND only include portfolios with defined target weights
+            // Include ALL portfolios with target allocations from builder (even if empty)
+            // Rationale: If user set target allocation in Build page, they want to see it here
             const filteredPortfolios = this.portfolioData.portfolios.filter(portfolio =>
-                portfolio.currentValue !== 0 && portfolio.currentValue !== null &&
-                portfolio.targetWeight > 0  // Only include portfolios with target allocation defined in builder
+                portfolio.targetWeight > 0  // Include any portfolio with target allocation (even if currentValue is 0)
             );
 
             if (filteredPortfolios.length === 0) {
-                this.showError('No portfolios with non-zero values available');
+                this.showError('No portfolios with target allocations found. Please configure allocations in the Build page first.');
                 return;
             }
 
@@ -417,7 +420,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 const positionDeficit = Math.max(0, minPositions - currentPositions);
 
                 let portfolioNameDisplay = portfolio.name;
-                if (positionDeficit > 0) {
+
+                // Show indicator for completely empty portfolios
+                if (portfolio.currentValue === 0 || !portfolio.currentValue) {
+                    portfolioNameDisplay = `${portfolio.name} <span class="badge bg-info" style="font-size: 0.75em; padding: 0.25em 0.5em; margin-left: 0.5em;">Empty - Needs Positions</span>`;
+                } else if (positionDeficit > 0) {
+                    // Show warning for portfolios that need more positions
                     portfolioNameDisplay = `${portfolio.name} <span class="text-warning" title="Needs ${positionDeficit} more positions">⚠️</span>`;
                 }
 

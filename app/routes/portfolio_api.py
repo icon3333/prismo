@@ -537,6 +537,39 @@ def get_portfolio_data_api():
         return error_response(f'Portfolio data could not be loaded: {str(e)}', 500)
 
 
+def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[str, Any]]:
+    """
+    Shared helper to query position data grouped by any field (country, category, etc.)
+
+    Args:
+        account_id: User's account ID
+        field_sql: SQL expression for the grouping field (e.g., "COALESCE(c.category, 'Uncategorized')")
+
+    Returns:
+        List of position data dictionaries with field_value, company details, and values
+    """
+    return query_db(f'''
+        SELECT
+            {field_sql} as field_value,
+            c.name as company_name,
+            p.name as portfolio_name,
+            COALESCE(cs.override_share, cs.shares, 0) as shares,
+            COALESCE(mp.price_eur, 0) as price,
+            CASE
+                WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL THEN c.custom_total_value
+                ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+            END as position_value
+        FROM companies c
+        LEFT JOIN company_shares cs ON c.id = cs.company_id
+        LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+        LEFT JOIN portfolios p ON c.portfolio_id = p.id
+        WHERE c.account_id = ?
+        AND COALESCE(cs.override_share, cs.shares, 0) > 0
+        AND (COALESCE(mp.price_eur, 0) > 0 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL))
+        ORDER BY field_value, position_value DESC
+    ''', [account_id])
+
+
 @require_auth
 def get_country_capacity_data():
     """API endpoint to get country investment capacity data for the rebalancing feature"""
@@ -579,39 +612,23 @@ def get_country_capacity_data():
 
         logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Country: {max_per_country}%")
 
-        # Get all user's positions with individual company details by country
-        position_data = query_db('''
-            SELECT
-                COALESCE(c.override_country, mp.country, 'Unknown') as country,
-                c.name as company_name,
-                p.name as portfolio_name,
-                COALESCE(cs.override_share, cs.shares, 0) as shares,
-                COALESCE(mp.price_eur, 0) as price,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as position_value
-            FROM companies c
-            LEFT JOIN company_shares cs ON c.id = cs.company_id
-            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-            LEFT JOIN portfolios p ON c.portfolio_id = p.id
-            WHERE c.account_id = ?
-            AND COALESCE(cs.override_share, cs.shares, 0) > 0
-            AND (COALESCE(mp.price_eur, 0) > 0 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL))
-            ORDER BY COALESCE(c.override_country, mp.country, 'Unknown'), position_value DESC
-        ''', [account_id])
+        # Get all user's positions with individual company details by country (using shared helper)
+        position_data = _get_position_data_by_field(
+            account_id,
+            "COALESCE(c.override_country, mp.country, 'Unknown')"
+        )
 
         # Group positions by country
         country_positions = {}
         if position_data:
             for row in position_data:
-                country = row['country']
+                country = row['field_value']  # Using generic field_value from helper
                 if country not in country_positions:
                     country_positions[country] = {
                         'positions': [],
                         'total_invested': 0
                     }
-                
+
                 position_info = {
                     'company_name': row['company_name'],
                     'portfolio_name': row['portfolio_name'],
@@ -619,7 +636,7 @@ def get_country_capacity_data():
                     'price': float(row['price']),
                     'value': float(row['position_value'])
                 }
-                
+
                 country_positions[country]['positions'].append(position_info)
                 country_positions[country]['total_invested'] += position_info['value']
 
@@ -627,20 +644,22 @@ def get_country_capacity_data():
         country_capacity = []
         if country_positions and total_investable_capital > 0:
             max_per_country_amount = total_investable_capital * (max_per_country / 100)
-            
+
             for country, data in country_positions.items():
                 current_invested = data['total_invested']
-                remaining_capacity = max(0, max_per_country_amount - current_invested)
-                
+                # Allow negative values for over-allocated countries
+                remaining_capacity = max_per_country_amount - current_invested
+
                 country_capacity.append({
                     'country': country,
                     'current_invested': current_invested,
                     'max_allowed': max_per_country_amount,
                     'remaining_capacity': remaining_capacity,
+                    'is_over_allocated': remaining_capacity < 0,
                     'positions': data['positions']  # Include individual positions for hover
                 })
 
-        # Sort by remaining capacity (ascending - least to most capacity)
+        # Sort by remaining capacity (ascending - over-allocated countries first, then least to most capacity)
         country_capacity.sort(key=lambda x: x['remaining_capacity'])
 
         logger.info(f"Returning country capacity data for {len(country_capacity)} countries")
@@ -652,6 +671,110 @@ def get_country_capacity_data():
 
     except Exception as e:
         logger.error(f"Error getting country capacity data: {str(e)}")
+        return error_response(str(e), 500)
+
+
+@require_auth
+def get_category_capacity_data():
+    """API endpoint to get category investment capacity data for the rebalancing feature"""
+    logger.info("API request for category investment capacity data")
+
+    account_id = g.account_id
+    logger.info(f"Getting category capacity data for account_id: {account_id}")
+
+    try:
+        # Get budget settings from expanded_state (from build page)
+        budget_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'budgetData'], one=True)
+
+        rules_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'rules'], one=True)
+
+        # Parse budget and rules data
+        total_investable_capital = 0
+        max_per_category = 25  # Default value
+
+        if budget_data and isinstance(budget_data, dict):
+            try:
+                budget_json = json.loads(budget_data.get('variable_value', '{}'))
+                total_investable_capital = float(budget_json.get('totalInvestableCapital', 0))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse budget data: {e}")
+
+        if rules_data and isinstance(rules_data, dict):
+            try:
+                rules_json = json.loads(rules_data.get('variable_value', '{}'))
+                max_per_category = float(rules_json.get('maxPerCategory', 25))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse rules data: {e}")
+
+        logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Category: {max_per_category}%")
+
+        # Get all user's positions with individual company details by category (using shared helper)
+        position_data = _get_position_data_by_field(
+            account_id,
+            "COALESCE(c.category, 'Uncategorized')"
+        )
+
+        # Group positions by category
+        category_positions = {}
+        if position_data:
+            for row in position_data:
+                category = row['field_value']  # Using generic field_value from helper
+                if category not in category_positions:
+                    category_positions[category] = {
+                        'positions': [],
+                        'total_invested': 0
+                    }
+
+                position_info = {
+                    'company_name': row['company_name'],
+                    'portfolio_name': row['portfolio_name'],
+                    'shares': float(row['shares']),
+                    'price': float(row['price']),
+                    'value': float(row['position_value'])
+                }
+
+                category_positions[category]['positions'].append(position_info)
+                category_positions[category]['total_invested'] += position_info['value']
+
+        # Calculate remaining capacity for each category
+        category_capacity = []
+        if category_positions and total_investable_capital > 0:
+            max_per_category_amount = total_investable_capital * (max_per_category / 100)
+
+            for category, data in category_positions.items():
+                current_invested = data['total_invested']
+                # Allow negative values for over-allocated categories
+                remaining_capacity = max_per_category_amount - current_invested
+
+                category_capacity.append({
+                    'category': category,
+                    'current_invested': current_invested,
+                    'max_allowed': max_per_category_amount,
+                    'remaining_capacity': remaining_capacity,
+                    'is_over_allocated': remaining_capacity < 0,
+                    'positions': data['positions']  # Include individual positions for hover
+                })
+
+        # Sort by remaining capacity (ascending - over-allocated categories first, then least to most capacity)
+        category_capacity.sort(key=lambda x: x['remaining_capacity'])
+
+        logger.info(f"Returning category capacity data for {len(category_capacity)} categories")
+        return jsonify({
+            'categories': category_capacity,
+            'total_investable_capital': total_investable_capital,
+            'max_per_category_percent': max_per_category
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting category capacity data: {str(e)}")
         return error_response(str(e), 500)
 
 

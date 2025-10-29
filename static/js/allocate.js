@@ -330,6 +330,16 @@ document.addEventListener('DOMContentLoaded', function () {
             // Calculate actions based on rebalancing mode
             this.calculateRebalancingActions(filteredPortfolios, totalCurrentValue);
 
+            // Sync calculated actions back to master portfolioData for detailed view consistency
+            filteredPortfolios.forEach(filtered => {
+                const originalPortfolio = this.portfolioData.portfolios.find(p => p.name === filtered.name);
+                if (originalPortfolio) {
+                    originalPortfolio.action = filtered.action;
+                    originalPortfolio.targetValue = filtered.targetValue;
+                    originalPortfolio.discrepancy = filtered.discrepancy;
+                }
+            });
+
             // Generate table HTML
             const tableHTML = this.generatePortfolioTableHTML(filteredPortfolios, totalCurrentValue, newTotalValue);
 
@@ -341,31 +351,102 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         calculateRebalancingActions(portfolios, totalCurrentValue) {
+            /**
+             * UNIFIED ALLOCATION LOGIC
+             * All modes follow the same core principles:
+             * 1. Calculate gap = target_value - current_value
+             * 2. Exclude items with gap = 0 (already at target)
+             * 3. Distribute capital proportionally based on gap sizes
+             *
+             * Mode differences:
+             * - existing-only: Allows sells (negative gaps), no new capital, buys = sells
+             * - new-only: Only buys (positive gaps), distribute new capital only
+             * - new-with-sells: Allows both, distribute full target adjustment
+             */
+
             if (this.rebalanceMode === 'existing-only') {
                 // Mode: Rebalance Existing Capital (no new money, buys must equal sells)
-                portfolios.forEach(portfolio => {
-                    portfolio.action = portfolio.discrepancy;
-                });
-            } else if (this.rebalanceMode === 'new-only') {
-                // Mode: New Capital Only (no sales, only buys)
-                const totalNeeded = portfolios.reduce((sum, p) => sum + Math.max(0, p.discrepancy), 0);
-                const canReachAllTargets = this.investmentAmount >= totalNeeded;
+                // Calculate gaps and distribute proportionally
+                const positiveGaps = [];
+                const negativeGaps = [];
+                let totalPositiveGap = 0;
+                let totalNegativeGap = 0;
 
                 portfolios.forEach(portfolio => {
-                    let action = 0;
-                    if (this.investmentAmount > 0 && portfolio.discrepancy > 0) {
-                        if (canReachAllTargets) {
-                            action = portfolio.discrepancy;
-                        } else if (totalNeeded > 0) {
-                            action = (portfolio.discrepancy / totalNeeded) * this.investmentAmount;
-                        }
+                    const gap = portfolio.discrepancy;
+
+                    if (Math.abs(gap) < 0.01) {
+                        // At target - no action
+                        portfolio.action = 0;
+                    } else if (gap > 0) {
+                        // Below target - needs to buy
+                        positiveGaps.push(portfolio);
+                        totalPositiveGap += gap;
+                    } else {
+                        // Above target - needs to sell
+                        negativeGaps.push(portfolio);
+                        totalNegativeGap += Math.abs(gap);
                     }
-                    portfolio.action = action;
                 });
+
+                // Calculate the smaller of total buys or total sells
+                const rebalanceAmount = Math.min(totalPositiveGap, totalNegativeGap);
+
+                // Distribute buys proportionally
+                positiveGaps.forEach(portfolio => {
+                    const proportionalShare = portfolio.discrepancy / totalPositiveGap;
+                    portfolio.action = proportionalShare * rebalanceAmount;
+                });
+
+                // Distribute sells proportionally
+                negativeGaps.forEach(portfolio => {
+                    const proportionalShare = Math.abs(portfolio.discrepancy) / totalNegativeGap;
+                    portfolio.action = -1 * proportionalShare * rebalanceAmount;
+                });
+
+            } else if (this.rebalanceMode === 'new-only') {
+                // Mode: New Capital Only (no sales, only buys)
+                // Only allocate to portfolios BELOW target
+                // Distribute proportionally based on gap size
+
+                const eligibleGaps = [];
+                let totalGap = 0;
+
+                portfolios.forEach(portfolio => {
+                    const gap = portfolio.discrepancy;
+
+                    if (gap <= 0) {
+                        // At or above target - gets 0€
+                        portfolio.action = 0;
+                    } else {
+                        // Below target - eligible for allocation
+                        eligibleGaps.push({ portfolio, gap });
+                        totalGap += gap;
+                    }
+                });
+
+                // Distribute new capital proportionally by gap size
+                if (this.investmentAmount > 0 && totalGap > 0) {
+                    eligibleGaps.forEach(item => {
+                        const proportionalShare = item.gap / totalGap;
+                        item.portfolio.action = proportionalShare * this.investmentAmount;
+                    });
+                }
+
             } else if (this.rebalanceMode === 'new-with-sells') {
                 // Mode: New Capital with Full Rebalancing (allows both buys and sells)
+                // Distribute full discrepancy, allowing both positive and negative actions
+
                 portfolios.forEach(portfolio => {
-                    portfolio.action = portfolio.discrepancy;
+                    const gap = portfolio.discrepancy;
+
+                    if (Math.abs(gap) < 0.01) {
+                        // At target - no action
+                        portfolio.action = 0;
+                    } else {
+                        // Apply full gap adjustment (buy if positive, sell if negative)
+                        portfolio.action = gap;
+                    }
                 });
             }
         }
@@ -694,9 +775,24 @@ document.addEventListener('DOMContentLoaded', function () {
             // Table body
             const tbody = document.createElement('tbody');
 
-            // Calculate the new portfolio value after action (this is the target value)
+            // Calculate the distribution base and target value
             let totalCurrentValue = portfolio.currentValue || 0;
-            let portfolioTargetValue = totalCurrentValue + portfolioActionAmount;
+
+            // Key fix: For "new-only" mode, distribute only the allocated new capital
+            // For rebalancing modes, use the final target value (current + action)
+            let distributionBase;
+            let portfolioTargetValue;  // Final value after all actions
+
+            if (this.rebalanceMode === 'new-only') {
+                // New-only mode: positions compete for their share of NEW capital only
+                distributionBase = portfolioActionAmount;  // Distribute the €18K
+                portfolioTargetValue = totalCurrentValue + portfolioActionAmount;  // Final value €80K
+            } else {
+                // Rebalancing modes: positions target their share of final portfolio value
+                distributionBase = totalCurrentValue + portfolioActionAmount;  // Both distribute and target the same €80K
+                portfolioTargetValue = distributionBase;
+            }
+
             let totalAction = 0;
             let totalValueAfter = 0;
 
@@ -760,14 +856,71 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // No longer need totalPositiveDiscrepancy since we calculate actions directly
 
-            // Second pass: assign target allocations and calculate discrepancies
+            // Second pass: Check if we should show missing positions
+            // This must be done BEFORE normalization
+            let shouldShowMissingPositions = false;
+            const missingPositionsCategory = portfolio.categories && portfolio.categories.find(cat =>
+                cat.name === 'Missing Positions' ||
+                (cat.positions && cat.positions.some(pos => pos.isPlaceholder))
+            );
+
+            if (missingPositionsCategory) {
+                // Calculate total weight of real positions from builder
+                const realBuilderPositions = builderPositions.filter(pos => !pos.isPlaceholder);
+                const totalRealWeight = realBuilderPositions.reduce((sum, pos) => sum + (pos.weight || 0), 0);
+
+                const minPositions = portfolio.minPositions || 0;
+                const currentPositionsCount = portfolio.categories
+                    .filter(cat => cat.name !== 'Missing Positions')
+                    .reduce((sum, cat) => sum + (cat.positions ? cat.positions.length : 0), 0);
+
+                shouldShowMissingPositions = (
+                    currentPositionsCount < minPositions &&
+                    Math.round(totalRealWeight) < 100
+                );
+
+                console.log(`Portfolio ${portfolio.name}: shouldShowMissingPositions=${shouldShowMissingPositions}, currentPositions=${currentPositionsCount}, minPositions=${minPositions}, totalRealWeight=${totalRealWeight}%`);
+            }
+
+            // Third pass: assign target allocations and calculate total for normalization
+            let totalTargetAllocation = 0;
             if (portfolio.categories && portfolio.categories.length > 0) {
                 portfolio.categories.forEach((category, categoryIndex) => {
                     // Skip categories with no positions
                     if (!category.positions || category.positions.length === 0) return;
 
-                    // Skip "Missing Positions" category temporarily - we'll handle it separately
-                    if (category.name === 'Missing Positions') return;
+                    // Skip missing positions if they shouldn't be shown
+                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    // Assign target allocations for each position
+                    category.positions.forEach(position => {
+                        // Use builder weight if available, otherwise use default allocation
+                        if (!position.targetAllocation || position.targetAllocation <= 0) {
+                            // Check if this position has a builder-defined weight
+                            const builderWeight = builderPositionsMap.get(position.name);
+                            position.targetAllocation = builderWeight || defaultAllocation;
+                        }
+
+                        totalTargetAllocation += position.targetAllocation;
+                    });
+                });
+            }
+
+            // Normalize target allocations to sum to exactly 100%
+            const normalizationFactor = totalTargetAllocation > 0 ? (100 / totalTargetAllocation) : 1;
+            console.log(`Portfolio ${portfolio.name}: Total target allocation before normalization: ${totalTargetAllocation}%, normalization factor: ${normalizationFactor}`);
+
+            // Fourth pass: normalize allocations and calculate target values
+            // Store normalized allocations in a separate map to avoid mutating originals
+            const normalizedAllocations = new Map();
+
+            if (portfolio.categories && portfolio.categories.length > 0) {
+                portfolio.categories.forEach((category, categoryIndex) => {
+                    // Skip categories with no positions
+                    if (!category.positions || category.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
                     // Calculate category metrics
                     let categoryCurrentValue = 0;
@@ -777,28 +930,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     category.positions.forEach(position => {
                         categoryCurrentValue += (position.currentValue || 0);
 
-                        // Use builder weight if available, otherwise use default allocation
-                        if (!position.targetAllocation || position.targetAllocation <= 0) {
-                            // Check if this position has a builder-defined weight
-                            const builderWeight = builderPositionsMap.get(position.name);
-                            position.targetAllocation = builderWeight || defaultAllocation;
-                        }
+                        // Calculate normalized allocation WITHOUT mutating the original
+                        const normalizedAllocation = position.targetAllocation * normalizationFactor;
+                        normalizedAllocations.set(position, normalizedAllocation);
+                        categoryTargetAllocation += normalizedAllocation;
 
-                        categoryTargetAllocation += position.targetAllocation;
-
-                        // Calculate target value using the new portfolio target value
-                        const targetValue = (position.targetAllocation / 100) * portfolioTargetValue;
+                        // Calculate target value based on final portfolio value
+                        const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
                         position.calculatedTargetValue = targetValue;
-
-                        // Calculate action directly: target - current (unified logic with global view)
-                        position.action = targetValue - (position.currentValue || 0);
-                        
-                        // For new-only mode, clamp negative actions to zero (no sells allowed)
-                        if (this.rebalanceMode === 'new-only' && position.action < 0) {
-                            position.action = 0;
-                        }
-                        
-                        position.valueAfter = (position.currentValue || 0) + position.action;
                     });
 
                     // Set category values
@@ -806,107 +945,185 @@ document.addEventListener('DOMContentLoaded', function () {
                     category.targetAllocation = categoryTargetAllocation;
                     category.calculatedTargetValue = (categoryTargetAllocation / 100) * portfolioTargetValue;
                 });
-
-                // Handle missing positions if any
-                const missingPositionsCategory = portfolio.categories.find(cat =>
-                    cat.name === 'Missing Positions' ||
-                    cat.positions.some(pos => pos.isPlaceholder));
-
-                // Check if real categories already have 100% allocation
-                let realPositionsHave100Percent = false;
-                if (portfolio.categories) {
-                    const realPositionCategories = portfolio.categories.filter(cat =>
-                        cat.name !== 'Missing Positions' &&
-                        cat.positions &&
-                        cat.positions.length > 0
-                    );
-
-                    const totalRealPositionsWeight = realPositionCategories.reduce((sum, cat) => {
-                        // Sum up the targetAllocation of all positions in this category
-                        const catAllocation = cat.positions.reduce((catSum, pos) => {
-                            return catSum + (pos.targetAllocation || 0);
-                        }, 0);
-                        return sum + catAllocation;
-                    }, 0);
-
-                    // If real positions already have 100% allocation, skip missing positions
-                    realPositionsHave100Percent = Math.round(totalRealPositionsWeight) >= 100;
-
-                    // Debug logging for troubleshooting
-                    if (portfolio.name === "GME" || portfolio.name.includes("GameStop") || portfolio.name.includes("Gamestop")) {
-                        console.log(`DEBUG ${portfolio.name}:`, {
-                            realPositionCategories,
-                            totalRealPositionsWeight,
-                            realPositionsHave100Percent,
-                            builderPositions: portfolio.builderPositions
-                        });
-                    }
-
-
-                }
-
-                // Handle case - show missing positions based on builder configuration
-                if (missingPositionsCategory && !realPositionsHave100Percent) {
-                    // Check if portfolio has minPositions defined
-                    const minPositions = portfolio.minPositions || 0;
-                    const currentPositionsCount = portfolio.categories
-                        .filter(cat => cat.name !== 'Missing Positions')
-                        .reduce((sum, cat) => sum + (cat.positions ? cat.positions.length : 0), 0);
-
-                    // Only show missing positions if we haven't reached minimum positions AND real positions don't sum to 100%
-                    if (currentPositionsCount < minPositions && !realPositionsHave100Percent) {
-                        let missingTargetAllocation = 0;
-                        let missingCalculatedValue = 0;
-
-                        // Calculate allocation for each missing position based on builder data
-                        missingPositionsCategory.positions.forEach(position => {
-                            // Set target allocation for each placeholder position
-                            position.targetAllocation = position.targetAllocation || defaultAllocation;
-                            const positionTargetValue = (position.targetAllocation / 100) * portfolioTargetValue;
-                            position.calculatedTargetValue = positionTargetValue;
-
-                            // Calculate action directly (always a buy since current value is 0)
-                            position.action = positionTargetValue;
-                            position.valueAfter = positionTargetValue;
-
-                            missingTargetAllocation += position.targetAllocation;
-                            missingCalculatedValue += positionTargetValue;
-                        });
-
-                        missingPositionsCategory.targetAllocation = missingTargetAllocation;
-                        missingPositionsCategory.calculatedTargetValue = missingCalculatedValue;
-                    } else {
-                        // If we have enough positions OR real positions sum to 100%, set missing positions to 0
-                        missingPositionsCategory.targetAllocation = 0;
-                        missingPositionsCategory.calculatedTargetValue = 0;
-
-                        // Clear individual position calculations too
-                        missingPositionsCategory.positions.forEach(position => {
-                            position.targetAllocation = 0;
-                            position.calculatedTargetValue = 0;
-                        });
-                    }
-                } else if (missingPositionsCategory) {
-                    // If user-defined allocations sum to 100% or real positions have 100%, set missing positions to 0
-                    missingPositionsCategory.targetAllocation = 0;
-                    missingPositionsCategory.calculatedTargetValue = 0;
-
-                    // Clear individual position calculations too
-                    missingPositionsCategory.positions.forEach(position => {
-                        position.targetAllocation = 0;
-                        position.calculatedTargetValue = 0;
-                    });
-                }
             }
 
-            // Third pass: calculate actions and render
+            // Fifth pass: UNIFIED ALLOCATION DISTRIBUTION LOGIC
+            /**
+             * All modes follow the same core principles:
+             * 1. Calculate gap = target_value - current_value for each position
+             * 2. Exclude positions with gap = 0 (already at target)
+             * 3. Exclude entire categories if category is at/above target
+             * 4. Distribute capital proportionally based on gap sizes
+             *
+             * Mode differences:
+             * - existing-only: Allows sells (negative gaps), buys = sells at portfolio level
+             * - new-only: Only buys (positive gaps), distribute portfolio's new capital
+             * - new-with-sells: Allows both buys and sells, full rebalancing
+             */
+
+            const positiveGaps = [];
+            const negativeGaps = [];
+            let totalPositiveGap = 0;
+            let totalNegativeGap = 0;
+
             if (portfolio.categories && portfolio.categories.length > 0) {
                 portfolio.categories.forEach((category, categoryIndex) => {
                     // Skip categories with no positions
                     if (!category.positions || category.positions.length === 0) return;
 
-                    // Skip "Missing Positions" category temporarily
-                    if (category.name === 'Missing Positions') return;
+                    // Skip missing positions if they shouldn't be shown
+                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    // Check if category is at or above target (for all modes)
+                    const categoryCurrentValue = category.currentValue || 0;
+                    const categoryTargetValue = category.calculatedTargetValue || 0;
+                    const categoryGap = categoryTargetValue - categoryCurrentValue;
+
+                    // Process positions within this category
+                    category.positions.forEach(position => {
+                        const positionCurrentValue = position.currentValue || 0;
+                        const positionTargetValue = position.calculatedTargetValue || 0;
+                        const positionGap = positionTargetValue - positionCurrentValue;
+
+                        position.gap = positionGap;
+
+                        // Determine eligibility based on mode and gap
+                        if (Math.abs(positionGap) < 0.01) {
+                            // At target - no action needed
+                            position.excludedReason = 'at_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (categoryGap <= 0 && positionGap > 0) {
+                            // Category is at/above target but position is below
+                            // In this case, category constraint takes precedence
+                            position.excludedReason = 'category_above_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (this.rebalanceMode === 'new-only' && positionGap <= 0) {
+                            // New-only mode: exclude positions at or above target
+                            position.excludedReason = 'at_or_above_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (this.rebalanceMode === 'existing-only' || this.rebalanceMode === 'new-with-sells') {
+                            // Rebalancing modes: include all positions with gaps
+                            if (positionGap > 0) {
+                                // Below target - needs to buy
+                                positiveGaps.push({
+                                    position: position,
+                                    gap: positionGap,
+                                    category: category.name
+                                });
+                                totalPositiveGap += positionGap;
+                            } else {
+                                // Above target - needs to sell
+                                negativeGaps.push({
+                                    position: position,
+                                    gap: Math.abs(positionGap),
+                                    category: category.name
+                                });
+                                totalNegativeGap += Math.abs(positionGap);
+                            }
+
+                        } else {
+                            // New-only mode with positive gap
+                            positiveGaps.push({
+                                position: position,
+                                gap: positionGap,
+                                category: category.name
+                            });
+                            totalPositiveGap += positionGap;
+                        }
+                    });
+                });
+            }
+
+            console.log(`Portfolio ${portfolio.name} (${this.rebalanceMode}): ${positiveGaps.length} buys (€${totalPositiveGap.toFixed(2)}), ${negativeGaps.length} sells (€${totalNegativeGap.toFixed(2)})`);
+
+            // Distribute capital based on mode
+            if (this.rebalanceMode === 'new-only') {
+                // New-only: Distribute new capital proportionally to positive gaps only
+                if (totalPositiveGap > 0 && portfolioActionAmount > 0) {
+                    const availableCapital = Math.max(0, portfolioActionAmount);
+
+                    positiveGaps.forEach(item => {
+                        const proportionalShare = item.gap / totalPositiveGap;
+                        const allocation = proportionalShare * availableCapital;
+
+                        item.position.action = allocation;
+                        item.position.valueAfter = (item.position.currentValue || 0) + allocation;
+
+                        if (item.gap > 100) {
+                            console.log(`  Buy ${item.position.name}: gap=€${item.gap.toFixed(2)}, share=${(proportionalShare*100).toFixed(1)}%, allocation=€${allocation.toFixed(2)}`);
+                        }
+                    });
+                }
+
+            } else if (this.rebalanceMode === 'existing-only') {
+                // Existing-only: Proportional buys and sells, buys = sells
+                const rebalanceAmount = Math.min(totalPositiveGap, totalNegativeGap);
+
+                if (rebalanceAmount > 0) {
+                    // Distribute buys proportionally
+                    if (totalPositiveGap > 0) {
+                        positiveGaps.forEach(item => {
+                            const proportionalShare = item.gap / totalPositiveGap;
+                            const allocation = proportionalShare * rebalanceAmount;
+
+                            item.position.action = allocation;
+                            item.position.valueAfter = (item.position.currentValue || 0) + allocation;
+                        });
+                    }
+
+                    // Distribute sells proportionally
+                    if (totalNegativeGap > 0) {
+                        negativeGaps.forEach(item => {
+                            const proportionalShare = item.gap / totalNegativeGap;
+                            const allocation = proportionalShare * rebalanceAmount;
+
+                            item.position.action = -allocation;
+                            item.position.valueAfter = (item.position.currentValue || 0) - allocation;
+                        });
+                    }
+                }
+
+            } else if (this.rebalanceMode === 'new-with-sells') {
+                // New-with-sells: Full rebalancing - apply full gaps
+                positiveGaps.forEach(item => {
+                    item.position.action = item.gap;
+                    item.position.valueAfter = (item.position.currentValue || 0) + item.gap;
+                });
+
+                negativeGaps.forEach(item => {
+                    item.position.action = -item.gap;
+                    item.position.valueAfter = (item.position.currentValue || 0) - item.gap;
+                });
+            }
+
+            // Ensure all positions have action and valueAfter set
+            if (portfolio.categories) {
+                portfolio.categories.forEach(category => {
+                    if (category.positions) {
+                        category.positions.forEach(position => {
+                            if (position.action === undefined) {
+                                position.action = 0;
+                                position.valueAfter = position.currentValue || 0;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Sixth pass: render categories and positions
+            if (portfolio.categories && portfolio.categories.length > 0) {
+                portfolio.categories.forEach((category, categoryIndex) => {
+                    // Skip categories with no positions
+                    if (!category.positions || category.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
                     const categoryId = `${portfolio.name}-${category.name}-${categoryIndex}`;
                     const isExpanded = this.categoriesExpanded.has(categoryId);
@@ -939,7 +1156,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     const categoryRow = document.createElement('tr');
-                    categoryRow.className = 'table-secondary category-row';
+                    // Add special styling for Missing Positions
+                    const isMissingPositions = category.name === 'Missing Positions';
+                    categoryRow.className = isMissingPositions
+                        ? 'table-warning category-row missing-positions-category'
+                        : 'table-secondary category-row';
                     categoryRow.style.cursor = 'pointer';
 
                     // Calculate allocation after action for category
@@ -947,15 +1168,20 @@ document.addEventListener('DOMContentLoaded', function () {
                         ? (categoryValueAfter / totalValueAfterAllActions) * 100
                         : 0;
 
+                    // Build category name display with special icon for missing positions
+                    const categoryNameHtml = isMissingPositions
+                        ? `<i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Missing Positions (${category.positions.length})</strong>`
+                        : `<strong>${category.name}</strong>`;
+
                     categoryRow.innerHTML = `
                         <td>
                             <i class="fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} me-2"></i>
-                            <strong>${category.name}</strong>
+                            ${categoryNameHtml}
                         </td>
                         <td class="current-value">${this.formatCurrency(category.currentValue || 0)}</td>
                         <td>${this.formatPercentage(categoryCurrentAllocation)}</td>
-                        <td>${this.formatPercentage(category.targetAllocation)}</td>
-                        <td class="target-value">${this.formatCurrency(category.calculatedTargetValue)}</td>
+                        <td>${this.formatPercentage(category.targetAllocation || 0)}</td>
+                        <td class="target-value">${this.formatCurrency(category.calculatedTargetValue || 0)}</td>
                         <td class="${categoryActionClass}">${categoryActionText}</td>
                         <td class="value-after">${this.formatCurrency(categoryValueAfter)}</td>
                         <td class="allocation-after">${this.formatPercentage(categoryAllocationAfterAction)}</td>
@@ -995,18 +1221,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
                             // Position row - indented to show hierarchy
                             const positionRow = document.createElement('tr');
-                            positionRow.className = 'position-row';
+                            const isPlaceholder = position.isPlaceholder || false;
+                            positionRow.className = isPlaceholder
+                                ? 'position-row placeholder-position'
+                                : 'position-row';
+
+                            // Add special styling for placeholder positions
+                            if (isPlaceholder) {
+                                positionRow.style.fontStyle = 'italic';
+                                positionRow.style.color = '#6c757d';
+                                positionRow.title = "This represents a future position to be filled";
+                            }
+
+                            // Build position name with icon for placeholders
+                            const positionNameHtml = isPlaceholder
+                                ? `<i class="fas fa-plus-circle me-2 text-muted"></i>${position.name}`
+                                : position.name;
+
+                            // Get the normalized allocation for display
+                            const displayAllocation = normalizedAllocations.get(position) || 0;
 
                             positionRow.innerHTML = `
                                 <td class="position-name">
-                                    <span class="ms-4">${position.name}</span>
+                                    <span class="ms-4">${positionNameHtml}</span>
                                 </td>
                                 <td class="current-value">${this.formatCurrency(position.currentValue || 0)}</td>
                                 <td>${this.formatPercentage(positionCurrentAllocation)}</td>
-                                <td>${this.formatPercentage(position.targetAllocation)}</td>
-                                <td class="target-value">${this.formatCurrency(position.calculatedTargetValue)}</td>
+                                <td>${this.formatPercentage(displayAllocation)}</td>
+                                <td class="target-value">${this.formatCurrency(position.calculatedTargetValue || 0)}</td>
                                 <td class="${actionClass}">${actionText}</td>
-                                <td class="value-after">${this.formatCurrency(position.valueAfter)}</td>
+                                <td class="value-after">${this.formatCurrency(position.valueAfter || 0)}</td>
                                 <td class="allocation-after">${this.formatPercentage(positionAllocationAfterAction)}</td>
                             `;
 
@@ -1022,122 +1266,18 @@ document.addEventListener('DOMContentLoaded', function () {
                         totalValueAfter += categoryValueAfter;
                     }
                 });
+            }
 
-                // Handle Missing Positions category separately
-                const missingPositionsCategory = portfolio.categories.find(cat =>
-                    cat.name === 'Missing Positions');
+            // Verification: Check if totalAction matches portfolioActionAmount
+            console.log(`Portfolio ${portfolio.name} verification:`);
+            console.log(`  Expected action (from global): €${portfolioActionAmount.toFixed(2)}`);
+            console.log(`  Calculated action (from positions): €${totalAction.toFixed(2)}`);
+            console.log(`  Difference: €${Math.abs(totalAction - portfolioActionAmount).toFixed(2)}`);
 
-                // Skip missing positions entirely for GME portfolio
-                if (portfolio.name === "GME") {
-                    console.log("GME portfolio - not rendering missing positions row");
-                }
-                // Show missing positions with individual placeholder rows
-                else if (missingPositionsCategory && missingPositionsCategory.targetAllocation > 0) {
-                    // Create expandable category header for missing positions
-                    const categoryId = `${portfolio.name}-Missing-Positions`;
-
-                    // Check if category is expanded (don't force auto-expand)
-                    const isExpanded = this.categoriesExpanded.has(categoryId);
-
-                    console.log(`Missing positions category for ${portfolio.name}:`, {
-                        categoryId,
-                        isExpanded,
-                        positionsCount: missingPositionsCategory.positions.length,
-                        targetAllocation: missingPositionsCategory.targetAllocation
-                    });
-
-                    // Calculate total action for all missing positions by summing individual actions
-                    let totalMissingAction = 0;
-                    missingPositionsCategory.positions.forEach(position => {
-                        totalMissingAction += position.action || 0;
-                    });
-
-                    // Calculate allocation after action for missing positions category
-                    const missingAllocationAfterAction = totalValueAfterAllActions > 0
-                        ? (totalMissingAction / totalValueAfterAllActions) * 100
-                        : 0;
-
-                    // Missing Positions category row (expandable)
-                    const categoryRow = document.createElement('tr');
-                    categoryRow.className = 'table-warning category-row missing-positions-category';
-                    categoryRow.style.cursor = 'pointer';
-
-                    categoryRow.innerHTML = `
-                        <td>
-                            <i class="fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} me-2"></i>
-                            <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
-                            <strong>Missing Positions (${missingPositionsCategory.positions.length})</strong>
-                        </td>
-                        <td class="current-value">${this.formatCurrency(0)}</td>
-                        <td>${this.formatPercentage(0)}</td>
-                        <td>${this.formatPercentage(missingPositionsCategory.targetAllocation)}</td>
-                        <td class="target-value">${this.formatCurrency(missingPositionsCategory.calculatedTargetValue)}</td>
-                        <td class="actions-positive">Buy ${this.formatCurrency(totalMissingAction)}</td>
-                        <td class="value-after">${this.formatCurrency(totalMissingAction)}</td>
-                        <td class="allocation-after">${this.formatPercentage(missingAllocationAfterAction)}</td>
-                    `;
-
-                    categoryRow.addEventListener('click', (e) => {
-                        console.log(`Missing Positions category clicked: ${categoryId}`, e);
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.toggleCategoryExpand(categoryId);
-                    });
-
-                    tbody.appendChild(categoryRow);
-
-                    // Add individual placeholder position rows if expanded
-                    if (isExpanded) {
-                        console.log(`Rendering ${missingPositionsCategory.positions.length} placeholder positions for ${portfolio.name}`);
-                        missingPositionsCategory.positions.forEach((position, index) => {
-                            console.log(`Rendering placeholder position ${index + 1}:`, position);
-                            if (position.isPlaceholder) {
-                                // Use the already calculated position action
-                                const positionAction = position.action || 0;
-
-                                // Calculate allocation after action for this position
-                                const positionAllocationAfterAction = totalValueAfterAllActions > 0
-                                    ? (positionAction / totalValueAfterAllActions) * 100
-                                    : 0;
-
-                                // Individual placeholder position row with special styling
-                                const positionRow = document.createElement('tr');
-                                positionRow.className = 'position-row placeholder-position';
-                                positionRow.style.fontStyle = 'italic';
-                                positionRow.style.color = '#6c757d';
-
-                                positionRow.innerHTML = `
-                                    <td class="position-name">
-                                        <span class="ms-4">
-                                            <i class="fas fa-plus-circle me-2 text-muted"></i>
-                                            ${position.name}
-                                        </span>
-                                    </td>
-                                    <td class="current-value">${this.formatCurrency(0)}</td>
-                                    <td>${this.formatPercentage(0)}</td>
-                                    <td>${this.formatPercentage(position.targetAllocation)}</td>
-                                    <td class="target-value">${this.formatCurrency(position.calculatedTargetValue)}</td>
-                                    <td class="actions-positive">Buy ${this.formatCurrency(positionAction)}</td>
-                                    <td class="value-after">${this.formatCurrency(positionAction)}</td>
-                                    <td class="allocation-after">${this.formatPercentage(positionAllocationAfterAction)}</td>
-                                `;
-
-                                // Add hover tooltip
-                                positionRow.title = "This represents a future position to be filled";
-
-                                tbody.appendChild(positionRow);
-
-                                // Add to totals
-                                totalAction += positionAction;
-                                totalValueAfter += positionAction;
-                            }
-                        });
-                    } else {
-                        // If category is collapsed, still add actions to totals
-                        totalAction += totalMissingAction;
-                        totalValueAfter += totalMissingAction;
-                    }
-                }
+            if (Math.abs(totalAction - portfolioActionAmount) > 0.10) {
+                console.warn(`⚠️ Mismatch detected! Detailed view actions don't match global view.`);
+            } else {
+                console.log(`✓ Actions match within rounding tolerance`);
             }
 
             // Portfolio total row
@@ -1218,9 +1358,35 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize portfolio allocator
     const allocator = new PortfolioAllocator();
 
-    // Country Capacity Feature
+    // Allocation Capacity Feature (Country & Category)
+    // Shared constants for allocation charts
+    const ALLOCATION_CHART_COLORS = {
+        ranges: [
+            {
+                from: -Infinity,
+                to: -0.01,
+                color: '#dc3545' // Red for over-allocated
+            },
+            {
+                from: 0,
+                to: 0,
+                color: '#e0e0e0' // Muted color for zero values
+            },
+            {
+                from: 0.01,
+                to: Infinity,
+                color: '#00c4a7' // Green for capacity remaining
+            }
+        ]
+    };
+
+    // Country Capacity
     let countryCapacityExpanded = false;
     let countryCapacityData = null;
+
+    // Category Capacity
+    let categoryCapacityExpanded = false;
+    let categoryCapacityData = null;
 
     // Toggle country capacity expander
     window.toggleCountryCapacityExpander = function() {
@@ -1283,7 +1449,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Create chart options styled to match Portfolio Allocations table
         const chartOptions = {
             series: [{
-                name: 'Remaining Capacity',
+                name: 'Country Allocation',
                 data: values
             }],
             chart: {
@@ -1305,19 +1471,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     dataLabels: {
                         position: 'top'
                     },
-                    colors: {
-                        ranges: [{
-                            from: 0,
-                            to: 0,
-                            color: '#e0e0e0' // Muted color for zero values
-                        }]
-                    }
+                    colors: ALLOCATION_CHART_COLORS  // Use shared color configuration
                 }
             },
             dataLabels: {
                 enabled: true,
                 formatter: function(val) {
-                    return val > 0 ? `€${Math.round(val).toLocaleString()}` : '€0';
+                    if (val < 0) {
+                        return `Over: €${Math.abs(Math.round(val)).toLocaleString()}`;
+                    } else if (val > 0) {
+                        return `€${Math.round(val).toLocaleString()}`;
+                    } else {
+                        return '€0';
+                    }
                 },
                 offsetX: 10,
                 style: {
@@ -1329,7 +1495,7 @@ document.addEventListener('DOMContentLoaded', function () {
             xaxis: {
                 categories: labels,
                 title: {
-                    text: 'Remaining Investment Capacity (€)',
+                    text: 'Allocation Status (€) - Negative = Over-allocated',
                     style: {
                         fontSize: '14px',
                         fontWeight: '500',
@@ -1372,7 +1538,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             },
             title: {
-                text: `Country Investment Capacity (Max ${countryCapacityData.max_per_country_percent}% per country)`,
+                text: `Country Allocation Status (Max ${countryCapacityData.max_per_country_percent}% per country)`,
                 align: 'left',
                 margin: 20,
                 style: {
@@ -1381,24 +1547,25 @@ document.addEventListener('DOMContentLoaded', function () {
                     color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333' // Adaptive text color
                 }
             },
-            colors: ['#00c4a7'], // Use app primary color
+            colors: ['#00c4a7'], // Default color (overridden by ranges)
             tooltip: {
                 shared: false,
                 custom: function({series, seriesIndex, dataPointIndex, w}) {
                     const country = countries[dataPointIndex];
                     const remainingCapacity = series[seriesIndex][dataPointIndex];
-                    
+                    const isOverAllocated = remainingCapacity < 0;
+
                     // Get adaptive colors for dark mode support
                     const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || 'white';
                     const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0';
                     const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
                     const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666';
-                    
+
                     let positionsHtml = '';
                     if (country.positions && country.positions.length > 0) {
                         positionsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${borderColor};">`;
                         positionsHtml += `<div style="font-weight: 600; margin-bottom: 6px; color: ${textColor};">Current Positions:</div>`;
-                        
+
                         country.positions.forEach(position => {
                             positionsHtml += `
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 12px;">
@@ -1409,13 +1576,18 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
                         positionsHtml += '</div>';
                     }
-                    
+
+                    // Status row - show either remaining capacity or over-allocation
+                    const statusLabel = isOverAllocated ? 'Over-allocated by:' : 'Remaining Capacity:';
+                    const statusValue = Math.abs(Math.round(remainingCapacity)).toLocaleString();
+                    const statusColor = isOverAllocated ? '#dc3545' : '#00c4a7';
+
                     return `
                         <div style="
-                            background: ${bgColor}; 
-                            border: 1px solid ${borderColor}; 
-                            border-radius: 6px; 
-                            padding: 12px; 
+                            background: ${bgColor};
+                            border: 1px solid ${borderColor};
+                            border-radius: 6px;
+                            padding: 12px;
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                             min-width: 250px;
@@ -1425,8 +1597,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 ${country.country}
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <span style="color: ${mutedColor};">Remaining Capacity:</span>
-                                <span style="color: #00c4a7; font-weight: 600;">€${Math.round(remainingCapacity).toLocaleString()}</span>
+                                <span style="color: ${mutedColor};">${statusLabel}</span>
+                                <span style="color: ${statusColor}; font-weight: 600;">€${statusValue}</span>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                 <span style="color: ${mutedColor};">Currently Invested:</span>
@@ -1515,6 +1687,305 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="notification is-info">
                     <i class="fas fa-info-circle mr-2"></i>
                     No country capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
+                </div>
+            `;
+        }
+    }
+
+    // Category Capacity Feature (mirrors country capacity)
+    // Toggle category capacity expander
+    window.toggleCategoryCapacityExpander = function() {
+        const content = document.getElementById('category-capacity-content');
+        const arrow = document.getElementById('category-capacity-arrow');
+
+        categoryCapacityExpanded = !categoryCapacityExpanded;
+
+        if (categoryCapacityExpanded) {
+            content.style.display = 'block';
+            arrow.classList.remove('fa-angle-down');
+            arrow.classList.add('fa-angle-up');
+
+            // Load data when expanded for the first time
+            if (!categoryCapacityData) {
+                fetchCategoryCapacityData();
+            }
+        } else {
+            content.style.display = 'none';
+            arrow.classList.remove('fa-angle-up');
+            arrow.classList.add('fa-angle-down');
+        }
+    };
+
+    // Fetch category capacity data from API
+    async function fetchCategoryCapacityData() {
+        try {
+            const response = await fetch('/portfolio/api/allocate/category-capacity');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            categoryCapacityData = await response.json();
+            console.log('Category capacity data loaded:', categoryCapacityData);
+            renderCategoryCapacityChart();
+        } catch (error) {
+            console.error('Error fetching category capacity data:', error);
+            showCategoryCapacityError('Failed to load category capacity data. Please try again later.');
+        }
+    }
+
+    // Render category capacity bar chart
+    function renderCategoryCapacityChart() {
+        const chartContainer = document.getElementById('category-capacity-chart');
+
+        if (!chartContainer) return;
+        if (!categoryCapacityData || !categoryCapacityData.categories || categoryCapacityData.categories.length === 0) {
+            showCategoryCapacityEmpty();
+            return;
+        }
+
+        // Clear the loading spinner
+        chartContainer.innerHTML = '';
+
+        // Prepare data for the chart
+        const categories = categoryCapacityData.categories;
+        const labels = categories.map(c => c.category);
+        const values = categories.map(c => c.remaining_capacity);
+
+        // Create chart options (using shared configuration)
+        const chartOptions = {
+            series: [{
+                name: 'Category Allocation',
+                data: values
+            }],
+            chart: {
+                type: 'bar',
+                height: Math.max(350, categories.length * 45),
+                toolbar: { show: false },
+                background: 'transparent',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                animations: { enabled: false }
+            },
+            plotOptions: {
+                bar: {
+                    horizontal: true,
+                    borderRadius: 6,
+                    dataLabels: { position: 'top' },
+                    colors: ALLOCATION_CHART_COLORS  // Use shared color configuration
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function(val) {
+                    if (val < 0) {
+                        return `Over: €${Math.abs(Math.round(val)).toLocaleString()}`;
+                    } else if (val > 0) {
+                        return `€${Math.round(val).toLocaleString()}`;
+                    } else {
+                        return '€0';
+                    }
+                },
+                offsetX: 10,
+                style: {
+                    fontSize: '13px',
+                    fontWeight: '500',
+                    colors: [getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333']
+                }
+            },
+            xaxis: {
+                categories: labels,
+                title: {
+                    text: 'Allocation Status (€) - Negative = Over-allocated',
+                    style: {
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666'
+                    }
+                },
+                labels: {
+                    formatter: function(val) {
+                        return `€${Math.round(val).toLocaleString()}`;
+                    },
+                    style: {
+                        fontSize: '12px',
+                        colors: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666'
+                    }
+                },
+                axisBorder: {
+                    show: true,
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0'
+                },
+                axisTicks: {
+                    show: true,
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0'
+                }
+            },
+            yaxis: {
+                title: {
+                    text: 'Categories',
+                    style: {
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666666'
+                    }
+                },
+                labels: {
+                    style: {
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        colors: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333'
+                    }
+                }
+            },
+            title: {
+                text: `Category Allocation Status (Max ${categoryCapacityData.max_per_category_percent}% per category)`,
+                align: 'left',
+                margin: 20,
+                style: {
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333333'
+                }
+            },
+            colors: ['#00c4a7'], // Default color (overridden by ranges)
+            tooltip: {
+                shared: false,
+                custom: function({series, seriesIndex, dataPointIndex, w}) {
+                    const category = categories[dataPointIndex];
+                    const remainingCapacity = series[seriesIndex][dataPointIndex];
+                    const isOverAllocated = remainingCapacity < 0;
+
+                    // Get adaptive colors for dark mode support
+                    const bgColor = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || 'white';
+                    const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0';
+                    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
+                    const mutedColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666';
+
+                    let positionsHtml = '';
+                    if (category.positions && category.positions.length > 0) {
+                        positionsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${borderColor};">`;
+                        positionsHtml += `<div style="font-weight: 600; margin-bottom: 6px; color: ${textColor};">Current Positions:</div>`;
+
+                        category.positions.forEach(position => {
+                            positionsHtml += `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 12px;">
+                                    <span style="color: ${mutedColor};">${position.company_name}</span>
+                                    <span style="color: ${textColor}; font-weight: 500;">€${Math.round(position.value).toLocaleString()}</span>
+                                </div>
+                            `;
+                        });
+                        positionsHtml += '</div>';
+                    }
+
+                    // Status row - show either remaining capacity or over-allocation
+                    const statusLabel = isOverAllocated ? 'Over-allocated by:' : 'Remaining Capacity:';
+                    const statusValue = Math.abs(Math.round(remainingCapacity)).toLocaleString();
+                    const statusColor = isOverAllocated ? '#dc3545' : '#00c4a7';
+
+                    return `
+                        <div style="
+                            background: ${bgColor};
+                            border: 1px solid ${borderColor};
+                            border-radius: 6px;
+                            padding: 12px;
+                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            min-width: 250px;
+                            max-width: 350px;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 8px; color: ${textColor}; font-size: 14px;">
+                                ${category.category}
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">${statusLabel}</span>
+                                <span style="color: ${statusColor}; font-weight: 600;">€${statusValue}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">Currently Invested:</span>
+                                <span style="color: ${textColor}; font-weight: 500;">€${Math.round(category.current_invested).toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span style="color: ${mutedColor};">Max Allowed:</span>
+                                <span style="color: ${textColor}; font-weight: 500;">€${Math.round(category.max_allowed).toLocaleString()}</span>
+                            </div>
+                            ${positionsHtml}
+                        </div>
+                    `;
+                }
+            },
+            grid: {
+                borderColor: getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#e0e0e0',
+                strokeDashArray: 0,
+                xaxis: {
+                    lines: {
+                        show: true
+                    }
+                },
+                yaxis: {
+                    lines: {
+                        show: false
+                    }
+                },
+                padding: {
+                    top: 0,
+                    right: 20,
+                    bottom: 0,
+                    left: 0
+                }
+            },
+            states: {
+                hover: {
+                    filter: {
+                        type: 'none'
+                    }
+                }
+            },
+            responsive: [{
+                breakpoint: 768,
+                options: {
+                    chart: {
+                        height: Math.max(300, categories.length * 35)
+                    },
+                    title: {
+                        style: {
+                            fontSize: '14px'
+                        }
+                    }
+                }
+            }]
+        };
+
+        // Create and render the chart
+        try {
+            const chart = new ApexCharts(chartContainer, chartOptions);
+            chart.render();
+            console.log('Category capacity chart rendered successfully');
+        } catch (error) {
+            console.error('Error rendering category capacity chart:', error);
+            showCategoryCapacityError('Failed to render chart. Please refresh the page.');
+        }
+    }
+
+    // Show error message in chart container
+    function showCategoryCapacityError(message) {
+        const chartContainer = document.getElementById('category-capacity-chart');
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <div class="notification is-danger">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    ${message}
+                </div>
+            `;
+        }
+    }
+
+    // Show empty state message
+    function showCategoryCapacityEmpty() {
+        const chartContainer = document.getElementById('category-capacity-chart');
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <div class="notification is-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    No category capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
                 </div>
             `;
         }

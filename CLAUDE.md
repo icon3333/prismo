@@ -1,0 +1,265 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+A Flask web application for **Parqet portfolio management** - helping users rebalance investment portfolios with smart allocation recommendations. Designed for **single-user homeserver deployment** with emphasis on elegance, simplicity, and robustness.
+
+**Key Philosophy**: 80/20 rule - deliver 80% of the impact with 20% of the effort. Simple, modular, elegant, efficient, and robust.
+
+## Running the Application
+
+### Development
+```bash
+# Setup (first time only - auto-creates .env and database)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Run the app (auto-detects environment, port 8065)
+python3 run.py --port 8065
+
+# Or with explicit development mode
+FLASK_ENV=development python3 run.py --port 8065
+```
+
+### Production Deployment
+```bash
+# Simple deployment (includes git pull, Docker rebuild, restart)
+./deploy.sh
+
+# Docker Compose (manual)
+docker-compose up -d
+
+# Access at http://localhost:8065 (or your server IP)
+```
+
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/test_allocation_service.py -v
+```
+
+## Architecture
+
+**Three-layer architecture** optimized for single-user homeserver deployment:
+
+```
+Routes (HTTP handling, request/response)
+  ↓
+Services (Business logic, pure Python)
+  ↓
+Repositories (Data access, SQL queries)
+  ↓
+Database (SQLite with proper indexing)
+```
+
+### Key Design Principles
+
+1. **Routes** (`app/routes/`): HTTP handling only, delegate to services
+   - Use `@require_auth` decorator for authentication
+   - Return JSON for API routes, render templates for pages
+   - All routes protected by authentication (except `/health` and index)
+
+2. **Services** (`app/services/`): Pure Python business logic
+   - `AllocationService`: Portfolio allocation calculations and rebalancing logic
+   - `PortfolioService`: Portfolio analytics and aggregations
+   - `PriceService`: Price operations and currency conversion
+   - No Flask dependencies - fully testable without app context
+
+3. **Repositories** (`app/repositories/`): Single source of truth for data access
+   - `PortfolioRepository`: Portfolio and company data queries
+   - `PriceRepository`: Market price operations
+   - `AccountRepository`: Account management
+   - All methods validate `account_id` for data isolation
+
+4. **Utils** (`app/utils/`): Supporting utilities
+   - `csv_processing/`: Modular CSV import (parser, company_processor, share_calculator, etc.)
+   - `yfinance_utils.py`: Market data fetching with caching
+   - `batch_processing.py`: Smart sync/async execution (sync <20 items, async ≥20)
+   - `identifier_normalization.py`: Ticker symbol normalization
+
+## Database Schema
+
+**SQLite** database with 9 core tables:
+- `accounts`: User accounts (single-user but multi-account support)
+- `portfolios`: Portfolio definitions
+- `companies`: Holdings (securities/positions)
+- `company_shares`: Share quantities with manual override support
+- `market_prices`: Cached market prices (updated via yfinance)
+- `identifier_mappings`: Custom ticker symbol mappings
+- `expanded_state`: UI state persistence
+- `background_jobs`: Job status tracking
+- Schema in `app/schema.sql` (automatically applied on startup)
+
+## Caching Strategy
+
+**Flask-Caching** with SimpleCache (in-memory, perfect for single-user):
+- **15 minutes**: Stock prices (`get_isin_data`, `get_yfinance_info`)
+- **1 hour**: Exchange rates
+- **Expected impact**: 50-90% reduction in API calls
+- Cache configured in `app/cache.py` and `app/main.py`
+
+## CSV Processing
+
+**Only Parqet native CSV exports are supported** - the format must match Parqet's export structure.
+
+CSV processing is modular (`app/utils/csv_processing/`):
+1. `parser.py`: Parse and validate CSV structure
+2. `company_processor.py`: Process company/security data
+3. `share_calculator.py`: Calculate share quantities from transactions
+4. `portfolio_handler.py`: Portfolio-level operations
+5. `price_updater.py`: Update market prices
+6. `transaction_manager.py`: Transaction processing
+
+## Authentication Pattern
+
+All routes use the `@require_auth` decorator (`app/decorators/auth.py`):
+- Auto-detects JSON vs HTML routes
+- Sets `g.account_id` for all authenticated routes
+- For HTML routes: also sets `g.account` (pre-loaded account object)
+- Returns 401 JSON or redirects with flash message on auth failure
+
+```python
+from app.decorators.auth import require_auth
+
+@blueprint.route('/api/data')
+@require_auth
+def get_data():
+    account_id = g.account_id  # Always available
+    # ... route logic
+```
+
+## Error Handling
+
+Use structured exceptions (`app/exceptions.py`):
+- `ValidationError`: Invalid input, missing fields
+- `NotFoundError`: Resource not found
+- `DatabaseError`: Database operation failed
+- `CSVProcessingError`: CSV parsing/processing failed
+- `PriceFetchError`: External API failures (yfinance)
+- `AuthenticationError`: Auth required or failed
+- Return proper HTTP status codes (400, 401, 404, 500)
+
+## Configuration
+
+Environment variables via `.env` file (auto-generated on first run):
+- `SECRET_KEY`: Flask session secret (auto-generated)
+- `FLASK_ENV`: development/production
+- `APP_DATA_DIR`: Data directory (default: `instance/`)
+- `DATABASE_URL`: Override for advanced users (default: SQLite in APP_DATA_DIR)
+- `CACHE_DEFAULT_TIMEOUT`: Cache timeout in seconds
+- `PRICE_UPDATE_INTERVAL_HOURS`: Auto price update interval (default: 24)
+- `BACKUP_INTERVAL_HOURS`: Database backup interval (default: 6)
+
+See `config.py` for all configuration options.
+
+## Key Utilities
+
+### Batch Processing (`app/utils/batch_processing.py`)
+Smart sync/async threshold:
+- **<20 items**: Synchronous execution (faster, no thread overhead)
+- **≥20 items**: Asynchronous parallel processing
+- Optimized for typical homeserver use cases
+
+### Identifier Normalization (`app/utils/identifier_normalization.py`)
+Normalizes ticker symbols across formats (ISIN, ticker, etc.) for consistent lookups.
+
+### yfinance Integration (`app/utils/yfinance_utils.py`)
+- `get_isin_data(identifier)`: Get price data (15-min cache)
+- `get_yfinance_info(identifier)`: Get detailed info (15-min cache)
+- Handles currency conversion to EUR
+
+## Testing Strategy
+
+Pragmatic test coverage (50-60% on critical paths):
+- Service layer tests (allocation, portfolio logic)
+- Repository layer tests (data access)
+- CSV processing tests (parser, processors)
+- Use `pytest` with fixtures for database setup
+- Mock external APIs (yfinance) in tests
+
+## Important Notes
+
+1. **Single-user optimization**: Architecture assumes single concurrent user
+2. **Parqet CSV only**: Only native Parqet export format is supported
+3. **SQLite limitations**: Consider PostgreSQL for multi-user scenarios
+4. **yfinance dependency**: Price updates require internet and working yfinance API
+5. **Database backups**: Auto-backup every 6 hours to `instance/backups/`
+6. **No authentication system**: Session-based account selection (no passwords)
+
+## Common Tasks
+
+### Adding a new route
+1. Add route function to appropriate blueprint in `app/routes/`
+2. Use `@require_auth` decorator
+3. Delegate business logic to service layer
+4. Return JSON for API, render template for pages
+
+### Adding new business logic
+1. Add method to appropriate service in `app/services/`
+2. Keep services pure Python (no Flask dependencies)
+3. Add tests in `tests/test_<service_name>.py`
+
+### Adding database queries
+1. Add method to appropriate repository in `app/repositories/`
+2. Always validate `account_id` for data isolation
+3. Use parameterized queries (no string interpolation)
+
+### Modifying CSV processing
+1. Update appropriate module in `app/utils/csv_processing/`
+2. Test with actual Parqet CSV exports
+3. Add tests to verify changes
+
+## File Structure Summary
+
+```
+app/
+├── main.py                  # Flask app factory
+├── db_manager.py           # Database connections and migrations
+├── schema.sql              # Database schema (auto-applied)
+├── cache.py                # Cache instance (prevents circular imports)
+├── validation.py           # Input validation utilities
+├── exceptions.py           # Structured error types
+├── decorators/
+│   └── auth.py            # @require_auth decorator
+├── routes/                 # HTTP request handlers
+├── services/               # Business logic (pure Python)
+├── repositories/           # Data access layer
+└── utils/                  # Supporting utilities
+    └── csv_processing/     # Modular CSV import logic
+
+config.py                   # Environment-based configuration
+run.py                      # Application entry point
+deploy.sh                   # Production deployment script
+docker-compose.yml          # Docker deployment config
+requirements.txt            # Python dependencies
+```
+
+## Development Workflow
+
+1. **Make changes** to code
+2. **Run tests** to verify: `pytest`
+3. **Test manually** in browser: `python3 run.py --port 8065`
+4. **Commit changes** (conventional commit style preferred)
+5. **Deploy** to production: `./deploy.sh` (if applicable)
+
+## Security Considerations
+
+- Session cookies: HttpOnly, SameSite=Lax
+- No plaintext secrets in code (use `.env`)
+- `.env` and `instance/` are gitignored
+- Database backups exclude from git tracking
+- Input validation on all user inputs
+- Parameterized SQL queries (no injection risk)
+
+## Contact & Support
+
+See README.md for contribution guidelines and support channels. This is an experimental, hobby-level project - open to feedback and improvements!

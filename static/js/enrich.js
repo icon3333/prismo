@@ -1315,6 +1315,13 @@ class PortfolioTableApp {
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 },
+                investmentTypeHealthPercentage() {
+                    if (this.filteredPortfolioItems.length === 0) return 0;
+                    const filledCount = this.filteredPortfolioItems.filter(item =>
+                        item.investment_type && (item.investment_type === 'Stock' || item.investment_type === 'ETF')
+                    ).length;
+                    return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
+                },
                 priceHealthPercentage() {
                     if (this.filteredPortfolioItems.length === 0) return 0;
                     const filledCount = this.filteredPortfolioItems.filter(item =>
@@ -1897,7 +1904,51 @@ class PortfolioTableApp {
                     }
                 },
 
+                async saveInvestmentTypeChange(item) {
+                    console.log('saveInvestmentTypeChange called with item:', item);
+                    if (!item || !item.id) {
+                        console.error('Invalid item for investment type change');
+                        return;
+                    }
 
+                    try {
+                        console.log('Sending investment type update request for item ID:', item.id, 'Type:', item.investment_type);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                investment_type: item.investment_type
+                            })
+                        });
+
+                        const result = await response.json();
+                        console.log('Investment type update response:', result);
+
+                        if (result.success) {
+                            // Show success notification
+                            if (typeof showNotification === 'function') {
+                                const typeName = item.investment_type || 'Not Set';
+                                showNotification(`Investment type updated to ${typeName}`, 'is-success', 3000);
+                            } else {
+                                console.log('Investment type updated successfully');
+                            }
+                        } else {
+                            // Show error notification
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Error updating investment type: ${result.error}`, 'is-danger');
+                            } else {
+                                console.error(`Error updating investment type: ${result.error}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error updating investment type:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update investment type', 'is-danger');
+                        }
+                    }
+                },
 
                 // Save shares changes to the database
                 async saveSharesChange(item, newShares) {

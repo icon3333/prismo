@@ -4,6 +4,7 @@ from flask import (
 )
 from app.db_manager import query_db, execute_db, backup_database, get_db
 from app.decorators import require_auth
+from app.exceptions import ValidationError, DataIntegrityError
 
 import sqlite3
 import logging
@@ -78,8 +79,11 @@ def create_account():
 
     except sqlite3.IntegrityError:
         flash(f'Account "{username}" already exists', 'error')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         flash(f'Error creating account: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error creating account")
+        flash('An unexpected error occurred while creating account', 'error')
 
     return redirect(url_for('main.index'))
 
@@ -114,8 +118,11 @@ def update_account():
 
     except sqlite3.IntegrityError:
         flash(f'Username "{new_username}" already exists', 'error')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         flash(f'Error updating username: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error updating username")
+        flash('An unexpected error occurred while updating username', 'error')
 
     return redirect(url_for('account.index'))
 
@@ -134,9 +141,12 @@ def reset_account_settings():
         execute_db('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
 
         flash('Account settings have been reset', 'success')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error resetting account settings: {str(e)}")
         flash(f'Error resetting account settings: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error resetting account settings")
+        flash('An unexpected error occurred while resetting settings', 'error')
 
     return redirect(url_for('account.index'))
 
@@ -250,8 +260,11 @@ def delete_account():
 
         flash('Account deleted successfully', 'success')
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         flash(f'Error deleting account: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error deleting account")
+        flash('An unexpected error occurred while deleting account', 'error')
 
     return redirect(url_for('main.index'))
 
@@ -312,9 +325,12 @@ def delete_stocks_crypto():
 
         flash('All stocks and crypto data deleted successfully', 'success')
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error deleting stocks/crypto data: {str(e)}")
         flash(f'Error deleting stocks/crypto data: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error deleting stocks/crypto data")
+        flash('An unexpected error occurred while deleting stocks/crypto data', 'error')
 
     return redirect(url_for('account.index'))
 
@@ -373,9 +389,13 @@ def export_data():
             mimetype='application/json'
         )
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error exporting account data: {str(e)}")
         flash(f'Error exporting account data: {str(e)}', 'error')
+        return redirect(url_for('account.index'))
+    except Exception as e:
+        logger.exception(f"Unexpected error exporting account data")
+        flash('An unexpected error occurred while exporting account data', 'error')
         return redirect(url_for('account.index'))
 
 
@@ -625,8 +645,11 @@ def import_data():
 
     except json.JSONDecodeError:
         flash('Invalid JSON file format', 'error')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error importing account data: {str(e)}")
         flash(f'Error importing account data: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error importing account data")
+        flash('An unexpected error occurred while importing account data', 'error')
 
     return redirect(url_for('account.index'))

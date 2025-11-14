@@ -5,12 +5,17 @@ from datetime import datetime
 from app.cache import cache
 
 def create_app(config_name=None):
+    import time
+    _create_app_start = time.time()
+
     app = Flask(__name__,
                 template_folder='../templates',
                 static_folder='../static')
 
     # Load configuration from config.py
     from config import config
+    _config_load_time = time.time() - _create_app_start
+    print(f"  ⏱️  Config loaded: {_config_load_time:.3f}s")
 
     # Determine config name from environment or parameter
     if config_name is None:
@@ -76,49 +81,70 @@ def create_app(config_name=None):
         return {'now': datetime.now()}
     
     # Register blueprints
+    _blueprint_start = time.time()
     from app.routes.main_routes import main_bp
     app.register_blueprint(main_bp)
-    
+
     from app.routes.account_routes import account_bp
     app.register_blueprint(account_bp, url_prefix='/account')
-    
+
     from app.routes.portfolio_routes import portfolio_bp
     app.register_blueprint(portfolio_bp)
-    
+
     from app.routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
+    _blueprint_time = time.time() - _blueprint_start
+    print(f"  ⏱️  Blueprints registered: {_blueprint_time:.3f}s")
     
     # Initialize the database
+    _db_start = time.time()
     from app.db_manager import init_db, migrate_database
     init_db(app)
-    
+
     # Run database migrations
     try:
         with app.app_context():
             migrate_database()
     except Exception as e:
         app.logger.error(f"Database migration failed: {e}")
+    _db_time = time.time() - _db_start
+    print(f"  ⏱️  Database init + migrations: {_db_time:.3f}s")
 
     # Only run startup tasks in the main process (not during Werkzeug reloader restart)
     if not os.environ.get('WERKZEUG_RUN_MAIN'):
         app.logger.info("Skipping startup tasks during reloader initialization")
     else:
-        # Trigger automatic price update on startup if needed
-        try:
+        # OPTIMIZATION: Run startup tasks in background thread to avoid blocking startup
+        # This makes the app responsive immediately while background tasks complete
+        def run_startup_tasks():
+            """Run startup tasks in background thread to avoid blocking app startup."""
+            import time
+            time.sleep(0.1)  # Small delay to ensure app is fully initialized
+
             with app.app_context():
-                from app.utils.startup_tasks import auto_update_prices_if_needed
-                auto_update_prices_if_needed()
-        except Exception as e:
-            app.logger.error(f"Automatic price update failed: {e}")
-        
-        # Trigger automatic database backup on startup
-        try:
-            with app.app_context():
-                from app.utils.startup_tasks import schedule_automatic_backups
-                schedule_automatic_backups()
-        except Exception as e:
-            app.logger.error(f"Automatic backup setup failed: {e}")
-    
+                # Trigger automatic price update on startup if needed
+                try:
+                    from app.utils.startup_tasks import auto_update_prices_if_needed
+                    auto_update_prices_if_needed()
+                except Exception as e:
+                    app.logger.error(f"Automatic price update failed: {e}")
+
+                # Trigger automatic database backup scheduler
+                try:
+                    from app.utils.startup_tasks import schedule_automatic_backups
+                    schedule_automatic_backups()
+                except Exception as e:
+                    app.logger.error(f"Automatic backup setup failed: {e}")
+
+        # Start background thread for startup tasks (daemon=True means it won't prevent app shutdown)
+        import threading
+        startup_thread = threading.Thread(target=run_startup_tasks, daemon=True)
+        startup_thread.start()
+        app.logger.info("Startup tasks scheduled in background thread")
+
+    _total_time = time.time() - _create_app_start
+    print(f"  ⏱️  TOTAL create_app() time: {_total_time:.3f}s\n")
+
     @app.route('/health')
     def health_check():
         """Health check endpoint for Docker and load balancers."""

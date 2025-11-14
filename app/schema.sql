@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS companies (
  custom_price_eur REAL,
  is_custom_value BOOLEAN DEFAULT 0,
  custom_value_date DATETIME,
+ investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
  FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
  FOREIGN KEY (account_id) REFERENCES accounts (id),
  UNIQUE (account_id, name)
@@ -105,6 +106,9 @@ CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id);
 CREATE INDEX IF NOT EXISTS idx_company_shares_company_id ON company_shares(company_id);
 CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id);
 CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier);
+CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type);
+CREATE INDEX IF NOT EXISTS idx_companies_category ON companies(category);
+CREATE INDEX IF NOT EXISTS idx_portfolios_account_id ON portfolios(account_id);
 -- Create indexes for background_jobs
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_created_at ON background_jobs(created_at);

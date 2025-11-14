@@ -513,7 +513,12 @@ class PortfolioRepository:
 
         Returns:
             Portfolio ID
+
+        Raises:
+            DatabaseError: If portfolio creation fails
         """
+        from app.exceptions import DatabaseError
+
         # Try to get existing
         existing = query_db(
             'SELECT id FROM portfolios WHERE account_id = ? AND name = ?',
@@ -527,22 +532,36 @@ class PortfolioRepository:
         # Create new
         logger.info(f"Creating new portfolio '{portfolio_name}' for account {account_id}")
 
-        result = execute_db(
-            'INSERT INTO portfolios (account_id, name) VALUES (?, ?)',
-            [account_id, portfolio_name]
-        )
+        try:
+            from app.db_manager import get_db
+            db = get_db()
+            cursor = db.execute(
+                'INSERT INTO portfolios (account_id, name) VALUES (?, ?)',
+                [account_id, portfolio_name]
+            )
+            portfolio_id = cursor.lastrowid
+            db.commit()
 
-        if result and 'lastrowid' in result:
-            return result['lastrowid']
+            if portfolio_id:
+                logger.info(f"Created portfolio '{portfolio_name}' with ID {portfolio_id}")
+                return portfolio_id
+            else:
+                # lastrowid is 0 or None - something went wrong
+                raise DatabaseError(f"Failed to create portfolio '{portfolio_name}' - no ID returned")
 
-        # Fallback: query again
-        created = query_db(
-            'SELECT id FROM portfolios WHERE account_id = ? AND name = ?',
-            [account_id, portfolio_name],
-            one=True
-        )
-
-        return created['id'] if created else None
+        except Exception as e:
+            logger.error(f"Failed to create portfolio '{portfolio_name}': {e}")
+            # Try fallback query in case it was created but commit failed
+            created = query_db(
+                'SELECT id FROM portfolios WHERE account_id = ? AND name = ?',
+                [account_id, portfolio_name],
+                one=True
+            )
+            if created:
+                logger.warning(f"Portfolio '{portfolio_name}' exists despite creation error - using existing ID {created['id']}")
+                return created['id']
+            else:
+                raise DatabaseError(f"Failed to create or find portfolio '{portfolio_name}'") from e
 
     @staticmethod
     def delete_portfolio(portfolio_id: int, account_id: int) -> bool:
@@ -633,6 +652,7 @@ class PortfolioRepository:
                 c.name,
                 c.identifier,
                 c.category,
+                c.investment_type,
                 c.total_invested,
                 c.override_country,
                 c.country_manually_edited,
@@ -688,6 +708,7 @@ class PortfolioRepository:
                     'identifier': row['identifier'],
                     'portfolio': row.get('portfolio_name') or row.get('portfolio') or '',
                     'category': row['category'],
+                    'investment_type': row.get('investment_type'),
                     'shares': float(row['shares']) if row.get('shares') is not None else 0,
                     'override_share': float(row['override_share']) if row.get('override_share') is not None else None,
                     'effective_shares': effective_shares,

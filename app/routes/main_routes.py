@@ -1,6 +1,7 @@
 from app.utils.portfolio_utils import get_portfolio_data
 from app.db_manager import query_db
 from flask import Blueprint, render_template, redirect, url_for, session, request, flash, jsonify
+from app.exceptions import ValidationError, DataIntegrityError
 import logging
 import json
 import math
@@ -12,44 +13,39 @@ main_bp = Blueprint('main', __name__)
 
 
 def calculate_missing_positions(account_id: int, portfolios) -> Dict[str, Any]:
-    """Calculate missing positions for each portfolio using rebalancer data"""
+    """
+    Calculate missing positions for each portfolio using rebalancer data.
+
+    Uses the internal allocation function directly to avoid session manipulation.
+
+    Args:
+        account_id: The account ID to fetch data for
+        portfolios: List of portfolios to check
+
+    Returns:
+        Dictionary with missing position statistics
+    """
     try:
-        # Import here to avoid circular imports
-        from app.routes.portfolio_api import get_allocate_portfolio_data
-        from flask import session
-        
-        # Temporarily set session for the API call
-        original_account_id = session.get('account_id')
-        session['account_id'] = account_id
-        
+        # Import the pure function (no Flask dependencies, safe to import)
+        from app.routes.portfolio_api import _get_allocate_portfolio_data_internal
+
         try:
-            # Get rebalancer data which has the correct missing positions logic
-            response = get_allocate_portfolio_data()
-            # Handle different response types
-            if isinstance(response, tuple):
-                # Error response
-                return {
-                    'portfolios_with_missing': [],
-                    'total_missing': 0,
-                    'total_portfolios_checked': 0
-                }
-            elif hasattr(response, 'get_json'):
-                rebalancer_data = response.get_json()
-            else:
-                rebalancer_data = response
-        except Exception as e:
+            # Call internal function directly with account_id - no session manipulation
+            rebalancer_data = _get_allocate_portfolio_data_internal(account_id)
+        except (ValidationError, DataIntegrityError) as e:
             logger.error(f"Error getting rebalancer data: {e}")
             return {
                 'portfolios_with_missing': [],
                 'total_missing': 0,
                 'total_portfolios_checked': 0
             }
-        finally:
-            # Restore original session
-            if original_account_id:
-                session['account_id'] = original_account_id
-            elif 'account_id' in session:
-                del session['account_id']
+        except Exception as e:
+            logger.exception(f"Unexpected error getting rebalancer data")
+            return {
+                'portfolios_with_missing': [],
+                'total_missing': 0,
+                'total_portfolios_checked': 0
+            }
         
         missing_data = {
             'portfolios_with_missing': [],
@@ -107,9 +103,16 @@ def calculate_missing_positions(account_id: int, portfolios) -> Dict[str, Any]:
                     missing_data['total_missing'] += missing_count
         
         return missing_data
-        
-    except Exception as e:
+
+    except (ValidationError, DataIntegrityError) as e:
         logger.error(f"Error calculating missing positions: {e}")
+        return {
+            'portfolios_with_missing': [],
+            'total_missing': 0,
+            'total_portfolios_checked': 0
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error calculating missing positions")
         return {
             'portfolios_with_missing': [],
             'total_missing': 0,

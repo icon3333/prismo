@@ -7,21 +7,22 @@ from app.utils.db_utils import (
     load_portfolio_data, process_portfolio_dataframe, update_price_in_db, update_batch_prices_in_db
 )
 from app.utils.yfinance_utils import get_isin_data
-from app.utils.batch_processing import start_batch_process, get_job_status, start_csv_processing_job
+from app.utils.batch_processing import start_batch_process, get_job_status, start_csv_processing_job, cancel_background_job
 from app.utils.portfolio_utils import (
     get_portfolio_data, process_csv_data, has_companies_in_default, get_stock_info
 )
-from app.utils.yfinance_utils import get_isin_data
-from app.utils.db_utils import update_price_in_db
 from app.utils.response_helpers import success_response, error_response, not_found_response, validation_error_response, service_unavailable_response
 from app.exceptions import (
     ValidationError, DataIntegrityError, ExternalAPIError, NotFoundError,
     CSVProcessingError, PriceFetchError
 )
 from app.utils.value_calculator import calculate_portfolio_total, calculate_item_value, has_price_or_custom_value
+from app.utils.identifier_mapping import store_identifier_mapping
+from app.utils.identifier_normalization import normalize_identifier
+from app.services.allocation_service import AllocationService
+from app.cache import cache
 
 
-import pandas as pd
 import logging
 from datetime import datetime
 import time
@@ -35,7 +36,24 @@ logger = logging.getLogger(__name__)
 
 
 def _apply_company_update(cursor, company_id, data, account_id):
-    """Internal helper to update company and share data."""
+    """
+    Internal helper to update company and share data.
+
+    Security: Only whitelisted fields are processed to prevent SQL injection.
+    """
+    # Whitelist of allowed fields that can be updated via this function
+    ALLOWED_FIELDS = {
+        'identifier', 'category', 'portfolio', 'investment_type',
+        'custom_total_value', 'custom_price_eur', 'is_custom_value_edit',
+        'country', 'reset_country', 'is_country_user_edit', 'shares',
+        'override_share', 'is_user_edit'
+    }
+
+    # Validate that all keys in data are whitelisted
+    for key in data.keys():
+        if key not in ALLOWED_FIELDS:
+            logger.warning(f"Ignoring non-whitelisted field '{key}' in company update")
+
     portfolio_name = data.get('portfolio')
     if portfolio_name and portfolio_name != 'None':
         portfolio = query_db(
@@ -94,24 +112,40 @@ def _apply_company_update(cursor, company_id, data, account_id):
                 current_company_name = None
             identifier_changed = (new_identifier != current_identifier)
 
-    # Build the SET clause dynamically based on what data is provided
+    # Build the SET clause safely using whitelisted columns
+    # This prevents SQL injection by explicitly mapping user input keys to known safe column names
+    ALLOWED_UPDATES = {
+        'identifier': 'identifier = ?',
+        'category': 'category = ?',
+        'portfolio': 'portfolio_id = ?',
+    }
+
     set_clause_parts = []
     params = []
 
-    if 'identifier' in data:
-        set_clause_parts.append('identifier = ?')
-        params.append(data.get('identifier', ''))
+    # Handle simple field updates using whitelist
+    for field_key, sql_fragment in ALLOWED_UPDATES.items():
+        if field_key in data:
+            if field_key == 'portfolio':
+                # Special case: portfolio maps to portfolio_id
+                set_clause_parts.append(sql_fragment)
+                params.append(portfolio_id)
+            else:
+                set_clause_parts.append(sql_fragment)
+                params.append(data.get(field_key, ''))
 
-    if 'category' in data:
-        set_clause_parts.append('category = ?')
-        params.append(data.get('category', ''))
+    # Handle investment_type with validation
+    if 'investment_type' in data:
+        investment_type = data.get('investment_type')
+        # Validate investment_type value - allow Stock, ETF, or NULL
+        if investment_type in ('Stock', 'ETF'):
+            set_clause_parts.append('investment_type = ?')
+            params.append(investment_type)
+        elif investment_type is None or investment_type == '':
+            # Allow clearing investment_type (no param needed for NULL)
+            set_clause_parts.append('investment_type = NULL')
 
-    # Only update portfolio_id if portfolio is being changed
-    if 'portfolio' in data:
-        set_clause_parts.append('portfolio_id = ?')
-        params.append(portfolio_id)
-
-    # Handle custom total value when no price is available (MUST be before UPDATE execution)
+    # Handle custom total value when no price is available
     if 'custom_total_value' in data or 'custom_price_eur' in data:
         custom_total_value = data.get('custom_total_value')
         custom_price = data.get('custom_price_eur')
@@ -125,15 +159,20 @@ def _apply_company_update(cursor, company_id, data, account_id):
             params.append(custom_price)
             set_clause_parts.append('is_custom_value = ?')
             params.append(1)
+            # CURRENT_TIMESTAMP is a SQLite keyword, not a user value, so it's safe
             set_clause_parts.append('custom_value_date = CURRENT_TIMESTAMP')
             logger.info(f"User set custom total value {custom_total_value} (price: {custom_price}) for company {company_id}")
 
-    # Add the company_id for the WHERE clause
-    params.append(company_id)
-
+    # Execute UPDATE if there are changes
     if set_clause_parts:
+        # Build query with parameterized WHERE clause
         set_clause = ', '.join(set_clause_parts)
-        cursor.execute(f'UPDATE companies SET {set_clause} WHERE id = ?', params)
+        query = f'UPDATE companies SET {set_clause} WHERE id = ?'
+        params.append(company_id)
+
+        # Log for debugging (safe because set_clause is built from whitelisted parts)
+        logger.debug(f"Executing UPDATE: {query} with params: {params}")
+        cursor.execute(query, params)
 
     # If identifier was changed, store mapping and fetch price
     if identifier_changed and new_identifier and current_company_data:
@@ -144,9 +183,6 @@ def _apply_company_update(cursor, company_id, data, account_id):
         
         # NEW: Try to detect and store identifier mapping
         if current_identifier and current_company_name:
-            from ..utils.identifier_mapping import store_identifier_mapping
-            from ..utils.identifier_normalization import normalize_identifier
-            
             # Try to reverse-engineer what the original CSV identifier might have been
             # This is a best-effort approach for creating mappings
             possible_csv_identifier = None
@@ -175,7 +211,6 @@ def _apply_company_update(cursor, company_id, data, account_id):
         
         try:
             # Clean up identifier (trim, uppercase) - no format conversion
-            from ..utils.identifier_normalization import normalize_identifier
             cleaned_identifier = normalize_identifier(new_identifier)
 
             logger.info(f"Cleaned identifier: '{new_identifier}' -> '{cleaned_identifier}'")
@@ -318,9 +353,12 @@ def manage_state():
 
             return jsonify(state_data)
 
+        except (DataIntegrityError, ValidationError) as e:
+            logger.error(f"Error retrieving state for page '{page_name}': {str(e)}")
+            return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
         except Exception as e:
-            logger.error(f"Error retrieving state: {str(e)}")
-            return error_response(str(e), 500)
+            logger.exception(f"Unexpected error retrieving state for page '{page_name}'")
+            return error_response('Failed to retrieve state', 500)
 
     # POST request to save state
     elif request.method == 'POST':
@@ -375,13 +413,163 @@ def manage_state():
                 f"State saved successfully for account {account_id}, page {page_name}")
             return success_response(message='State saved successfully')
 
+        except (DataIntegrityError, ValidationError) as e:
+            logger.error(f"Error saving state for page '{page_name}': {str(e)}")
+            return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
         except Exception as e:
-            logger.error(f"Error saving state: {str(e)}")
-            return error_response(str(e), 500)
+            logger.exception(f"Unexpected error saving state for page '{page_name}'")
+            return error_response('Failed to save state', 500)
 
     return error_response('Method not allowed', 405)
 
 # API endpoint to get companies for a specific portfolio
+
+@cache.memoize(timeout=60)
+def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
+    """
+    Internal function to get structured portfolio data for rebalancing.
+
+    This is a pure function that doesn't depend on Flask request context,
+    making it testable and reusable across different contexts.
+
+    Cached for 60 seconds to reduce database load and CPU usage on repeated calls.
+    Cache is automatically invalidated when portfolio data is modified.
+
+    Args:
+        account_id: The account ID to fetch data for
+
+    Returns:
+        Dictionary with portfolio allocation data
+
+    Raises:
+        ValidationError: If data is invalid
+        DataIntegrityError: If database operations fail
+    """
+    logger.info(f"Getting portfolio data for rebalancing, account_id: {account_id}")
+
+    # Get all portfolios for this account
+    try:
+        portfolios_data = query_db('''
+            SELECT id, name
+            FROM portfolios
+            WHERE account_id = ? AND name IS NOT NULL
+            ORDER BY name
+        ''', [account_id])
+    except Exception as e:
+        logger.error(f"Database error fetching portfolios: {e}")
+        raise DataIntegrityError('Failed to fetch portfolio data from database')
+
+    if not portfolios_data:
+        logger.warning(f"No portfolios found for account {account_id}")
+        return {'portfolios': []}
+
+    # Get target allocations from expanded_state
+    try:
+        target_allocation_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'portfolios'], one=True)
+    except Exception as e:
+        logger.error(f"Database error fetching target allocations: {e}")
+        raise DataIntegrityError('Failed to fetch target allocation data')
+
+    # Parse target allocations if available
+    target_allocations = []
+    if target_allocation_data and isinstance(target_allocation_data, dict):
+        variable_value = target_allocation_data.get('variable_value')
+        if variable_value:
+            try:
+                target_allocations = json.loads(variable_value)
+                logger.info(
+                    f"Found target allocations in expanded_state: {len(target_allocations)} portfolios")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse target allocations JSON: {e}")
+                raise ValidationError('Invalid target allocation data format')
+
+    # Fetch all portfolio/company data in one query
+    try:
+        data = query_db('''
+            SELECT p.id AS portfolio_id, p.name AS portfolio_name,
+                   c.category, c.name AS company_name, c.identifier,
+                   c.investment_type,
+                   cs.shares, cs.override_share,
+                   COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
+                   mp.price_eur,
+                   c.custom_total_value,
+                   c.custom_price_eur,
+                   c.is_custom_value
+            FROM portfolios p
+            LEFT JOIN companies c ON c.portfolio_id = p.id AND c.account_id = p.account_id
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE p.account_id = ? AND p.name IS NOT NULL
+            ORDER BY p.name, c.category, c.name
+        ''', [account_id])
+    except Exception as e:
+        logger.error(f"Database error fetching portfolio company data: {e}")
+        raise DataIntegrityError('Failed to fetch portfolio company data')
+
+    # Fetch allocation rules from expanded_state
+    rules = {}
+    try:
+        rules_data = query_db('''
+            SELECT variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name = ?
+        ''', [account_id, 'build', 'rules'], one=True)
+
+        if rules_data and isinstance(rules_data, dict):
+            rules_value = rules_data.get('variable_value')
+            if rules_value:
+                try:
+                    rules = json.loads(rules_value)
+                    logger.info(f"Found allocation rules: maxPerStock={rules.get('maxPerStock')}%, maxPerETF={rules.get('maxPerETF')}%")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse rules JSON: {e}")
+    except Exception as e:
+        logger.warning(f"Could not fetch allocation rules: {e}")
+
+    # Use AllocationService to process the data
+    try:
+        # Step 1: Get portfolio positions with current values
+        portfolio_map, portfolio_builder_data = AllocationService.get_portfolio_positions(
+            portfolio_data=data or [],
+            target_allocations=target_allocations,
+            rules=rules
+        )
+
+        # Calculate total current value across all portfolios
+        total_current_value = sum(pdata['currentValue'] for pdata in portfolio_map.values())
+        logger.info(f"Total current value across all portfolios: {total_current_value}")
+
+        # Step 2: Calculate allocation targets with type constraints
+        portfolios_with_targets = AllocationService.calculate_allocation_targets_with_type_constraints(
+            portfolio_map=portfolio_map,
+            portfolio_builder_data=portfolio_builder_data,
+            target_allocations=target_allocations,
+            total_current_value=total_current_value,
+            rules=rules
+        )
+
+        # Step 3: Generate rebalancing plan
+        result = AllocationService.generate_rebalancing_plan(
+            portfolios_with_targets=portfolios_with_targets
+        )
+
+        logger.info(f"Returning {len(result['portfolios'])} portfolios")
+        return result
+
+    except ImportError as e:
+        logger.error(f"Failed to import AllocationService: {e}")
+        raise ValidationError('Allocation service unavailable')
+    except (ValidationError, DataIntegrityError):
+        # Re-raise these so caller can handle them
+        raise
+    except Exception as e:
+        logger.error(f"Error in allocation service: {e}")
+        raise ValidationError(f'Failed to calculate allocations: {str(e)}')
+
 
 @require_auth
 def get_allocate_portfolio_data():
@@ -390,106 +578,8 @@ def get_allocate_portfolio_data():
 
     try:
         account_id = g.account_id
-        logger.info(f"Getting portfolio data for rebalancing, account_id: {account_id}")
-
-        # Get all portfolios for this account
-        try:
-            portfolios_data = query_db('''
-                SELECT id, name
-                FROM portfolios
-                WHERE account_id = ? AND name IS NOT NULL
-                ORDER BY name
-            ''', [account_id])
-        except Exception as e:
-            logger.error(f"Database error fetching portfolios: {e}")
-            raise DataIntegrityError('Failed to fetch portfolio data from database')
-
-        if not portfolios_data:
-            logger.warning(f"No portfolios found for account {account_id}")
-            return jsonify({'portfolios': []})
-
-        # Get target allocations from expanded_state
-        try:
-            target_allocation_data = query_db('''
-                SELECT variable_value
-                FROM expanded_state
-                WHERE account_id = ? AND page_name = ? AND variable_name = ?
-            ''', [account_id, 'build', 'portfolios'], one=True)
-        except Exception as e:
-            logger.error(f"Database error fetching target allocations: {e}")
-            raise DataIntegrityError('Failed to fetch target allocation data')
-
-        # Parse target allocations if available
-        target_allocations = []
-        if target_allocation_data and isinstance(target_allocation_data, dict):
-            variable_value = target_allocation_data.get('variable_value')
-            if variable_value:
-                try:
-                    target_allocations = json.loads(variable_value)
-                    logger.info(
-                        f"Found target allocations in expanded_state: {len(target_allocations)} portfolios")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse target allocations JSON: {e}")
-                    raise ValidationError('Invalid target allocation data format')
-
-        # Fetch all portfolio/company data in one query
-        try:
-            data = query_db('''
-                SELECT p.id AS portfolio_id, p.name AS portfolio_name,
-                       c.category, c.name AS company_name, c.identifier,
-                       cs.shares, cs.override_share,
-                       COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
-                       mp.price_eur,
-                       c.custom_total_value,
-                       c.custom_price_eur,
-                       c.is_custom_value
-                FROM portfolios p
-                LEFT JOIN companies c ON c.portfolio_id = p.id AND c.account_id = p.account_id
-                LEFT JOIN company_shares cs ON c.id = cs.company_id
-                LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-                WHERE p.account_id = ? AND p.name IS NOT NULL
-                ORDER BY p.name, c.category, c.name
-            ''', [account_id])
-        except Exception as e:
-            logger.error(f"Database error fetching portfolio company data: {e}")
-            raise DataIntegrityError('Failed to fetch portfolio company data')
-
-        # Use AllocationService to process the data
-        try:
-            from app.services.allocation_service import AllocationService
-
-            # Step 1: Get portfolio positions with current values
-            portfolio_map, portfolio_builder_data = AllocationService.get_portfolio_positions(
-                portfolio_data=data or [],
-                target_allocations=target_allocations
-            )
-
-            # Calculate total current value across all portfolios
-            total_current_value = sum(pdata['currentValue'] for pdata in portfolio_map.values())
-            logger.info(f"Total current value across all portfolios: {total_current_value}")
-
-            # Step 2: Calculate allocation targets for each position
-            portfolios_with_targets = AllocationService.calculate_allocation_targets(
-                portfolio_map=portfolio_map,
-                portfolio_builder_data=portfolio_builder_data,
-                target_allocations=target_allocations,
-                total_current_value=total_current_value
-            )
-
-            # Step 3: Generate rebalancing plan
-            result = AllocationService.generate_rebalancing_plan(
-                portfolios_with_targets=portfolios_with_targets
-            )
-
-            logger.info(f"Returning {len(result['portfolios'])} portfolios")
-            return jsonify(result)
-
-        except ImportError as e:
-            logger.error(f"Failed to import AllocationService: {e}")
-            raise ValidationError('Allocation service unavailable')
-        except Exception as e:
-            logger.error(f"Error in allocation service: {e}")
-            raise ValidationError(f'Failed to calculate allocations: {str(e)}')
+        result = _get_allocate_portfolio_data_internal(account_id)
+        return jsonify(result)
 
     except ValidationError as e:
         logger.error(f"Validation error in get_allocate_portfolio_data: {e}")
@@ -528,13 +618,12 @@ def get_portfolio_data_api():
                 f"Successfully retrieved {len(portfolio_data)} portfolio items")
 
         return jsonify(portfolio_data)
-    except KeyError as ke:
-        logger.error(
-            f"KeyError accessing portfolio data: {str(ke)}", exc_info=True)
-        return error_response(f'Session key error: {str(ke)}', 401)
+    except (DataIntegrityError, ValidationError) as e:
+        logger.error(f"Error getting portfolio data for account {account_id}: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
     except Exception as e:
-        logger.error(f"Error getting portfolio data: {str(e)}", exc_info=True)
-        return error_response(f'Portfolio data could not be loaded: {str(e)}', 500)
+        logger.exception(f"Unexpected error getting portfolio data for account {account_id}")
+        return error_response('Failed to load portfolio data', 500)
 
 
 def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[str, Any]]:
@@ -669,9 +758,12 @@ def get_country_capacity_data():
             'max_per_country_percent': max_per_country
         })
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error getting country capacity data: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting country capacity data")
+        return error_response('Failed to calculate country capacity', 500)
 
 
 @require_auth
@@ -773,9 +865,12 @@ def get_category_capacity_data():
             'max_per_category_percent': max_per_category
         })
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error getting category capacity data: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting category capacity data")
+        return error_response('Failed to calculate category capacity', 500)
 
 
 @require_auth
@@ -930,9 +1025,12 @@ def get_portfolios_api():
         logger.debug(f"JSON response to be sent: {json_response.data}")
         return json_response
 
+    except (DataIntegrityError, ValidationError) as e:
+        logger.error(f"Error getting portfolios: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
     except Exception as e:
-        logger.error(f"Error getting portfolios: {str(e)}", exc_info=True)
-        return error_response(str(e), 500)
+        logger.exception(f"Unexpected error getting portfolios")
+        return error_response('Failed to retrieve portfolios', 500)
 
 
 @require_auth
@@ -1226,20 +1324,40 @@ def update_portfolio_api():
                         portfolio_map['-'] = portfolio_id
 
                 # Update company
-                cursor.execute('''
+                # Build dynamic UPDATE based on which fields are provided
+                update_fields = []
+                update_values = []
+
+                # Always update these fields
+                update_fields.append('identifier = ?')
+                update_values.append(new_identifier)
+                update_fields.append('category = ?')
+                update_values.append(item.get('category', ''))
+                update_fields.append('portfolio_id = ?')
+                update_values.append(portfolio_id)
+
+                # Conditionally update investment_type if provided
+                if 'investment_type' in item:
+                    investment_type = item.get('investment_type')
+                    # Validate investment_type value
+                    if investment_type and investment_type in ('Stock', 'ETF'):
+                        update_fields.append('investment_type = ?')
+                        update_values.append(investment_type)
+                    elif investment_type is None or investment_type == '':
+                        # Allow clearing investment_type
+                        update_fields.append('investment_type = NULL')
+
+                # Add company_id for WHERE clause
+                update_values.append(company_id)
+
+                cursor.execute(f'''
                     UPDATE companies
-                    SET identifier = ?, category = ?, portfolio_id = ?
+                    SET {', '.join(update_fields)}
                     WHERE id = ?
-                ''', [
-                    new_identifier,
-                    item.get('category', ''),
-                    portfolio_id,
-                    company_id
-                ])
+                ''', update_values)
 
                 # Handle identifier changes (cleanup and fetch price with cascade)
                 if new_identifier and new_identifier != original_identifier:
-                    from ..utils.identifier_normalization import normalize_identifier
 
                     # Clean up identifier (trim whitespace, uppercase)
                     # No format conversion - cascade at fetch time handles stock vs crypto
@@ -1438,8 +1556,11 @@ def manage_portfolios():
             flash(
                 f'Portfolio "{portfolio_name}" deleted successfully', 'success')
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         flash(f'Error managing portfolios: {str(e)}', 'error')
+    except Exception as e:
+        logger.exception(f"Unexpected error managing portfolios")
+        flash('An unexpected error occurred while managing portfolios', 'error')
 
     return redirect(url_for('portfolio.enrich'))
 
@@ -1454,14 +1575,13 @@ def csv_upload_progress():
             
             if job_id:
                 # Get progress from database using existing function
-                from app.utils.batch_processing import get_job_status
                 job_status = get_job_status(job_id)
                 
-                logger.info(f"DEBUG: Session has job_id={job_id}, job_status={job_status.get('status')}")
+                logger.debug(f" Session has job_id={job_id}, job_status={job_status.get('status')}")
                 
                 # IMMEDIATELY clear failed/cancelled jobs from session to prevent infinite loops
                 if job_status.get('status') in ['failed', 'cancelled', 'completed']:
-                    logger.info(f"DEBUG: Job {job_id} has terminal status '{job_status.get('status')}', clearing from session IMMEDIATELY")
+                    logger.debug(f" Job {job_id} has terminal status '{job_status.get('status')}', clearing from session IMMEDIATELY")
                     if 'csv_upload_job_id' in session:
                         del session['csv_upload_job_id']
                         session.modified = True
@@ -1478,7 +1598,7 @@ def csv_upload_progress():
                 if job_status.get('status') != 'not_found':
                     # Check if job was cancelled or failed - clean up session immediately
                     if job_status.get('status') in ['cancelled', 'failed']:
-                        logger.info(f"DEBUG: Job {job_id} has terminal status '{job_status.get('status')}', clearing from session")
+                        logger.debug(f" Job {job_id} has terminal status '{job_status.get('status')}', clearing from session")
                         if 'csv_upload_job_id' in session:
                             del session['csv_upload_job_id']
                             session.modified = True
@@ -1502,8 +1622,8 @@ def csv_upload_progress():
                         'job_id': job_id
                     }
                     
-                    logger.info(f"DEBUG: CSV progress API returning for account {session['account_id']}: {progress_data}")
-                    logger.info(f"DEBUG: Original job_status from database: {job_status}")
+                    logger.debug(f" CSV progress API returning for account {g.account_id}: {progress_data}")
+                    logger.debug(f" Original job_status from database: {job_status}")
                     
                     # This logic moved to earlier in the function for immediate cleanup
                     
@@ -1524,7 +1644,7 @@ def csv_upload_progress():
             # Clear CSV upload job from session
             job_id = session.get('csv_upload_job_id')
             if job_id:
-                logger.info(f"Manually clearing CSV upload job {job_id} for account {session['account_id']}")
+                logger.info(f"Manually clearing CSV upload job {job_id} for account {g.account_id}")
                 del session['csv_upload_job_id']
                 session.modified = True
             
@@ -1534,10 +1654,13 @@ def csv_upload_progress():
                 session.modified = True
                 
             return jsonify({'message': f'CSV upload progress cleared (was tracking job_id: {job_id})'})
-    
-    except Exception as e:
+
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error handling CSV upload progress: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error handling CSV upload progress")
+        return error_response('Failed to retrieve upload progress', 500)
 
     return error_response('Method not allowed', 405)
 
@@ -1553,7 +1676,6 @@ def cancel_csv_upload():
             return error_response('No active upload to cancel', 400)
         
         # Cancel the background job by marking it as cancelled in database
-        from app.utils.batch_processing import cancel_background_job
         success = cancel_background_job(job_id)
         
         if success:
@@ -1561,14 +1683,17 @@ def cancel_csv_upload():
             session.pop('csv_upload_job_id', None)
             session.modified = True
 
-            logger.info(f"CSV upload cancelled for account_id: {session['account_id']}, job_id: {job_id}")
+            logger.info(f"CSV upload cancelled for account_id: {g.account_id}, job_id: {job_id}")
             return success_response(message='Upload cancelled successfully')
         else:
             return error_response('Failed to cancel upload', 500)
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error cancelling CSV upload: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error cancelling CSV upload")
+        return error_response('Failed to cancel upload', 500)
 
 
 @require_auth
@@ -1603,6 +1728,73 @@ def get_portfolio_metrics():
             'last_update': max(last_updates) if last_updates else None
         })
 
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error getting portfolio metrics: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting portfolio metrics")
         return error_response('Failed to get portfolio metrics', 500)
+
+
+@require_auth
+def get_investment_type_distribution():
+    """
+    Get investment type distribution (Stock vs ETF) for portfolio visualization.
+
+    Returns aggregated data showing:
+    - Total value per investment type
+    - Percentage of portfolio per type
+    - Count of positions per type
+    """
+    try:
+        account_id = g.account_id
+
+        # Query to get investment type distribution
+        # Uses the same logic as portfolio value calculations (handles custom values)
+        distribution_data = query_db('''
+            SELECT
+                COALESCE(c.investment_type, 'Uncategorized') as type,
+                COUNT(*) as count,
+                SUM(CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END) as value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+            AND (
+                (COALESCE(cs.override_share, cs.shares, 0) > 0)
+                OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
+            )
+            GROUP BY c.investment_type
+        ''', [account_id])
+
+        # Calculate total value
+        total_value = sum(item['value'] for item in distribution_data if item['value'])
+
+        # Format response
+        distribution = []
+        for item in distribution_data:
+            value = float(item['value']) if item['value'] else 0.0
+            percentage = (value / total_value * 100) if total_value > 0 else 0.0
+
+            distribution.append({
+                'type': item['type'],
+                'value': round(value, 2),
+                'percentage': round(percentage, 2),
+                'count': item['count']
+            })
+
+        return jsonify({
+            'distribution': distribution,
+            'total_value': round(total_value, 2)
+        })
+
+    except (DataIntegrityError, ValidationError) as e:
+        logger.error(f"Error getting investment type distribution: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting investment type distribution")
+        return error_response('Failed to get investment type distribution', 500)

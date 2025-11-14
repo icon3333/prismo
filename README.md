@@ -47,7 +47,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run the application (auto-sets up env and database)
-./app.sh
+python3 run.py --port 8065
 ```
 
 The app auto-detects and configures everything on first launch. Visit `http://localhost:8065` to start.
@@ -109,7 +109,7 @@ The app includes automatic backup management and price update scheduling.
 
 ## 🎯 Usage
 
-Start with `./app.sh` or `python3 run.py --port 8065`. Create/select an account, then navigate through:
+Start with `python3 run.py --port 8065`. Create/select an account, then navigate through:
 
 - **Build**: Upload Parqet CSV and define target allocations
 - **Enrich**: Update prices and metadata via yfinance integration  

@@ -88,7 +88,7 @@ def _write_env_file(env_vars):
     print("   - Use different keys for development and production")
     
     print("\n🚀 To run the app:")
-    print("   python run.py --port 5000")
+    print("   python run.py")
 
 
 def setup_environment(production=False):
@@ -163,13 +163,17 @@ def check_and_setup_environment():
 
 # Create the Flask application at module level
 # This is required for gunicorn to find the app object
+import time
+_app_creation_start = time.time()
 app = create_app()
+_app_creation_time = time.time() - _app_creation_start
+print(f"⏱️  App creation took: {_app_creation_time:.3f} seconds")
 
 if __name__ == '__main__':
     # Parse command line arguments first to check for skip flag
     parser = argparse.ArgumentParser(
         description='Run the Portfolio Rebalancing Flask application')
-    parser.add_argument('--port', type=int, default=5000,
+    parser.add_argument('--port', type=int, default=8065,
                         help='Port to run the application on')
     parser.add_argument('--skip-setup', action='store_true',
                         help='Skip automatic environment setup check')
@@ -193,8 +197,13 @@ if __name__ == '__main__':
     # Check environment setup before running (unless skipped)
     if not args.skip_setup:
         check_and_setup_environment()
-    
+
     # Run the application with the specified port
     # Debug mode should be controlled by FLASK_ENV, not hardcoded
     debug_mode = os.environ.get('FLASK_ENV', 'development') == 'development'
+
+    _run_start = time.time()
+    print(f"⏱️  Starting Flask server (debug={debug_mode})...")
     app.run(host='0.0.0.0', port=args.port, debug=debug_mode, threaded=True)
+    _run_time = time.time() - _run_start
+    print(f"⏱️  Flask app.run() took: {_run_time:.3f} seconds")

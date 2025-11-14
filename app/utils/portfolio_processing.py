@@ -32,8 +32,8 @@ def process_csv_data(account_id, file_content):
     db = None
     cursor = None
     try:
-        logger.info(f"DEBUG: Starting process_csv_data for account_id: {account_id}")
-        logger.info(f"DEBUG: File content length: {len(file_content)} characters")
+        logger.debug(f" Starting process_csv_data for account_id: {account_id}")
+        logger.debug(f" File content length: {len(file_content)} characters")
 
         # Note: Initial progress is now set in upload endpoint to fix race condition
         # Start with backup progress since upload endpoint already set status to "processing"
@@ -54,7 +54,7 @@ def process_csv_data(account_id, file_content):
                          thousands='.')
         df.columns = df.columns.str.lower()
         
-        logger.info(f"DEBUG: Successfully parsed CSV with {len(df)} rows and columns: {list(df.columns)}")
+        logger.debug(f" Successfully parsed CSV with {len(df)} rows and columns: {list(df.columns)}")
 
         essential_columns = {
             "identifier": ["identifier", "isin", "symbol"],
@@ -549,7 +549,7 @@ def process_csv_data(account_id, file_content):
         db.commit()
         clear_data_caches()
         
-        logger.info(f"DEBUG: After database commit - positions_added: {len(positions_added)}, positions_updated: {len(positions_updated)}, positions_removed: {len(positions_removed)}")
+        logger.debug(f" After database commit - positions_added: {len(positions_added)}, positions_updated: {len(positions_updated)}, positions_removed: {len(positions_removed)}")
 
         all_identifiers = set()
         for company_name in positions_added + positions_updated:
@@ -560,16 +560,16 @@ def process_csv_data(account_id, file_content):
             )
             if company and company['identifier']:
                 all_identifiers.add(company['identifier'])
-                logger.info(f"DEBUG: Found identifier for {company_name}: {company['identifier']}")
+                logger.debug(f" Found identifier for {company_name}: {company['identifier']}")
             else:
-                logger.info(f"DEBUG: No identifier found for company: {company_name}")
+                logger.debug(f" No identifier found for company: {company_name}")
 
-        logger.info(f"DEBUG: Found {len(all_identifiers)} identifiers for price updates: {list(all_identifiers)}")
-        logger.info(f"DEBUG: positions_added: {positions_added}")
-        logger.info(f"DEBUG: positions_updated: {positions_updated}")
+        logger.debug(f" Found {len(all_identifiers)} identifiers for price updates: {list(all_identifiers)}")
+        logger.debug(f" positions_added: {positions_added}")
+        logger.debug(f" positions_updated: {positions_updated}")
 
         if all_identifiers:
-            logger.info(f"DEBUG: Starting price updates for {len(all_identifiers)} identifiers")
+            logger.debug(f" Starting price updates for {len(all_identifiers)} identifiers")
             update_csv_progress(0, len(all_identifiers), "Starting price updates...", "processing")
             time.sleep(0.1)
             logger.info(
@@ -590,7 +590,7 @@ def process_csv_data(account_id, file_content):
                     f"API call {processed_identifiers}/{total_identifiers}: Fetching {identifier[:20]}...", 
                     "processing"
                 )
-                logger.info(f"DEBUG: Updated progress to {processed_identifiers}/{total_identifiers} ({int((processed_identifiers / total_identifiers) * 100)}%)")
+                logger.debug(f" Updated progress to {processed_identifiers}/{total_identifiers} ({int((processed_identifiers / total_identifiers) * 100)}%)")
                 
                 logger.info(f"Making API call {processed_identifiers}/{total_identifiers} for {identifier}")
                 
@@ -621,9 +621,9 @@ def process_csv_data(account_id, file_content):
                     failed_prices.append(identifier)
 
         # Final completion with longer persistence  
-        logger.info(f"DEBUG: Finalizing CSV processing. all_identifiers length: {len(all_identifiers)}")
+        logger.debug(f" Finalizing CSV processing. all_identifiers length: {len(all_identifiers)}")
         if all_identifiers:
-            logger.info(f"DEBUG: Completing with {len(all_identifiers)}/{len(all_identifiers)}")
+            logger.debug(f" Completing with {len(all_identifiers)}/{len(all_identifiers)}")
             update_csv_progress(len(all_identifiers), len(all_identifiers), "CSV import completed successfully!", "completed")
         else:
             logger.info("DEBUG: No identifiers processed, completing with 1/1")
@@ -824,12 +824,12 @@ def update_csv_progress_background(job_id: str, current: int, total: int, messag
         from app.utils.db_utils import execute_background_db
         from datetime import datetime
         
-        logger.info(f"DEBUG: Attempting to update background progress - Job: {job_id}, Current: {current}, Total: {total}, Percentage: {percentage}")
+        logger.debug(f" Attempting to update background progress - Job: {job_id}, Current: {current}, Total: {total}, Percentage: {percentage}")
         
         # First check if the job exists
         from app.utils.db_utils import query_background_db
         existing_job = query_background_db("SELECT id, status FROM background_jobs WHERE id = ?", (job_id,), one=True)
-        logger.info(f"DEBUG: Existing job status before update: {existing_job}")
+        logger.debug(f" Existing job status before update: {existing_job}")
         
         rows_affected = execute_background_db(
             "UPDATE background_jobs SET progress = ?, result = ?, updated_at = ? WHERE id = ?",
@@ -862,13 +862,13 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
     Returns:
         Tuple[bool, str, dict]: (success, message, details)
     """
-    logger.info(f"DEBUG: process_csv_data_background starting - account_id: {account_id}, job_id: {job_id}")
-    logger.info(f"DEBUG: File content length: {len(file_content)} characters")
-    logger.info(f"DEBUG: Using {'REFACTORED' if use_refactored else 'LEGACY'} CSV processing")
+    logger.debug(f" process_csv_data_background starting - account_id: {account_id}, job_id: {job_id}")
+    logger.debug(f" File content length: {len(file_content)} characters")
+    logger.debug(f" Using {'REFACTORED' if use_refactored else 'LEGACY'} CSV processing")
 
     # Create a progress function that updates the database
     def background_progress_wrapper(current, total, message="Processing...", status="processing"):
-        logger.info(f"DEBUG: Background wrapper called with current={current}, total={total}, message='{message}', status='{status}'")
+        logger.debug(f" Background wrapper called with current={current}, total={total}, message='{message}', status='{status}'")
 
         # First update the progress - this ensures users see progress even if job gets cancelled
         update_csv_progress_background(job_id, current, total, message, status)
@@ -877,7 +877,7 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
         from app.utils.batch_processing import get_job_status
         job_status = get_job_status(job_id)
         if job_status.get('status') == 'cancelled':
-            logger.info(f"DEBUG: Job {job_id} was cancelled, stopping processing")
+            logger.debug(f" Job {job_id} was cancelled, stopping processing")
             raise KeyboardInterrupt("Upload cancelled by user")
 
     try:

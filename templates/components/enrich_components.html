@@ -1,6 +1,11 @@
 {% macro head_extras() %}
 <!-- Lodash is now loaded in base.html -->
 <style>
+    /* Wider layout for enrich page */
+    .container {
+        max-width: 1600px !important;
+    }
+
     /* Improved layout and spacing consistency */
     .card {
         box-shadow: var(--shadow);
@@ -18,7 +23,17 @@
     }
 
     .card-content {
-        padding: var(--space-md);
+        padding: 0.75rem;
+    }
+
+    /* Tighter spacing between columns */
+    .columns:not(.is-variable) {
+        margin-left: -0.375rem;
+        margin-right: -0.375rem;
+    }
+
+    .columns:not(.is-variable) > .column {
+        padding: 0.375rem;
     }
 
     /* More consistent form elements */
@@ -203,20 +218,25 @@
     .table {
         border-radius: var(--border-radius-sm);
         overflow: hidden;
-        box-shadow: var(--shadow);
+        box-shadow: none;
+        border: 1px solid var(--border-color);
     }
 
     .table th {
         background-color: var(--section-bg);
         color: var(--text-color);
         font-weight: var(--font-weight-semibold);
-        font-size: 0.9rem;
-        border-bottom: 2px solid var(--border-color);
+        font-size: 0.85rem;
+        border-bottom: 1px solid var(--border-color);
+        border-width: 1px;
         vertical-align: middle;
+        padding: 0.5rem 0.6rem;
     }
 
     .table td {
         vertical-align: middle;
+        padding: 0.35rem 0.6rem;
+        border-width: 1px;
     }
 
     .table td .button {
@@ -839,6 +859,14 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
+                                <th @click="sortBy('investment_type')" class="is-sortable col-input-small">
+                                    Type
+                                    <span class="column-health" :class="getHealthColorClass(investmentTypeHealthPercentage)"
+                                        v-text="investmentTypeHealthPercentage + '%'"></span>
+                                    <span class="icon is-small ml-1" v-if="sortColumn === 'investment_type'">
+                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
+                                    </span>
+                                </th>
                                 <th @click="sortBy('country')" class="is-sortable col-input-small">
                                     Country
                                     <span class="column-health" :class="getHealthColorClass(countryHealthPercentage)"
@@ -905,6 +933,15 @@
                                 <td class="col-input-small">
                                     <input class="input is-small" type="text" v-model="item.category"
                                         @blur="saveCategoryChange(item)">
+                                </td>
+                                <td class="col-input-small">
+                                    <div class="select is-small">
+                                        <select v-model="item.investment_type" @change="saveInvestmentTypeChange(item)">
+                                            <option :value="null">-</option>
+                                            <option value="Stock">Stock</option>
+                                            <option value="ETF">ETF</option>
+                                        </select>
+                                    </div>
                                 </td>
                                 <td class="col-input-small">
                                     <div class="field has-addons">

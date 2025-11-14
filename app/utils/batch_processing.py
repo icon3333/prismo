@@ -155,13 +155,13 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str):
     """
     with app.app_context():
         try:
-            logger.info(f"DEBUG: _run_csv_job started in background thread for account_id: {account_id}, job_id: {job_id}")
+            logger.debug(f" _run_csv_job started in background thread for account_id: {account_id}, job_id: {job_id}")
             logger.info(f"Starting background CSV processing for account_id: {account_id}, job_id: {job_id}")
             
             # Import here to avoid circular imports
             from app.utils.portfolio_processing import process_csv_data_background
             
-            logger.info(f"DEBUG: About to call process_csv_data_background with job_id: {job_id}")
+            logger.debug(f" About to call process_csv_data_background with job_id: {job_id}")
             # Use the background version that doesn't depend on session
             success, message, result = process_csv_data_background(account_id, file_content, job_id)
             
@@ -217,17 +217,17 @@ def start_csv_processing_job(account_id: int, file_content: str) -> str:
 
     try:
         # Create job record in database
-        logger.info(f"DEBUG: Creating job record in database for job_id: {job_id}")
+        logger.debug(f" Creating job record in database for job_id: {job_id}")
         db = get_db()
         db.execute(
             "INSERT INTO background_jobs (id, name, status, progress, total) VALUES (?, ?, ?, ?, ?)",
             (job_id, 'csv_upload', 'processing', 0, 100)
         )
         db.commit()
-        logger.info(f"DEBUG: Job record created successfully in database for job_id: {job_id}")
+        logger.debug(f" Job record created successfully in database for job_id: {job_id}")
 
         # Create and start the background thread
-        logger.info(f"DEBUG: Creating background thread for job_id: {job_id}")
+        logger.debug(f" Creating background thread for job_id: {job_id}")
         thread = threading.Thread(
             target=_run_csv_job, 
             args=(app, account_id, file_content, job_id),

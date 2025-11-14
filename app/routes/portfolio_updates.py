@@ -81,8 +81,11 @@ def update_price_api(company_id: int):
         logger.error(f"Failed to update price in database for {identifier}")
         return error_response(f'Failed to update price in database for {identifier}', 500)
 
-    except Exception as e:
+    except (DataIntegrityError, ExternalAPIError, PriceFetchError) as e:
         logger.error(f"Error updating price for company {company_id}: {str(e)}")
+        return error_response(str(e), 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error updating price for company {company_id}")
         return error_response('An unexpected error occurred.', 500)
 
 
@@ -227,9 +230,12 @@ def price_fetch_progress():
         progress_data = get_latest_job_progress()
         return jsonify(progress_data)
 
-    except Exception as e:
-        logger.error(f"Error getting price fetch progress: {str(e)}")
+    except DataIntegrityError as e:
+        logger.error(f"Data integrity error getting price fetch progress: {str(e)}")
         return error_response(str(e), 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting price fetch progress")
+        return error_response('Failed to retrieve progress information', 500)
 
 
 @require_auth
@@ -263,9 +269,12 @@ def price_update_status(job_id):
 
         return jsonify(response_data)
 
-    except Exception as e:
+    except (DataIntegrityError, NotFoundError) as e:
         logger.error(f"Error getting job status for {job_id}: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 404 if isinstance(e, NotFoundError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting job status for {job_id}")
+        return error_response('Failed to retrieve job status', 500)
 
 
 @require_auth
@@ -306,9 +315,13 @@ def update_single_portfolio_api(company_id):
                 )
 
         return success_response(message='Company updated successfully')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError, NotFoundError) as e:
         logger.error(f"Error updating company {company_id}: {str(e)}")
-        return error_response(str(e), 500)
+        status_code = 400 if isinstance(e, ValidationError) else 404 if isinstance(e, NotFoundError) else 500
+        return error_response(str(e), status_code)
+    except Exception as e:
+        logger.exception(f"Unexpected error updating company {company_id}")
+        return error_response('Internal server error', 500)
 
 
 @require_auth
@@ -347,9 +360,12 @@ def bulk_update():
                 details={'updated': updated, 'errors': errors}
             )
         return success_response(data={'updated': updated}, message=f'Successfully updated {updated} companies')
-    except Exception as e:
+    except (DataIntegrityError, ValidationError) as e:
         logger.error(f"Error in bulk update: {str(e)}")
-        return error_response(str(e), 500)
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error in bulk update")
+        return error_response('Internal server error', 500)
 
 
 @require_auth
@@ -385,6 +401,9 @@ def get_portfolio_companies(portfolio_id):
                     'value_eur': company['price_eur'] * company['effective_shares'] if company['price_eur'] and company['effective_shares'] else 0
                 })
         return jsonify(result)
+    except (DataIntegrityError, ValidationError) as e:
+        logger.error(f"Error getting companies for portfolio {portfolio_id}: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
     except Exception as e:
-        logger.error(f"Error getting companies for portfolio: {str(e)}")
-        return error_response(str(e), 500)
+        logger.exception(f"Unexpected error getting companies for portfolio {portfolio_id}")
+        return error_response('Internal server error', 500)

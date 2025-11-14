@@ -40,7 +40,7 @@ def execute_background_db(query, args=()):
     This function doesn't require Flask application context.
     """
     try:
-        logger.debug(f"🗄️ Executing background statement: {query}")
+        logger.debug(f"Executing background statement: {query}")
         logger.debug(f"📋 Statement args: {args}")
         
         db = get_background_db()
@@ -48,10 +48,10 @@ def execute_background_db(query, args=()):
         
         cursor = db.execute(query, args)
         rowcount = cursor.rowcount
-        logger.debug(f"📊 Statement executed, rowcount: {rowcount}")
+        logger.debug(f"Statement executed, rowcount: {rowcount}")
         
         db.commit()
-        logger.debug(f"✅ Database changes committed")
+        logger.debug(f"Database changes committed")
         
         cursor.close()
         db.close()
@@ -59,11 +59,11 @@ def execute_background_db(query, args=()):
         logger.debug(f"📈 Background statement affected {rowcount} rows")
         return rowcount
     except Exception as e:
-        logger.error(f"💥 Background database execute failed: {str(e)}")
+        logger.error(f"Background database execute failed: {str(e)}")
         logger.error(f"📜 Statement was: {query}")
         logger.error(f"📋 Args were: {args}")
         logger.error(f"🚨 Exception type: {type(e).__name__}")
-        logger.error(f"🔍 Full exception details:", exc_info=True)
+        logger.error(f"Full exception details:", exc_info=True)
         raise
 
 
@@ -84,11 +84,11 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         Success status
     """
     try:
-        logger.debug(f"🛠️ Starting database update for identifier: {identifier}")
-        logger.debug(f"💰 Price data: {price} {currency} ({price_eur} EUR), country: {country}")
+        logger.debug(f"Starting database update for identifier: {identifier}")
+        logger.debug(f"Price data: {price} {currency} ({price_eur} EUR), country: {country}")
         
         if not identifier or price is None:
-            logger.warning(f"⚠️ Missing identifier or price: {identifier}, {price}")
+            logger.warning(f"Missing identifier or price: {identifier}, {price}")
             return False
 
         now = datetime.now().isoformat()
@@ -96,7 +96,7 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
 
         # If we have a modified identifier, update the company records first
         if modified_identifier:
-            logger.info(f"🔄 Updating identifier in database from {identifier} to {modified_identifier}")
+            logger.info(f"Updating identifier in database from {identifier} to {modified_identifier}")
 
             # Update identifier in companies table
             rows_updated = execute_background_db('''
@@ -105,13 +105,13 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                 WHERE identifier = ?
             ''', [modified_identifier, identifier])
 
-            logger.info(f"✅ Updated {rows_updated} company records with new identifier {modified_identifier}")
+            logger.info(f"Updated {rows_updated} company records with new identifier {modified_identifier}")
 
             # Use the modified identifier for all subsequent operations
             identifier = modified_identifier
 
         # Check if the record exists in market_prices
-        logger.debug(f"🔍 Checking if price record exists for {identifier}")
+        logger.debug(f"Checking if price record exists for {identifier}")
         existing = query_background_db(
             'SELECT 1 FROM market_prices WHERE identifier = ?',
             [identifier],
@@ -128,7 +128,7 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                     country = ?
                 WHERE identifier = ?
             ''', [price, currency, price_eur, now, country, identifier])
-            logger.info(f"✅ Updated existing price record for {identifier} ({rows_affected} rows affected)")
+            logger.info(f"Updated existing price record for {identifier} ({rows_affected} rows affected)")
         else:
             # Insert new record
             logger.debug(f"➕ Creating new price record for {identifier}")
@@ -137,28 +137,56 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                 (identifier, price, currency, price_eur, last_updated, country)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', [identifier, price, currency, price_eur, now, country])
-            logger.info(f"✅ Created new price record for {identifier} ({rows_affected} rows affected)")
+            logger.info(f"Created new price record for {identifier} ({rows_affected} rows affected)")
 
         # Update last_price_update in accounts table for all accounts that have this identifier
         logger.debug(f"🔄 Updating account timestamps for {identifier}")
         accounts_affected = execute_background_db('''
-            UPDATE accounts 
-            SET last_price_update = ? 
+            UPDATE accounts
+            SET last_price_update = ?
             WHERE id IN (
-                SELECT DISTINCT account_id 
-                FROM companies 
+                SELECT DISTINCT account_id
+                FROM companies
                 WHERE identifier = ?
             )
         ''', [now, identifier])
-        logger.debug(f"📊 Updated {accounts_affected} account records with new timestamp")
+        logger.debug(f"Updated {accounts_affected} account records with new timestamp")
+
+        # Auto-categorize investment type if not already set
+        try:
+            from app.utils.yfinance_utils import auto_categorize_investment_type
+
+            # Check if any companies with this identifier have NULL investment_type
+            uncategorized = query_background_db('''
+                SELECT COUNT(*) as count
+                FROM companies
+                WHERE identifier = ? AND investment_type IS NULL
+            ''', [identifier], one=True)
+
+            if uncategorized and uncategorized['count'] > 0:
+                investment_type = auto_categorize_investment_type(identifier)
+
+                if investment_type:
+                    # Update all companies with this identifier
+                    rows_categorized = execute_background_db('''
+                        UPDATE companies
+                        SET investment_type = ?
+                        WHERE identifier = ? AND investment_type IS NULL
+                    ''', [investment_type, identifier])
+                    logger.info(f"✅ Auto-categorized {rows_categorized} companies with identifier {identifier} as {investment_type}")
+                else:
+                    logger.debug(f"Could not auto-categorize {identifier} - requires manual categorization")
+        except Exception as e:
+            # Don't fail the entire price update if auto-categorization fails
+            logger.warning(f"Auto-categorization failed for {identifier}: {e}")
 
         logger.info(f"🎉 Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) with country={country}")
         return True
 
     except Exception as e:
-        logger.error(f"💥 Failed to update price in database for {identifier}: {str(e)}")
+        logger.error(f"Failed to update price in database for {identifier}: {str(e)}")
         logger.error(f"🚨 Exception type: {type(e).__name__}")
-        logger.error(f"🔍 Full exception details:", exc_info=True)
+        logger.error(f"Full exception details:", exc_info=True)
         return False
 
 
@@ -468,7 +496,7 @@ def update_batch_prices_in_db(results):
                             f"✅ Successfully updated price AND identifier for {isin} -> {modified_identifier}")
                 else:
                     failed_count += 1
-                    logger.warning(f"❌ Failed to update price for {isin}")
+                    logger.warning(f"Failed to update price for {isin}")
 
         logger.info(
             f"Batch update complete. Success: {success_count}, Modified: {modified_count}, Failed: {failed_count}")

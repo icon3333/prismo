@@ -99,6 +99,22 @@
           </div>
         </div>
 
+        <!-- Maximum % per ETF -->
+        <div class="rule-item">
+          <div class="rule-description">
+            <h4 class="rule-title">Maximum % per ETF</h4>
+            <p class="rule-subtitle">Limits the maximum percentage allocation for any single ETF position</p>
+          </div>
+          <div class="rule-input">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
+                  v-model.number="rules.maxPerETF">
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Maximum % per Category -->
         <div class="rule-item">
           <div class="rule-description">

@@ -90,6 +90,20 @@
                     </div>
                 </div>
 
+                <div class="column is-6">
+                    <div class="gauge-card">
+                        <div class="gauge-indicator">
+                            <div class="overview-chart-header">
+                                <div class="overview-chart-title">Investment Types</div>
+                                <div class="overview-chart-subtitle" id="investmentTypeSubtitle">Stock vs ETF breakdown</div>
+                            </div>
+                            <div class="overview-chart-container">
+                                <div id="investmentTypeChart" style="min-height: 300px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -519,6 +533,7 @@
                         id: item.id,
                         name: companyName,
                         category: item.category || 'Uncategorized',
+                        investment_type: item.investment_type || null,
                         shares: shares,
                         effective_shares: shares, // Required by centralized calculator
                         priceEur: price,
@@ -682,7 +697,8 @@
                 'portfolioAllocationsChart',
                 'companyAllocationsChart',
                 'countryDistributionChart',
-                'categoryDistributionChart'
+                'categoryDistributionChart',
+                'investmentTypeChart'
             ];
 
             chartIds.forEach(chartId => {
@@ -825,8 +841,8 @@
 
                 // Ensure metadata fields exist
                 company.country = company.country || 'Unknown';
-
                 company.category = company.category || 'Unknown';
+                company.investment_type = company.investment_type || null;
                 company.exchange = company.exchange || 'Unknown';
 
                 return company;
@@ -848,7 +864,7 @@
                         // Preserve metadata from the first occurrence
                         category: company.category || 'Unknown',
                         country: company.country || 'Unknown',
-
+                        investment_type: company.investment_type || null,
                         exchange: company.exchange || 'Unknown'
                     };
                 }
@@ -1042,6 +1058,7 @@
         function updateDistributionCharts() {
             updateDistributionChart('country', 'countryDistributionChart');
             updateDistributionChart('category', 'categoryDistributionChart');
+            updateInvestmentTypeChart();
         }
 
         function updateDistributionChart(field, chartId) {
@@ -1112,6 +1129,92 @@
                 });
             } catch (error) {
                 console.error(`Error creating ${field} distribution chart:`, error);
+                document.getElementById(chartId).innerHTML = '<p class="has-text-danger">Error creating chart</p>';
+            }
+        }
+
+        function updateInvestmentTypeChart() {
+            const chartId = 'investmentTypeChart';
+            const distributions = {};
+            const companyDetails = {}; // Track companies in each type
+
+            // Get all companies from selected portfolios
+            const allCompanies = getAllCompaniesFromSelectedPortfolios();
+
+            allCompanies.forEach(company => {
+                const value = company.currentValue || 0;
+                const type = company.investment_type || 'Uncategorized';
+
+                distributions[type] = (distributions[type] || 0) + value;
+
+                // Track company details for tooltips
+                if (!companyDetails[type]) companyDetails[type] = [];
+                companyDetails[type].push({
+                    name: company.name,
+                    value: value,
+                    percentage: 0 // Will be calculated later
+                });
+            });
+
+            const distributionData = Object.entries(distributions)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value);
+
+            // Update subtitle with count
+            const investmentTypeSubtitle = document.getElementById('investmentTypeSubtitle');
+            if (investmentTypeSubtitle) {
+                const stockCount = companyDetails['Stock'] ? companyDetails['Stock'].length : 0;
+                const etfCount = companyDetails['ETF'] ? companyDetails['ETF'].length : 0;
+                const uncategorizedCount = companyDetails['Uncategorized'] ? companyDetails['Uncategorized'].length : 0;
+                investmentTypeSubtitle.textContent = `${stockCount} Stocks, ${etfCount} ETFs`;
+                if (uncategorizedCount > 0) {
+                    investmentTypeSubtitle.textContent += `, ${uncategorizedCount} Uncategorized`;
+                }
+            }
+
+            // Clear existing chart
+            document.getElementById(chartId).innerHTML = '';
+
+            if (distributionData.length === 0) {
+                document.getElementById(chartId).innerHTML = '<p class="has-text-grey has-text-centered p-4">No data available</p>';
+                return;
+            }
+
+            // Calculate percentages
+            const distributionTotal = distributionData.reduce((sum, item) => sum + item.value, 0);
+            const distributionPercentages = distributionData.map(item => distributionTotal > 0 ? (item.value / distributionTotal) * 100 : 0);
+
+            // Calculate individual company percentages
+            for (const key in companyDetails) {
+                companyDetails[key].forEach(company => {
+                    company.percentage = distributionTotal > 0 ? (company.value / distributionTotal) * 100 : 0;
+                });
+                companyDetails[key].sort((a, b) => b.value - a.value);
+            }
+
+            // Custom colors for investment types
+            const typeColors = {
+                'Stock': '#3b82f6',  // Blue
+                'ETF': '#10b981',    // Green
+                'Uncategorized': '#6b7280'  // Gray
+            };
+            const colors = distributionData.map(item => typeColors[item.name] || '#8b5cf6');
+
+            try {
+                // Create doughnut chart
+                ChartConfig.createStandardDoughnutChart(
+                    chartId,
+                    distributionData.map(item => item.name),
+                    distributionData.map(item => item.value),
+                    {
+                        title: '',
+                        colors: colors,
+                        showTotal: true,
+                        height: 300
+                    }
+                );
+            } catch (error) {
+                console.error('Error creating investment type distribution chart:', error);
                 document.getElementById(chartId).innerHTML = '<p class="has-text-danger">Error creating chart</p>';
             }
         }

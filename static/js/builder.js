@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function () {
       },
       rules: {
         maxPerStock: 5,
+        maxPerETF: 10,
         maxPerCategory: 25,
         maxPerCountry: 10
       },

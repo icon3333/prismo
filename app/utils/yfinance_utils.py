@@ -1,5 +1,4 @@
 import logging
-import yfinance as yf
 import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -7,14 +6,29 @@ import warnings
 from app.exceptions import PriceFetchError
 from app.cache import cache
 
-# Suppress specific yfinance warnings
-warnings.filterwarnings("ignore", message="^[Tt]he 'period'")
+# Lazy import yfinance to speed up module loading (yfinance takes 3-5 seconds to import)
+_yf = None
+
+def _get_yfinance():
+    """Lazy load yfinance module to speed up application startup."""
+    global _yf
+    if _yf is None:
+        import yfinance as yf
+        _yf = yf
+        # Suppress specific yfinance warnings when module is first loaded
+        warnings.filterwarnings("ignore", message="^[Tt]he 'period'")
+    return _yf
+
 logger = logging.getLogger(__name__)
+
+# Cache timeout constants (in seconds)
+CACHE_TIMEOUT_EXCHANGE_RATES = 3600  # 1 hour - exchange rates change infrequently
+CACHE_TIMEOUT_STOCK_PRICES = 900      # 15 minutes - balance between freshness and API usage
 
 # --- Helper Functions ---
 
 
-@cache.memoize(timeout=3600)  # Cache for 1 hour - exchange rates change infrequently
+@cache.memoize(timeout=CACHE_TIMEOUT_EXCHANGE_RATES)
 def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
     """
     Fetch the exchange rate between two currencies.
@@ -37,6 +51,7 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
     try:
         # Construct the currency pair ticker
         ticker = f"{from_currency}{to_currency}=X"
+        yf = _get_yfinance()
         rate_data = yf.Ticker(ticker)
 
         # Get the current price
@@ -127,7 +142,7 @@ def _is_likely_crypto(identifier: str) -> bool:
 # --- Main Data Fetching Function ---
 
 
-@cache.memoize(timeout=900)  # Cache for 15 minutes - good balance for stock prices
+@cache.memoize(timeout=CACHE_TIMEOUT_STOCK_PRICES)  # Cache for 15 minutes - good balance for stock prices
 def get_isin_data(identifier: str) -> Dict[str, Any]:
     """
     Get stock/crypto data using fallback pattern instead of pre-normalization.
@@ -212,6 +227,7 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
 
     try:
         # Create ticker object (matches working script)
+        yf = _get_yfinance()
         ticker = yf.Ticker(identifier)
 
         # Access info directly like working script - no inner try/except
@@ -285,7 +301,7 @@ def _fetch_yfinance_data(identifier: str) -> Optional[Dict[str, Any]]:
 # --- Other Utility Functions (can be expanded) ---
 
 
-@cache.memoize(timeout=900)  # Cache for 15 minutes
+@cache.memoize(timeout=CACHE_TIMEOUT_STOCK_PRICES)  # Cache for 15 minutes
 def get_yfinance_info(identifier: str) -> Dict[str, Any]:
     """
     Simple wrapper to get the full info dictionary from yfinance.
@@ -294,6 +310,7 @@ def get_yfinance_info(identifier: str) -> Dict[str, Any]:
     """
     logger.info(f"Fetching yfinance info (not cached) for: {identifier}")
     try:
+        yf = _get_yfinance()
         ticker = yf.Ticker(identifier)
         return ticker.info
     except Exception as e:
@@ -301,9 +318,65 @@ def get_yfinance_info(identifier: str) -> Dict[str, Any]:
         return {'error': str(e)}
 
 
+def auto_categorize_investment_type(identifier: str) -> Optional[str]:
+    """
+    Automatically determine investment type (Stock or ETF) with 99% confidence.
+
+    Returns None if cannot determine with high confidence (field left empty for user to categorize).
+
+    Uses yfinance quoteType field which is highly reliable for most securities:
+    - "EQUITY" → Stock
+    - "ETF" → ETF
+    - "CRYPTOCURRENCY" → Stock (per user requirement)
+    - Other/Missing → None (requires manual categorization)
+
+    Args:
+        identifier: The security identifier (ISIN, ticker, or crypto symbol)
+
+    Returns:
+        "Stock", "ETF", or None if cannot determine with 99% confidence
+    """
+    try:
+        # Fetch yfinance info (cached) - rely on API for accurate categorization
+        # Don't use heuristics as they can misclassify ETF tickers like VOO, SPY
+        info = get_yfinance_info(identifier)
+
+        if not info or 'error' in info:
+            logger.debug(f"Could not fetch info for {identifier} - cannot auto-categorize")
+            return None
+
+        # Extract quoteType field
+        quote_type = info.get('quoteType')
+
+        if not quote_type:
+            logger.debug(f"No quoteType field for {identifier} - cannot auto-categorize")
+            return None
+
+        # Map quoteType to investment type
+        type_mapping = {
+            'EQUITY': 'Stock',
+            'ETF': 'ETF',
+            'CRYPTOCURRENCY': 'Stock',
+        }
+
+        investment_type = type_mapping.get(quote_type)
+
+        if investment_type:
+            logger.info(f"Auto-categorized {identifier} as {investment_type} (quoteType: {quote_type})")
+            return investment_type
+        else:
+            logger.debug(f"Unknown quoteType '{quote_type}' for {identifier} - cannot auto-categorize")
+            return None
+
+    except Exception as e:
+        logger.warning(f"Error during auto-categorization for {identifier}: {e}")
+        return None
+
+
 def get_historical_prices(identifiers, years=5):
     """Fetches historical price data for a list of identifiers."""
     try:
+        yf = _get_yfinance()
         end_date = datetime.now()
         start_date = end_date.replace(year=end_date.year - years)
 

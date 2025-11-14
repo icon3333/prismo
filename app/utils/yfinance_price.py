@@ -40,7 +40,9 @@ def get_price_for_ticker(ticker: str) -> Dict[str, Any]:
             info_thread = threading.Thread(target=get_info)
             info_thread.daemon = True
             info_thread.start()
-            info_thread.join(timeout=10)
+            # Reduced timeout from 10s to 3s - yfinance typically responds in 0.5-2s
+            # 3s timeout handles slow networks while avoiding excessive waits
+            info_thread.join(timeout=3)
 
             if info_error[0] is None and info_result[0] is not None:
                 price = info_result[0].get("currentPrice")

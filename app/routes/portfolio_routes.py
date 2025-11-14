@@ -3,11 +3,13 @@ from flask import (
     request, flash, session, jsonify, current_app, g
 )
 import logging
+import requests
 from app.db_manager import query_db
 from app.decorators import require_auth
+from app.cache import cache
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics
+    get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -16,9 +18,67 @@ from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_defau
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Cache timeout constants (in seconds)
+CACHE_TIMEOUT_COUNTRIES_API = 86400  # 24 hours - country list rarely changes
+
 portfolio_bp = Blueprint('portfolio', __name__,
                          url_prefix='/portfolio',
                          template_folder='../../templates')
+
+
+# Helper function to fetch countries from external API with caching and fallback
+@cache.memoize(timeout=CACHE_TIMEOUT_COUNTRIES_API)
+def _fetch_countries_from_api():
+    """
+    Fetch country list from REST Countries API with proper error handling.
+
+    Returns:
+        list: List of country names, starting with '(crypto)'
+    """
+    # Minimal fallback list in case API is down
+    FALLBACK_COUNTRIES = [
+        '(crypto)', 'United States', 'United Kingdom', 'Germany', 'France',
+        'Japan', 'China', 'Canada', 'Australia', 'Switzerland', 'Netherlands',
+        'Sweden', 'Denmark', 'Norway', 'Singapore', 'Hong Kong'
+    ]
+
+    try:
+        # Reduced timeout from 10s to 3s - API typically responds in <1s
+        response = requests.get(
+            'https://restcountries.com/v3.1/all?fields=name',
+            timeout=3
+        )
+        response.raise_for_status()  # Raise exception for 4xx/5xx status codes
+
+        api_countries = response.json()
+        countries = ['(crypto)']  # Always include crypto first
+
+        # Extract country names and sort them
+        country_names = []
+        for country in api_countries:
+            if 'name' in country and 'common' in country['name']:
+                name = country['name']['common']
+                # Skip duplicates and clean up names
+                if name not in country_names and name != '(crypto)':
+                    country_names.append(name)
+
+        # Sort alphabetically and add to list
+        country_names.sort()
+        countries.extend(country_names)
+
+        logger.info(f"Successfully loaded {len(countries)} countries from REST Countries API")
+        return countries
+
+    except requests.Timeout:
+        logger.warning("REST Countries API timeout after 3s, using fallback list")
+        return FALLBACK_COUNTRIES
+    except requests.RequestException as e:
+        logger.warning(f"REST Countries API request failed: {e}, using fallback list")
+        return FALLBACK_COUNTRIES
+    except (ValueError, KeyError) as e:
+        logger.error(f"Failed to parse REST Countries API response: {e}, using fallback list")
+        return FALLBACK_COUNTRIES
+
 
 # Ensure session persistence
 
@@ -71,32 +131,8 @@ def enrich():
     logger.info(
         f"Retrieved {len(portfolios)} portfolios from the portfolios table: {[p['name'] for p in portfolios]}")
 
-    # Get comprehensive country list from REST Countries API (server-side like portfolios)
-    # NO hardcoded fallbacks - always use live API data
-    import requests
-    response = requests.get('https://restcountries.com/v3.1/all?fields=name', timeout=10)
-    
-    if response.status_code == 200:
-        api_countries = response.json()
-        countries = ['(crypto)']  # Always include crypto first
-        
-        # Extract country names and sort them
-        country_names = []
-        for country in api_countries:
-            if 'name' in country and 'common' in country['name']:
-                name = country['name']['common']
-                # Skip duplicates and clean up names
-                if name not in country_names and name != '(crypto)':
-                    country_names.append(name)
-        
-        # Sort alphabetically and add to list
-        country_names.sort()
-        countries.extend(country_names)
-        
-        logger.info(f"Successfully loaded {len(countries)} countries from REST Countries API")
-    else:
-        logger.error(f"Failed to load countries from API: HTTP {response.status_code}")
-        countries = ['(crypto)']  # Only crypto if API fails - no hardcoded countries
+    # Get comprehensive country list from REST Countries API (cached with fallback)
+    countries = _fetch_countries_from_api()
 
     # Log template variables for debugging
     logger.info(f"Template variables for enrich page:")
@@ -113,8 +149,8 @@ def enrich():
     )
     missing_prices = sum(1 for item in portfolio_data if not item['price_eur'])
     total_items = len(portfolio_data)
-    health = int(((total_items - missing_prices) /
-                 total_items * 100) if total_items > 0 else 100)
+    # Health metric: percentage of items with prices (0 if no items exist)
+    health = int((total_items - missing_prices) / total_items * 100) if total_items > 0 else 0
 
     # Check if we should use the default portfolio
     use_default_portfolio = session.pop('use_default_portfolio', False)
@@ -248,3 +284,5 @@ portfolio_bp.add_url_rule('/api/price_update_status/<string:job_id>',
                           view_func=price_update_status, methods=['GET'])
 portfolio_bp.add_url_rule('/api/portfolio_metrics',
                           view_func=get_portfolio_metrics, methods=['GET'])
+portfolio_bp.add_url_rule('/api/investment_type_distribution',
+                          view_func=get_investment_type_distribution, methods=['GET'])

@@ -44,27 +44,6 @@ def normalize_identifier(identifier: str) -> str:
     return clean_identifier
 
 
-def should_try_crypto_format(identifier: str) -> bool:
-    """
-    DEPRECATED: No longer used with Strategy 1 cascade approach.
-
-    This function used to determine if an identifier should be converted to
-    crypto format during normalization. With Strategy 1, we no longer guess
-    the format - instead, the cascade logic in fetch_price_with_crypto_fallback()
-    tries both formats automatically at fetch time.
-
-    Kept for backward compatibility but always returns False.
-
-    Args:
-        identifier: Identifier string
-
-    Returns:
-        False (deprecated, not used)
-    """
-    logger.debug(f"should_try_crypto_format called for '{identifier}' but is deprecated (always returns False)")
-    return False
-
-
 def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     """
     Strategy 1: Simple two-step cascade for price fetching.
@@ -86,7 +65,7 @@ def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     """
     from .yfinance_utils import _fetch_yfinance_data_robust
 
-    logger.info(f"🔍 Two-step cascade for: '{identifier}'")
+    logger.info(f"Two-step cascade for: '{identifier}'")
 
     # Step 1: Try original identifier
     logger.debug(f"  Step 1: Trying original format '{identifier}'")
@@ -203,7 +182,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                 )
                 market_prices_removed += 1
                 action_taken = "removed_unused_base_format"
-                logger.info(f"  ✅ Removed unused base format '{base_id}' from market_prices")
+                logger.info(f"Removed unused base format '{base_id}' from market_prices")
                 
             elif companies_using_base > 0 and companies_using_crypto == 0:
                 # Companies are using base format, remove crypto format from market_prices
@@ -213,7 +192,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                 )
                 market_prices_removed += 1
                 action_taken = "removed_unused_crypto_format"
-                logger.info(f"  ✅ Removed unused crypto format '{crypto_id}' from market_prices")
+                logger.info(f"Removed unused crypto format '{crypto_id}' from market_prices")
                 
             elif companies_using_crypto > 0 and companies_using_base > 0:
                 # Both formats are being used - need to decide which to keep
@@ -232,7 +211,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                             WHERE id = ?
                         ''', [crypto_id, company['id']])
                         companies_updated += 1
-                        logger.info(f"  ✅ Updated company '{company['name']}': '{base_id}' → '{crypto_id}'")
+                        logger.info(f"Updated company '{company['name']}': '{base_id}' → '{crypto_id}'")
                     
                     # Remove base format from market_prices
                     cursor.execute(
@@ -256,7 +235,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                             WHERE id = ?
                         ''', [base_id, company['id']])
                         companies_updated += 1
-                        logger.info(f"  ✅ Updated company '{company['name']}': '{crypto_id}' → '{base_id}'")
+                        logger.info(f"Updated company '{company['name']}': '{crypto_id}' → '{base_id}'")
                     
                     # Remove crypto format from market_prices
                     cursor.execute(
@@ -280,7 +259,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                             WHERE id = ?
                         ''', [crypto_id, company['id']])
                         companies_updated += 1
-                        logger.info(f"  ⚠️ Updated company '{company['name']}': '{base_id}' → '{crypto_id}' (fallback)")
+                        logger.info(f"Updated company '{company['name']}': '{base_id}' → '{crypto_id}' (fallback)")
                     
                     # Remove base format from market_prices
                     cursor.execute(
@@ -302,7 +281,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                     )
                     market_prices_removed += 1
                     action_taken = "kept_more_recent_crypto"
-                    logger.info(f"  ✅ Kept more recent crypto format '{crypto_id}', removed '{base_id}'")
+                    logger.info(f"Kept more recent crypto format '{crypto_id}', removed '{base_id}'")
                 else:
                     cursor.execute(
                         'DELETE FROM market_prices WHERE identifier = ?',
@@ -310,7 +289,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
                     )
                     market_prices_removed += 1
                     action_taken = "kept_more_recent_base"
-                    logger.info(f"  ✅ Kept more recent base format '{base_id}', removed '{crypto_id}'")
+                    logger.info(f"Kept more recent base format '{base_id}', removed '{crypto_id}'")
             
             pairs_processed.append({
                 'base': base_id,
@@ -392,10 +371,10 @@ def run_test_cases() -> Dict[str, Any]:
             
             if passed:
                 results['passed'] += 1
-                logger.info(f"✅ Test passed: '{input_id}' -> '{actual_output}'")
+                logger.info(f"Test passed: '{input_id}' -> '{actual_output}'")
             else:
                 results['failed'] += 1
-                logger.warning(f"❌ Test failed: '{input_id}' -> expected '{expected_output}', got '{actual_output}'")
+                logger.warning(f"Test failed: '{input_id}' -> expected '{expected_output}', got '{actual_output}'")
             
             results['details'].append({
                 'input': input_id,
@@ -406,7 +385,7 @@ def run_test_cases() -> Dict[str, Any]:
             
         except Exception as e:
             results['failed'] += 1
-            logger.error(f"❌ Test error for '{input_id}': {e}")
+            logger.error(f"Test error for '{input_id}': {e}")
             results['details'].append({
                 'input': input_id,
                 'expected': expected_output,

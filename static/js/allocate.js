@@ -216,7 +216,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Add portfolio options - show all portfolios with target allocations (even if empty)
             this.portfolioData.portfolios.forEach(portfolio => {
-                if (portfolio.targetWeight > 0) {  // Show if has target allocation, even if empty
+                // Filter out portfolios with target allocation AND valid names (not "Unknown")
+                const isValidPortfolio = portfolio.targetWeight > 0 &&
+                                        portfolio.name &&
+                                        !portfolio.name.toLowerCase().includes('unknown');
+
+                if (isValidPortfolio) {
                     const option = document.createElement('option');
                     option.value = portfolio.name;
                     // Add "(Empty)" suffix for empty portfolios
@@ -762,6 +767,7 @@ document.addEventListener('DOMContentLoaded', function () {
             thead.innerHTML = `
                 <tr>
                     <th>Name</th>
+                    <th>Type</th>
                     <th>Current Value</th>
                     <th>Current Allocation</th>
                     <th>Target Allocation</th>
@@ -884,6 +890,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Third pass: assign target allocations and calculate total for normalization
             let totalTargetAllocation = 0;
+            let hasBackendConstrainedValues = false;
+
             if (portfolio.categories && portfolio.categories.length > 0) {
                 portfolio.categories.forEach((category, categoryIndex) => {
                     // Skip categories with no positions
@@ -894,21 +902,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
                     // Assign target allocations for each position
                     category.positions.forEach(position => {
-                        // Use builder weight if available, otherwise use default allocation
-                        if (!position.targetAllocation || position.targetAllocation <= 0) {
-                            // Check if this position has a builder-defined weight
-                            const builderWeight = builderPositionsMap.get(position.name);
-                            position.targetAllocation = builderWeight || defaultAllocation;
+                        // Check if backend provided constrained target value
+                        if (position.targetValue !== undefined && position.targetValue !== null) {
+                            hasBackendConstrainedValues = true;
+                            // Calculate percentage for display (will be recalculated properly later)
+                            const backendPct = portfolioTargetValue > 0
+                                ? (position.targetValue / portfolioTargetValue) * 100
+                                : 0;
+                            totalTargetAllocation += backendPct;
+                        } else {
+                            // Use builder weight if available, otherwise use default allocation
+                            if (!position.targetAllocation || position.targetAllocation <= 0) {
+                                const builderWeight = builderPositionsMap.get(position.name);
+                                position.targetAllocation = builderWeight || defaultAllocation;
+                            }
+                            totalTargetAllocation += position.targetAllocation;
                         }
-
-                        totalTargetAllocation += position.targetAllocation;
                     });
                 });
             }
 
             // Normalize target allocations to sum to exactly 100%
-            const normalizationFactor = totalTargetAllocation > 0 ? (100 / totalTargetAllocation) : 1;
-            console.log(`Portfolio ${portfolio.name}: Total target allocation before normalization: ${totalTargetAllocation}%, normalization factor: ${normalizationFactor}`);
+            // SKIP normalization if backend provided constrained values (already normalized)
+            const normalizationFactor = (!hasBackendConstrainedValues && totalTargetAllocation > 0)
+                ? (100 / totalTargetAllocation)
+                : 1;
+            console.log(`Portfolio ${portfolio.name}: Total target allocation before normalization: ${totalTargetAllocation}%, normalization factor: ${normalizationFactor}, using backend values: ${hasBackendConstrainedValues}`);
 
             // Fourth pass: normalize allocations and calculate target values
             // Store normalized allocations in a separate map to avoid mutating originals
@@ -930,14 +949,31 @@ document.addEventListener('DOMContentLoaded', function () {
                     category.positions.forEach(position => {
                         categoryCurrentValue += (position.currentValue || 0);
 
-                        // Calculate normalized allocation WITHOUT mutating the original
-                        const normalizedAllocation = position.targetAllocation * normalizationFactor;
-                        normalizedAllocations.set(position, normalizedAllocation);
-                        categoryTargetAllocation += normalizedAllocation;
+                        // CRITICAL: Use backend's constrained target value if available
+                        // Backend applies type constraints (maxPerStock, maxPerETF) with recursive redistribution
+                        if (position.targetValue !== undefined && position.targetValue !== null) {
+                            // Backend has already calculated constrained value - use it directly
+                            position.calculatedTargetValue = position.targetValue;
 
-                        // Calculate target value based on final portfolio value
-                        const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
-                        position.calculatedTargetValue = targetValue;
+                            // Calculate the percentage this represents (for display)
+                            const backendAllocation = portfolioTargetValue > 0
+                                ? (position.targetValue / portfolioTargetValue) * 100
+                                : 0;
+                            normalizedAllocations.set(position, backendAllocation);
+                            categoryTargetAllocation += backendAllocation;
+
+                            console.log(`Using backend constrained value for ${position.name}: ${position.targetValue.toFixed(2)} (${backendAllocation.toFixed(2)}%)`);
+                        } else {
+                            // Fallback to frontend normalization if backend didn't provide targetValue
+                            const normalizedAllocation = position.targetAllocation * normalizationFactor;
+                            normalizedAllocations.set(position, normalizedAllocation);
+                            categoryTargetAllocation += normalizedAllocation;
+
+                            const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
+                            position.calculatedTargetValue = targetValue;
+
+                            console.log(`Using frontend normalization for ${position.name}: ${normalizedAllocation.toFixed(2)}%`);
+                        }
                     });
 
                     // Set category values
@@ -1178,6 +1214,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             <i class="fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} me-2"></i>
                             ${categoryNameHtml}
                         </td>
+                        <td></td>
                         <td class="current-value">${this.formatCurrency(category.currentValue || 0)}</td>
                         <td>${this.formatPercentage(categoryCurrentAllocation)}</td>
                         <td>${this.formatPercentage(category.targetAllocation || 0)}</td>
@@ -1241,13 +1278,37 @@ document.addEventListener('DOMContentLoaded', function () {
                             // Get the normalized allocation for display
                             const displayAllocation = normalizedAllocations.get(position) || 0;
 
+                            // Investment type display with icon
+                            let typeDisplay = '-';
+                            let typeIcon = '';
+                            if (position.investment_type === 'Stock') {
+                                typeIcon = '<i class="fas fa-chart-line me-1" style="color: #3b82f6;"></i>';
+                                typeDisplay = typeIcon + 'Stock';
+                            } else if (position.investment_type === 'ETF') {
+                                typeIcon = '<i class="fas fa-layer-group me-1" style="color: #10b981;"></i>';
+                                typeDisplay = typeIcon + 'ETF';
+                            }
+
+                            // Check if position is capped and build target allocation display
+                            let targetAllocationDisplay = this.formatPercentage(displayAllocation);
+                            if (position.is_capped) {
+                                const rule = position.applicable_rule === 'maxPerStock' ? 'Stock' : 'ETF';
+                                const unconstrainedPct = (position.unconstrained_target_value / portfolioTargetValue) * 100;
+                                targetAllocationDisplay = `
+                                    <span class="text-warning" title="Capped by max ${rule} rule. Unconstrained: ${this.formatPercentage(unconstrainedPct)}">
+                                        <i class="fas fa-lock me-1"></i>${this.formatPercentage(displayAllocation)}
+                                    </span>
+                                `;
+                            }
+
                             positionRow.innerHTML = `
                                 <td class="position-name">
                                     <span class="ms-4">${positionNameHtml}</span>
                                 </td>
+                                <td class="text-center">${typeDisplay}</td>
                                 <td class="current-value">${this.formatCurrency(position.currentValue || 0)}</td>
                                 <td>${this.formatPercentage(positionCurrentAllocation)}</td>
-                                <td>${this.formatPercentage(displayAllocation)}</td>
+                                <td>${targetAllocationDisplay}</td>
                                 <td class="target-value">${this.formatCurrency(position.calculatedTargetValue || 0)}</td>
                                 <td class="${actionClass}">${actionText}</td>
                                 <td class="value-after">${this.formatCurrency(position.valueAfter || 0)}</td>
@@ -1286,6 +1347,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             totalRow.innerHTML = `
                 <td>Portfolio Total</td>
+                <td></td>
                 <td class="current-value">${this.formatCurrency(totalCurrentValue)}</td>
                 <td>100%</td>
                 <td>100%</td>

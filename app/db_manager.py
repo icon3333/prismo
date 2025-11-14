@@ -2,7 +2,9 @@ import os
 import sqlite3
 import shutil
 from datetime import datetime
+from pathlib import Path
 import logging
+import threading
 from flask import g, current_app
 import click
 from flask.cli import with_appcontext
@@ -12,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Store the database path when the app initializes
 _db_path = None
+_db_path_lock = threading.Lock()  # Thread safety for _db_path initialization
 
 def set_db_path(path):
     """Set the database path for background operations."""
@@ -40,15 +43,19 @@ def get_db():
         try:
             g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
             g.db.row_factory = sqlite3.Row
+            # Enable foreign key constraints (critical for data integrity)
+            g.db.execute('PRAGMA foreign_keys = ON')
             logger.debug(f"Connected to database: {db_path}")
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to connect to database {db_path}: {e}")
             # If we can't connect, try creating the file first
             try:
                 # Touch the file to create it
-                open(db_path, 'a').close()
+                Path(db_path).touch(exist_ok=True)
                 g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
                 g.db.row_factory = sqlite3.Row
+                # Enable foreign key constraints (critical for data integrity)
+                g.db.execute('PRAGMA foreign_keys = ON')
                 logger.info(f"Created and connected to new database: {db_path}")
             except Exception as create_error:
                 logger.error(f"Failed to create database file {db_path}: {create_error}")
@@ -60,16 +67,25 @@ def get_background_db():
     Get a new database connection for background tasks.
     This should be used instead of get_db() when working in background threads
     where Flask's request context is not available.
+
+    Thread-safe using double-check locking pattern.
     """
     global _db_path
+
+    # First check without lock (fast path)
     if _db_path is None:
-        # Fallback to try getting from current_app if available
-        try:
-            from flask import current_app
-            _db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        except RuntimeError:
-            # If no application context, fail fast instead of using potentially wrong database
-            raise RuntimeError("No database path available - ensure Flask app context is available in background operations")
+        # Acquire lock for initialization
+        with _db_path_lock:
+            # Double-check after acquiring lock
+            if _db_path is None:
+                # Fallback to try getting from current_app if available
+                try:
+                    from flask import current_app
+                    _db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
+                    logger.debug(f"Initialized _db_path from app context: {_db_path}")
+                except RuntimeError:
+                    # If no application context, fail fast instead of using potentially wrong database
+                    raise RuntimeError("No database path available - ensure Flask app context is available in background operations")
     
     # Ensure the database directory exists
     db_dir = os.path.dirname(_db_path)
@@ -85,15 +101,19 @@ def get_background_db():
     try:
         db = sqlite3.connect(_db_path, detect_types=sqlite3.PARSE_DECLTYPES)
         db.row_factory = sqlite3.Row
+        # Enable foreign key constraints (critical for data integrity)
+        db.execute('PRAGMA foreign_keys = ON')
         return db
     except sqlite3.OperationalError as e:
         logger.error(f"Failed to connect to background database {_db_path}: {e}")
         # If we can't connect, try creating the file first
         try:
             # Touch the file to create it
-            open(_db_path, 'a').close()
+            Path(_db_path).touch(exist_ok=True)
             db = sqlite3.connect(_db_path, detect_types=sqlite3.PARSE_DECLTYPES)
             db.row_factory = sqlite3.Row
+            # Enable foreign key constraints (critical for data integrity)
+            db.execute('PRAGMA foreign_keys = ON')
             logger.info(f"Created and connected to new background database: {_db_path}")
             return db
         except Exception as create_error:
@@ -349,50 +369,124 @@ def execute_db(query, args=()):
         raise
 
 def migrate_database():
-    """Run database migrations"""
+    """
+    Run database migrations with proper error handling.
+
+    Uses specific exception handling to distinguish between expected
+    (missing columns) and unexpected errors.
+    """
     db = get_db()
     cursor = db.cursor()
-    
+
     try:
-        # Check if we need to add the new columns for tracking user-edited shares
+        # Migration 1: Add user-edited shares tracking columns
         try:
             cursor.execute("SELECT manual_edit_date FROM company_shares LIMIT 1")
-        except Exception:
-            # Columns don't exist, add them
-            logger.info("Adding user-edited shares tracking columns to company_shares table")
-            cursor.execute("ALTER TABLE company_shares ADD COLUMN manual_edit_date DATETIME")
-            cursor.execute("ALTER TABLE company_shares ADD COLUMN is_manually_edited BOOLEAN DEFAULT 0")
-            cursor.execute("ALTER TABLE company_shares ADD COLUMN csv_modified_after_edit BOOLEAN DEFAULT 0")
-            db.commit()
-            logger.info("Successfully added user-edited shares tracking columns")
-        
-        # Check if we need to add the new columns for country override
+            logger.debug("Column manual_edit_date exists - migration 1 already applied")
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e).lower():
+                logger.info("Applying migration 1: Adding user-edited shares tracking columns")
+                try:
+                    cursor.execute("ALTER TABLE company_shares ADD COLUMN manual_edit_date DATETIME")
+                    cursor.execute("ALTER TABLE company_shares ADD COLUMN is_manually_edited BOOLEAN DEFAULT 0")
+                    cursor.execute("ALTER TABLE company_shares ADD COLUMN csv_modified_after_edit BOOLEAN DEFAULT 0")
+                    db.commit()
+                    logger.info("Migration 1 completed successfully")
+
+                    # Verify migration
+                    cursor.execute("SELECT manual_edit_date FROM company_shares LIMIT 1")
+                    logger.debug("Migration 1 verified - columns accessible")
+                except sqlite3.Error as alter_error:
+                    db.rollback()
+                    logger.error(f"Migration 1 failed: {alter_error}")
+                    raise RuntimeError(f"Database migration 1 failed: {alter_error}") from alter_error
+            else:
+                # Unexpected OperationalError - re-raise
+                raise
+
+        # Migration 2: Add country override columns
         try:
             cursor.execute("SELECT override_country FROM companies LIMIT 1")
-        except Exception:
-            # Columns don't exist, add them
-            logger.info("Adding country override columns to companies table")
-            cursor.execute("ALTER TABLE companies ADD COLUMN override_country TEXT")
-            cursor.execute("ALTER TABLE companies ADD COLUMN country_manually_edited BOOLEAN DEFAULT 0")
-            cursor.execute("ALTER TABLE companies ADD COLUMN country_manual_edit_date DATETIME")
-            db.commit()
-            logger.info("Successfully added country override columns")
+            logger.debug("Column override_country exists - migration 2 already applied")
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e).lower():
+                logger.info("Applying migration 2: Adding country override columns")
+                try:
+                    cursor.execute("ALTER TABLE companies ADD COLUMN override_country TEXT")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN country_manually_edited BOOLEAN DEFAULT 0")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN country_manual_edit_date DATETIME")
+                    db.commit()
+                    logger.info("Migration 2 completed successfully")
 
-        # Check if we need to add the new columns for custom values (when no price is available)
+                    # Verify migration
+                    cursor.execute("SELECT override_country FROM companies LIMIT 1")
+                    logger.debug("Migration 2 verified - columns accessible")
+                except sqlite3.Error as alter_error:
+                    db.rollback()
+                    logger.error(f"Migration 2 failed: {alter_error}")
+                    raise RuntimeError(f"Database migration 2 failed: {alter_error}") from alter_error
+            else:
+                # Unexpected OperationalError - re-raise
+                raise
+
+        # Migration 3: Add custom value columns
         try:
             cursor.execute("SELECT custom_total_value FROM companies LIMIT 1")
-        except Exception:
-            # Columns don't exist, add them
-            logger.info("Adding custom value columns to companies table")
-            cursor.execute("ALTER TABLE companies ADD COLUMN custom_total_value REAL")
-            cursor.execute("ALTER TABLE companies ADD COLUMN custom_price_eur REAL")
-            cursor.execute("ALTER TABLE companies ADD COLUMN is_custom_value BOOLEAN DEFAULT 0")
-            cursor.execute("ALTER TABLE companies ADD COLUMN custom_value_date DATETIME")
-            db.commit()
-            logger.info("Successfully added custom value columns")
+            logger.debug("Column custom_total_value exists - migration 3 already applied")
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e).lower():
+                logger.info("Applying migration 3: Adding custom value columns")
+                try:
+                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_total_value REAL")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_price_eur REAL")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN is_custom_value BOOLEAN DEFAULT 0")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_value_date DATETIME")
+                    db.commit()
+                    logger.info("Migration 3 completed successfully")
 
+                    # Verify migration
+                    cursor.execute("SELECT custom_total_value FROM companies LIMIT 1")
+                    logger.debug("Migration 3 verified - columns accessible")
+                except sqlite3.Error as alter_error:
+                    db.rollback()
+                    logger.error(f"Migration 3 failed: {alter_error}")
+                    raise RuntimeError(f"Database migration 3 failed: {alter_error}") from alter_error
+            else:
+                # Unexpected OperationalError - re-raise
+                raise
+
+        # Migration 4: Add investment_type column
+        try:
+            cursor.execute("SELECT investment_type FROM companies LIMIT 1")
+            logger.debug("Column investment_type exists - migration 4 already applied")
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e).lower():
+                logger.info("Applying migration 4: Adding investment_type column")
+                try:
+                    cursor.execute("ALTER TABLE companies ADD COLUMN investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF'))")
+                    # Create index for investment_type
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)")
+                    db.commit()
+                    logger.info("Migration 4 completed successfully")
+
+                    # Verify migration
+                    cursor.execute("SELECT investment_type FROM companies LIMIT 1")
+                    logger.debug("Migration 4 verified - column accessible")
+                except sqlite3.Error as alter_error:
+                    db.rollback()
+                    logger.error(f"Migration 4 failed: {alter_error}")
+                    raise RuntimeError(f"Database migration 4 failed: {alter_error}") from alter_error
+            else:
+                # Unexpected OperationalError - re-raise
+                raise
+
+        logger.info("All database migrations completed successfully")
+
+    except RuntimeError:
+        # Re-raise migration failures
+        raise
     except Exception as e:
-        logger.error(f"Error during database migration: {e}")
+        logger.error(f"Unexpected error during database migration: {e}")
         db.rollback()
         raise
 

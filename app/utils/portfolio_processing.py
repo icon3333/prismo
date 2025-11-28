@@ -1,6 +1,8 @@
 import pandas as pd
 import logging
 import io
+import threading
+import time
 from flask import session
 from app.db_manager import query_db, execute_db, backup_database, get_db
 from app.utils.db_utils import update_price_in_db
@@ -10,6 +12,28 @@ from app.utils.identifier_normalization import normalize_identifier
 from app.utils.identifier_mapping import get_preferred_identifier
 
 logger = logging.getLogger(__name__)
+
+# Thread-local storage for database connections
+_thread_local_db = threading.local()
+
+def get_thread_db():
+    """Get or create database connection for current thread."""
+    if not hasattr(_thread_local_db, 'connection'):
+        from app.db_manager import get_background_db
+        _thread_local_db.connection = get_background_db()
+        _thread_local_db.connection.execute('PRAGMA journal_mode=WAL')
+        _thread_local_db.connection.execute('PRAGMA busy_timeout=5000')
+    return _thread_local_db.connection
+
+def close_thread_db():
+    """Close thread-local database connection."""
+    if hasattr(_thread_local_db, 'connection'):
+        _thread_local_db.connection.close()
+        del _thread_local_db.connection
+
+# Progress update throttling
+_last_progress_update = {}  # job_id -> timestamp
+_progress_update_lock = threading.Lock()
 
 
 # DEPRECATED: Session-based progress tracking removed in favor of database-based tracking
@@ -817,38 +841,54 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
 
 
 def update_csv_progress_background(job_id: str, current: int, total: int, message: str = "Processing...", status: str = "processing"):
-    """Update CSV upload progress in database for background jobs"""
+    """Update CSV upload progress with throttling - max 1 per second per job."""
+
+    # Always update immediately for terminal states
+    if status in ['completed', 'failed', 'cancelled']:
+        _do_progress_update(job_id, current, total, message, status)
+        return
+
+    # Throttle in-progress updates to 1 per second
+    current_time = time.time()
+    with _progress_update_lock:
+        last_update = _last_progress_update.get(job_id, 0)
+
+        # Skip if updated within last 1 second
+        if current_time - last_update < 1.0:
+            logger.debug(f"Throttling progress update for job {job_id} (too soon)")
+            return
+
+        _last_progress_update[job_id] = current_time
+
+    _do_progress_update(job_id, current, total, message, status)
+
+def _do_progress_update(job_id: str, current: int, total: int, message: str, status: str):
+    """Perform actual database progress update."""
     percentage = int((current / total) * 100) if total > 0 else 0
-    
+
     try:
-        from app.utils.db_utils import execute_background_db
         from datetime import datetime
-        
-        logger.debug(f" Attempting to update background progress - Job: {job_id}, Current: {current}, Total: {total}, Percentage: {percentage}")
-        
-        # First check if the job exists
-        from app.utils.db_utils import query_background_db
-        existing_job = query_background_db("SELECT id, status FROM background_jobs WHERE id = ?", (job_id,), one=True)
-        logger.debug(f" Existing job status before update: {existing_job}")
-        
-        rows_affected = execute_background_db(
+
+        # Use thread-local connection (reused)
+        db = get_thread_db()
+
+        rows_affected = db.execute(
             "UPDATE background_jobs SET progress = ?, result = ?, updated_at = ? WHERE id = ?",
             (percentage, message, datetime.now(), job_id)
-        )
-        
-        logger.info(f"CSV Progress (Background): {percentage}% - {message} (Status: {status}) - Job ID: {job_id} - Rows affected: {rows_affected}")
-        
+        ).rowcount
+
+        db.commit()
+
+        logger.info(f"CSV Progress: {percentage}% - {message} (Status: {status})")
+
         if rows_affected == 0:
-            logger.warning(f"DEBUG: No rows were updated for job_id {job_id}! Job may not exist in database.")
-            # Check what jobs exist
-            all_jobs = query_background_db("SELECT id, status FROM background_jobs ORDER BY created_at DESC LIMIT 5")
-            logger.warning(f"DEBUG: Recent jobs in database: {all_jobs}")
-        
+            logger.warning(f"No rows updated for job_id {job_id}!")
+
     except Exception as e:
-        logger.warning(f"Failed to update background progress for job {job_id}: {e}", exc_info=True)
+        logger.warning(f"Failed to update progress for job {job_id}: {e}", exc_info=True)
 
 
-def process_csv_data_background(account_id: int, file_content: str, job_id: str, use_refactored: bool = False):
+def process_csv_data_background(account_id: int, file_content: str, job_id: str, use_refactored: bool = True):
     """
     Process CSV data in background thread using database-based progress tracking.
     This version doesn't use Flask session which isn't available in background threads.
@@ -857,14 +897,14 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
         account_id: Account ID for this import
         file_content: Raw CSV file content
         job_id: Background job ID for progress tracking
-        use_refactored: If True, use new modular csv_processing package (default: False for backward compatibility)
+        use_refactored: If True, use new modular csv_processing package with timezone fix (default: True)
 
     Returns:
         Tuple[bool, str, dict]: (success, message, details)
     """
     logger.debug(f" process_csv_data_background starting - account_id: {account_id}, job_id: {job_id}")
     logger.debug(f" File content length: {len(file_content)} characters")
-    logger.debug(f" Using {'REFACTORED' if use_refactored else 'LEGACY'} CSV processing")
+    logger.info(f"CSV PROCESSING PATH: Using {'REFACTORED (with timezone fix)' if use_refactored else 'LEGACY (no timezone fix)'} code")
 
     # Create a progress function that updates the database
     def background_progress_wrapper(current, total, message="Processing...", status="processing"):
@@ -926,3 +966,6 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
         logger.error(f"Error processing CSV in background: {str(e)}", exc_info=True)
         update_csv_progress_background(job_id, 0, 1, f"Error: {str(e)}", "failed")
         return False, str(e), {}
+    finally:
+        # Clean up thread-local database connection
+        close_thread_db()

@@ -223,19 +223,30 @@ def _insert_new_company(
 def _remove_company(company_name: str, existing_company_map: Dict, account_id: int, cursor) -> bool:
     """Remove a company and clean up related records."""
     if company_name not in existing_company_map:
+        logger.warning(
+            f"Cannot remove company '{company_name}' - not found in existing_company_map. "
+            f"Available companies: {list(existing_company_map.keys())}"
+        )
         return False
 
     company_id = existing_company_map[company_name]['id']
     identifier = existing_company_map[company_name]['identifier']
 
     # Determine removal reason for logging
-    logger.info(f"Removing company {company_name}")
+    logger.info(f"Removing company '{company_name}' (ID: {company_id}, identifier: {identifier})")
 
     # Remove shares first (foreign key constraint)
     cursor.execute('DELETE FROM company_shares WHERE company_id = ?', [company_id])
+    shares_deleted = cursor.rowcount
+    logger.debug(f"Deleted {shares_deleted} share record(s) for company_id {company_id}")
 
     # Remove company
     cursor.execute('DELETE FROM companies WHERE id = ?', [company_id])
+    companies_deleted = cursor.rowcount
+    logger.debug(f"Deleted {companies_deleted} company record(s) for company_id {company_id}")
+
+    if companies_deleted == 0:
+        logger.error(f"Failed to delete company '{company_name}' (ID: {company_id}) from database")
 
     # Clean up market prices if no other accounts use this identifier
     if identifier:

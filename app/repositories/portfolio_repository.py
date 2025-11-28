@@ -695,6 +695,12 @@ class PortfolioRepository:
                     else (float(row['shares']) if row.get('shares') is not None else 0)
                 )
 
+                # Skip companies with zero shares (defensive filter)
+                # These should have been removed during import, but filter here as safety net
+                if effective_shares <= 1e-6:
+                    logger.debug(f"Skipping company {row['name']} with zero shares (effective_shares={effective_shares})")
+                    continue
+
                 effective_country = row.get('override_country') or row.get('country')
 
                 # Format last_updated

@@ -45,6 +45,10 @@ def get_db():
             g.db.row_factory = sqlite3.Row
             # Enable foreign key constraints (critical for data integrity)
             g.db.execute('PRAGMA foreign_keys = ON')
+            # Enable WAL mode for better concurrency
+            g.db.execute('PRAGMA journal_mode=WAL')
+            # Set busy timeout to 5 seconds for lock retry
+            g.db.execute('PRAGMA busy_timeout=5000')
             logger.debug(f"Connected to database: {db_path}")
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to connect to database {db_path}: {e}")
@@ -56,6 +60,10 @@ def get_db():
                 g.db.row_factory = sqlite3.Row
                 # Enable foreign key constraints (critical for data integrity)
                 g.db.execute('PRAGMA foreign_keys = ON')
+                # Enable WAL mode for better concurrency
+                g.db.execute('PRAGMA journal_mode=WAL')
+                # Set busy timeout to 5 seconds for lock retry
+                g.db.execute('PRAGMA busy_timeout=5000')
                 logger.info(f"Created and connected to new database: {db_path}")
             except Exception as create_error:
                 logger.error(f"Failed to create database file {db_path}: {create_error}")
@@ -103,6 +111,10 @@ def get_background_db():
         db.row_factory = sqlite3.Row
         # Enable foreign key constraints (critical for data integrity)
         db.execute('PRAGMA foreign_keys = ON')
+        # Enable WAL mode for better concurrency
+        db.execute('PRAGMA journal_mode=WAL')
+        # Set busy timeout to 5 seconds for lock retry
+        db.execute('PRAGMA busy_timeout=5000')
         return db
     except sqlite3.OperationalError as e:
         logger.error(f"Failed to connect to background database {_db_path}: {e}")
@@ -114,6 +126,10 @@ def get_background_db():
             db.row_factory = sqlite3.Row
             # Enable foreign key constraints (critical for data integrity)
             db.execute('PRAGMA foreign_keys = ON')
+            # Enable WAL mode for better concurrency
+            db.execute('PRAGMA journal_mode=WAL')
+            # Set busy timeout to 5 seconds for lock retry
+            db.execute('PRAGMA busy_timeout=5000')
             logger.info(f"Created and connected to new background database: {_db_path}")
             return db
         except Exception as create_error:
@@ -176,7 +192,12 @@ def init_db(app):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Drop old auto-update trigger (migration)
+        # This trigger doubled write operations unnecessarily since code already sets updated_at
+        db.execute('DROP TRIGGER IF EXISTS update_background_jobs_timestamp')
         db.commit()
+        logger.info("Removed redundant auto-update trigger for background_jobs (if it existed)")
 
         try:
             # Create tables if not present

@@ -129,12 +129,13 @@ BEGIN
  WHERE id = NEW.id;
 END;
 
--- Create trigger for background_jobs (only if it doesn't exist)
-CREATE TRIGGER IF NOT EXISTS update_background_jobs_timestamp
-AFTER UPDATE ON background_jobs
-BEGIN
- UPDATE background_jobs SET updated_at = CURRENT_TIMESTAMP
- WHERE id = NEW.id;
-END;
+-- REMOVED: Auto-update trigger doubles write operations unnecessarily
+-- Progress update code already sets updated_at explicitly
+-- CREATE TRIGGER IF NOT EXISTS update_background_jobs_timestamp
+-- AFTER UPDATE ON background_jobs
+-- BEGIN
+--  UPDATE background_jobs SET updated_at = CURRENT_TIMESTAMP
+--  WHERE id = NEW.id;
+-- END;
 
  

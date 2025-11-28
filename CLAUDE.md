@@ -69,7 +69,7 @@ Database (SQLite with proper indexing)
    - All routes protected by authentication (except `/health` and index)
 
 2. **Services** (`app/services/`): Pure Python business logic
-   - `AllocationService`: Portfolio allocation calculations and rebalancing logic
+   - `AllocationService`: Portfolio allocation calculations and rebalancing logic with standardized allocation modes
    - `PortfolioService`: Portfolio analytics and aggregations
    - `PriceService`: Price operations and currency conversion
    - No Flask dependencies - fully testable without app context
@@ -91,13 +91,18 @@ Database (SQLite with proper indexing)
 **SQLite** database with 9 core tables:
 - `accounts`: User accounts (single-user but multi-account support)
 - `portfolios`: Portfolio definitions
-- `companies`: Holdings (securities/positions)
-- `company_shares`: Share quantities with manual override support
+- `companies`: Holdings (securities/positions) with:
+  - Custom value support (`custom_total_value`, `custom_price_eur`, `is_custom_value`, `custom_value_date`)
+  - Investment type classification (`investment_type`: Stock or ETF)
+  - Country override capabilities (`override_country`, `country_manually_edited`)
+  - Total invested tracking
+- `company_shares`: Share quantities with manual override support and edit tracking
 - `market_prices`: Cached market prices (updated via yfinance)
 - `identifier_mappings`: Custom ticker symbol mappings
 - `expanded_state`: UI state persistence
 - `background_jobs`: Job status tracking
 - Schema in `app/schema.sql` (automatically applied on startup)
+- **Database migrations** handle schema evolution (4 migrations currently implemented in `db_manager.py`)
 
 ## Caching Strategy
 
@@ -113,11 +118,16 @@ Database (SQLite with proper indexing)
 
 CSV processing is modular (`app/utils/csv_processing/`):
 1. `parser.py`: Parse and validate CSV structure
-2. `company_processor.py`: Process company/security data
-3. `share_calculator.py`: Calculate share quantities from transactions
+2. `company_processor.py`: Process company/security data (includes investment type detection)
+3. `share_calculator.py`: Calculate share quantities from transactions with timezone-aware comparison fixes
 4. `portfolio_handler.py`: Portfolio-level operations
 5. `price_updater.py`: Update market prices
-6. `transaction_manager.py`: Transaction processing
+6. `transaction_manager.py`: Transaction processing with proper handling of zero-share positions
+
+**Recent Improvements**:
+- Timezone-aware date comparison for manual share edits
+- Proper handling of zero-share and negative-share positions (auto-removal)
+- Investment type (Stock/ETF) detection and tracking
 
 ## Authentication Pattern
 
@@ -194,6 +204,8 @@ Pragmatic test coverage (50-60% on critical paths):
 4. **yfinance dependency**: Price updates require internet and working yfinance API
 5. **Database backups**: Auto-backup every 6 hours to `instance/backups/`
 6. **No authentication system**: Session-based account selection (no passwords)
+7. **Custom values**: Enrich page allows setting custom total values for positions not available via yfinance
+8. **Position types**: Holdings are classified as Stock or ETF for allocation constraint purposes
 
 ## Common Tasks
 

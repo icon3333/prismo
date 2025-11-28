@@ -13,8 +13,9 @@ This tool was born out of necessity over several months of struggling with portf
 
 It's a portfolio rebalancer specifically designed to work with Parqet's data, helping you:
 - Import your Parqet portfolio data via CSV
-- Enrich holdings with real-time market prices from yfinance
-- Build and set target allocations
+- Enrich holdings with real-time market prices from yfinance (or set custom values for unlisted holdings)
+- Classify positions by investment type (Stock/ETF) for allocation constraints
+- Build and set target allocations with multiple allocation modes
 - Get smart rebalancing recommendations (buy/sell amounts)
 - Analyze portfolio composition, performance, and risks with visualizations
 
@@ -58,9 +59,9 @@ The app auto-detects and configures everything on first launch. Visit `http://lo
 
 2. **Import & Build**: Navigate to "Build Portfolio" → Upload CSV → Set target allocations.
 
-3. **Enrich Data**: Go to "Enrich" to fetch/update real-time prices via yfinance.
+3. **Enrich Data**: Go to "Enrich" to fetch/update real-time prices via yfinance, or set custom values for unlisted holdings.
 
-4. **Rebalance**: Use "Allocate" for precise buy/sell recommendations based on your targets.
+4. **Rebalance**: Use "Allocate" for precise buy/sell recommendations based on your targets with support for Stock/ETF allocation constraints.
 
 5. **Analyze**: Check "Analyse" for portfolio visualizations and "Risk Overview" for global allocation insights.
 
@@ -112,10 +113,10 @@ The app includes automatic backup management and price update scheduling.
 Start with `python3 run.py --port 8065`. Create/select an account, then navigate through:
 
 - **Build**: Upload Parqet CSV and define target allocations
-- **Enrich**: Update prices and metadata via yfinance integration  
-- **Allocate**: Get precise buy/sell trade recommendations
+- **Enrich**: Update prices and metadata via yfinance integration, or set custom values for unlisted holdings
+- **Allocate**: Get precise buy/sell trade recommendations with standardized allocation modes and Stock/ETF constraints
 - **Analyse**: View portfolio composition charts and metrics
-- **Risk Overview**: Global allocation and risk analysis
+- **Risk Overview**: Global allocation and risk analysis with position type breakdown
 
 ### API Access
 Key endpoints for programmatic use:
@@ -150,9 +151,15 @@ Data persists in `./instance` directory. The deploy script manages the full upda
 
 ## 🔒 Security
 
-> **🔐 Complete security guide**: See [SECURITY.md](SECURITY.md) for detailed security guidelines.
+**Important Security Notes**:
+- Session-based authentication (no password system - designed for single-user homeserver)
+- Session cookies use HttpOnly and SameSite=Lax flags
+- All user inputs are validated
+- Parameterized SQL queries prevent injection attacks
+- `.env` file stores secrets (auto-generated, not in git)
+- Database backups exclude sensitive data from git tracking
 
-Note: While I've tried to implement reasonable security measures, remember this is experimental code! Review everything before using in production.
+Note: While reasonable security measures are implemented, remember this is experimental code designed for single-user homeserver deployment. Review everything before using in production environments.
 
 ## 🤝 Contributing & Feedback
 
@@ -246,6 +253,14 @@ Focused refactoring for single-user homeserver deployment:
   - CSV processing tests
   - Repository layer tests
   - Allocation service tests
+
+**Recent Feature Additions** (Phase 2 Improvements):
+- ✅ Investment type classification (Stock/ETF) with database migration
+- ✅ Custom total value support for unlisted or private holdings
+- ✅ Standardized allocation modes with proper empty portfolio handling
+- ✅ Timezone-aware date comparisons for manual share edit tracking
+- ✅ Enhanced CSV processing with zero-share position auto-removal
+- ✅ Improved enrich page UI with custom value persistence
 
 **Total Impact**:
 - **~200 lines of duplicate code removed**

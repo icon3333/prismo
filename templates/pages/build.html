@@ -71,7 +71,7 @@
               <span class="result-label">Available to Invest</span>
               <div class="result-value">
                 ${ formatCurrency(budgetData.availableToInvest) }
-                <span class="available-percentage">(${availablePercentage}% of Total)</span>
+                <span class="tag is-light ml-2">${ availablePercentage }%</span>
               </div>
             </div>
           </div>
@@ -187,20 +187,34 @@
               <input class="portfolio-allocation-input" type="text" :value="parseFloat(portfolio.allocation).toFixed(0)"
                 @change="$event.target.value && $event.target.value.length > 0 ? portfolio.allocation = parseFloat($event.target.value) : null; updateAllocations()"
                 @focus="$event.target.select()">
+              <div class="help-text">&nbsp;</div>
             </div>
             <div class="metric-group">
               <label class="metric-label">Amount</label>
               <input class="portfolio-allocation-input" type="text" :value="formatCurrency(calculateAllocationAmount(portfolio.allocation))"
                 readonly>
+              <div class="help-text">&nbsp;</div>
             </div>
             <div class="metric-group">
-              <label class="metric-label">Min Positions</label>
-              <input class="portfolio-allocation-input" type="text" :value="portfolio.minPositions" readonly>
+              <label class="metric-label">Desired Positions</label>
+              <input
+                class="portfolio-allocation-input"
+                :class="{ 'warning-border': isBelowMinimum(portfolio) }"
+                type="number"
+                min="1"
+                step="1"
+                v-model.number="portfolio.desiredPositions"
+                @blur="saveAllocation"
+                @keyup.enter="saveAllocation"
+                :title="isBelowMinimum(portfolio) ? 'Below minimum of ' + portfolio.minPositions + ' positions' : ''"
+              >
+              <div class="help-text">(min ${ portfolio.minPositions })</div>
             </div>
             <div class="metric-group">
               <label class="metric-label">Current Positions</label>
               <input class="portfolio-allocation-input" type="text" :value="portfolio.currentPositions || 0"
-                     :class="{'has-text-danger': portfolio.currentPositions < portfolio.minPositions}" readonly>
+                     :class="{'has-text-danger': portfolio.currentPositions < getEffectivePositions(portfolio)}" readonly>
+              <div class="help-text">&nbsp;</div>
             </div>
           </div>
 

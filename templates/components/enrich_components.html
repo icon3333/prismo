@@ -219,16 +219,12 @@
         border-radius: var(--border-radius-sm);
         overflow: hidden;
         box-shadow: none;
-        border: 1px solid var(--border-color);
     }
 
     .table th {
-        background-color: var(--section-bg);
         color: var(--text-color);
         font-weight: var(--font-weight-semibold);
         font-size: 0.85rem;
-        border-bottom: 1px solid var(--border-color);
-        border-width: 1px;
         vertical-align: middle;
         padding: 0.5rem 0.6rem;
     }
@@ -236,11 +232,38 @@
     .table td {
         vertical-align: middle;
         padding: 0.35rem 0.6rem;
-        border-width: 1px;
+        font-size: 0.85rem;
+        border: none !important;
+    }
+
+    .table th {
+        border: none !important;
+    }
+
+    .table tbody tr {
+        border: none !important;
+    }
+
+    .table tbody tr:hover {
+        background-color: var(--hover-bg, rgba(0, 0, 0, 0.02));
+        transition: background-color 0.2s ease;
     }
 
     .table td .button {
         margin-bottom: 0;
+    }
+
+    /* Ensure consistent font-size across all table cell elements */
+    .table td,
+    .table td span,
+    .table td .input,
+    .table td input.input,
+    .table td .input.is-small,
+    .table td .select,
+    .table td .select select,
+    .table td select,
+    .table td .select.is-small select {
+        font-size: 0.85rem !important;
     }
 
     .is-sortable {
@@ -883,6 +906,9 @@
                                 </th>
                                 <th @click="sortBy('total_value')" class="is-sortable col-currency">
                                     Total Value
+                                    <span class="column-health" :class="getHealthColorClass(valueCompletenessPercentage)"
+                                        :title="'Positions with values: ' + valueCompletenessPercentage + '%'"
+                                        v-text="valueCompletenessPercentage + '%'"></span>
                                     <span class="icon is-small ml-1" v-if="sortColumn === 'total_value'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
@@ -903,8 +929,21 @@
                                     </label>
                                 </td>
                                 <td class="col-identifier">
-                                    <input class="input is-small" type="text" v-model="item.identifier"
-                                        @blur="saveIdentifierChange(item)">
+                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small"
+                                                   type="text"
+                                                   v-model="item.identifier"
+                                                   :class="{ 'user-edited': item.identifier_manually_edited }"
+                                                   :title="item.identifier_manually_edited
+                                                           ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
+                                                           : ''"
+                                                   @input="debouncedSaveIdentifier(item)">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].identifier">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="col-company has-tooltip-top" :data-tooltip="item.company">
                                     <span class="truncate" v-text="item.company"></span>
@@ -931,8 +970,15 @@
                                     </div>
                                 </td>
                                 <td class="col-input-small">
-                                    <input class="input is-small" type="text" v-model="item.category"
-                                        @blur="saveCategoryChange(item)">
+                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small" type="text" v-model="item.category"
+                                                @input="debouncedSaveCategory(item)">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].category">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="col-input-small">
                                     <div class="select is-small">
@@ -973,23 +1019,36 @@
                                     </div>
                                 </td>
                                 <td class="col-input-medium">
-                                    <input class="input is-small" :class="{
-                                               'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
-                                               'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
-                                           }" type="text" :value="formatNumber(item.effective_shares)" @blur="(e) => {
-                                               const newShares = parseFloat(e.target.value) || 0;
-                                               item.effective_shares = newShares;
-                                               saveSharesChange(item, newShares);
-                                           }" :title="getSharesTitle(item)">
+                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small" :class="{
+                                                       'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
+                                                       'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
+                                                   }" type="text" :value="formatNumber(item.effective_shares)" @input="(e) => {
+                                                       const newShares = parseGermanNumber(e.target.value);
+                                                       item.effective_shares = newShares;
+                                                       debouncedSaveShares(item, newShares);
+                                                   }" :title="getSharesTitle(item)">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].shares">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="col-currency">
                                     <!-- Priority 1: If custom value set, show it in orange -->
-                                    <input v-if="item.is_custom_value && item.custom_total_value"
-                                           class="input is-small user-edited"
-                                           type="text"
-                                           :value="formatCurrency(item.custom_total_value)"
-                                           @blur="(e) => saveTotalValueChange(item, e.target.value)"
-                                           title="Custom total value - manually entered">
+                                    <div v-if="item.is_custom_value && item.custom_total_value" class="field has-addons" style="margin-bottom: 0;">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small user-edited"
+                                                   type="text"
+                                                   :value="formatCurrency(item.custom_total_value)"
+                                                   @input="(e) => debouncedSaveTotalValue(item, e.target.value)"
+                                                   title="Custom total value - manually entered">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].totalValue">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
                                     <!-- Priority 2: If custom price exists (but not total), calculate using custom price -->
                                     <span v-else-if="item.is_custom_value && item.custom_price_eur && !item.custom_total_value"
                                           class="user-edited"
@@ -998,13 +1057,19 @@
                                     <!-- Priority 3: If market price exists, show calculated value -->
                                     <span v-else-if="item.price_eur" v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                     <!-- Priority 4: No price available - editable input -->
-                                    <input v-else
-                                           class="input is-small"
-                                           type="text"
-                                           value="€0.00"
-                                           @blur="(e) => saveTotalValueChange(item, e.target.value)"
-                                           placeholder="Enter value"
-                                           title="No price available - enter total value manually">
+                                    <div v-else class="field has-addons" style="margin-bottom: 0;">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small"
+                                                   type="text"
+                                                   value="€0.00"
+                                                   @input="(e) => debouncedSaveTotalValue(item, e.target.value)"
+                                                   placeholder="Enter value"
+                                                   title="No price available - enter total value manually">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].totalValue">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td class="col-currency">
                                     <span v-text="formatCurrency(item.total_invested)"></span>

@@ -664,11 +664,17 @@ def process_csv_data(account_id, file_content):
                 removed_details = removed_details[:97] + '...'
             message += f". <strong>Removed {len(positions_removed)} companies</strong> that had zero shares or were not in the CSV: {removed_details}"
 
+        # Add protected identifiers information if any were protected
+        protected_count = results.get('protected_identifiers_count', 0)
+        if protected_count > 0:
+            message += f". <strong>Protected {protected_count} manually edited identifier{'s' if protected_count != 1 else ''}</strong>"
+
         return True, message, {
             'added': positions_added,
             'updated': positions_updated,
             'removed': positions_removed,
             'failed_prices': failed_prices,
+            'protected_identifiers_count': protected_count,
         }
 
     except Exception as e:

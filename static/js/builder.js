@@ -500,7 +500,38 @@ document.addEventListener('DOMContentLoaded', function () {
         // Update portfolio
         portfolio.minPositions = minPositions;
 
+        // If no custom value set, initialize desiredPositions
+        if (portfolio.desiredPositions === null || portfolio.desiredPositions === undefined) {
+          portfolio.desiredPositions = minPositions;
+        }
+
+        // NOTE: Don't overwrite desiredPositions if user has set it
+
         return minPositions;
+      },
+
+      // Get the effective positions value (custom or calculated)
+      getEffectivePositions(portfolio) {
+        // Return custom value if set, otherwise calculated minimum
+        return portfolio.desiredPositions ?? portfolio.minPositions;
+      },
+
+      // Check if user has set a custom positions value
+      isCustomPositions(portfolio) {
+        return portfolio.desiredPositions !== null &&
+               portfolio.desiredPositions !== undefined &&
+               portfolio.desiredPositions !== portfolio.minPositions;
+      },
+
+      // Check if effective positions is below calculated minimum
+      isBelowMinimum(portfolio) {
+        return this.getEffectivePositions(portfolio) < portfolio.minPositions;
+      },
+
+      // Reset desired positions to calculated minimum
+      resetDesiredPositions(portfolio) {
+        portfolio.desiredPositions = portfolio.minPositions;  // Reset to calculated
+        this.saveAllocation();  // Trigger auto-save
       },
 
       // Ensure portfolio has minimum number of positions
@@ -514,8 +545,8 @@ document.addEventListener('DOMContentLoaded', function () {
           this.calculateMinimumPositions(portfolio);
         }
 
-        // Use the calculated minimum positions (already rounded up in calculateMinimumPositions)
-        const minPositions = portfolio.minPositions;
+        // Use the effective positions (desired or calculated minimum)
+        const minPositions = this.getEffectivePositions(portfolio);
 
         // First, filter out all placeholder positions to avoid duplicates
         portfolio.positions = portfolio.positions.filter(p => !p.isPlaceholder);
@@ -729,8 +760,8 @@ document.addEventListener('DOMContentLoaded', function () {
           const count = realPositions.length;
 
           if (count > 0) {
-            // Calculate weight based on minimum positions, not just real positions count
-            const minPositions = portfolio.minPositions || count;
+            // Calculate weight based on effective positions (desired or minimum), not just real positions count
+            const minPositions = this.getEffectivePositions(portfolio) || count;
             const evenWeight = parseFloat((100 / minPositions).toFixed(2));
 
             // Set even weight for all valid positions
@@ -762,9 +793,9 @@ document.addEventListener('DOMContentLoaded', function () {
           const realPositionCount = realPositions.length;
 
           if (realPositionCount > 0) {
-            // Calculate weight based on minimum positions, not real positions
-            // This ensures proper distribution of weight: 100% / minPositions 
-            const minPositions = portfolio.minPositions || realPositionCount;
+            // Calculate weight based on effective positions (desired or minimum), not real positions
+            // This ensures proper distribution of weight: 100% / effectivePositions
+            const minPositions = this.getEffectivePositions(portfolio) || realPositionCount;
             const evenWeight = parseFloat((100 / minPositions).toFixed(2));
 
             // Set weight for all real positions
@@ -881,8 +912,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const portfolio = this.portfolios[portfolioIndex];
         const position = portfolio.positions[positionIndex];
 
-        // Calculate maximum allowed weight
-        const maxWeight = 100 / Math.max(1, Math.ceil(portfolio.minPositions));
+        // Calculate maximum allowed weight based on effective positions
+        const maxWeight = 100 / Math.max(1, Math.ceil(this.getEffectivePositions(portfolio)));
 
         return position.weight > maxWeight;
       },
@@ -1101,9 +1132,9 @@ document.addEventListener('DOMContentLoaded', function () {
           });
 
           // Add "remaining position (x)" line if needed
-          // Calculate remaining positions as: max(minPositions, currentPositions) - realPositionCount
+          // Calculate remaining positions as: max(effectivePositions, currentPositions) - realPositionCount
           const realPositionCount = realPositions.length;
-          const minPositions = portfolio.minPositions || 0;
+          const minPositions = this.getEffectivePositions(portfolio) || 0;
           const currentPositions = portfolio.currentPositions || 0;
           const totalPositionsNeeded = Math.max(minPositions, currentPositions);
           const remainingPositionsCount = totalPositionsNeeded - realPositionCount;
@@ -1123,8 +1154,8 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         } else {
           // CASE 2: No positions defined (no companies manually added)
-          // Show only "positions (x)" line using max(minPositions, currentPositions)
-          const minPositions = portfolio.minPositions || 0;
+          // Show only "positions (x)" line using max(effectivePositions, currentPositions)
+          const minPositions = this.getEffectivePositions(portfolio) || 0;
           const currentPositions = portfolio.currentPositions || 0;
           const positionCount = Math.max(minPositions, currentPositions);
 

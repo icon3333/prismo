@@ -1201,7 +1201,9 @@ class PortfolioTableApp {
                     bulkCategory: '',
                     bulkCountry: '',
                     isBulkProcessing: false,
-                    isUpdatingSelected: false
+                    isUpdatingSelected: false,
+                    // Track which items/fields are currently saving
+                    savingStates: {}
                     // Country options now server-rendered like portfolios
                 };
             },
@@ -1335,6 +1337,33 @@ class PortfolioTableApp {
                         item.effective_country && item.effective_country.trim() !== '' && item.effective_country !== 'N/A'
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
+                },
+                // Value completeness percentage - positions with non-zero values
+                valueCompletenessPercentage() {
+                    if (!this.filteredPortfolioItems || this.filteredPortfolioItems.length === 0) {
+                        return 0;
+                    }
+
+                    const valuedItems = this.filteredPortfolioItems.filter(item => {
+                        // Has custom value
+                        if (item.is_custom_value && item.custom_total_value && item.custom_total_value > 0) {
+                            return true;
+                        }
+                        // Has market price
+                        if (item.price_eur && item.price_eur > 0) {
+                            return true;
+                        }
+                        return false;
+                    });
+
+                    return Math.round((valuedItems.length / this.filteredPortfolioItems.length) * 100);
+                },
+                // Color class for completeness KPI
+                completenessColorClass() {
+                    const pct = this.valueCompletenessPercentage;
+                    if (pct === 100) return 'has-text-success';        // Green - complete
+                    if (pct >= 70) return 'has-text-warning-dark';     // Orange - partial
+                    return 'has-text-danger';                           // Red - low
                 }
             },
             watch: {
@@ -1445,9 +1474,9 @@ class PortfolioTableApp {
                         'Portfolio',
                         'Category',
                         'Shares',
-                        'Price (EUR)',
-                        'Total Value',
-                        'Total Invested',
+                        'Price (€)',
+                        'Total Value (€)',
+                        'Total Invested (€)',
                         'Last Updated'
                     ];
 
@@ -1459,10 +1488,10 @@ class PortfolioTableApp {
                             this.escapeCSVField(item.company || ''),
                             this.escapeCSVField(item.portfolio || ''),
                             this.escapeCSVField(item.category || ''),
-                            item.effective_shares || 0,
-                            item.price_eur || 0,
-                            calculateItemValue(item), // Use centralized calculator for CSV export
-                            item.total_invested || 0,
+                            this.escapeCSVField(formatGermanNumber(item.effective_shares || 0)),
+                            this.escapeCSVField(formatGermanNumber(item.price_eur || 0)),
+                            this.escapeCSVField(formatGermanNumber(calculateItemValue(item))),
+                            this.escapeCSVField(formatGermanNumber(item.total_invested || 0)),
                             this.escapeCSVField(item.last_updated || '')
                         ];
                         csvRows.push(row.join(','));
@@ -1514,17 +1543,36 @@ class PortfolioTableApp {
                 // This function will update the dropdown to only show portfolios that are actually used
                 async loadData() {
                     this.loading = true;
+                    console.log('🔄 loadData: Starting to load portfolio data...');
                     try {
-                        // Load portfolio items
+                        // Load portfolio items with timeout
+                        console.log('🔄 loadData: Fetching from /portfolio/api/portfolio_data');
+
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
                         const response = await fetch('/portfolio/api/portfolio_data', {
-                            cache: 'no-store'
+                            cache: 'no-store',
+                            credentials: 'same-origin',  // Ensure cookies are sent
+                            signal: controller.signal
                         });
-                        
+
+                        clearTimeout(timeoutId);
+                        console.log('🔄 loadData: Response received:', response.status, response.statusText);
+
+                        // Check if redirected (authentication issue)
+                        if (response.redirected) {
+                            console.error('❌ loadData: Request was redirected to:', response.url);
+                            throw new Error('Session expired - please refresh the page');
+                        }
+
                         if (!response.ok) {
+                            console.error('❌ loadData: HTTP error!', response.status);
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
-                        
+
                         const data = await response.json();
+                        console.log('✅ loadData: Data parsed successfully, items:', Array.isArray(data) ? data.length : 'not an array');
                         
                         // Ensure data is an array
                         if (Array.isArray(data)) {
@@ -1599,8 +1647,21 @@ class PortfolioTableApp {
                             this.updateMetrics();
                         }
                     } catch (error) {
-                        console.error('Error loading portfolio data:', error);
+                        console.error('❌ Error loading portfolio data:', error);
+
+                        // Show user-friendly error message
+                        if (error.name === 'AbortError') {
+                            console.error('❌ Request timed out after 15 seconds');
+                            alert('Request timed out. Please check your connection and try refreshing the page.');
+                        } else if (error.message.includes('Session expired')) {
+                            alert('Your session has expired. Please refresh the page to log in again.');
+                        } else {
+                            console.error('❌ Unexpected error:', error.message);
+                            // Set empty array to show "no data" message instead of infinite loading
+                            this.portfolioItems = [];
+                        }
                     } finally {
+                        console.log('🔄 loadData: Setting loading = false');
                         this.loading = false;
                     }
                 },
@@ -1821,14 +1882,18 @@ class PortfolioTableApp {
                     }
 
                     try {
+                        const payload = {
+                            identifier: item.identifier || '',
+                            is_identifier_user_edit: true
+                        };
+                        console.log('🔍 DEBUG: Sending identifier update with payload:', payload);
+
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({
-                                identifier: item.identifier || ''
-                            })
+                            body: JSON.stringify(payload)
                         });
 
                         const result = await response.json();
@@ -2029,9 +2094,8 @@ class PortfolioTableApp {
                     }
 
                     try {
-                        // Parse currency input (remove € symbol, spaces, and commas)
-                        const cleanValue = String(newTotalValue).replace(/[€\s,]/g, '').trim();
-                        const totalValue = parseFloat(cleanValue);
+                        // Parse currency input using German locale parser
+                        const totalValue = parseGermanNumber(newTotalValue);
 
                         if (isNaN(totalValue) || totalValue < 0) {
                             if (typeof showNotification === 'function') {
@@ -2336,6 +2400,74 @@ class PortfolioTableApp {
                         }
                     }
                 }
+            },
+            created() {
+                // Create debounced versions of save methods for text inputs
+                // This prevents premature auto-save while user is still typing
+                // Dropdowns remain immediate for snappy feedback
+
+                // Helper to set saving state (with Vue reactivity)
+                const setSaving = (itemId, field) => {
+                    if (!this.savingStates[itemId]) {
+                        this.$set(this.savingStates, itemId, {});
+                    }
+                    this.$set(this.savingStates[itemId], field, true);
+                };
+
+                // Helper to clear saving state
+                const clearSaving = (itemId, field) => {
+                    if (this.savingStates[itemId]) {
+                        this.$set(this.savingStates[itemId], field, false);
+                    }
+                };
+
+                // Wrap original save methods to clear saving state when done
+                const wrapSaveMethod = (methodName, fieldName) => {
+                    const original = this[methodName];
+                    this[methodName] = async function(...args) {
+                        try {
+                            return await original.apply(this, args);
+                        } finally {
+                            const item = args[0];
+                            if (item && item.id) {
+                                clearSaving(item.id, fieldName);
+                            }
+                        }
+                    };
+                };
+
+                // Wrap all save methods to auto-clear saving state
+                wrapSaveMethod('saveCategoryChange', 'category');
+                wrapSaveMethod('saveIdentifierChange', 'identifier');
+                wrapSaveMethod('saveSharesChange', 'shares');
+                wrapSaveMethod('saveTotalValueChange', 'totalValue');
+
+                // Create debounced versions (once)
+                const debouncedSaveCategory = _.debounce(this.saveCategoryChange, 500);
+                const debouncedSaveIdentifier = _.debounce(this.saveIdentifierChange, 500);
+                const debouncedSaveShares = _.debounce(this.saveSharesChange, 500);
+                const debouncedSaveTotalValue = _.debounce(this.saveTotalValueChange, 500);
+
+                // Create wrapper methods that set saving state immediately, then call debounced
+                this.debouncedSaveCategory = (item) => {
+                    setSaving(item.id, 'category');
+                    debouncedSaveCategory(item);
+                };
+
+                this.debouncedSaveIdentifier = (item) => {
+                    setSaving(item.id, 'identifier');
+                    debouncedSaveIdentifier(item);
+                };
+
+                this.debouncedSaveShares = (item, shares) => {
+                    setSaving(item.id, 'shares');
+                    debouncedSaveShares(item, shares);
+                };
+
+                this.debouncedSaveTotalValue = (item, value) => {
+                    setSaving(item.id, 'totalValue');
+                    debouncedSaveTotalValue(item, value);
+                };
             },
             mounted() {
                 // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)

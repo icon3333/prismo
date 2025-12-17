@@ -44,12 +44,6 @@
   color: var(--text-color);
 }
 
-.available-percentage {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-left: var(--space-sm);
-}
-
 /* Form field spacing and layout */
 .field {
   margin-bottom: var(--space-md);
@@ -215,6 +209,42 @@
   color: var(--text-muted) !important;
   cursor: not-allowed !important;
   opacity: 0.7 !important;
+}
+
+/* Warning border for values below minimum */
+.portfolio-allocation-input.warning-border {
+  border: 2px solid #f59e0b !important;
+  background-color: #fffbeb !important;
+}
+
+/* Dark theme warning border adjustments */
+@media (prefers-color-scheme: dark) {
+  .portfolio-allocation-input.warning-border {
+    background-color: rgba(245, 158, 11, 0.1) !important;
+    border-color: #f59e0b !important;
+  }
+}
+
+/* Reset button styling */
+.reset-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.reset-button:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.reset-button:active {
+  transform: scale(0.95);
 }
 
 /* Portfolio Toggle in Metrics */

@@ -398,11 +398,9 @@ p {
 .table td {
   padding: var(--space-sm) var(--space-md);
   text-align: left;
-  border-bottom: 1px solid var(--border-color);
 }
 
 .table th {
-  background-color: var(--darker-bg);
   font-weight: var(--font-weight-semibold);
   color: var(--text-color);
 }

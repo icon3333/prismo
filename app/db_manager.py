@@ -501,6 +501,31 @@ def migrate_database():
                 # Unexpected OperationalError - re-raise
                 raise
 
+        # Migration 5: Add identifier manual edit tracking columns
+        try:
+            cursor.execute("SELECT override_identifier FROM companies LIMIT 1")
+            logger.debug("Column override_identifier exists - migration 5 already applied")
+        except sqlite3.OperationalError as e:
+            if "no such column" in str(e).lower():
+                logger.info("Applying migration 5: Adding identifier manual edit tracking columns")
+                try:
+                    cursor.execute("ALTER TABLE companies ADD COLUMN override_identifier TEXT")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN identifier_manually_edited BOOLEAN DEFAULT 0")
+                    cursor.execute("ALTER TABLE companies ADD COLUMN identifier_manual_edit_date DATETIME")
+                    db.commit()
+                    logger.info("Migration 5 completed successfully")
+
+                    # Verify migration
+                    cursor.execute("SELECT override_identifier FROM companies LIMIT 1")
+                    logger.debug("Migration 5 verified - columns accessible")
+                except sqlite3.Error as alter_error:
+                    db.rollback()
+                    logger.error(f"Migration 5 failed: {alter_error}")
+                    raise RuntimeError(f"Database migration 5 failed: {alter_error}") from alter_error
+            else:
+                # Unexpected OperationalError - re-raise
+                raise
+
         logger.info("All database migrations completed successfully")
 
     except RuntimeError:

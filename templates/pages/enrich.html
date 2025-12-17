@@ -30,6 +30,7 @@ portfolio_data_section %}
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/utils/locale-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/utils/value-calculator.js') }}"></script>
 <script src="{{ url_for('static', filename='js/enrich.js') }}"></script>
 {% endblock %}

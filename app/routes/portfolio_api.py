@@ -45,8 +45,9 @@ def _apply_company_update(cursor, company_id, data, account_id):
     ALLOWED_FIELDS = {
         'identifier', 'category', 'portfolio', 'investment_type',
         'custom_total_value', 'custom_price_eur', 'is_custom_value_edit',
-        'country', 'reset_country', 'is_country_user_edit', 'shares',
-        'override_share', 'is_user_edit'
+        'country', 'reset_country', 'is_country_user_edit', 'reset_identifier',
+        'is_identifier_user_edit',
+        'shares', 'override_share', 'is_user_edit'
     }
 
     # Validate that all keys in data are whitelisted
@@ -130,6 +131,21 @@ def _apply_company_update(cursor, company_id, data, account_id):
                 # Special case: portfolio maps to portfolio_id
                 set_clause_parts.append(sql_fragment)
                 params.append(portfolio_id)
+            elif field_key == 'identifier':
+                # Check if this is a user edit (not CSV import)
+                is_user_edit = data.get('is_identifier_user_edit', False)
+
+                set_clause_parts.append(sql_fragment)
+                params.append(data.get(field_key, ''))
+
+                # If user is manually editing, set tracking fields
+                if is_user_edit:
+                    set_clause_parts.append('override_identifier = ?')
+                    params.append(data.get(field_key, ''))
+                    set_clause_parts.append('identifier_manually_edited = ?')
+                    params.append(1)
+                    set_clause_parts.append('identifier_manual_edit_date = CURRENT_TIMESTAMP')
+                    logger.info(f"Marking identifier as manually edited for company {company_id}")
             else:
                 set_clause_parts.append(sql_fragment)
                 params.append(data.get(field_key, ''))
@@ -247,6 +263,18 @@ def _apply_company_update(cursor, company_id, data, account_id):
                 logger.warning(f"Failed to fetch price for '{cleaned_identifier}': {price_data.get('error', 'Unknown error')}")
         except Exception as e:
             logger.error(f"Error fetching price for '{cleaned_identifier}': {str(e)}")
+
+    # Handle identifier reset
+    if data.get('reset_identifier', False):
+        # Reset identifier to original state - clear manual edit flags
+        cursor.execute('''
+            UPDATE companies
+            SET identifier_manually_edited = 0,
+                override_identifier = NULL,
+                identifier_manual_edit_date = NULL
+            WHERE id = ?
+        ''', [company_id])
+        logger.info(f"Reset identifier manual edit for company {company_id}")
 
     # Handle country updates
     if 'country' in data or 'reset_country' in data:

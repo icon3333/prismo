@@ -42,11 +42,12 @@ def apply_share_changes(
         progress_callback: Optional callback(current, total, message, status)
 
     Returns:
-        Dict with 'added', 'updated', 'removed' lists of company names
+        Dict with 'added', 'updated', 'removed' lists of company names, and 'protected_identifiers_count'
     """
     positions_added = []
     positions_updated = []
     positions_removed = []
+    protected_identifiers_count = 0
 
     total_companies = len(share_calculations)
     processed_companies = 0
@@ -70,7 +71,7 @@ def apply_share_changes(
 
         # Update or insert company
         if company_name in existing_company_map:
-            _update_existing_company(
+            identifier_was_protected = _update_existing_company(
                 company_name=company_name,
                 existing_company_map=existing_company_map,
                 position=position,
@@ -79,6 +80,8 @@ def apply_share_changes(
                 default_portfolio_id=default_portfolio_id,
                 cursor=cursor
             )
+            if identifier_was_protected:
+                protected_identifiers_count += 1
             positions_updated.append(company_name)
         else:
             _insert_new_company(
@@ -99,7 +102,8 @@ def apply_share_changes(
     return {
         'added': positions_added,
         'updated': positions_updated,
-        'removed': positions_removed
+        'removed': positions_removed,
+        'protected_identifiers_count': protected_identifiers_count
     }
 
 
@@ -111,18 +115,41 @@ def _update_existing_company(
     override_map: Dict,
     default_portfolio_id: int,
     cursor
-) -> None:
-    """Update an existing company record."""
+) -> bool:
+    """
+    Update an existing company record.
+
+    Returns:
+        bool: True if identifier was protected (manually edited), False otherwise
+    """
     company_id = existing_company_map[company_name]['id']
     existing_portfolio_id = existing_company_map[company_name]['portfolio_id']
+
+    # Check if identifier was manually edited
+    manual_edit_check = query_db(
+        'SELECT identifier_manually_edited, override_identifier FROM companies WHERE id = ?',
+        [company_id],
+        one=True
+    )
+
+    # Determine which identifier to use
+    identifier_protected = False
+    if manual_edit_check and manual_edit_check.get('identifier_manually_edited'):
+        # Keep the manually edited identifier
+        final_identifier = manual_edit_check.get('override_identifier')
+        identifier_protected = True
+        logger.info(f"Protecting manually edited identifier for {company_name}: {final_identifier}")
+    else:
+        # Use CSV identifier
+        final_identifier = position['identifier']
 
     # Preserve existing portfolio assignment unless it's None
     final_portfolio_id = existing_portfolio_id if existing_portfolio_id else default_portfolio_id
 
-    # Update company record
+    # Update company record (now with protected identifier)
     cursor.execute(
         'UPDATE companies SET identifier = ?, portfolio_id = ?, total_invested = ? WHERE id = ?',
-        [position['identifier'], final_portfolio_id, position['total_invested'], company_id]
+        [final_identifier, final_portfolio_id, position['total_invested'], company_id]
     )
 
     # Get existing override if any
@@ -140,6 +167,8 @@ def _update_existing_company(
             existing_override,
             cursor
         )
+
+    return identifier_protected
 
 
 def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor) -> None:

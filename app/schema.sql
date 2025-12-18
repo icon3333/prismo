@@ -106,6 +106,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id);
 CREATE INDEX IF NOT EXISTS idx_company_shares_company_id ON company_shares(company_id);
 CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id);
 CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier);
+CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type);
 CREATE INDEX IF NOT EXISTS idx_companies_category ON companies(category);
 CREATE INDEX IF NOT EXISTS idx_portfolios_account_id ON portfolios(account_id);

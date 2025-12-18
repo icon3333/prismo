@@ -49,6 +49,10 @@ def get_db():
             g.db.execute('PRAGMA journal_mode=WAL')
             # Set busy timeout to 5 seconds for lock retry
             g.db.execute('PRAGMA busy_timeout=5000')
+            # WAL mode optimizations for better performance
+            g.db.execute('PRAGMA synchronous = NORMAL')  # NORMAL is safe for WAL mode
+            g.db.execute('PRAGMA temp_store = MEMORY')   # Store temp tables in memory
+            g.db.execute('PRAGMA cache_size = -64000')   # 64MB cache for better performance
             logger.debug(f"Connected to database: {db_path}")
         except sqlite3.OperationalError as e:
             logger.error(f"Failed to connect to database {db_path}: {e}")
@@ -115,6 +119,10 @@ def get_background_db():
         db.execute('PRAGMA journal_mode=WAL')
         # Set busy timeout to 5 seconds for lock retry
         db.execute('PRAGMA busy_timeout=5000')
+        # WAL mode optimizations for better performance
+        db.execute('PRAGMA synchronous = NORMAL')  # NORMAL is safe for WAL mode
+        db.execute('PRAGMA temp_store = MEMORY')   # Store temp tables in memory
+        db.execute('PRAGMA cache_size = -64000')   # 64MB cache for better performance
         return db
     except sqlite3.OperationalError as e:
         logger.error(f"Failed to connect to background database {_db_path}: {e}")
@@ -130,6 +138,10 @@ def get_background_db():
             db.execute('PRAGMA journal_mode=WAL')
             # Set busy timeout to 5 seconds for lock retry
             db.execute('PRAGMA busy_timeout=5000')
+            # WAL mode optimizations for better performance
+            db.execute('PRAGMA synchronous = NORMAL')  # NORMAL is safe for WAL mode
+            db.execute('PRAGMA temp_store = MEMORY')   # Store temp tables in memory
+            db.execute('PRAGMA cache_size = -64000')   # 64MB cache for better performance
             logger.info(f"Created and connected to new background database: {_db_path}")
             return db
         except Exception as create_error:

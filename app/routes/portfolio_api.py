@@ -654,6 +654,135 @@ def get_portfolio_data_api():
         return error_response('Failed to load portfolio data', 500)
 
 
+@require_auth
+def get_single_portfolio_data_api(portfolio_id):
+    """
+    Get portfolio data for a single portfolio.
+    Returns companies, categories, and summary statistics for a specific portfolio.
+
+    This endpoint is used by the Portfolio Analysis page dropdown selector
+    to load data on-demand for the selected portfolio.
+
+    Args:
+        portfolio_id: Portfolio ID from URL path
+
+    Returns:
+        JSON response with:
+        - portfolio_id: Portfolio ID
+        - portfolio_name: Portfolio name
+        - total_value: Sum of all position values
+        - num_holdings: Number of companies
+        - last_updated: Most recent price update timestamp
+        - companies: List of company objects with percentages
+        - categories: List of category aggregations
+
+    Errors:
+        404: Portfolio not found or doesn't belong to user
+        500: Internal server error
+    """
+    try:
+        account_id = g.account_id
+        logger.info(f"Fetching data for portfolio {portfolio_id}, account {account_id}")
+
+        # Verify portfolio belongs to account
+        portfolio = query_db('''
+            SELECT id, name
+            FROM portfolios
+            WHERE id = ? AND account_id = ?
+        ''', [portfolio_id, account_id], one=True)
+
+        if not portfolio:
+            logger.warning(f"Portfolio {portfolio_id} not found for account {account_id}")
+            return not_found_response(f'Portfolio {portfolio_id} not found')
+
+        # Fetch companies for this portfolio
+        companies = query_db('''
+            SELECT
+                c.id, c.name, c.identifier, c.category, c.investment_type,
+                c.total_invested, mp.country, c.override_country,
+                COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
+                cs.shares, cs.override_share,
+                COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
+                mp.price_eur, mp.currency, mp.last_updated,
+                c.custom_total_value, c.is_custom_value,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as current_value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.portfolio_id = ? AND c.account_id = ?
+            AND COALESCE(cs.override_share, cs.shares, 0) > 0
+            ORDER BY current_value DESC
+        ''', [portfolio_id, account_id])
+
+        if not companies:
+            logger.info(f"No companies found for portfolio {portfolio_id}")
+            companies = []
+
+        # Calculate totals and percentages
+        total_value = sum(float(c['current_value']) for c in companies)
+
+        for company in companies:
+            company['percentage'] = (
+                (float(company['current_value']) / total_value * 100)
+                if total_value > 0 else 0
+            )
+
+        # Group by category
+        categories = {}
+        for company in companies:
+            cat_name = company['category'] or 'Uncategorized'
+            if cat_name not in categories:
+                categories[cat_name] = {
+                    'name': cat_name,
+                    'companies': [],
+                    'total_value': 0,
+                    'total_invested': 0
+                }
+            categories[cat_name]['companies'].append(company)
+            categories[cat_name]['total_value'] += float(company['current_value'])
+            categories[cat_name]['total_invested'] += float(company.get('total_invested', 0))
+
+        # Convert to list and calculate percentages
+        categories_list = []
+        for cat_data in categories.values():
+            cat_data['percentage'] = (
+                (cat_data['total_value'] / total_value * 100)
+                if total_value > 0 else 0
+            )
+            cat_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
+            categories_list.append(cat_data)
+
+        categories_list.sort(key=lambda x: x['total_value'], reverse=True)
+
+        # Build response
+        response_data = {
+            'portfolio_id': portfolio['id'],
+            'portfolio_name': portfolio['name'],
+            'total_value': total_value,
+            'num_holdings': len(companies),
+            'last_updated': max((c['last_updated'] for c in companies if c['last_updated']), default=None),
+            'companies': companies,
+            'categories': categories_list
+        }
+
+        logger.info(f"Returning {len(companies)} companies in {len(categories_list)} categories for portfolio {portfolio_id}")
+        return jsonify(response_data)
+
+    except ValidationError as e:
+        logger.error(f"Validation error: {e}")
+        return error_response(str(e), status=400)
+    except DataIntegrityError as e:
+        logger.error(f"Data integrity error: {e}")
+        return error_response(str(e), status=409)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting single portfolio data for portfolio {portfolio_id}")
+        return error_response('Internal server error', status=500)
+
+
 def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[str, Any]]:
     """
     Shared helper to query position data grouped by any field (country, category, etc.)
@@ -696,36 +825,28 @@ def get_country_capacity_data():
     logger.info(f"Getting country capacity data for account_id: {account_id}")
 
     try:
-        # Get budget settings from expanded_state (from build page)
-        budget_data = query_db('''
-            SELECT variable_value
+        # Get budget and rules settings from expanded_state in single query
+        state_data = query_db('''
+            SELECT variable_name, variable_value
             FROM expanded_state
-            WHERE account_id = ? AND page_name = ? AND variable_name = ?
-        ''', [account_id, 'build', 'budgetData'], one=True)
-
-        rules_data = query_db('''
-            SELECT variable_value
-            FROM expanded_state
-            WHERE account_id = ? AND page_name = ? AND variable_name = ?
-        ''', [account_id, 'build', 'rules'], one=True)
+            WHERE account_id = ? AND page_name = ? AND variable_name IN (?, ?)
+        ''', [account_id, 'build', 'budgetData', 'rules'])
 
         # Parse budget and rules data
         total_investable_capital = 0
         max_per_country = 10  # Default value
 
-        if budget_data and isinstance(budget_data, dict):
+        for row in state_data:
+            var_name = row.get('variable_name')
+            var_value = row.get('variable_value', '{}')
             try:
-                budget_json = json.loads(budget_data.get('variable_value', '{}'))
-                total_investable_capital = float(budget_json.get('totalInvestableCapital', 0))
+                parsed_json = json.loads(var_value)
+                if var_name == 'budgetData':
+                    total_investable_capital = float(parsed_json.get('totalInvestableCapital', 0))
+                elif var_name == 'rules':
+                    max_per_country = float(parsed_json.get('maxPerCountry', 10))
             except (json.JSONDecodeError, ValueError) as e:
-                logger.warning(f"Failed to parse budget data: {e}")
-
-        if rules_data and isinstance(rules_data, dict):
-            try:
-                rules_json = json.loads(rules_data.get('variable_value', '{}'))
-                max_per_country = float(rules_json.get('maxPerCountry', 10))
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.warning(f"Failed to parse rules data: {e}")
+                logger.warning(f"Failed to parse {var_name} data: {e}")
 
         logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Country: {max_per_country}%")
 
@@ -1235,7 +1356,13 @@ def _validate_batch_updates(updates: List[Dict], account_id: int) -> tuple:
             try:
                 shares_val = item['shares']
                 if shares_val is not None:
-                    float(shares_val)
+                    shares_float = float(shares_val)
+                    if shares_float < 0:
+                        validation_errors.append({
+                            'index': idx,
+                            'company': company_name,
+                            'error': f'Shares cannot be negative: {shares_val}'
+                        })
             except (ValueError, TypeError):
                 validation_errors.append({
                     'index': idx,
@@ -1247,7 +1374,13 @@ def _validate_batch_updates(updates: List[Dict], account_id: int) -> tuple:
             try:
                 override_val = item['override_share']
                 if override_val is not None:
-                    float(override_val)
+                    override_float = float(override_val)
+                    if override_float < 0:
+                        validation_errors.append({
+                            'index': idx,
+                            'company': company_name,
+                            'error': f'Override shares cannot be negative: {override_val}'
+                        })
             except (ValueError, TypeError):
                 validation_errors.append({
                     'index': idx,
@@ -1624,22 +1757,6 @@ def csv_upload_progress():
                     })
                 
                 if job_status.get('status') != 'not_found':
-                    # Check if job was cancelled or failed - clean up session immediately
-                    if job_status.get('status') in ['cancelled', 'failed']:
-                        logger.debug(f" Job {job_id} has terminal status '{job_status.get('status')}', clearing from session")
-                        if 'csv_upload_job_id' in session:
-                            del session['csv_upload_job_id']
-                            session.modified = True
-                        
-                        # Return idle status to stop frontend polling
-                        return jsonify({
-                            'current': 0,
-                            'total': 0,
-                            'percentage': 0,
-                            'status': 'idle',
-                            'message': f'Upload {job_status.get("status")}'
-                        })
-                    
                     # Convert database format to frontend format
                     progress_data = {
                         'current': job_status.get('progress', 0),
@@ -1649,12 +1766,9 @@ def csv_upload_progress():
                         'message': job_status.get('message', 'Processing...'),
                         'job_id': job_id
                     }
-                    
+
                     logger.debug(f" CSV progress API returning for account {g.account_id}: {progress_data}")
-                    logger.debug(f" Original job_status from database: {job_status}")
-                    
-                    # This logic moved to earlier in the function for immediate cleanup
-                    
+
                     return jsonify(progress_data)
             
             # No job_id or job not found - return idle status

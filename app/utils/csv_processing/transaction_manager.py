@@ -52,6 +52,37 @@ def apply_share_changes(
     total_companies = len(share_calculations)
     processed_companies = 0
 
+    # Pre-fetch all company data (identifier edits + shares) in a single query to avoid N+1
+    # This combines what used to be two separate queries into one efficient JOIN
+    identifier_edit_map = {}
+    shares_exist_map = {}
+    company_data_rows = query_db(
+        '''SELECT
+            c.id,
+            c.identifier_manually_edited,
+            c.override_identifier,
+            cs.shares,
+            cs.override_share,
+            cs.is_manually_edited,
+            cs.manual_edit_date
+           FROM companies c
+           LEFT JOIN company_shares cs ON cs.company_id = c.id
+           WHERE c.account_id = ?''',
+        [account_id]
+    )
+
+    # Build lookup maps from the combined query result
+    for row in company_data_rows:
+        company_id = row['id']
+        # Build identifier edit map
+        identifier_edit_map[company_id] = {
+            'identifier_manually_edited': row['identifier_manually_edited'],
+            'override_identifier': row['override_identifier']
+        }
+        # Build shares existence map
+        if row['shares'] is not None:
+            shares_exist_map[company_id] = True
+
     # Process company updates and additions
     for company_name, share_data in share_calculations.items():
         processed_companies += 1
@@ -78,7 +109,9 @@ def apply_share_changes(
                 share_data=share_data,
                 override_map=override_map,
                 default_portfolio_id=default_portfolio_id,
-                cursor=cursor
+                cursor=cursor,
+                identifier_edit_map=identifier_edit_map,
+                shares_exist_map=shares_exist_map
             )
             if identifier_was_protected:
                 protected_identifiers_count += 1
@@ -114,7 +147,9 @@ def _update_existing_company(
     share_data: Dict,
     override_map: Dict,
     default_portfolio_id: int,
-    cursor
+    cursor,
+    identifier_edit_map: Dict,
+    shares_exist_map: Dict
 ) -> bool:
     """
     Update an existing company record.
@@ -125,18 +160,14 @@ def _update_existing_company(
     company_id = existing_company_map[company_name]['id']
     existing_portfolio_id = existing_company_map[company_name]['portfolio_id']
 
-    # Check if identifier was manually edited
-    manual_edit_check = query_db(
-        'SELECT identifier_manually_edited, override_identifier FROM companies WHERE id = ?',
-        [company_id],
-        one=True
-    )
+    # Use pre-fetched identifier manual edit data (avoids N+1 query)
+    manual_edit_data = identifier_edit_map.get(company_id, {})
 
     # Determine which identifier to use
     identifier_protected = False
-    if manual_edit_check and manual_edit_check.get('identifier_manually_edited'):
+    if manual_edit_data.get('identifier_manually_edited'):
         # Keep the manually edited identifier
-        final_identifier = manual_edit_check.get('override_identifier')
+        final_identifier = manual_edit_data.get('override_identifier')
         identifier_protected = True
         logger.info(f"Protecting manually edited identifier for {company_name}: {final_identifier}")
     else:
@@ -155,29 +186,31 @@ def _update_existing_company(
     # Get existing override if any
     existing_override = override_map.get(company_id)
 
+    # Use pre-fetched share existence data (avoids N+1 query)
+    share_exists = shares_exist_map.get(company_id, False)
+
     # Update or insert shares based on manual edit status
     if share_data['has_manual_edit']:
         # User has manually edited - handle accordingly
-        _update_shares_with_manual_edit(company_id, share_data, cursor)
+        _update_shares_with_manual_edit(company_id, share_data, cursor, share_exists)
     else:
         # Normal CSV processing - use existing override if any
         _update_shares_normal(
             company_id,
             share_data['csv_shares'],
             existing_override,
-            cursor
+            cursor,
+            share_exists
         )
 
     return identifier_protected
 
 
-def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor) -> None:
+def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor, share_exists: bool) -> None:
     """Update shares for a manually edited company."""
-    share_row = query_db('SELECT shares FROM company_shares WHERE company_id = ?', [company_id], one=True)
-
     if share_data['csv_modified_after_edit']:
         # CSV has newer transactions - update both CSV and override shares
-        if share_row:
+        if share_exists:
             cursor.execute(
                 '''UPDATE company_shares
                    SET shares = ?, override_share = ?, csv_modified_after_edit = 1
@@ -193,7 +226,7 @@ def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor) -
             )
     else:
         # No newer transactions - update CSV shares but keep override as is
-        if share_row:
+        if share_exists:
             cursor.execute(
                 'UPDATE company_shares SET shares = ?, override_share = ? WHERE company_id = ?',
                 [share_data['csv_shares'], share_data['override_shares'], company_id]
@@ -207,11 +240,9 @@ def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor) -
             )
 
 
-def _update_shares_normal(company_id: int, csv_shares: float, existing_override: float, cursor) -> None:
+def _update_shares_normal(company_id: int, csv_shares: float, existing_override: float, cursor, share_exists: bool) -> None:
     """Update shares for a non-manually-edited company."""
-    share_row = query_db('SELECT shares FROM company_shares WHERE company_id = ?', [company_id], one=True)
-
-    if share_row:
+    if share_exists:
         cursor.execute(
             'UPDATE company_shares SET shares = ?, override_share = ? WHERE company_id = ?',
             [csv_shares, existing_override, company_id]

@@ -44,6 +44,10 @@
                             <p class="title is-5" id="summaryTotalValue">-</p>
                         </div>
                         <div class="column has-text-centered">
+                            <p class="heading">P&L</p>
+                            <p class="title is-5" id="summaryPnL">-</p>
+                        </div>
+                        <div class="column has-text-centered">
                             <p class="heading">Holdings</p>
                             <p class="title is-5" id="summaryHoldings">-</p>
                         </div>
@@ -71,7 +75,7 @@
                                         <th class="is-sortable" data-sort="string">Category</th>
                                         <th class="is-sortable" data-sort="number">%</th>
                                         <th class="is-sortable" data-sort="number">Current Value</th>
-                                        <th class="is-sortable" data-sort="number">Total Invested</th>
+                                        <th class="is-sortable" data-sort="number">P&L (€ / %)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="stockTableBody">
@@ -93,7 +97,7 @@
                                         <th class="is-sortable" data-sort="string">Category</th>
                                         <th class="is-sortable" data-sort="number">% of Portfolio</th>
                                         <th class="is-sortable" data-sort="number">Current Value</th>
-                                        <th class="is-sortable" data-sort="number">Total Invested</th>
+                                        <th class="is-sortable" data-sort="number">P&L (€ / %)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="categoryTableBody">
@@ -269,9 +273,47 @@
                 return value.toFixed(1) + '%';
             }
 
+            function formatPnL(pnlAbsolute, pnlPercentage, totalInvested) {
+                // Handle N/A cases (null or undefined P&L values)
+                if (pnlAbsolute === null || pnlAbsolute === undefined) {
+                    return '<span class="has-text-grey-light">N/A</span>';
+                }
+
+                const absValue = parseFloat(pnlAbsolute);
+                const pctValue = parseFloat(pnlPercentage);
+
+                // Determine color class and sign
+                let colorClass;
+                let sign;
+
+                if (absValue > 0) {
+                    colorClass = 'has-text-success';
+                    sign = '+';
+                } else if (absValue < 0) {
+                    colorClass = 'has-text-danger';
+                    sign = '';  // Negative sign is part of the number
+                } else {
+                    colorClass = 'has-text-grey-light';
+                    sign = '';
+                }
+
+                // Format absolute value and percentage
+                const formattedAbs = formatCurrency(absValue);
+                const formattedPct = `${sign}${Math.abs(pctValue).toFixed(1)}%`;
+
+                // Build tooltip with total invested value
+                const tooltipText = totalInvested !== undefined && totalInvested !== null
+                    ? `Total Invested: ${formatCurrency(totalInvested)}`
+                    : '';
+
+                // Return formatted P&L with tooltip
+                return `<span class="${colorClass}" title="${tooltipText}">${formattedAbs} (${formattedPct})</span>`;
+            }
+
             // Make format functions available globally for components
             window.formatCurrency = formatCurrency;
             window.formatPercentage = formatPercentage;
+            window.formatPnL = formatPnL;
 
             // Table sorting functionality with persistent state
             function initTableSorting() {
@@ -529,6 +571,15 @@
             function updateSummaryBox() {
                 document.getElementById('summaryPortfolioName').textContent = currentPortfolioData.portfolio_name;
                 document.getElementById('summaryTotalValue').textContent = formatCurrency(currentPortfolioData.total_value);
+
+                // Display portfolio P&L with color coding
+                const pnlElement = document.getElementById('summaryPnL');
+                pnlElement.innerHTML = formatPnL(
+                    currentPortfolioData.portfolio_pnl_absolute,
+                    currentPortfolioData.portfolio_pnl_percentage,
+                    currentPortfolioData.total_invested
+                );
+
                 document.getElementById('summaryHoldings').textContent = currentPortfolioData.num_holdings;
 
                 const lastUpdated = currentPortfolioData.last_updated
@@ -553,7 +604,7 @@
                         <td>${escapeHtml(company.category || 'Uncategorized')}</td>
                         <td>${formatPercentage(company.percentage)}</td>
                         <td>${formatCurrency(company.current_value)}</td>
-                        <td>${formatCurrency(company.total_invested || 0)}</td>
+                        <td>${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested)}</td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -587,7 +638,7 @@
                         </td>
                         <td>${formatPercentage(category.percentage)}</td>
                         <td>${formatCurrency(category.total_value)}</td>
-                        <td>${formatCurrency(category.total_invested)}</td>
+                        <td>${formatPnL(category.pnl_absolute, category.pnl_percentage, category.total_invested)}</td>
                     `;
                     tbody.appendChild(categoryRow);
 
@@ -620,7 +671,7 @@
                                 </span>
                             </td>
                             <td><span class="is-size-7">${formatCurrency(company.current_value)}</span></td>
-                            <td><span class="is-size-7">${formatCurrency(company.total_invested || 0)}</span></td>
+                            <td><span class="is-size-7">${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested)}</span></td>
                         `;
                         tbody.appendChild(companyRow);
                     });

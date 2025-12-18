@@ -110,6 +110,12 @@ CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type);
 CREATE INDEX IF NOT EXISTS idx_companies_category ON companies(category);
 CREATE INDEX IF NOT EXISTS idx_portfolios_account_id ON portfolios(account_id);
+
+-- PERFORMANCE OPTIMIZATION: Composite indexes for common query patterns
+-- Covers the most common access pattern: filtering by portfolio_id and account_id together
+CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id);
+-- Optimizes category grouping within portfolios
+CREATE INDEX IF NOT EXISTS idx_companies_portfolio_category ON companies(portfolio_id, category);
 -- Create indexes for background_jobs
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_created_at ON background_jobs(created_at);

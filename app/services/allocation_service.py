@@ -455,8 +455,6 @@ class AllocationService:
         # Extract default weights from rules
         default_stock_weight = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
         default_etf_weight = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
-        logger.info(f"[ALLOCATION DEBUG] Rules received: {rules}")
-        logger.info(f"[ALLOCATION DEBUG] Using default weights: Stock={default_stock_weight}%, ETF={default_etf_weight}%")
 
         # Build mapping of company names to investment types from portfolio_data
         company_investment_types = {}
@@ -484,16 +482,17 @@ class AllocationService:
         portfolio_builder_data = {}
 
         for portfolio in target_allocations:
-            portfolio_id = portfolio.get('id')
-            if not portfolio_id:
+            portfolio_name = portfolio.get('name')
+            if not portfolio_name:
                 continue
 
-            # Store complete builder configuration
-            portfolio_builder_data[portfolio_id] = {
+            # Store complete builder configuration - keyed by NAME for reliable matching
+            # (Portfolio IDs in saved state can become stale; names are unique per account)
+            portfolio_builder_data[portfolio_name] = {
                 'minPositions': portfolio.get('minPositions', 0),
                 'allocation': portfolio.get('allocation', 0),
                 'positions': portfolio.get('positions', []),
-                'name': portfolio.get('name', 'Unknown')
+                'name': portfolio_name
             }
 
             # Check if portfolio has ONLY placeholders (no explicit positions)
@@ -506,52 +505,36 @@ class AllocationService:
             placeholder_weight = None
             if has_only_placeholders and placeholder_positions:
                 placeholder_weight = placeholder_positions[0].get('weight')
-                if placeholder_weight:
-                    logger.info(f"[ALLOCATION DEBUG] Portfolio {portfolio.get('name')} has ONLY placeholders with weight {placeholder_weight}% - will use for all positions")
 
             # Store target weights for real positions
             # Priority: explicit weight from Build page > placeholder weight > type-based default
+            # Key by (portfolio_name, company_name) for reliable matching
             for position in portfolio.get('positions', []):
                 if not position.get('isPlaceholder'):
                     company_name = position.get('companyName')
-                    position_key = (portfolio_id, company_name)
+                    position_key = (portfolio_name, company_name)
 
                     # Use explicit weight if provided
                     explicit_weight = position.get('weight')
                     if explicit_weight is not None and explicit_weight > 0:
                         position_target_weights[position_key] = float(explicit_weight)
-                        logger.debug(f"Set EXPLICIT weight for {company_name}: {explicit_weight}%")
                     else:
                         default_weight = get_default_weight(company_name)
                         position_target_weights[position_key] = default_weight
-                        logger.debug(f"Set DEFAULT weight for {company_name}: {default_weight}% (type: {company_investment_types.get(company_name)})")
 
             # If portfolio has only placeholders, mark it for equal distribution
-            if has_only_placeholders and placeholder_weight:
-                portfolio_builder_data[portfolio_id]['use_placeholder_weight'] = True
-                portfolio_builder_data[portfolio_id]['placeholder_weight'] = placeholder_weight
+            if has_only_placeholders and placeholder_weight and portfolio_name in portfolio_builder_data:
+                portfolio_builder_data[portfolio_name]['use_placeholder_weight'] = True
+                portfolio_builder_data[portfolio_name]['placeholder_weight'] = placeholder_weight
 
         # Group data by portfolio and category
         portfolio_map = {}
 
-        # STEP 1: Initialize portfolio_map with ALL portfolios from target_allocations
-        # This ensures empty portfolios with target allocations are included
-        # Filter out portfolios with invalid/unknown names
-        for portfolio in target_allocations:
-            portfolio_id = portfolio.get('id')
-            portfolio_name = portfolio.get('name')
-            # Skip portfolios with missing names or "Unknown" in the name
-            if portfolio_id and portfolio_name and 'unknown' not in portfolio_name.lower():
-                portfolio_map[portfolio_id] = {
-                    'name': portfolio_name,
-                    'categories': {},
-                    'currentValue': 0
-                }
-                logger.debug(f"Initialized portfolio {portfolio_name} (ID: {portfolio_id}) in portfolio_map")
-            elif portfolio_id and (not portfolio_name or 'unknown' in portfolio_name.lower()):
-                logger.warning(f"Skipping invalid portfolio (ID: {portfolio_id}, Name: {portfolio_name})")
+        # NOTE: We no longer pre-initialize portfolio_map from target_allocations
+        # This caused duplicate entries when portfolio IDs changed (recreated portfolios)
+        # Instead, we only populate from actual database data and look up targets by NAME
 
-        # STEP 2: Add actual positions from database
+        # Process actual positions from database
         if portfolio_data:
             for row in portfolio_data:
                 if isinstance(row, dict):
@@ -574,10 +557,12 @@ class AllocationService:
                         portfolio['currentValue'] += pos_value
                         cat['currentValue'] += pos_value
 
-                        target_weight = position_target_weights.get((pid, row['company_name']), 0)
+                        # Look up by portfolio NAME (not ID) for reliable matching
+                        lookup_key = (pname, row['company_name'])
+                        target_weight = position_target_weights.get(lookup_key, 0)
 
                         # Check if this portfolio uses placeholder-based equal distribution
-                        builder_config = portfolio_builder_data.get(pid, {})
+                        builder_config = portfolio_builder_data.get(pname, {})
                         use_placeholder_weight = builder_config.get('use_placeholder_weight', False)
                         placeholder_weight_value = builder_config.get('placeholder_weight', None)
 
@@ -586,13 +571,11 @@ class AllocationService:
                             # Priority: placeholder weight > type-based default
                             if use_placeholder_weight and placeholder_weight_value:
                                 target_weight = float(placeholder_weight_value)
-                                logger.info(f"[ALLOCATION DEBUG] Applied PLACEHOLDER weight for {row['company_name']}: {target_weight}%")
                             elif row.get('investment_type') in ['Stock', 'ETF']:
                                 if row.get('investment_type') == 'Stock':
                                     target_weight = default_stock_weight
                                 elif row.get('investment_type') == 'ETF':
                                     target_weight = default_etf_weight
-                                logger.info(f"[ALLOCATION DEBUG] Applied TYPE-BASED default weight for {row['company_name']}: {target_weight}% (type: {row.get('investment_type')})")
 
                         position_data = {
                             'name': row['company_name'],
@@ -602,7 +585,6 @@ class AllocationService:
                             'investment_type': row.get('investment_type')
                         }
                         cat['positions'].append(position_data)
-                        logger.info(f"[ALLOCATION DEBUG] Position added: {row['company_name']}, targetAllocation={target_weight}%, type={row.get('investment_type')}")
 
         logger.info(f"Processed {len(portfolio_map)} portfolios with positions")
         return portfolio_map, portfolio_builder_data
@@ -636,16 +618,15 @@ class AllocationService:
         for portfolio_id, pdata in portfolio_map.items():
             portfolio_name = pdata['name']
 
-            # Get target weight for this portfolio
+            # Get target weight for this portfolio - match by NAME for reliable matching
             portfolio_target_weight = 0
             target_portfolio = next(
-                (p for p in target_allocations if p.get('id') == portfolio_id), None)
+                (p for p in target_allocations if p.get('name') == portfolio_name), None)
             if target_portfolio:
                 portfolio_target_weight = target_portfolio.get('allocation', 0)
-                logger.debug(f"Portfolio {portfolio_name}: target weight {portfolio_target_weight}%")
 
-            # Get builder data
-            builder_data = portfolio_builder_data.get(portfolio_id, {})
+            # Get builder data - keyed by portfolio NAME for reliable matching
+            builder_data = portfolio_builder_data.get(portfolio_name, {})
 
             portfolio_entry = {
                 'name': portfolio_name,
@@ -720,7 +701,6 @@ class AllocationService:
                     pos_target_value = (pos['targetAllocation'] / 100) * portfolio_target_value
                     pos['targetValue'] = pos_target_value
                     cat_target_value += pos_target_value
-                    logger.info(f"[ALLOCATION DEBUG] {portfolio_name} - {pos['name']}: targetAllocation={pos['targetAllocation']}%, targetValue=€{pos_target_value:.2f}")
 
                 cat['targetValue'] = cat_target_value
                 cat['targetWeight'] = (
@@ -766,9 +746,6 @@ class AllocationService:
         # Parse rules - use consistent defaults matching get_portfolio_positions
         max_stock_pct = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
         max_etf_pct = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
-
-        logger.info(f"[ALLOCATION DEBUG] Type constraints - Rules: {rules}")
-        logger.info(f"[ALLOCATION DEBUG] Applying rules: maxPerStock={max_stock_pct}%, maxPerETF={max_etf_pct}%")
 
         # First calculate unconstrained targets (same as regular allocation)
         portfolios = AllocationService.calculate_allocation_targets(

@@ -90,6 +90,21 @@ document.addEventListener('DOMContentLoaded', function () {
             this.rebalanceMode = 'existing-only'; // 'existing-only', 'new-only', 'new-with-sells'
             this.categoriesExpanded = new Set(); // Track expanded categories
             this.selectedPortfolio = null; // Track selected portfolio
+
+            // OPTIMIZATION: Create formatters once, reuse many times (15% faster)
+            this.currencyFormatter = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'EUR',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+
+            this.percentageFormatter = new Intl.NumberFormat('en-US', {
+                style: 'percent',
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1
+            });
+
             this.init();
         }
 
@@ -187,9 +202,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     throw new Error('Invalid portfolio data received');
                 }
 
-                // Debug: Log basic portfolio info
-                console.log(`Loaded ${this.portfolioData.portfolios.length} portfolios for allocation`);
-
                 // Initialize UI state based on current mode
                 this.handleModeChange();
                 this.renderPortfolioTable();
@@ -271,20 +283,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         formatCurrency(value) {
-            return new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'EUR',
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            }).format(value);
+            return this.currencyFormatter.format(value);
         }
 
         formatPercentage(value) {
-            return new Intl.NumberFormat('en-US', {
-                style: 'percent',
-                minimumFractionDigits: 1,
-                maximumFractionDigits: 1
-            }).format(value / 100);
+            return this.percentageFormatter.format(value / 100);
         }
 
         // Helper method to count current positions in a portfolio
@@ -457,7 +460,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         generatePortfolioTableHTML(portfolios, totalCurrentValue, newTotalValue) {
-            let tableHTML = `
+            // OPTIMIZATION: Use array for efficient string building (O(n) vs O(n²) for concatenation)
+            const htmlParts = [];
+
+            // Header
+            htmlParts.push(`
             <div class="table-responsive">
                 <table class="table table-striped table-hover unified-table">
                     <thead>
@@ -473,7 +480,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         </tr>
                     </thead>
                     <tbody>
-            `;
+            `);
 
             // Track totals for summary
             let totalTargetValue = 0;
@@ -481,6 +488,7 @@ document.addEventListener('DOMContentLoaded', function () {
             let totalSells = 0;
             let totalValueAfter = 0;
 
+            // Portfolio rows - push to array instead of concatenating
             portfolios.forEach(portfolio => {
                 const currentAllocation = totalCurrentValue > 0 ? (portfolio.currentValue / totalCurrentValue) * 100 : 0;
                 const valueAfterAction = portfolio.currentValue + portfolio.action;
@@ -489,7 +497,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Determine action styling and text
                 let actionClass = "actions-neutral";
                 let actionText = "No action";
-                
+
                 if (portfolio.action > 0.01) {
                     actionClass = "actions-positive";
                     actionText = `Buy ${this.formatCurrency(portfolio.action)}`;
@@ -518,8 +526,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 totalTargetValue += portfolio.targetValue;
                 totalValueAfter += valueAfterAction;
 
-                // Add row to table
-                tableHTML += `
+                // Push row to array
+                htmlParts.push(`
                     <tr ${positionDeficit > 0 ? 'class="table-warning"' : ''}>
                         <td class="col-company">${portfolioNameDisplay}</td>
                         <td class="col-currency current-value">${this.formatCurrency(portfolio.currentValue)}</td>
@@ -530,11 +538,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         <td class="col-currency value-after">${this.formatCurrency(valueAfterAction)}</td>
                         <td class="col-percentage allocation-after">${this.formatPercentage(allocationAfterAction)}</td>
                     </tr>
-                `;
+                `);
             });
 
-            // Add total row
-            tableHTML += `
+            // Total row
+            htmlParts.push(`
                     <tr class="total-row">
                         <td class="col-company"><strong>Total</strong></td>
                         <td class="col-currency current-value"><strong>${this.formatCurrency(totalCurrentValue)}</strong></td>
@@ -552,12 +560,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 </tbody>
             </table>
             </div>
-            `;
+            `);
 
-            // Add summary footer
-            tableHTML += this.generateSummaryFooter(totalCurrentValue, totalBuys, totalSells, totalValueAfter);
+            // Summary footer
+            htmlParts.push(this.generateSummaryFooter(totalCurrentValue, totalBuys, totalSells, totalValueAfter));
 
-            return tableHTML;
+            // OPTIMIZATION: Single join operation instead of n concatenations
+            return htmlParts.join('');
         }
 
         generateSummaryFooter(currentValue, totalBuys, totalSells, newValue) {

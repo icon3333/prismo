@@ -1,4 +1,13 @@
 // Allocation Builder JavaScript - Improved Version with Position Selection
+
+// Debug mode - set to true for development, false for production
+const DEBUG_BUILDER = false;
+
+// Helper function for conditional debug logging
+function debugLog(...args) {
+    if (DEBUG_BUILDER) debugLog(...args);
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   // Auto-save debounce function
   function debounce(func, wait = 300) {
@@ -97,23 +106,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
           // Load available portfolios
           await this.loadAvailablePortfolios();
-          console.log("Available portfolios loaded:", this.availablePortfolios);
+          debugLog("Available portfolios loaded:", this.availablePortfolios);
 
           // Load portfolio metrics
           await this.loadPortfolioMetrics();
-          console.log("Portfolio metrics loaded:", this.portfolioMetrics);
+          debugLog("Portfolio metrics loaded:", this.portfolioMetrics);
 
           // Load saved state if available
           await this.loadSavedState();
 
           // If no portfolios were loaded from saved state, initialize them from available portfolios
           if (!this.portfolios || this.portfolios.length === 0) {
-            console.log("No portfolios in saved state, initializing from available portfolios");
+            debugLog("No portfolios in saved state, initializing from available portfolios");
             this.portfolios = [];
 
             // For each available portfolio, add it and load its companies
             for (const portfolio of this.availablePortfolios) {
-              console.log("Processing portfolio:", portfolio);
+              debugLog("Processing portfolio:", portfolio);
               if (portfolio.id && portfolio.name !== '-') {
                 try {
                   // Add this portfolio with default allocation
@@ -125,21 +134,21 @@ document.addEventListener('DOMContentLoaded', function () {
                     selectedPosition: "", // Initialize the selectedPosition property
                     evenSplit: false // Initialize evenSplit property - default to manual allocation
                   });
-                  console.log(`Added portfolio ${portfolio.name} (ID: ${portfolio.id}) to this.portfolios`);
+                  debugLog(`Added portfolio ${portfolio.name} (ID: ${portfolio.id}) to this.portfolios`);
 
                   // Load companies for this portfolio (for dropdown only, not creating positions)
-                  console.log(`Fetching companies for portfolio ${portfolio.name} (ID: ${portfolio.id})...`);
+                  debugLog(`Fetching companies for portfolio ${portfolio.name} (ID: ${portfolio.id})...`);
                   const response = await axios.get(`/portfolio/api/portfolio_companies/${portfolio.id}`);
-                  console.log(`Received company data for portfolio ${portfolio.name}:`, response.data);
+                  debugLog(`Received company data for portfolio ${portfolio.name}:`, response.data);
 
                   if (response.data && Array.isArray(response.data)) {
                     // Store companies in portfolioCompanies (for dropdown selection only)
                     Vue.set(this.portfolioCompanies, portfolio.id, response.data);
-                    console.log(`Stored ${response.data.length} companies for portfolio ${portfolio.name} (for dropdown only)`);
+                    debugLog(`Stored ${response.data.length} companies for portfolio ${portfolio.name} (for dropdown only)`);
                   } else {
                     // Initialize with empty array if no companies
                     Vue.set(this.portfolioCompanies, portfolio.id, []);
-                    console.log(`No companies found for portfolio ${portfolio.name}, initialized with empty array`);
+                    debugLog(`No companies found for portfolio ${portfolio.name}, initialized with empty array`);
                   }
                 } catch (error) {
                   console.error(`Error loading companies for portfolio ${portfolio.id}:`, error);
@@ -148,8 +157,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
               }
             }
-            console.log("Final portfolios list:", this.portfolios);
-            console.log("Final portfolioCompanies:", this.portfolioCompanies);
+            debugLog("Final portfolios list:", this.portfolios);
+            debugLog("Final portfolioCompanies:", this.portfolioCompanies);
 
             // Set default allocations
             if (this.portfolios.length > 0) {
@@ -195,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
       async loadSavedState() {
         try {
           const response = await axios.get('/portfolio/api/state?page=build');
-          console.log('Loaded saved state:', response.data);
+          debugLog('Loaded saved state:', response.data);
 
           if (response.data && response.data.budgetData) {
             this.budgetData = JSON.parse(response.data.budgetData);
@@ -226,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function () {
               availablePortfolioMap[p.id] = p.name;
             }
           });
-          console.log('Available portfolio map:', availablePortfolioMap);
+          debugLog('Available portfolio map:', availablePortfolioMap);
 
           // Temporary array to store portfolios from saved state
           let savedPortfolios = [];
@@ -240,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Track which portfolio IDs we have from saved state
             savedPortfolioIds = new Set(savedPortfolios.map(p => p.id));
-            console.log('Saved portfolio IDs:', Array.from(savedPortfolioIds));
+            debugLog('Saved portfolio IDs:', Array.from(savedPortfolioIds));
           }
 
           // Initialize this.portfolios with saved portfolios
@@ -249,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // Add any missing portfolios from availablePortfolios (already filtered to exclude "-")
           for (const portfolio of this.availablePortfolios) {
             if (portfolio.id && !savedPortfolioIds.has(portfolio.id)) {
-              console.log(`Adding missing portfolio to state: ${portfolio.name} (ID: ${portfolio.id})`);
+              debugLog(`Adding missing portfolio to state: ${portfolio.name} (ID: ${portfolio.id})`);
               this.portfolios.push({
                 id: portfolio.id,
                 name: portfolio.name,
@@ -261,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
           }
 
-          console.log('Final portfolio list after merging saved state:', this.portfolios);
+          debugLog('Final portfolio list after merging saved state:', this.portfolios);
 
           // Load companies for each portfolio (for dropdown only) and ensure placeholder positions exist
           for (const portfolio of this.portfolios) {
@@ -289,16 +298,16 @@ document.addEventListener('DOMContentLoaded', function () {
               // Add placeholder positions if needed - this will not create actual company positions
               this.ensureMinimumPositions(portfolio);
 
-              console.log(`Loaded portfolio ${portfolio.name} (ID: ${portfolio.id}) with ${portfolio.currentPositions} companies`);
+              debugLog(`Loaded portfolio ${portfolio.name} (ID: ${portfolio.id}) with ${portfolio.currentPositions} companies`);
             }
           }
 
-          console.log('Final portfolio list (all portfolios):', this.portfolios);
+          debugLog('Final portfolio list (all portfolios):', this.portfolios);
 
           // Force recalculation of all placeholder weights
           this.portfolios.forEach((portfolio, portfolioIndex) => {
             this.updatePlaceholderWeight(portfolioIndex);
-            console.log(`Recalculated placeholder weight for portfolio ${portfolio.name} (index: ${portfolioIndex})`);
+            debugLog(`Recalculated placeholder weight for portfolio ${portfolio.name} (index: ${portfolioIndex})`);
           });
 
           if (response.data && response.data.expandedPortfolios) {
@@ -325,7 +334,7 @@ document.addEventListener('DOMContentLoaded', function () {
           const response = await axios.get('/portfolio/api/portfolios?include_ids=true');
           // Filter out the "-" placeholder portfolio
           this.availablePortfolios = response.data.filter(p => p.name !== '-');
-          console.log('Loaded all portfolios (excluding "-" placeholder):', this.availablePortfolios);
+          debugLog('Loaded all portfolios (excluding "-" placeholder):', this.availablePortfolios);
 
           // Note: We don't auto-create positions for these portfolios
           // Positions will only be added when the user explicitly selects them from the dropdown
@@ -340,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           const response = await axios.get('/portfolio/api/portfolio_metrics');
           this.portfolioMetrics = response.data;
-          console.log('Loaded portfolio metrics:', this.portfolioMetrics);
+          debugLog('Loaded portfolio metrics:', this.portfolioMetrics);
         } catch (error) {
           console.error('Error loading portfolio metrics:', error);
           portfolioManager.showNotification('Failed to load portfolio metrics', 'is-danger');
@@ -352,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           const response = await axios.get(`/portfolio/api/portfolio_companies/${portfolioId}`);
           const companies = response.data;
-          console.log(`Loaded ${companies.length} companies for portfolio ${portfolioId}:`, companies);
+          debugLog(`Loaded ${companies.length} companies for portfolio ${portfolioId}:`, companies);
 
           // Store in portfolioCompanies map (for dropdown only)
           Vue.set(this.portfolioCompanies, portfolioId, companies);
@@ -854,7 +863,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const realPositions = portfolio.positions.filter(p => !p.isPlaceholder);
         const placeholder = portfolio.positions.find(p => p.isPlaceholder);
 
-        console.log('Updating placeholder weight:', {
+        debugLog('Updating placeholder weight:', {
           portfolioIndex,
           placeholder,
           realPositions,
@@ -871,7 +880,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (realPositionsWeight >= 100) {
             placeholder.weight = 0;
             placeholder.totalRemainingWeight = 0;
-            console.log('Set placeholder weight to 0 (real positions sum to 100%)');
+            debugLog('Set placeholder weight to 0 (real positions sum to 100%)');
             return;
           }
 
@@ -884,7 +893,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // Calculate weight per remaining position
             const weightPerPosition = parseFloat((totalRemainingWeight / placeholder.positionsRemaining).toFixed(2));
 
-            console.log('Weight calculation:', {
+            debugLog('Weight calculation:', {
               realPositionsWeight,
               totalRemainingWeight,
               weightPerPosition,
@@ -897,12 +906,12 @@ document.addEventListener('DOMContentLoaded', function () {
             // Store the total remaining weight for calculations
             placeholder.totalRemainingWeight = totalRemainingWeight;
 
-            console.log('Updated placeholder weight to:', placeholder.weight);
+            debugLog('Updated placeholder weight to:', placeholder.weight);
           } else {
             // If no positions remaining, set weight to 0
             placeholder.weight = 0;
             placeholder.totalRemainingWeight = 0;
-            console.log('Set placeholder weight to 0 (no positions remaining)');
+            debugLog('Set placeholder weight to 0 (no positions remaining)');
           }
         }
       },

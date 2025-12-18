@@ -405,6 +405,14 @@ p {
   color: var(--text-color);
 }
 
+/* Ensure table data cells have black text to match other tables */
+.table td,
+.table.is-fullwidth td,
+.table.is-striped td,
+.table.is-hoverable td {
+  color: var(--text-color) !important;
+}
+
 .table tr {
   background-color: var(--card-bg);
   transition: background-color var(--transition-speed) var(--transition-func);
@@ -428,10 +436,78 @@ p {
   background-color: var(--primary-light) !important;
 }
 
-/* Table category row */
+/* Table category row - clickable with hover feedback */
 .category-row {
   background-color: var(--darker-bg) !important;
   font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.category-row:hover {
+  background-color: var(--primary-light) !important;
+}
+
+.category-row.is-selected {
+  background-color: rgba(50, 115, 220, 0.15) !important;
+}
+
+/* Category toggle icon */
+.toggle-companies {
+  color: var(--primary);
+  transition: transform 0.2s ease;
+}
+
+.toggle-companies:hover {
+  transform: scale(1.2);
+}
+
+/* Category toggle button (alternative implementation) */
+.toggle-category {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.toggle-category:hover {
+  color: var(--primary);
+}
+
+/* Category company sub-rows */
+tr.category-companies {
+  background-color: rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+tr.category-companies td {
+  border-top: none;
+  padding-top: 0.4em;
+  padding-bottom: 0.4em;
+}
+
+/* Sortable table headers */
+th.is-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+
+th.is-sortable:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+th.is-sortable.is-sorted-asc::after,
+th.is-sortable.is-sorted-desc::after {
+  display: inline-block;
+  margin-left: 0.3em;
+  font-size: 0.8em;
+}
+
+th.is-sortable.is-sorted-asc::after {
+  content: '▲';
+}
+
+th.is-sortable.is-sorted-desc::after {
+  content: '▼';
 }
 
 /* Position rows indentation */

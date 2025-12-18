@@ -463,72 +463,59 @@
 
 {% macro upload_section(url_for) %}
 <div class="column is-6">
-    <div id="upload-card" class="card mb-5"
-        style="height: 100%; min-height: 250px; display: flex; flex-direction: column;">
-        <header class="card-header">
-            <p class="card-header-title">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-upload"></i>
-                    </span>
-                    <span>Upload Portfolio Data</span>
-                </span>
-            </p>
-        </header>
-        <div class="card-content"
-            style="flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between;">
-            <div class="content">
-                <form action="{{ url_for('portfolio.upload_csv') }}" method="post" enctype="multipart/form-data">
-                    <div class="field">
-                        <label class="label">CSV File</label>
-                        <div class="file has-name is-fullwidth">
-                            <label class="file-label">
-                                <input class="file-input" type="file" name="csv_file" id="csv_file" accept=".csv">
-                                <span class="file-cta">
-                                    <span class="file-icon">
-                                        <i class="fas fa-upload"></i>
-                                    </span>
-                                    <span class="file-label">
-                                        Choose a file…
-                                    </span>
+    <div id="upload-card" class="mb-5">
+        <h3 class="subtitle is-6 has-text-weight-semibold mt-5 mb-4">Upload Portfolio Data</h3>
+        <div>
+            <form action="{{ url_for('portfolio.upload_csv') }}" method="post" enctype="multipart/form-data">
+                <div class="field">
+                    <label class="label">CSV File</label>
+                    <div class="file has-name is-fullwidth">
+                        <label class="file-label">
+                            <input class="file-input" type="file" name="csv_file" id="csv_file" accept=".csv">
+                            <span class="file-cta">
+                                <span class="file-icon">
+                                    <i class="fas fa-upload"></i>
                                 </span>
-                                <span class="file-name">
-                                    No file selected
+                                <span class="file-label">
+                                    Choose a file…
                                 </span>
-                            </label>
-                        </div>
-                        <p class="help">Upload a CSV file with your portfolio data.</p>
+                            </span>
+                            <span class="file-name">
+                                No file selected
+                            </span>
+                        </label>
                     </div>
+                    <p class="help">Upload a CSV file with your portfolio data.</p>
+                </div>
 
-                    <!-- Enhanced loading indicator with progress bar -->
-                    <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
-                        <div class="loading-container">
-                            <!-- Progress header with percentage -->
-                            <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-                                <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
-                                <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
-                            </div>
-                            
-                            <!-- Visual progress bar -->
-                            <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
-                            
-                            <!-- Status message and controls -->
-                            <div class="is-flex is-justify-content-center is-align-items-center" style="gap: 10px;">
-                                <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
-                                <button id="cancel-upload-btn" 
-                                    class="button is-small is-danger is-outlined" 
-                                    title="Cancel upload">
-                                    <span class="icon is-small">
-                                        <i class="fas fa-times"></i>
-                                    </span>
-                                    <span>Cancel</span>
-                                </button>
-                            </div>
+                <!-- Enhanced loading indicator with progress bar -->
+                <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
+                    <div class="loading-container">
+                        <!-- Progress header with percentage -->
+                        <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+                            <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
+                            <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
+                        </div>
+
+                        <!-- Visual progress bar -->
+                        <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
+
+                        <!-- Status message and controls -->
+                        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: 10px;">
+                            <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
+                            <button id="cancel-upload-btn"
+                                class="button is-small is-danger is-outlined"
+                                title="Cancel upload">
+                                <span class="icon is-small">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                                <span>Cancel</span>
+                            </button>
                         </div>
                     </div>
+                </div>
 
-                </form>
-            </div>
+            </form>
         </div>
     </div>
 </div>
@@ -536,110 +523,99 @@
 
 {% macro portfolio_management(url_for, portfolios) %}
 <div class="column is-6">
-    <div class="card mb-5" style="height: 100%; min-height: 250px; display: flex; flex-direction: column;">
-        <header class="card-header">
-            <p class="card-header-title">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-folder-open"></i>
-                    </span>
-                    <span>Portfolio Management</span>
-                </span>
-            </p>
-        </header>
-        <div class="card-content" style="flex-grow: 1; display: flex; flex-direction: column;">
-            <div class="content">
-                <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form">
-                    <!-- Row 1: Action dropdown and all dynamic fields in columns -->
-                    <div class="columns is-variable is-2 mb-4">
-                        <!-- Action Column -->
-                        <div class="column is-4">
-                            <div class="field">
-                                <label class="label">Action</label>
-                                <div class="control">
-                                    <div class="select is-fullwidth">
-                                        <select name="action" id="portfolio-action">
-                                            <option value="">Select action</option>
-                                            <option value="add">Add Portfolio</option>
-                                            <option value="rename">Rename Portfolio</option>
-                                            <option value="delete">Delete Portfolio</option>
-                                        </select>
-                                    </div>
+    <div class="mb-5">
+        <h3 class="subtitle is-6 has-text-weight-semibold mt-5 mb-4">Portfolio Management</h3>
+        <div>
+            <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form">
+                <!-- Row 1: Action dropdown and all dynamic fields in columns -->
+                <div class="columns is-variable is-2 mb-4">
+                    <!-- Action Column -->
+                    <div class="column is-4">
+                        <div class="field">
+                            <label class="label">Action</label>
+                            <div class="control">
+                                <div class="select is-fullwidth">
+                                    <select name="action" id="portfolio-action">
+                                        <option value="">Select action</option>
+                                        <option value="add">Add Portfolio</option>
+                                        <option value="rename">Rename Portfolio</option>
+                                        <option value="delete">Delete Portfolio</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Dynamic fields column -->
-                        <div class="column is-8">
-                            <div id="portfolio-action-fields">
-                                <!-- Add Portfolio fields -->
-                                <div id="add-portfolio-fields" class="is-hidden">
-                                    <div class="field">
-                                        <label class="label">Portfolio Name</label>
-                                        <div class="control">
-                                            <input class="input" type="text" name="add_portfolio_name"
-                                                placeholder="Enter portfolio name">
-                                        </div>
+                    <!-- Dynamic fields column -->
+                    <div class="column is-8">
+                        <div id="portfolio-action-fields">
+                            <!-- Add Portfolio fields -->
+                            <div id="add-portfolio-fields" class="is-hidden">
+                                <div class="field">
+                                    <label class="label">Portfolio Name</label>
+                                    <div class="control">
+                                        <input class="input" type="text" name="add_portfolio_name"
+                                            placeholder="Enter portfolio name">
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- Rename Portfolio fields -->
-                                <div id="rename-portfolio-fields" class="is-hidden">
-                                    <div class="columns is-variable is-2">
-                                        <div class="column is-half">
-                                            <div class="field">
-                                                <label class="label">Select Portfolio</label>
-                                                <div class="control">
-                                                    <div class="select is-fullwidth">
-                                                        <select name="old_name">
-                                                            <option value="">Select portfolio</option>
-                                                            {% for portfolio in portfolios %}
-                                                            <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                                            {% endfor %}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="column is-half">
-                                            <div class="field">
-                                                <label class="label">New Name</label>
-                                                <div class="control">
-                                                    <input class="input" type="text" name="new_name"
-                                                        placeholder="Enter new name">
+                            <!-- Rename Portfolio fields -->
+                            <div id="rename-portfolio-fields" class="is-hidden">
+                                <div class="columns is-variable is-2">
+                                    <div class="column is-half">
+                                        <div class="field">
+                                            <label class="label">Select Portfolio</label>
+                                            <div class="control">
+                                                <div class="select is-fullwidth">
+                                                    <select name="old_name">
+                                                        <option value="">Select portfolio</option>
+                                                        {% for portfolio in portfolios %}
+                                                        <option value="{{ portfolio }}">{{ portfolio }}</option>
+                                                        {% endfor %}
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="column is-half">
+                                        <div class="field">
+                                            <label class="label">New Name</label>
+                                            <div class="control">
+                                                <input class="input" type="text" name="new_name"
+                                                    placeholder="Enter new name">
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
+                            </div>
 
-                                <!-- Delete Portfolio fields -->
-                                <div id="delete-portfolio-fields" class="is-hidden">
-                                    <div class="columns is-variable is-2">
-                                        <div class="column">
-                                            <div class="field">
-                                                <label class="label">Select Portfolio</label>
-                                                <div class="control">
-                                                    <div class="select is-fullwidth">
-                                                        <select name="delete_portfolio_name">
-                                                            <option value="">Select portfolio</option>
-                                                            {% for portfolio in portfolios %}
-                                                            <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                                            {% endfor %}
-                                                        </select>
-                                                    </div>
+                            <!-- Delete Portfolio fields -->
+                            <div id="delete-portfolio-fields" class="is-hidden">
+                                <div class="columns is-variable is-2">
+                                    <div class="column">
+                                        <div class="field">
+                                            <label class="label">Select Portfolio</label>
+                                            <div class="control">
+                                                <div class="select is-fullwidth">
+                                                    <select name="delete_portfolio_name">
+                                                        <option value="">Select portfolio</option>
+                                                        {% for portfolio in portfolios %}
+                                                        <option value="{{ portfolio }}">{{ portfolio }}</option>
+                                                        {% endfor %}
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="column">
-                                            <div class="field">
-                                                <label class="label" style="visibility: hidden;">Placeholder</label>
-                                                <div class="notification is-warning is-light py-2 px-3"
-                                                    style="height: 2.25em; display: flex; align-items: center; margin: 0;">
-                                                    <p class="is-size-7 has-text-weight-medium" style="margin: 0;">
-                                                        Portfolio must be empty to delete.
-                                                    </p>
-                                                </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="field">
+                                            <label class="label" style="visibility: hidden;">Placeholder</label>
+                                            <div class="notification is-warning is-light py-2 px-3"
+                                                style="height: 2.25em; display: flex; align-items: center; margin: 0;">
+                                                <p class="is-size-7 has-text-weight-medium" style="margin: 0;">
+                                                    Portfolio must be empty to delete.
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -647,20 +623,20 @@
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Row 2: Apply button -->
-                    <div class="field">
-                        <div class="control">
-                            <button type="submit" class="button is-info" id="portfolio-action-btn" disabled>
-                                <span class="icon">
-                                    <i class="fas fa-check"></i>
-                                </span>
-                                <span>Apply</span>
-                            </button>
-                        </div>
+                <!-- Row 2: Apply button -->
+                <div class="field">
+                    <div class="control">
+                        <button type="submit" class="button is-info" id="portfolio-action-btn" disabled>
+                            <span class="icon">
+                                <i class="fas fa-check"></i>
+                            </span>
+                            <span>Apply</span>
+                        </button>
                     </div>
-                </form>
-            </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>

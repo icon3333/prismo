@@ -15,23 +15,94 @@
     <div id="analysisContent" style="display: none;">
 
 
-        <!-- Portfolio Breakdown Section -->
+        <!-- Portfolio Selection Section -->
         <section class="mb-6">
-            <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
-                <h2 class="section-title">Portfolio Breakdown</h2>
-                <div class="buttons">
-                    <button id="expandAllPortfolios" class="button is-small is-outlined">
-                        <span class="icon"><i class="fas fa-expand-alt"></i></span>
-                        <span>Expand All</span>
-                    </button>
-                    <button id="collapseAllPortfolios" class="button is-small is-outlined">
-                        <span class="icon"><i class="fas fa-compress-alt"></i></span>
-                        <span>Collapse All</span>
-                    </button>
+            <div class="box">
+                <h2 class="section-title mb-4">Portfolio Analysis</h2>
+
+                <!-- Portfolio Dropdown -->
+                <div class="field">
+                    <label class="label">Select Portfolio</label>
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select id="portfolioSelector">
+                                <option value="">-- Loading portfolios --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Statistics (hidden initially) -->
+                <div id="portfolioSummary" style="display: none;" class="mt-4">
+                    <div class="columns is-mobile">
+                        <div class="column has-text-centered">
+                            <p class="heading">Portfolio</p>
+                            <p class="title is-5" id="summaryPortfolioName">-</p>
+                        </div>
+                        <div class="column has-text-centered">
+                            <p class="heading">Total Value</p>
+                            <p class="title is-5" id="summaryTotalValue">-</p>
+                        </div>
+                        <div class="column has-text-centered">
+                            <p class="heading">Holdings</p>
+                            <p class="title is-5" id="summaryHoldings">-</p>
+                        </div>
+                        <div class="column has-text-centered">
+                            <p class="heading">Last Updated</p>
+                            <p class="title is-5" id="summaryLastUpdated">-</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div id="portfolioSections">
-                <!-- Portfolio sections will be added here dynamically -->
+        </section>
+
+        <!-- Portfolio Tables (hidden initially) -->
+        <section id="portfolioTables" class="mb-6" style="display: none;">
+            <div class="columns">
+                <!-- Left: Stock Allocation -->
+                <div class="column is-6">
+                    <div class="box">
+                        <h3 class="subtitle is-5 mb-3">Stock Allocation</h3>
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped is-hoverable" data-table-id="stockTable">
+                                <thead>
+                                    <tr>
+                                        <th class="is-sortable" data-sort="string">Company</th>
+                                        <th class="is-sortable" data-sort="string">Category</th>
+                                        <th class="is-sortable" data-sort="number">%</th>
+                                        <th class="is-sortable" data-sort="number">Current Value</th>
+                                        <th class="is-sortable" data-sort="number">Total Invested</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stockTableBody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Category Allocation -->
+                <div class="column is-6">
+                    <div class="box">
+                        <h3 class="subtitle is-5 mb-3">Category Allocation</h3>
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped is-hoverable" data-table-id="categoryTable">
+                                <thead>
+                                    <tr>
+                                        <th class="is-sortable" data-sort="string">Category</th>
+                                        <th class="is-sortable" data-sort="number">% of Portfolio</th>
+                                        <th class="is-sortable" data-sort="number">Current Value</th>
+                                        <th class="is-sortable" data-sort="number">Total Invested</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categoryTableBody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -106,18 +177,85 @@
                 return;
             }
 
-            // Store data
+            // State management
             let portfolios = [];
-            let portfolioData = [];
-            let selectedPortfolioIds = [];
-            let portfolioCharts = {};
+            let selectedPortfolioId = null;
+            let selectedPortfolioIds = [];  // Needed by heatmap
+            let currentPortfolioData = null;
+            let expandedCategories = new Set();
 
-            // Make portfolioData available globally for the components
-            window.portfolioData = portfolioData;
+            // Make portfolioData available globally for heatmap
+            window.portfolioData = [];
 
-            // Charts
-            let portfolioAllocationsChart = null;
-            let companyAllocationsChart = null;
+            // Persistent sort state (replaces WeakMap for persistence across page loads)
+            let persistedSortState = {
+                stockTable: { column: null, direction: 'asc' },
+                categoryTable: { column: null, direction: 'asc' }
+            };
+
+            // Debounce utility for saving state
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+
+            // Save sort state to server (debounced)
+            const saveSortState = debounce(async function() {
+                try {
+                    await fetch('/portfolio/api/state', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            page: 'analyse',
+                            tableSortState: JSON.stringify(persistedSortState)
+                        })
+                    });
+                    console.log('Sort state saved successfully');
+                } catch (error) {
+                    console.warn('Failed to save sort state:', error);
+                }
+            }, 500);
+
+            // Load sort state from server
+            async function loadSortState() {
+                try {
+                    const response = await fetch('/portfolio/api/state?page=analyse');
+                    if (!response.ok) return;
+                    const state = await response.json();
+                    if (state.tableSortState) {
+                        persistedSortState = JSON.parse(state.tableSortState);
+                        console.log('Loaded sort state:', persistedSortState);
+                    }
+                } catch (error) {
+                    console.warn('Failed to load sort state:', error);
+                }
+            }
+
+            // Apply saved sort state to a table
+            function applySortState(table) {
+                const tableId = table.dataset.tableId;
+                if (!tableId || !persistedSortState[tableId]) return;
+
+                const savedState = persistedSortState[tableId];
+                if (!savedState.column) return;
+
+                const headers = table.querySelectorAll('th.is-sortable');
+                for (const header of headers) {
+                    const columnName = header.childNodes[0].textContent.trim();
+                    if (columnName === savedState.column) {
+                        // Apply sort
+                        sortTableByHeader(table, header, savedState.direction);
+                        break;
+                    }
+                }
+            }
 
             // Format functions
             function formatCurrency(value) {
@@ -135,61 +273,113 @@
             window.formatCurrency = formatCurrency;
             window.formatPercentage = formatPercentage;
 
-            // Table sorting functionality
-            let currentSortColumn = '';
-            let currentSortDirection = 'asc';
-
+            // Table sorting functionality with persistent state
             function initTableSorting() {
-                document.querySelectorAll('th.is-sortable').forEach(header => {
-                    // Add sort icon span if it doesn't exist but keep it hidden
-                    if (!header.querySelector('.sort-icon')) {
-                        const iconSpan = document.createElement('span');
-                        iconSpan.className = 'sort-icon icon is-small ml-1';
-                        iconSpan.style.display = 'none';
-                        iconSpan.innerHTML = '<i class="fas fa-sort"></i>';
-                        header.appendChild(iconSpan);
+                console.log('DEBUG: initTableSorting() called');
+                document.querySelectorAll('table[data-table-id]').forEach(table => {
+                    const tableId = table.dataset.tableId;
+                    const headers = table.querySelectorAll('th.is-sortable');
+
+                    // Skip if already initialized
+                    if (table.dataset.sortingInitialized === 'true') {
+                        applySortState(table);
+                        return;
+                    }
+                    table.dataset.sortingInitialized = 'true';
+
+                    // Initialize state for this table if not exists
+                    if (!persistedSortState[tableId]) {
+                        persistedSortState[tableId] = { column: null, direction: 'asc' };
                     }
 
-                    header.addEventListener('click', function () {
-                        const table = this.closest('table');
-                        const tbody = table.querySelector('tbody');
-                        const rows = Array.from(tbody.querySelectorAll('tr:not(.category-companies)'));
-                        const index = Array.from(this.parentNode.children).indexOf(this);
-                        const sortType = this.dataset.sort;
-                        const columnName = this.childNodes[0].textContent.trim();
+                    // Use event delegation: attach ONE listener to the table
+                    table.addEventListener('click', function(e) {
+                        const header = e.target.closest('th.is-sortable');
+                        if (!header) return;
 
-                        // Determine sort direction
-                        let isAsc = true;
-                        if (currentSortColumn === columnName) {
-                            isAsc = currentSortDirection === 'desc'; // Toggle direction
+                        const columnName = header.childNodes[0].textContent.trim();
+                        const currentState = persistedSortState[tableId];
+
+                        // Determine new direction
+                        let newDirection = 'asc';
+                        if (currentState.column === columnName) {
+                            newDirection = currentState.direction === 'asc' ? 'desc' : 'asc';
                         }
 
-                        // Update global sort state
-                        currentSortColumn = columnName;
-                        currentSortDirection = isAsc ? 'asc' : 'desc';
+                        // Update persisted state
+                        persistedSortState[tableId] = {
+                            column: columnName,
+                            direction: newDirection
+                        };
 
-                        // Sort rows
-                        rows.sort((a, b) => {
-                            const cellA = a.querySelectorAll('td')[index].textContent.trim();
-                            const cellB = b.querySelectorAll('td')[index].textContent.trim();
+                        // Apply sort
+                        sortTableByHeader(table, header, newDirection);
 
-                            if (sortType === 'number') {
-                                // Extract numeric value from formatted strings (remove currency symbols, commas, % signs)
-                                const numA = parseFloat(cellA.replace(/[€%,]/g, ''));
-                                const numB = parseFloat(cellB.replace(/[€%,]/g, ''));
-                                return isAsc ? numA - numB : numB - numA;
-                            } else {
-                                // String comparison
-                                return isAsc ?
-                                    cellA.localeCompare(cellB) :
-                                    cellB.localeCompare(cellA);
-                            }
-                        });
-
-                        // Reinsert rows in sorted order
-                        rows.forEach(row => tbody.appendChild(row));
+                        // Save state to server
+                        saveSortState();
                     });
+
+                    // Apply saved state after initialization
+                    applySortState(table);
                 });
+
+                // DEBUG: Log initialization status
+                const allTables = document.querySelectorAll('table[data-table-id]');
+                console.log(`DEBUG initTableSorting: Found ${allTables.length} tables with data-table-id`);
+            }
+
+            // Sort a table by clicking a header
+            function sortTableByHeader(table, header, direction) {
+                const tbody = table.querySelector('tbody');
+                const tableId = table.dataset.tableId;
+                // Exclude both category-company (static table) and category-companies (dynamic table)
+                const rows = Array.from(tbody.querySelectorAll('tr:not(.category-company):not(.category-companies)'));
+                const index = Array.from(header.parentNode.children).indexOf(header);
+                const sortType = header.dataset.sort || 'string';
+                const isAsc = direction === 'asc';
+
+                // Clear previous sort indicators
+                table.querySelectorAll('th.is-sortable').forEach(th => {
+                    th.classList.remove('is-sorted-asc', 'is-sorted-desc');
+                });
+
+                // Add current sort indicator
+                header.classList.add(isAsc ? 'is-sorted-asc' : 'is-sorted-desc');
+
+                // Sort rows
+                rows.sort((a, b) => {
+                    const cellA = a.querySelectorAll('td')[index]?.textContent.trim() || '';
+                    const cellB = b.querySelectorAll('td')[index]?.textContent.trim() || '';
+
+                    if (sortType === 'number') {
+                        const numA = parseFloat(cellA.replace(/[€%,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+                        const numB = parseFloat(cellB.replace(/[€%,]/g, '').replace(/\./g, '').replace(',', '.')) || 0;
+                        return isAsc ? numA - numB : numB - numA;
+                    } else {
+                        return isAsc ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+                    }
+                });
+
+                // For category table, need to keep company rows with their categories
+                if (tableId === 'categoryTable') {
+                    rows.forEach(categoryRow => {
+                        const categoryName = categoryRow.dataset.category;
+                        const portfolioId = categoryRow.dataset.portfolioId;
+                        tbody.appendChild(categoryRow);
+
+                        // Find and append related company rows
+                        if (categoryName) {
+                            // Handle both static table (.category-company) and dynamic table (.category-companies)
+                            let selector = portfolioId
+                                ? `.category-companies[data-parent-category="${categoryName}"][data-portfolio-id="${portfolioId}"], .category-company[data-parent-category="${categoryName}"][data-portfolio-id="${portfolioId}"]`
+                                : `.category-company[data-parent-category="${categoryName}"]`;
+                            const companyRows = tbody.querySelectorAll(selector);
+                            companyRows.forEach(row => tbody.appendChild(row));
+                        }
+                    });
+                } else {
+                    rows.forEach(row => tbody.appendChild(row));
+                }
             }
 
             // Initialize expandable portfolio sections
@@ -232,6 +422,297 @@
                 }
             }
 
+            // NEW INITIALIZATION LOGIC - Portfolio Dropdown Selector
+            // ======================================================
+
+            async function initializePage() {
+                try {
+                    // Load saved sort state first
+                    await loadSortState();
+
+                    // Load portfolios for dropdown
+                    await loadPortfolios();
+
+                    // Try to restore last selected portfolio
+                    const savedPortfolioId = await loadSavedPortfolioSelection();
+
+                    if (savedPortfolioId) {
+                        document.getElementById('portfolioSelector').value = savedPortfolioId;
+                        await loadPortfolioData(savedPortfolioId);
+                    }
+
+                    // Hide loading, show content
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    document.getElementById('analysisContent').style.display = 'block';
+
+                    // Initialize concentration heatmap (always visible)
+                    // Note: Will show empty until portfolio is selected
+                    selectedPortfolioIds = [];  // Initialize as empty array
+                    initializeRiskBreakdown();
+                } catch (error) {
+                    console.error('Error initializing page:', error);
+                    showError('Failed to load portfolio data. Please try again.');
+                }
+            }
+
+            async function loadPortfolios() {
+                const response = await fetch('/portfolio/api/portfolios?include_ids=true&has_companies=true');
+                if (!response.ok) throw new Error('Failed to fetch portfolios');
+
+                portfolios = await response.json();
+
+                const selector = document.getElementById('portfolioSelector');
+                selector.innerHTML = '<option value="">-- Select a portfolio --</option>';
+
+                portfolios.forEach(portfolio => {
+                    const option = document.createElement('option');
+                    option.value = portfolio.id;
+                    option.textContent = portfolio.name;
+                    selector.appendChild(option);
+                });
+
+                selector.addEventListener('change', handlePortfolioChange);
+            }
+
+            async function handlePortfolioChange(event) {
+                const portfolioId = event.target.value;
+                if (!portfolioId) {
+                    hidePortfolioDisplay();
+                    return;
+                }
+                await loadPortfolioData(portfolioId);
+                await savePortfolioSelection(portfolioId);
+            }
+
+            async function loadPortfolioData(portfolioId) {
+                try {
+                    showLoadingState();
+
+                    const response = await fetch(`/portfolio/api/portfolio_data/${portfolioId}`);
+                    if (!response.ok) {
+                        if (response.status === 404) throw new Error('Portfolio not found');
+                        throw new Error('Failed to fetch portfolio data');
+                    }
+
+                    currentPortfolioData = await response.json();
+                    renderPortfolioDisplay();
+
+                    // Update heatmap with this portfolio's data
+                    selectedPortfolioIds = [currentPortfolioData.portfolio_id];  // Update selected portfolio IDs
+                    window.portfolioData = [{
+                        id: currentPortfolioData.portfolio_id,
+                        name: currentPortfolioData.portfolio_name,
+                        companies: currentPortfolioData.companies
+                    }];
+                    initializeRiskBreakdown();
+
+                } catch (error) {
+                    console.error('Error loading portfolio:', error);
+                    showError(`Failed to load portfolio: ${error.message}`);
+                }
+            }
+
+            function renderPortfolioDisplay() {
+                if (!currentPortfolioData) return;
+
+                updateSummaryBox();
+                renderStockTable();
+                renderCategoryTable();
+
+                document.getElementById('portfolioSummary').style.display = 'block';
+                document.getElementById('portfolioTables').style.display = 'block';
+
+                hideLoadingState();  // Reset opacity and pointer-events
+                initTableSorting();
+            }
+
+            function updateSummaryBox() {
+                document.getElementById('summaryPortfolioName').textContent = currentPortfolioData.portfolio_name;
+                document.getElementById('summaryTotalValue').textContent = formatCurrency(currentPortfolioData.total_value);
+                document.getElementById('summaryHoldings').textContent = currentPortfolioData.num_holdings;
+
+                const lastUpdated = currentPortfolioData.last_updated
+                    ? new Date(currentPortfolioData.last_updated).toLocaleDateString()
+                    : 'Never';
+                document.getElementById('summaryLastUpdated').textContent = lastUpdated;
+            }
+
+            function renderStockTable() {
+                const tbody = document.getElementById('stockTableBody');
+                tbody.innerHTML = '';
+
+                if (!currentPortfolioData.companies || currentPortfolioData.companies.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="has-text-centered">No holdings</td></tr>';
+                    return;
+                }
+
+                currentPortfolioData.companies.forEach(company => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${escapeHtml(company.name)}</td>
+                        <td>${escapeHtml(company.category || 'Uncategorized')}</td>
+                        <td>${formatPercentage(company.percentage)}</td>
+                        <td>${formatCurrency(company.current_value)}</td>
+                        <td>${formatCurrency(company.total_invested || 0)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            function renderCategoryTable() {
+                const tbody = document.getElementById('categoryTableBody');
+                tbody.innerHTML = '';
+
+                if (!currentPortfolioData.categories || currentPortfolioData.categories.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="has-text-centered">No categories</td></tr>';
+                    return;
+                }
+
+                currentPortfolioData.categories.forEach(category => {
+                    const isExpanded = expandedCategories.has(category.name);
+                    const iconClass = isExpanded ? 'fa-minus-circle' : 'fa-plus-circle';
+
+                    // Category row
+                    const categoryRow = document.createElement('tr');
+                    categoryRow.className = 'category-row';
+                    categoryRow.dataset.category = category.name;  // Add for sorting
+                    categoryRow.innerHTML = `
+                        <td>
+                            <span class="icon-text">
+                                <span class="icon toggle-category" data-category="${escapeHtml(category.name)}" style="cursor: pointer;">
+                                    <i class="fas ${iconClass}"></i>
+                                </span>
+                                <span>${escapeHtml(category.name)}</span>
+                            </span>
+                        </td>
+                        <td>${formatPercentage(category.percentage)}</td>
+                        <td>${formatCurrency(category.total_value)}</td>
+                        <td>${formatCurrency(category.total_invested)}</td>
+                    `;
+                    tbody.appendChild(categoryRow);
+
+                    // Make entire row clickable, not just the icon
+                    categoryRow.style.cursor = 'pointer';
+                    categoryRow.addEventListener('click', (e) => {
+                        // Don't toggle if clicking on a link or button inside the row
+                        if (e.target.closest('a, button')) return;
+                        console.log('DEBUG: Category row clicked:', category.name);
+                        toggleCategoryExpansion(category.name);
+                    });
+
+                    // Company rows (expandable)
+                    category.companies.forEach(company => {
+                        const companyRow = document.createElement('tr');
+                        companyRow.className = 'category-company';
+                        companyRow.dataset.parentCategory = category.name;
+                        companyRow.style.display = isExpanded ? '' : 'none';
+
+                        const catPercent = (company.current_value / category.total_value * 100).toFixed(1);
+
+                        companyRow.innerHTML = `
+                            <td class="pl-5">
+                                <span class="is-size-7">${escapeHtml(company.name)}</span>
+                            </td>
+                            <td>
+                                <span class="is-size-7">
+                                    ${catPercent}%
+                                    <span class="has-text-grey-light">(${company.percentage.toFixed(1)}% of portfolio)</span>
+                                </span>
+                            </td>
+                            <td><span class="is-size-7">${formatCurrency(company.current_value)}</span></td>
+                            <td><span class="is-size-7">${formatCurrency(company.total_invested || 0)}</span></td>
+                        `;
+                        tbody.appendChild(companyRow);
+                    });
+                });
+            }
+
+            function toggleCategoryExpansion(categoryName) {
+                if (expandedCategories.has(categoryName)) {
+                    expandedCategories.delete(categoryName);
+                } else {
+                    expandedCategories.add(categoryName);
+                }
+                renderCategoryTable();
+                initTableSorting();  // Reinitialize sorting after table rebuild
+            }
+
+            async function savePortfolioSelection(portfolioId) {
+                try {
+                    await fetch('/portfolio/api/state', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            page: 'analyse',
+                            selectedPortfolioId: String(portfolioId)
+                        })
+                    });
+                } catch (error) {
+                    console.warn('Failed to save selection:', error);
+                }
+            }
+
+            async function loadSavedPortfolioSelection() {
+                try {
+                    const response = await fetch('/portfolio/api/state?page=analyse');
+                    if (!response.ok) return null;
+                    const state = await response.json();
+                    return state.selectedPortfolioId || null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function hidePortfolioDisplay() {
+                document.getElementById('portfolioSummary').style.display = 'none';
+                document.getElementById('portfolioTables').style.display = 'none';
+                currentPortfolioData = null;
+            }
+
+            function showLoadingState() {
+                const tables = document.getElementById('portfolioTables');
+                if (tables) {
+                    tables.style.opacity = '0.5';
+                    tables.style.pointerEvents = 'none';
+                }
+            }
+
+            function hideLoadingState() {
+                const tables = document.getElementById('portfolioTables');
+                if (tables) {
+                    tables.style.opacity = '';
+                    tables.style.pointerEvents = '';
+                }
+            }
+
+            function showError(message) {
+                document.getElementById('loadingIndicator').innerHTML = `
+                    <div class="has-text-centered">
+                        <p class="has-text-danger mb-3">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            ${escapeHtml(message)}
+                        </p>
+                        <button class="button is-info" onclick="location.reload()">Try Again</button>
+                    </div>
+                `;
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            // END NEW INITIALIZATION LOGIC
+            // ======================================================
+
+            // START NEW IMPLEMENTATION - Initialize with dropdown selector
+            console.log('Initializing Portfolio Analysis with dropdown selector...');
+            initializePage();
+
+            // OLD IMPLEMENTATION BELOW - KEEPING FOR REFERENCE BUT NOT EXECUTING
+            // ======================================================================
+            /*
             // Load data and initialize
             console.log('Starting data loading process...');
 
@@ -256,7 +737,8 @@
 
             Promise.all([
                 fetchPortfolios(),
-                fetchPortfolioData()
+                fetchPortfolioData(),
+                loadSortState() // Load saved sort preferences
             ]).then(([portfoliosList, data]) => {
                 clearTimeout(loadingTimeout); // Clear the timeout since we got a response
                 console.log('Data loaded successfully, processing...');
@@ -370,6 +852,9 @@
             </div>
         `;
             });
+            */
+            // END OLD IMPLEMENTATION - COMMENTED OUT
+            // ======================================================
 
             // Fetch list of portfolios with their IDs
             async function fetchPortfolios() {
@@ -931,7 +1416,7 @@
                     companyTableColumn.className = 'column is-6';
                     companyTableColumn.innerHTML = `
                 <div class="table-container" style="height: 100%; display: flex; flex-direction: column;">
-                    <table class="table is-fullwidth is-striped is-hoverable">
+                    <table class="table is-fullwidth is-striped is-hoverable" data-table-id="companyTable">
                         <thead>
                             <tr>
                                 <th class="is-sortable company-column" data-sort="string">Company</th>
@@ -953,7 +1438,7 @@
                     categoryTableColumn.className = 'column is-6';
                     categoryTableColumn.innerHTML = `
                 <div class="table-container" style="height: calc(100% - 40px); display: flex; flex-direction: column;">
-                    <table class="table is-fullwidth is-striped is-hoverable">
+                    <table class="table is-fullwidth is-striped is-hoverable" data-table-id="categoryTable">
                         <thead>
                             <tr>
                                 <th class="is-sortable company-column" data-sort="string">Category</th>
@@ -1961,33 +2446,30 @@
                 // Implementation of initializeExpandableRiskSections function
             }
 
-            // Add event listeners to toggle category companies
+            // Add event listeners to toggle category companies - ENTIRE ROW CLICKABLE
             document.addEventListener('click', function (e) {
-                // Check if click was on or inside a toggle-companies element
-                const toggleIcon = e.target.closest('.toggle-companies');
+                // Check if click was on or inside a category row
+                const categoryRow = e.target.closest('.category-row');
+                if (!categoryRow) return;
+
+                const categoryName = categoryRow.dataset.category;
+                const portfolioId = categoryRow.dataset.portfolioId;
+
+                // Find the toggle icon within this row
+                const toggleIcon = categoryRow.querySelector('.toggle-companies');
                 if (!toggleIcon) return;
 
-                const categoryName = toggleIcon.dataset.category;
-                const portfolioId = toggleIcon.dataset.portfolioId;
-
-                // Find the category row
-                const categoryRow = toggleIcon.closest('.category-row');
-
-                // Toggle icon
                 const icon = toggleIcon.querySelector('i');
                 const isExpanding = icon.classList.contains('fa-plus-circle');
 
+                // Toggle icon
                 if (isExpanding) {
                     icon.classList.remove('fa-plus-circle');
                     icon.classList.add('fa-minus-circle');
-
-                    // Highlight the row when expanded
                     categoryRow.classList.add('is-selected');
                 } else {
                     icon.classList.remove('fa-minus-circle');
                     icon.classList.add('fa-plus-circle');
-
-                    // Remove highlight when collapsed
                     categoryRow.classList.remove('is-selected');
                 }
 
@@ -1998,25 +2480,17 @@
 
                 companyRows.forEach(row => {
                     if (isExpanding) {
-                        // First make it visible but with 0 height
                         row.classList.remove('is-hidden');
                         row.style.maxHeight = '0';
                         row.style.opacity = '0';
-
-                        // Force a reflow
-                        void row.offsetHeight;
-
-                        // Then animate to full height
+                        void row.offsetHeight; // Force reflow
                         row.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                         row.style.maxHeight = '100px';
                         row.style.opacity = '1';
                     } else {
-                        // Animate to 0 height
                         row.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
                         row.style.maxHeight = '0';
                         row.style.opacity = '0';
-
-                        // After animation, hide it
                         setTimeout(() => {
                             row.classList.add('is-hidden');
                             row.style.maxHeight = '';
@@ -2027,52 +2501,5 @@
             });
         });
     </script>
-    <style>
-        /* Category row styling */
-        .category-row {
-            background-color: rgba(0, 0, 0, 0.03);
-            font-weight: 500;
-            transition: background-color 0.2s ease;
-        }
-
-        .category-row.is-selected {
-            background-color: rgba(50, 115, 220, 0.08);
-        }
-
-        .toggle-companies {
-            cursor: pointer;
-            color: #3273dc;
-            transition: transform 0.2s ease;
-        }
-
-        .toggle-companies:hover {
-            transform: scale(1.2);
-        }
-
-        tr.category-companies {
-            background-color: rgba(0, 0, 0, 0.02);
-            overflow: hidden;
-        }
-
-        tr.category-companies td {
-            border-top: none;
-            padding-top: 0.4em;
-            padding-bottom: 0.4em;
-        }
-
-        /* Helper classes for the dual percentage display */
-        .has-text-grey-light {
-            color: #8c9b9d !important;
-            font-size: 0.9em;
-            margin-left: 0.3em;
-        }
-
-        /* Chart container sizing */
-        .chart-large-container,
-        .chart-medium-container {
-            width: 100%;
-            height: 400px;
-            position: relative;
-        }
-    </style>
+    <!-- Styles moved to static/css/custom.css for consistency -->
     {% endblock %}

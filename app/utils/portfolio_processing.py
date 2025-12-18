@@ -28,8 +28,28 @@ def get_thread_db():
 def close_thread_db():
     """Close thread-local database connection."""
     if hasattr(_thread_local_db, 'connection'):
-        _thread_local_db.connection.close()
-        del _thread_local_db.connection
+        try:
+            _thread_local_db.connection.close()
+        except Exception as e:
+            logger.warning(f"Error closing thread-local DB connection: {e}")
+        finally:
+            del _thread_local_db.connection
+
+
+class ThreadDBContext:
+    """Context manager for thread-local database connections.
+
+    Ensures database connections are properly closed even if exceptions occur.
+    Usage:
+        with ThreadDBContext() as db:
+            db.execute(...)
+    """
+    def __enter__(self):
+        return get_thread_db()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        close_thread_db()
+        return False  # Don't suppress exceptions
 
 # Progress update throttling
 _last_progress_update = {}  # job_id -> timestamp
@@ -664,17 +684,12 @@ def process_csv_data(account_id, file_content):
                 removed_details = removed_details[:97] + '...'
             message += f". <strong>Removed {len(positions_removed)} companies</strong> that had zero shares or were not in the CSV: {removed_details}"
 
-        # Add protected identifiers information if any were protected
-        protected_count = results.get('protected_identifiers_count', 0)
-        if protected_count > 0:
-            message += f". <strong>Protected {protected_count} manually edited identifier{'s' if protected_count != 1 else ''}</strong>"
-
+        # Note: Legacy function doesn't track protected identifiers (see refactored version)
         return True, message, {
             'added': positions_added,
             'updated': positions_updated,
             'removed': positions_removed,
             'failed_prices': failed_prices,
-            'protected_identifiers_count': protected_count,
         }
 
     except Exception as e:

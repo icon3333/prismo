@@ -8,7 +8,7 @@ from app.db_manager import query_db
 from app.decorators import require_auth
 from app.cache import cache
 from app.routes.portfolio_api import (
-    get_portfolios_api, get_portfolio_data_api, manage_state,
+    get_portfolios_api, get_portfolio_data_api, get_single_portfolio_data_api, manage_state,
     get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
@@ -286,3 +286,5 @@ portfolio_bp.add_url_rule('/api/portfolio_metrics',
                           view_func=get_portfolio_metrics, methods=['GET'])
 portfolio_bp.add_url_rule('/api/investment_type_distribution',
                           view_func=get_investment_type_distribution, methods=['GET'])
+portfolio_bp.add_url_rule('/api/portfolio_data/<int:portfolio_id>',
+                          view_func=get_single_portfolio_data_api, methods=['GET'])

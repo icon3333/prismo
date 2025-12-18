@@ -3,6 +3,14 @@
  * Handles file uploads, portfolio management, and data visualization
  */
 
+// Debug mode - set to true for development, false for production
+const DEBUG = false;
+
+// Helper function for conditional debug logging
+function debugLog(...args) {
+    if (DEBUG) debugLog(...args);
+}
+
 // Centralized Progress Manager - handles all progress tracking
 const ProgressManager = {
     elements: {
@@ -25,7 +33,7 @@ const ProgressManager = {
     },
 
     init() {
-        console.log('ProgressManager: Initializing...');
+        debugLog('ProgressManager: Initializing...');
         
         // Initialize price fetch elements
         this.elements.priceProgressElement = document.getElementById('price-fetch-progress');
@@ -39,7 +47,7 @@ const ProgressManager = {
         this.elements.uploadProgressBar = document.getElementById('upload-progress-bar');
         this.elements.uploadStatusMessage = document.getElementById('upload-status-message');
 
-        console.log('ProgressManager: Elements found:', {
+        debugLog('ProgressManager: Elements found:', {
             priceProgressElement: !!this.elements.priceProgressElement,
             priceProgressPercentage: !!this.elements.priceProgressPercentage,
             priceProgressBar: !!this.elements.priceProgressBar,
@@ -52,8 +60,8 @@ const ProgressManager = {
         
         // Debug: Log actual element visibility
         if (this.elements.priceProgressElement) {
-            console.log('Progress element display style:', this.elements.priceProgressElement.style.display);
-            console.log('Progress element computed style:', window.getComputedStyle(this.elements.priceProgressElement).display);
+            debugLog('Progress element display style:', this.elements.priceProgressElement.style.display);
+            debugLog('Progress element computed style:', window.getComputedStyle(this.elements.priceProgressElement).display);
         }
 
         if (!this.elements.priceProgressElement && !this.elements.csvUploadIndicator) {
@@ -72,7 +80,7 @@ const ProgressManager = {
     async checkForOngoingUploads() {
         // For simplified upload system, we don't need to check for ongoing uploads
         // since processing happens synchronously and completes immediately
-        console.log('Simplified upload system - no background uploads to check');
+        debugLog('Simplified upload system - no background uploads to check');
         
         // Clear any stale progress data from old system
         try {
@@ -80,9 +88,9 @@ const ProgressManager = {
                 method: 'DELETE',
                 credentials: 'include'
             });
-            console.log('Cleared any stale progress data from previous system');
+            debugLog('Cleared any stale progress data from previous system');
         } catch (error) {
-            console.log('No stale progress data to clear');
+            debugLog('No stale progress data to clear');
         }
     },
 
@@ -90,18 +98,18 @@ const ProgressManager = {
         this.currentJob.type = jobType;
         this.currentJob.startTime = Date.now();
 
-        console.log(`ProgressManager: Showing progress for ${jobType}`);
+        debugLog(`ProgressManager: Showing progress for ${jobType}`);
 
         if (jobType === 'simple_csv_upload' && this.elements.csvUploadIndicator) {
-            console.log('ProgressManager: Displaying CSV upload indicator');
+            debugLog('ProgressManager: Displaying CSV upload indicator');
             this.elements.csvUploadIndicator.style.display = 'block';
         } else if ((jobType === 'price_fetch' || jobType === 'selected_price_fetch') && this.elements.priceProgressElement) {
-            console.log('ProgressManager: Displaying price fetch progress element');
+            debugLog('ProgressManager: Displaying price fetch progress element');
             this.elements.priceProgressElement.style.display = 'block';
             this.elements.priceProgressElement.style.visibility = 'visible';
             this.elements.priceProgressElement.style.opacity = '1';
             this.elements.priceProgressElement.dataset.processing = 'true';
-            console.log('ProgressManager: Progress element visibility set:', {
+            debugLog('ProgressManager: Progress element visibility set:', {
                 display: this.elements.priceProgressElement.style.display,
                 visibility: this.elements.priceProgressElement.style.visibility,
                 opacity: this.elements.priceProgressElement.style.opacity
@@ -127,7 +135,7 @@ const ProgressManager = {
     setProgress(percentage, message = null, current = 0, total = 0) {
         const jobType = this.currentJob.type;
 
-        console.log(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''} (${current}/${total})`);
+        debugLog(`ProgressManager: Setting progress ${percentage}% for ${jobType}${message ? ` - ${message}` : ''} (${current}/${total})`);
 
         if (jobType === 'simple_csv_upload') {
             // Handle simple CSV upload progress
@@ -171,7 +179,7 @@ const ProgressManager = {
             return;
         } else if (jobType === 'price_fetch' || jobType === 'selected_price_fetch') {
             // Handle price fetch progress (both all and selected)
-            console.log('ProgressManager: Updating price progress UI elements', {
+            debugLog('ProgressManager: Updating price progress UI elements', {
                 hasProgressElement: !!this.elements.priceProgressElement,
                 hasProgressBar: !!this.elements.priceProgressBar,
                 hasProgressText: !!this.elements.priceProgressText,
@@ -187,7 +195,7 @@ const ProgressManager = {
                 this.elements.priceProgressBar.value = percentage;
                 // Add smooth transition effect
                 this.elements.priceProgressBar.style.transition = 'value 0.3s ease';
-                console.log('ProgressManager: Updated progress bar to', percentage + '%');
+                debugLog('ProgressManager: Updated progress bar to', percentage + '%');
             } else {
                 console.warn('ProgressManager: priceProgressBar element not found for price progress');
             }
@@ -195,7 +203,7 @@ const ProgressManager = {
             // Update company count text
             if (this.elements.priceProgressText) {
                 this.elements.priceProgressText.textContent = `${current} / ${total} companies updated`;
-                console.log('ProgressManager: Updated progress text to', `${current} / ${total} companies updated`);
+                debugLog('ProgressManager: Updated progress text to', `${current} / ${total} companies updated`);
             } else {
                 console.warn('ProgressManager: priceProgressText element not found for progress text');
             }
@@ -252,7 +260,7 @@ const ProgressManager = {
             }
 
             const data = await response.json();
-            console.log("Price fetch progress:", data);
+            debugLog("Price fetch progress:", data);
 
             const percentage = data.percentage || 0;
             const current = data.current || 0;
@@ -282,8 +290,8 @@ const ProgressManager = {
             }
 
             const data = await response.json();
-            console.log("CSV upload progress:", data);
-            console.log(`DEBUG: Received status='${data.status}', message='${data.message}', job_id='${data.job_id}'`);
+            debugLog("CSV upload progress:", data);
+            debugLog(`DEBUG: Received status='${data.status}', message='${data.message}', job_id='${data.job_id}'`);
 
                             // Check for stuck jobs - if a job has been running for more than 5 minutes without progress, consider it stuck
             if (data.status === 'processing' && this.currentJob.startTime) {
@@ -324,17 +332,17 @@ const ProgressManager = {
                     
                     // Instead of reloading, refresh data via API calls - prevents browser refresh
                     if (typeof window.portfolioTableApp !== 'undefined' && window.portfolioTableApp.loadData) {
-                        console.log('Refreshing portfolio data after successful upload...');
+                        debugLog('Refreshing portfolio data after successful upload...');
                         window.portfolioTableApp.loadData();
                     } else {
-                        console.log('Portfolio app not found, falling back to page reload');
+                        debugLog('Portfolio app not found, falling back to page reload');
                         window.location.reload();
                     }
                     
                     // Reset the upload form
                     const form = document.querySelector('form[action*="upload"]');
                     if (form && typeof FileUploadHandler !== 'undefined' && FileUploadHandler.resetForm) {
-                        console.log('Form reset completed');
+                        debugLog('Form reset completed');
                         FileUploadHandler.resetForm(form);
                     }
                 }, 2000);
@@ -343,7 +351,7 @@ const ProgressManager = {
                 this.error(data.message || `Upload ${data.status}`);
                 this.stopTracking();
                 
-                console.log(`CSV upload ${data.status}: ${data.message}`);
+                debugLog(`CSV upload ${data.status}: ${data.message}`);
                 
                 setTimeout(() => {
                     this.hide();
@@ -355,7 +363,7 @@ const ProgressManager = {
                 }, 3000);
                 
             } else if (data.status === 'idle') {
-                console.log(`Upload status changed to idle: ${data.message}`);
+                debugLog(`Upload status changed to idle: ${data.message}`);
                 
                 // Check if this was a terminal status message
                 if (data.message && (data.message.includes('failed') || data.message.includes('cancelled'))) {
@@ -367,11 +375,11 @@ const ProgressManager = {
                 
                 // No active upload found - check how long we've been polling
                 const pollingDuration = Date.now() - this.currentJob.startTime;
-                console.log(`No active upload found - polling duration: ${pollingDuration}ms`);
+                debugLog(`No active upload found - polling duration: ${pollingDuration}ms`);
                 
                 // Increased timeout to 30 seconds and added more sophisticated checking
                 if (pollingDuration > 30000) {
-                    console.log('Checking if upload might have completed despite progress tracking issues...');
+                    debugLog('Checking if upload might have completed despite progress tracking issues...');
                     
                     // Before giving up, try to reload the page to check if data was actually updated
                     try {
@@ -381,7 +389,7 @@ const ProgressManager = {
                             
                             // If we have data, the upload likely succeeded despite progress tracking issues
                             if (Array.isArray(portfolioData) && portfolioData.length > 0) {
-                                console.log('Upload appears to have succeeded despite progress tracking issues');
+                                debugLog('Upload appears to have succeeded despite progress tracking issues');
                                 this.setProgress(100, 'Upload completed (detected from data)!');
                                 
                                 if (typeof showNotification === 'function') {
@@ -399,14 +407,14 @@ const ProgressManager = {
                         console.warn('Could not verify upload completion:', checkError);
                     }
                     
-                    console.log('Stopping polling - no progress found after 30 seconds');
+                    debugLog('Stopping polling - no progress found after 30 seconds');
                     this.error('Upload may have failed to start or completed without proper progress tracking. Please check if your data was updated, or try again.');
                     this.stopTracking();
                 }
             } else if (data.status === 'processing' || percentage > 0) {
                 // We have active progress, reset any timeout concerns
                 // This ensures we don't timeout while actually processing
-                console.log(`Upload is actively processing: ${percentage}% - ${message}`);
+                debugLog(`Upload is actively processing: ${percentage}% - ${message}`);
             }
             
         } catch (error) {
@@ -427,7 +435,7 @@ const ProgressManager = {
     },
 
     complete(finalPercentage = 100) {
-        console.log('ProgressManager: Completing progress tracking');
+        debugLog('ProgressManager: Completing progress tracking');
         this.setProgress(finalPercentage, 'Complete');
 
         // Ensure minimum display time so users can see completion
@@ -496,11 +504,11 @@ const UpdateAllDataHandler = {
                 if (typeof showNotification === 'function') {
                     showNotification(result.message || 'Started updating all prices and metadata', 'is-success');
                 } else {
-                    console.log('Success:', result.message || 'Started updating all prices and metadata');
+                    debugLog('Success:', result.message || 'Started updating all prices and metadata');
                 }
 
                 // Start progress tracking using ProgressManager (same pattern as CSV upload)
-                console.log('Starting progress tracking for price fetch...');
+                debugLog('Starting progress tracking for price fetch...');
                 ProgressManager.startTracking('price_fetch', 500);
 
                 // Set up completion handler - check for completion status
@@ -524,7 +532,7 @@ const UpdateAllDataHandler = {
                                 setTimeout(async () => {
                                     if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
                                         await window.portfolioTableApp.loadData();
-                                        console.log('Portfolio data reloaded after price update completion');
+                                        debugLog('Portfolio data reloaded after price update completion');
                                     } else {
                                         console.warn('portfolioTableApp.loadData is not available, reloading page instead');
                                         window.location.reload();
@@ -556,7 +564,7 @@ const UpdateAllDataHandler = {
 
 const UpdateSelectedHandler = {
     async run(selectedCompanyIds) {
-        console.log('UpdateSelectedHandler: Starting with company IDs:', selectedCompanyIds);
+        debugLog('UpdateSelectedHandler: Starting with company IDs:', selectedCompanyIds);
 
         if (!selectedCompanyIds || selectedCompanyIds.length === 0) {
             console.error('No companies selected for update');
@@ -564,7 +572,7 @@ const UpdateSelectedHandler = {
         }
 
         try {
-            console.log('Starting selected price update for companies:', selectedCompanyIds);
+            debugLog('Starting selected price update for companies:', selectedCompanyIds);
 
             // Make the API call
             const response = await fetch('/portfolio/api/update_selected_prices', {
@@ -582,11 +590,11 @@ const UpdateSelectedHandler = {
                 if (typeof showNotification === 'function') {
                     showNotification(result.message || 'Started updating selected companies', 'is-success');
                 } else {
-                    console.log('Success:', result.message || 'Started updating selected companies');
+                    debugLog('Success:', result.message || 'Started updating selected companies');
                 }
 
                 // Start progress tracking using ProgressManager (same pattern as CSV upload)
-                console.log('Starting progress tracking for selected price fetch...');
+                debugLog('Starting progress tracking for selected price fetch...');
                 ProgressManager.startTracking('selected_price_fetch', 500);
 
                 // Set up completion handler - check for completion status
@@ -610,7 +618,7 @@ const UpdateSelectedHandler = {
                                 setTimeout(async () => {
                                     if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
                                         await window.portfolioTableApp.loadData();
-                                        console.log('Portfolio data reloaded after selected update completion');
+                                        debugLog('Portfolio data reloaded after selected update completion');
                                     } else {
                                         console.warn('portfolioTableApp.loadData is not available, reloading page instead');
                                         window.location.reload();
@@ -643,11 +651,11 @@ const FileUploadHandler = {
         const uploadForm = document.querySelector('form[action*="upload"]');
         const uploadCard = document.getElementById('upload-card');
 
-        console.log('FileUploadHandler: Debugging elements found:');
-        console.log('  fileInput:', fileInput);
-        console.log('  fileLabel:', fileLabel);
-        console.log('  uploadForm:', uploadForm);
-        console.log('  uploadCard:', uploadCard);
+        debugLog('FileUploadHandler: Debugging elements found:');
+        debugLog('  fileInput:', fileInput);
+        debugLog('  fileLabel:', fileLabel);
+        debugLog('  uploadForm:', uploadForm);
+        debugLog('  uploadCard:', uploadCard);
 
         if (!fileInput || !fileLabel || !uploadForm || !uploadCard) {
             console.error('Required file upload elements not found');
@@ -660,36 +668,36 @@ const FileUploadHandler = {
             return;
         }
 
-        console.log('FileUploadHandler: Initializing CSV upload handler');
-        console.log('Upload form action:', uploadForm.action);
-        console.log('Upload form method:', uploadForm.method);
+        debugLog('FileUploadHandler: Initializing CSV upload handler');
+        debugLog('Upload form action:', uploadForm.action);
+        debugLog('Upload form method:', uploadForm.method);
 
         // File selection handler
         fileInput.addEventListener('change', function () {
-            console.log('File input change event triggered');
-            console.log('Files length:', fileInput.files.length);
+            debugLog('File input change event triggered');
+            debugLog('Files length:', fileInput.files.length);
 
             if (fileInput.files.length > 0) {
                 const fileName = fileInput.files[0].name;
                 const fileSize = fileInput.files[0].size;
                 fileLabel.textContent = fileName;
-                console.log(`File selected: ${fileName}, size: ${fileSize} bytes`);
+                debugLog(`File selected: ${fileName}, size: ${fileSize} bytes`);
 
                 // Prevent multiple submissions by checking if already processing
                 if (uploadCard.classList.contains('is-processing')) {
-                    console.log('Upload already in progress, ignoring duplicate event');
+                    debugLog('Upload already in progress, ignoring duplicate event');
                     return;
                 }
 
                 // Add a class to the card to indicate processing
                 uploadCard.classList.add('is-processing');
-                console.log('Added is-processing class to upload card');
+                debugLog('Added is-processing class to upload card');
 
                 // Upload file using reliable AJAX method
                 FileUploadHandler.submitFile(fileInput.files[0], uploadForm);
             } else {
                 fileLabel.textContent = 'No file selected';
-                console.log('No file selected');
+                debugLog('No file selected');
             }
         });
 
@@ -706,7 +714,7 @@ const FileUploadHandler = {
         const cancelBtn = document.getElementById('cancel-upload-btn');
         if (cancelBtn) {
             cancelBtn.addEventListener('click', async function() {
-                console.log('Cancel button clicked');
+                debugLog('Cancel button clicked');
                 
                 // Disable the button to prevent multiple clicks
                 cancelBtn.disabled = true;
@@ -724,7 +732,7 @@ const FileUploadHandler = {
                     const result = await response.json();
                     
                     if (response.ok && result.success) {
-                        console.log('Upload cancelled successfully');
+                        debugLog('Upload cancelled successfully');
                         
                         // Show cancellation message
                         ProgressManager.error('Upload cancelled by user');
@@ -776,7 +784,7 @@ const FileUploadHandler = {
     },
 
     async submitFile(file, form) {
-        console.log('Starting CSV file upload:', {
+        debugLog('Starting CSV file upload:', {
             fileName: file.name,
             fileSize: file.size,
             actionUrl: form.action
@@ -787,14 +795,14 @@ const FileUploadHandler = {
         if (uploadUrl.includes('rebalancer.nniiccoo.com')) {
             // Replace production URL with relative path for local development
             uploadUrl = '/portfolio/upload';
-            console.log('Fixed upload URL for local development:', uploadUrl);
+            debugLog('Fixed upload URL for local development:', uploadUrl);
         }
         
         try {
             const formData = new FormData();
             formData.append('csv_file', file);
 
-            console.log('Uploading file via AJAX...');
+            debugLog('Uploading file via AJAX...');
             
             // Show simple loading indicator
             ProgressManager.show('simple_csv_upload');
@@ -823,7 +831,7 @@ const FileUploadHandler = {
 
             clearTimeout(timeoutId);
             
-            console.log('Upload response received:', {
+            debugLog('Upload response received:', {
                 status: response.status,
                 ok: response.ok,
                 contentType: response.headers.get('content-type')
@@ -831,10 +839,10 @@ const FileUploadHandler = {
             
             if (response.ok) {
                 const result = await response.json();
-                console.log('Upload result:', result);
+                debugLog('Upload result:', result);
                 
                 if (result.success) {
-                    console.log('Upload started successfully, job_id:', result.job_id);
+                    debugLog('Upload started successfully, job_id:', result.job_id);
                     
                     // Update progress message to show upload has started
                     ProgressManager.setProgress(0, 'Upload started, processing...');
@@ -885,10 +893,10 @@ const FileUploadHandler = {
             if (uploadUrl.includes('rebalancer.nniiccoo.com')) {
                 // Replace production URL with relative path for local development
                 uploadUrl = '/portfolio/upload';
-                console.log('Fixed upload URL for local development:', uploadUrl);
+                debugLog('Fixed upload URL for local development:', uploadUrl);
             }
             
-            console.log('Submitting CSV file via AJAX...', {
+            debugLog('Submitting CSV file via AJAX...', {
                 fileName: file.name,
                 fileSize: file.size,
                 actionUrl: actionUrl,
@@ -896,16 +904,16 @@ const FileUploadHandler = {
             });
 
             // First, test basic connectivity
-            console.log('Testing server connectivity...');
+            debugLog('Testing server connectivity...');
             try {
                 const testResponse = await fetch('/portfolio/api/portfolios', {
                     method: 'GET',
                     credentials: 'include'
                 });
-                console.log('Connectivity test status:', testResponse.status);
+                debugLog('Connectivity test status:', testResponse.status);
             } catch (connectError) {
                 console.error('Connectivity test failed:', connectError);
-                console.log('Server appears unreachable - this may be normal in Docker or when CORS is misconfigured');
+                debugLog('Server appears unreachable - this may be normal in Docker or when CORS is misconfigured');
                 // Don't fallback immediately - try the upload anyway as it might work
             }
 
@@ -915,8 +923,8 @@ const FileUploadHandler = {
             const formData = new FormData();
             formData.append('csv_file', file);
 
-            console.log('Making fetch request to:', uploadUrl);
-            console.log('FormData contents:', formData.get('csv_file'));
+            debugLog('Making fetch request to:', uploadUrl);
+            debugLog('FormData contents:', formData.get('csv_file'));
 
             const response = await fetch(uploadUrl, {
                 method: 'POST',
@@ -927,8 +935,8 @@ const FileUploadHandler = {
                 }
             });
 
-            console.log('Upload response status:', response.status);
-            console.log('Upload response headers:', response.headers);
+            debugLog('Upload response status:', response.status);
+            debugLog('Upload response headers:', response.headers);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -953,10 +961,10 @@ const FileUploadHandler = {
                 }
             }
             
-            console.log('Upload response data:', result);
+            debugLog('Upload response data:', result);
 
             if (result.success) {
-                console.log('CSV upload successful:', result.message);
+                debugLog('CSV upload successful:', result.message);
                 ProgressManager.setProgress(100, 'Upload completed successfully!');
                 
                 // Wait a bit to show the completion message
@@ -986,7 +994,7 @@ const FileUploadHandler = {
     },
 
     fallbackToFormSubmission(file, actionUrl) {
-        console.log('Using fallback form submission for CSV upload');
+        debugLog('Using fallback form submission for CSV upload');
         
         // Since AJAX failed, let's try a direct approach
         // Reset the processing state first
@@ -998,7 +1006,7 @@ const FileUploadHandler = {
         // Get the original form and submit it normally
         const originalForm = document.querySelector('form[action*="upload"]');
         if (originalForm) {
-            console.log('Submitting original form directly');
+            debugLog('Submitting original form directly');
             originalForm.submit();
         } else {
             // Fallback: create a new form
@@ -1066,7 +1074,7 @@ const FileUploadHandler = {
             uploadCard.classList.remove('is-processing');
         }
         
-        console.log('Form reset completed');
+        debugLog('Form reset completed');
     }
 };
 
@@ -1216,14 +1224,14 @@ class PortfolioTableApp {
                     return 'is-danger';
                 },
                 filteredPortfolioItems() {
-                    console.log(`Computing filtered items with portfolio=${this.selectedPortfolio}, companySearch=${this.companySearchQuery}`);
+                    debugLog(`Computing filtered items with portfolio=${this.selectedPortfolio}, companySearch=${this.companySearchQuery}`);
 
                     // First filter by selected portfolio
                     let filtered = this.selectedPortfolio
                         ? this.portfolioItems.filter(item => item.portfolio === this.selectedPortfolio)
                         : this.portfolioItems;
 
-                    console.log(`After portfolio filter: ${filtered.length} items`);
+                    debugLog(`After portfolio filter: ${filtered.length} items`);
 
                     // Filter by company name if search query is provided
                     if (this.companySearchQuery && this.companySearchQuery.trim() !== '') {
@@ -1231,7 +1239,7 @@ class PortfolioTableApp {
                         filtered = filtered.filter(item => {
                             return item.company && item.company.toLowerCase().includes(query);
                         });
-                        console.log(`After company search filter: ${filtered.length} items`);
+                        debugLog(`After company search filter: ${filtered.length} items`);
                     }
 
                     // Apply sorting if a sort column is specified
@@ -1369,12 +1377,12 @@ class PortfolioTableApp {
             watch: {
                 selectedPortfolio() {
                     // Update metrics when portfolio selection changes
-                    console.log('selectedPortfolio changed:', this.selectedPortfolio);
+                    debugLog('selectedPortfolio changed:', this.selectedPortfolio);
                     this.updateFilteredMetrics();
                 },
                 companySearchQuery() {
                     // Update metrics when search query changes
-                    console.log('companySearchQuery changed:', this.companySearchQuery);
+                    debugLog('companySearchQuery changed:', this.companySearchQuery);
                     this.updateFilteredMetrics();
                 }
             },
@@ -1386,13 +1394,13 @@ class PortfolioTableApp {
                         // Setup two-way binding with portfolio dropdown
                         const portfolioDropdown = document.getElementById('filter-portfolio');
                         if (portfolioDropdown) {
-                            console.log('Found portfolio dropdown element');
+                            debugLog('Found portfolio dropdown element');
                             // Initial value from Vue to DOM
                             portfolioDropdown.value = this.selectedPortfolio;
 
                             // DOM to Vue binding
                             portfolioDropdown.addEventListener('change', () => {
-                                console.log('Portfolio dropdown changed to:', portfolioDropdown.value);
+                                debugLog('Portfolio dropdown changed to:', portfolioDropdown.value);
                                 this.selectedPortfolio = portfolioDropdown.value;
                                 // Force update filtered list
                                 this.updateFilteredMetrics();
@@ -1400,7 +1408,7 @@ class PortfolioTableApp {
 
                             // Vue to DOM binding
                             this.$watch('selectedPortfolio', (newVal) => {
-                                console.log('selectedPortfolio changed in Vue:', newVal);
+                                debugLog('selectedPortfolio changed in Vue:', newVal);
                                 portfolioDropdown.value = newVal;
                             });
                         } else {
@@ -1412,13 +1420,13 @@ class PortfolioTableApp {
                         const clearSearchButton = document.getElementById('clear-company-search');
 
                         if (companySearchInput) {
-                            console.log('Found company search input element');
+                            debugLog('Found company search input element');
                             // Initial value from Vue to DOM
                             companySearchInput.value = this.companySearchQuery;
 
                             // DOM to Vue binding
                             companySearchInput.addEventListener('input', () => {
-                                console.log('Company search input changed to:', companySearchInput.value);
+                                debugLog('Company search input changed to:', companySearchInput.value);
                                 this.companySearchQuery = companySearchInput.value;
                                 // Force update filtered list
                                 this.updateFilteredMetrics();
@@ -1426,7 +1434,7 @@ class PortfolioTableApp {
 
                             // Vue to DOM binding
                             this.$watch('companySearchQuery', (newVal) => {
-                                console.log('companySearchQuery changed in Vue:', newVal);
+                                debugLog('companySearchQuery changed in Vue:', newVal);
                                 companySearchInput.value = newVal;
                             });
 
@@ -1543,10 +1551,10 @@ class PortfolioTableApp {
                 // This function will update the dropdown to only show portfolios that are actually used
                 async loadData() {
                     this.loading = true;
-                    console.log('🔄 loadData: Starting to load portfolio data...');
+                    debugLog('🔄 loadData: Starting to load portfolio data...');
                     try {
                         // Load portfolio items with timeout
-                        console.log('🔄 loadData: Fetching from /portfolio/api/portfolio_data');
+                        debugLog('🔄 loadData: Fetching from /portfolio/api/portfolio_data');
 
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
@@ -1558,7 +1566,7 @@ class PortfolioTableApp {
                         });
 
                         clearTimeout(timeoutId);
-                        console.log('🔄 loadData: Response received:', response.status, response.statusText);
+                        debugLog('🔄 loadData: Response received:', response.status, response.statusText);
 
                         // Check if redirected (authentication issue)
                         if (response.redirected) {
@@ -1572,7 +1580,7 @@ class PortfolioTableApp {
                         }
 
                         const data = await response.json();
-                        console.log('✅ loadData: Data parsed successfully, items:', Array.isArray(data) ? data.length : 'not an array');
+                        debugLog('✅ loadData: Data parsed successfully, items:', Array.isArray(data) ? data.length : 'not an array');
                         
                         // Ensure data is an array
                         if (Array.isArray(data)) {
@@ -1585,11 +1593,11 @@ class PortfolioTableApp {
                             this.portfolioItems = [];
                         }
                         
-                        console.log('Loaded portfolio items:', this.portfolioItems);
+                        debugLog('Loaded portfolio items:', this.portfolioItems);
 
                         // Extract unique portfolios from the data that are actually in use
                         const usedPortfolios = [...new Set(this.portfolioItems.map(item => item.portfolio))].filter(Boolean);
-                        console.log('Used portfolios:', usedPortfolios);
+                        debugLog('Used portfolios:', usedPortfolios);
 
                         // Also refresh the portfolio options from the server but only keep those that are in use
                         try {
@@ -1604,7 +1612,7 @@ class PortfolioTableApp {
                                     usedPortfolios.includes(portfolio));
 
                                 this.portfolioOptions = filteredPortfolios;
-                                console.log('Updated portfolio options (filtered):', this.portfolioOptions);
+                                debugLog('Updated portfolio options (filtered):', this.portfolioOptions);
 
                                 // Update the DOM dropdown as well
                                 const portfolioDropdown = document.getElementById('filter-portfolio');
@@ -1661,7 +1669,7 @@ class PortfolioTableApp {
                             this.portfolioItems = [];
                         }
                     } finally {
-                        console.log('🔄 loadData: Setting loading = false');
+                        debugLog('🔄 loadData: Setting loading = false');
                         this.loading = false;
                     }
                 },
@@ -1694,8 +1702,8 @@ class PortfolioTableApp {
 
                     // Force Vue to re-render the filtered list
                     this.$forceUpdate();
-                    console.log(`Updated metrics: ${this.metrics.total} items`);
-                    console.log(`Filtering conditions: portfolio=${this.selectedPortfolio}`);
+                    debugLog(`Updated metrics: ${this.metrics.total} items`);
+                    debugLog(`Filtering conditions: portfolio=${this.selectedPortfolio}`);
                 },
 
                 confirmPriceUpdate(item) {
@@ -1732,7 +1740,7 @@ class PortfolioTableApp {
                             if (typeof showNotification === 'function') {
                                 showNotification(result.message || 'Price updated successfully', 'is-success');
                             } else {
-                                console.log(result.message || 'Price updated successfully');
+                                debugLog(result.message || 'Price updated successfully');
                             }
                         } else {
                             // Construct a meaningful error message
@@ -1828,14 +1836,14 @@ class PortfolioTableApp {
                 },
 
                 async savePortfolioChange(item) {
-                    console.log('savePortfolioChange called with item:', item);
+                    debugLog('savePortfolioChange called with item:', item);
                     if (!item || !item.id) {
                         console.error('Invalid item for portfolio change');
                         return;
                     }
 
                     try {
-                        console.log('Sending portfolio update request for item ID:', item.id, 'Portfolio:', item.portfolio);
+                        debugLog('Sending portfolio update request for item ID:', item.id, 'Portfolio:', item.portfolio);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -1847,14 +1855,14 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Portfolio update response:', result);
+                        debugLog('Portfolio update response:', result);
 
                         if (result.success) {
                             // Show success notification using the global function if available
                             if (typeof showNotification === 'function') {
                                 showNotification('Portfolio updated successfully', 'is-success', 3000);
                             } else {
-                                console.log('Portfolio updated successfully');
+                                debugLog('Portfolio updated successfully');
                             }
                         } else {
                             // Show error notification
@@ -1886,7 +1894,7 @@ class PortfolioTableApp {
                             identifier: item.identifier || '',
                             is_identifier_user_edit: true
                         };
-                        console.log('🔍 DEBUG: Sending identifier update with payload:', payload);
+                        debugLog('🔍 DEBUG: Sending identifier update with payload:', payload);
 
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
@@ -1903,7 +1911,7 @@ class PortfolioTableApp {
                             if (typeof showNotification === 'function') {
                                 showNotification('Identifier updated and price fetched automatically', 'is-success', 3000);
                             } else {
-                                console.log('Identifier updated and price fetched automatically');
+                                debugLog('Identifier updated and price fetched automatically');
                             }
 
                             // Refresh the data to show updated price (backend handles price update automatically)
@@ -1925,14 +1933,14 @@ class PortfolioTableApp {
                 },
 
                 async saveCategoryChange(item) {
-                    console.log('saveCategoryChange called with item:', item);
+                    debugLog('saveCategoryChange called with item:', item);
                     if (!item || !item.id) {
                         console.error('Invalid item for category change');
                         return;
                     }
 
                     try {
-                        console.log('Sending category update request for item ID:', item.id, 'Category:', item.category);
+                        debugLog('Sending category update request for item ID:', item.id, 'Category:', item.category);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -1944,14 +1952,14 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Category update response:', result);
+                        debugLog('Category update response:', result);
 
                         if (result.success) {
                             // Show success notification using the global function if available
                             if (typeof showNotification === 'function') {
                                 showNotification('Category updated successfully', 'is-success', 3000);
                             } else {
-                                console.log('Category updated successfully');
+                                debugLog('Category updated successfully');
                             }
                         } else {
                             // Show error notification
@@ -1970,14 +1978,14 @@ class PortfolioTableApp {
                 },
 
                 async saveInvestmentTypeChange(item) {
-                    console.log('saveInvestmentTypeChange called with item:', item);
+                    debugLog('saveInvestmentTypeChange called with item:', item);
                     if (!item || !item.id) {
                         console.error('Invalid item for investment type change');
                         return;
                     }
 
                     try {
-                        console.log('Sending investment type update request for item ID:', item.id, 'Type:', item.investment_type);
+                        debugLog('Sending investment type update request for item ID:', item.id, 'Type:', item.investment_type);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -1989,7 +1997,7 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Investment type update response:', result);
+                        debugLog('Investment type update response:', result);
 
                         if (result.success) {
                             // Show success notification
@@ -1997,7 +2005,7 @@ class PortfolioTableApp {
                                 const typeName = item.investment_type || 'Not Set';
                                 showNotification(`Investment type updated to ${typeName}`, 'is-success', 3000);
                             } else {
-                                console.log('Investment type updated successfully');
+                                debugLog('Investment type updated successfully');
                             }
                         } else {
                             // Show error notification
@@ -2032,7 +2040,7 @@ class PortfolioTableApp {
                             return;
                         }
 
-                        console.log('Sending shares update request for item ID:', item.id, 'Override shares:', shares);
+                        debugLog('Sending shares update request for item ID:', item.id, 'Override shares:', shares);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -2045,14 +2053,14 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Shares update response:', result);
+                        debugLog('Shares update response:', result);
 
                         if (result.success) {
                             // Show success notification using the global function if available
                             if (typeof showNotification === 'function') {
                                 showNotification('Shares updated successfully', 'is-success', 3000);
                             } else {
-                                console.log('Shares updated successfully');
+                                debugLog('Shares updated successfully');
                             }
 
                             // Update the item to reflect manual edit status
@@ -2066,7 +2074,7 @@ class PortfolioTableApp {
                             if (result.data && result.data.override_share !== undefined) {
                                 item.override_share = result.data.override_share;
                                 item.effective_shares = result.data.override_share;
-                                console.log('Updated override_share value from server:', item.override_share);
+                                debugLog('Updated override_share value from server:', item.override_share);
                             }
 
                             // Update the total value display
@@ -2109,7 +2117,7 @@ class PortfolioTableApp {
                             ? totalValue / item.effective_shares
                             : 0;
 
-                        console.log('Saving custom total value:', {
+                        debugLog('Saving custom total value:', {
                             company_id: item.id,
                             total_value: totalValue,
                             shares: item.effective_shares,
@@ -2217,7 +2225,7 @@ class PortfolioTableApp {
                         this.sortDirection = 'asc';
                     }
 
-                    console.log(`Sorting by ${column} in ${this.sortDirection} order`);
+                    debugLog(`Sorting by ${column} in ${this.sortDirection} order`);
                 },
 
                 // Bulk edit methods
@@ -2275,7 +2283,7 @@ class PortfolioTableApp {
                             identifier: item.identifier
                         }));
 
-                        console.log('Sending bulk update:', updateData);
+                        debugLog('Sending bulk update:', updateData);
 
                         // Send the bulk update request
                         const response = await fetch('/portfolio/api/bulk_update', {
@@ -2329,7 +2337,7 @@ class PortfolioTableApp {
                     }
 
                     try {
-                        console.log('Sending country update request for item ID:', item.id, 'Country:', item.effective_country);
+                        debugLog('Sending country update request for item ID:', item.id, 'Country:', item.effective_country);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -2342,7 +2350,7 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Country update response:', result);
+                        debugLog('Country update response:', result);
 
                         if (result.success) {
                             item.country_manually_edited = true;
@@ -2368,7 +2376,7 @@ class PortfolioTableApp {
                     }
 
                     try {
-                        console.log('Resetting country for item ID:', item.id);
+                        debugLog('Resetting country for item ID:', item.id);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
@@ -2380,7 +2388,7 @@ class PortfolioTableApp {
                         });
 
                         const result = await response.json();
-                        console.log('Country reset response:', result);
+                        debugLog('Country reset response:', result);
 
                         if (result.success && result.data) {
                             // Update the item with the response data from server
@@ -2473,40 +2481,40 @@ class PortfolioTableApp {
                 // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)
                 this.syncUIWithVueModel();
                 
-                console.log('Vue component mounted. Methods available:', Object.keys(this.$options.methods).join(', '));
-                console.log('Initial portfolio options:', this.portfolioOptions);
+                debugLog('Vue component mounted. Methods available:', Object.keys(this.$options.methods).join(', '));
+                debugLog('Initial portfolio options:', this.portfolioOptions);
 
                 // First, normalize the initial portfolioOptions if they exist
-                console.log('Initial portfolio options type:', typeof this.portfolioOptions, Array.isArray(this.portfolioOptions));
+                debugLog('Initial portfolio options type:', typeof this.portfolioOptions, Array.isArray(this.portfolioOptions));
 
                 // Convert array of objects to array of strings if needed
                 if (Array.isArray(this.portfolioOptions)) {
                     if (this.portfolioOptions.length > 0 && typeof this.portfolioOptions[0] === 'object' && this.portfolioOptions[0].name) {
-                        console.log('Converting portfolio options from objects to strings');
+                        debugLog('Converting portfolio options from objects to strings');
                         this.portfolioOptions = this.portfolioOptions.map(p => p.name);
                     }
-                    console.log('Normalized initial portfolio options:', this.portfolioOptions);
+                    debugLog('Normalized initial portfolio options:', this.portfolioOptions);
                 }
 
                 // Always fetch fresh portfolio data from the server
-                console.log('Fetching up-to-date portfolio options from server...');
+                debugLog('Fetching up-to-date portfolio options from server...');
                 fetch('/portfolio/api/portfolios', {
                     cache: 'no-store'
                 })
                     .then(response => {
-                        console.log('Portfolio API response status:', response.status);
+                        debugLog('Portfolio API response status:', response.status);
                         if (!response.ok) {
                             throw new Error(`HTTP error ${response.status}`);
                         }
                         return response.json();
                     })
                     .then(data => {
-                        console.log('Portfolio options from server (RAW):', data);
-                        console.log('Portfolio options type:', typeof data, Array.isArray(data));
+                        debugLog('Portfolio options from server (RAW):', data);
+                        debugLog('Portfolio options type:', typeof data, Array.isArray(data));
 
                         if (Array.isArray(data)) {
                             this.portfolioOptions = data.filter(p => p && p !== '-');
-                            console.log('Processed portfolio options:', this.portfolioOptions.length, 'items');
+                            debugLog('Processed portfolio options:', this.portfolioOptions.length, 'items');
                         } else {
                             console.warn('Invalid portfolio options format from server');
                             this.portfolioOptions = [];
@@ -2516,7 +2524,7 @@ class PortfolioTableApp {
                         console.error('Error fetching portfolio options:', error);
                         // Fall back to options passed from template if API fails
                         if (Array.isArray(this.portfolioOptions)) {
-                            console.log('Falling back to template-provided portfolio options');
+                            debugLog('Falling back to template-provided portfolio options');
                             this.portfolioOptions = this.portfolioOptions.filter(p => p && p !== '-');
                         } else {
                             this.portfolioOptions = [];
@@ -2533,7 +2541,7 @@ class PortfolioTableApp {
                     });
 
                 // Countries are now server-rendered like portfolios - no need to load them
-                console.log('Country options are now server-rendered like portfolios');
+                debugLog('Country options are now server-rendered like portfolios');
 
                 // Add event listeners for the delete confirmation modal and update price modal
                 document.addEventListener('keydown', (e) => {
@@ -2649,7 +2657,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
     
-    console.log('All required libraries loaded successfully:', Object.keys(requiredLibraries));
+    debugLog('All required libraries loaded successfully:', Object.keys(requiredLibraries));
 
     // Initialize the centralized progress manager first
     if (!ProgressManager.init()) {
@@ -2670,7 +2678,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (portfoliosElement) {
         try {
             portfolios = JSON.parse(portfoliosElement.textContent);
-            console.log('Parsed portfolios from DOM:', portfolios);
+            debugLog('Parsed portfolios from DOM:', portfolios);
         } catch (error) {
             console.error('Error parsing portfolios data:', error);
         }
@@ -2691,7 +2699,7 @@ document.addEventListener('DOMContentLoaded', function () {
             window.portfolioTableApp = new PortfolioTableApp(portfolios, defaultPortfolio);
 
             // Log that the app has been initialized
-            console.log('PortfolioTableApp initialized globally as window.portfolioTableApp');
+            debugLog('PortfolioTableApp initialized globally as window.portfolioTableApp');
         } catch (error) {
             console.error('Failed to initialize PortfolioTableApp:', error);
         }

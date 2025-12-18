@@ -605,12 +605,12 @@ class PortfolioRepository:
         """
         logger.info(f"Renaming portfolio {portfolio_id} to '{new_name}'")
 
-        result = execute_db(
+        rowcount = execute_db(
             'UPDATE portfolios SET name = ? WHERE id = ? AND account_id = ?',
             [new_name, portfolio_id, account_id]
         )
 
-        return result is not None and result.get('rowcount', 0) > 0
+        return rowcount is not None and rowcount > 0
 
     @staticmethod
     def get_portfolio_data_with_enrichment(account_id: int) -> list:

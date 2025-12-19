@@ -9,14 +9,16 @@ A Flask web application designed specifically for [Parqet](https://parqet.com) p
 
 ## 🎯 What is this?
 
-This tool was born out of necessity over several months of struggling with portfolio allocation management on [Parqet](https://parqet.com). As someone who wanted better control over portfolio rebalancing and allocation visualization, I started tinkering with code and... well, here we are! 
+This tool was born out of necessity over several months of struggling with portfolio allocation management on [Parqet](https://parqet.com). As someone who wanted better control over portfolio rebalancing and allocation visualization, I started tinkering with code and... well, here we are!
 
 It's a portfolio rebalancer specifically designed to work with Parqet's data, helping you:
 - Import your Parqet portfolio data via CSV
 - Enrich holdings with real-time market prices from yfinance (or set custom values for unlisted holdings)
 - Classify positions by investment type (Stock/ETF) for allocation constraints
-- Build and set target allocations with multiple allocation modes
-- Get smart rebalancing recommendations (buy/sell amounts)
+- Build and set target allocations with editable desired position counts
+- Track profit & loss (P&L) with absolute and percentage metrics for each position
+- Get smart rebalancing recommendations (buy/sell amounts) with multiple allocation modes
+- Protect manually edited identifiers from CSV reimport overwrites
 - Analyze portfolio composition, performance, and risks with visualizations
 
 Guided by a philosophy of **elegance, simplicity, and robustness**, it delivers 80% of the impact with 20% of the effort—focusing on automated, user-friendly features in a minimalistic, Apple-inspired UI.
@@ -57,13 +59,13 @@ The app auto-detects and configures everything on first launch. Visit `http://lo
 
 1. **Export from Parqet**: Download your portfolio as a native CSV export.
 
-2. **Import & Build**: Navigate to "Build Portfolio" → Upload CSV → Set target allocations.
+2. **Import & Build**: Navigate to "Build Portfolio" → Upload CSV → Set target allocations → Edit desired position counts directly.
 
-3. **Enrich Data**: Go to "Enrich" to fetch/update real-time prices via yfinance, or set custom values for unlisted holdings.
+3. **Enrich Data**: Go to "Enrich" to fetch/update real-time prices via yfinance, or set custom values for unlisted holdings. Edit identifiers knowing your changes are protected.
 
 4. **Rebalance**: Use "Allocate" for precise buy/sell recommendations based on your targets with support for Stock/ETF allocation constraints.
 
-5. **Analyze**: Check "Analyse" for portfolio visualizations and "Risk Overview" for global allocation insights.
+5. **Analyze**: Check "Analyse" for portfolio visualizations with P&L tracking and "Risk Overview" for global allocation insights.
 
 The workflow is designed to be intuitive—each page builds on the previous step, guiding you from raw data to actionable investment decisions.
 
@@ -112,10 +114,10 @@ The app includes automatic backup management and price update scheduling.
 
 Start with `python3 run.py --port 8065`. Create/select an account, then navigate through:
 
-- **Build**: Upload Parqet CSV and define target allocations
-- **Enrich**: Update prices and metadata via yfinance integration, or set custom values for unlisted holdings
+- **Build**: Upload Parqet CSV, define target allocations, and edit desired position counts (with min/max validation)
+- **Enrich**: Update prices and metadata via yfinance integration, set custom values for unlisted holdings, and edit identifiers with automatic protection from reimport overwrites
 - **Allocate**: Get precise buy/sell trade recommendations with standardized allocation modes and Stock/ETF constraints
-- **Analyse**: View portfolio composition charts and metrics
+- **Analyse**: View portfolio composition charts, metrics, and P&L tracking (absolute and percentage profit/loss per position)
 - **Risk Overview**: Global allocation and risk analysis with position type breakdown
 
 ### API Access
@@ -176,11 +178,11 @@ Since this was a learning project for me, I'm sure there are plenty of improveme
 
 If you notice anything important missing from this tool for Parqet users, please let me know! Some ideas I've been thinking about:
 
-- Better error handling for malformed CSV files
-- More detailed portfolio analytics
-- Historical performance tracking
-- Integration with more data sources
-- Better mobile interface
+- Historical performance tracking over time
+- Integration with more data sources beyond yfinance
+- Better mobile interface and responsive design
+- Advanced portfolio optimization algorithms
+- Multi-currency support improvements
 
 ## 📄 License
 
@@ -254,13 +256,18 @@ Focused refactoring for single-user homeserver deployment:
   - Repository layer tests
   - Allocation service tests
 
-**Recent Feature Additions** (Phase 2 Improvements):
+**Recent Feature Additions** (Phase 2 & 3 Improvements):
+- ✅ **P&L Tracking**: Profit & loss calculations (absolute and percentage) for each position
+- ✅ **Editable Desired Positions**: Direct editing of target position counts in Build page with validation
+- ✅ **Protected Identifier Edits**: Manually edited identifiers preserved across CSV reimports
+- ✅ **Portfolio Rename**: Fixed bug preventing portfolio renaming
+- ✅ **Enhanced Table UI**: Improved scrollbars and visual polish across all pages
 - ✅ Investment type classification (Stock/ETF) with database migration
 - ✅ Custom total value support for unlisted or private holdings
 - ✅ Standardized allocation modes with proper empty portfolio handling
 - ✅ Timezone-aware date comparisons for manual share edit tracking
 - ✅ Enhanced CSV processing with zero-share position auto-removal
-- ✅ Improved enrich page UI with custom value persistence
+- ✅ Debug mode control via FLASK_ENV environment variable
 
 **Total Impact**:
 - **~200 lines of duplicate code removed**

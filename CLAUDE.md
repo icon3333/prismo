@@ -69,8 +69,8 @@ Database (SQLite with proper indexing)
    - All routes protected by authentication (except `/health` and index)
 
 2. **Services** (`app/services/`): Pure Python business logic
-   - `AllocationService`: Portfolio allocation calculations and rebalancing logic with standardized allocation modes
-   - `PortfolioService`: Portfolio analytics and aggregations
+   - `AllocationService`: Portfolio allocation calculations and rebalancing logic with standardized allocation modes and type constraints
+   - `PortfolioService`: Portfolio analytics, aggregations, and P&L calculations
    - `PriceService`: Price operations and currency conversion
    - No Flask dependencies - fully testable without app context
 
@@ -95,14 +95,20 @@ Database (SQLite with proper indexing)
   - Custom value support (`custom_total_value`, `custom_price_eur`, `is_custom_value`, `custom_value_date`)
   - Investment type classification (`investment_type`: Stock or ETF)
   - Country override capabilities (`override_country`, `country_manually_edited`)
-  - Total invested tracking
+  - Identifier protection (`override_identifier`, `identifier_manually_edited`, `identifier_manual_edit_date`)
+  - Total invested tracking (for P&L calculations)
 - `company_shares`: Share quantities with manual override support and edit tracking
 - `market_prices`: Cached market prices (updated via yfinance)
 - `identifier_mappings`: Custom ticker symbol mappings
 - `expanded_state`: UI state persistence
 - `background_jobs`: Job status tracking
 - Schema in `app/schema.sql` (automatically applied on startup)
-- **Database migrations** handle schema evolution (4 migrations currently implemented in `db_manager.py`)
+- **Database migrations** handle schema evolution (5 migrations currently implemented in `db_manager.py`):
+  1. User-edited shares tracking columns
+  2. Country override columns
+  3. Custom value columns
+  4. Investment type column
+  5. Identifier manual edit tracking columns
 
 ## Caching Strategy
 
@@ -128,6 +134,8 @@ CSV processing is modular (`app/utils/csv_processing/`):
 - Timezone-aware date comparison for manual share edits
 - Proper handling of zero-share and negative-share positions (auto-removal)
 - Investment type (Stock/ETF) detection and tracking
+- Protected identifier edits (manual changes preserved across CSV reimports)
+- Total invested tracking for P&L calculations
 
 ## Authentication Pattern
 
@@ -157,6 +165,33 @@ Use structured exceptions (`app/exceptions.py`):
 - `PriceFetchError`: External API failures (yfinance)
 - `AuthenticationError`: Auth required or failed
 - Return proper HTTP status codes (400, 401, 404, 500)
+
+## Recent Features & Improvements
+
+### Major Features Added
+- **P&L Tracking**: Profit & loss calculations displayed in Analyse page
+  - Absolute P&L: `current_value - total_invested`
+  - Percentage P&L: `(pnl_absolute / total_invested) * 100`
+  - Calculated in `portfolio_api.py` for all positions with `total_invested > 0`
+
+- **Editable Desired Positions**: Build page allows direct editing of target position counts
+  - Input validation with min/max constraints
+  - Real-time visual warnings for values below minimum
+  - Saves to `expanded_state` table for persistence
+
+- **Protected Identifier Edits**: Manual identifier changes preserved across CSV reimports
+  - New columns: `override_identifier`, `identifier_manually_edited`, `identifier_manual_edit_date`
+  - CSV import checks for manual edits and skips overwriting protected identifiers
+  - Tracking counter shows how many identifiers were protected during import
+
+- **Portfolio Rename**: Fixed bug preventing portfolio renaming functionality
+
+- **Enhanced UI**: Improved table scrollbars and visual polish across all pages
+
+### Performance Optimizations
+- Pre-fetching company data with JOIN queries to avoid N+1 problems
+- Smart batch processing with sync/async thresholds
+- Composite database indexes for common query patterns
 
 ## Configuration
 
@@ -206,6 +241,10 @@ Pragmatic test coverage (50-60% on critical paths):
 6. **No authentication system**: Session-based account selection (no passwords)
 7. **Custom values**: Enrich page allows setting custom total values for positions not available via yfinance
 8. **Position types**: Holdings are classified as Stock or ETF for allocation constraint purposes
+9. **P&L tracking**: Automatically calculated from `total_invested` and current value for each position
+10. **Protected edits**: Manual edits to identifiers, shares, and countries are preserved across CSV reimports
+11. **Editable positions**: Build page allows direct editing of desired position counts with min/max validation
+12. **Debug mode**: Controlled via `FLASK_ENV` environment variable (development/production)
 
 ## Common Tasks
 

@@ -1,0 +1,2458 @@
+/* ========================================
+   PORTFOLIO SIMULATOR - Ocean Depth
+   Design System: Linear/Stripe/Framer Quality
+   Features: Glassmorphism, Floating Cards, Bento Grid
+   ======================================== */
+
+:root {
+  color-scheme: light; /* Default to light mode for native UI elements */
+
+  /* Ocean Depth Palette */
+  --ocean-950: #020617;
+  --ocean-900: #0F172A;
+  --ocean-800: #1E293B;
+  --ocean-700: #334155;
+  --ocean-600: #475569;
+  --ocean-500: #64748B;
+
+  /* Aqua/Cyan Accents */
+  --aqua-500: #06B6D4;
+  --aqua-400: #22D3EE;
+  --aqua-300: #67E8F9;
+  --aqua-200: #A5F3FC;
+  --aqua-100: #CFFAFE;
+  --aqua-50: #ECFEFF;
+
+  /* Teal Depth */
+  --teal-900: #134E4A;
+  --teal-800: #115E59;
+  --teal-700: #0F766E;
+  --teal-600: #0D9488;
+  --teal-500: #14B8A6;
+  --teal-400: #2DD4BF;
+  --teal-300: #5EEAD4;
+
+  /* Coral/Orange Accent (CTAs) */
+  --coral-600: #EA580C;
+  --coral-500: #F97316;
+  --coral-400: #FB923C;
+
+  /* Crimson/Red Accent (Dramatic) */
+  --crimson-700: #9a2637;
+  --crimson-600: #c83647;
+  --crimson-500: #d9485d;
+  --crimson-400: #e26577;
+  --crimson-300: #ea9aa3;
+
+  /* Neutrals */
+  --white: #FFFFFF;
+  --pearl-50: #F8FAFC;
+  --pearl-100: #F1F5F9;
+  --pearl-200: #E2E8F0;
+  --pearl-300: #CBD5E1;
+  --pearl-900: #0F172A;
+
+  /* Semantic Colors */
+  --success: var(--teal-500);
+  --warning: var(--coral-500);
+  --error: #EF4444;
+  --info: var(--aqua-500);
+
+  /* Background & Surfaces */
+  --bg-primary: var(--pearl-50);
+  --bg-secondary: var(--white);
+  --bg-tertiary: var(--pearl-100);
+
+  /* Text Colors */
+  --text-primary: var(--ocean-900);
+  --text-secondary: var(--ocean-700);
+  --text-tertiary: var(--ocean-600);
+  --text-inverse: var(--white);
+
+  /* Border & Dividers */
+  --border-subtle: var(--pearl-200);
+  --border-default: var(--pearl-300);
+  --border-strong: var(--ocean-500);
+
+  /* Minimal shadows - subtle only */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+  --shadow-2xl: none;
+  --shadow-float: none;
+  --shadow-float-hover: none;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Spacing Scale (8px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+
+  /* Border Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Spring animation (Framer-like) */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Legacy variable mappings */
+  --coral: var(--coral-500);
+  --color-ink-lighter: var(--ocean-600);
+  --radius: var(--radius-md);
+
+  /* Navigation & Surface Colors */
+  --accent: var(--aqua-500);
+  --border-color: var(--border-default);
+  --border-hover: var(--ocean-600);
+  --surface: var(--bg-secondary);
+  --surface-hover: var(--bg-tertiary);
+  --surface-elevated: var(--bg-secondary);
+  --accent-shadow: rgba(6, 182, 212, 0.4);
+
+  /* ========================================
+     Button Sizing System (Centralized) - Minimal (Table Header Size)
+     ======================================== */
+
+  /* Tier 1: Compact Buttons (Tables, Grids, Dense UI) */
+  --btn-height-compact: 20px;        /* Minimal - fits table header text */
+  --btn-padding-compact: 6px;        /* Minimal horizontal padding */
+  --btn-font-size-compact: 0.75rem;  /* 12px - slightly smaller than headers */
+  --btn-line-height-compact: 18px;   /* Tight line height */
+
+  /* Tier 2: Standard Buttons (Modals, Toolbars, CTAs) */
+  --btn-height-standard: 24px;       /* Just enough for 14px font (table header size) */
+  --btn-padding-standard: 10px;      /* Minimal padding */
+  --btn-font-size-standard: 0.875rem; /* 14px - matches table headers */
+  --btn-line-height-standard: 22px;  /* Tight - just fits text */
+
+  /* ========================================
+     Homepage Typography System (Centralized) - Two Sizes Only
+     ======================================== */
+
+  /* Section Titles - "Your Portfolios", "Portfolio Backups & Recovery" */
+  --homepage-title-size: 1.625rem;      /* 26px - matches Portfolio/Simulation tab size */
+  --homepage-title-weight: 700;
+  --homepage-title-spacing: 0.05em;
+
+  /* Content - All other text (portfolio names, metadata, descriptions) */
+  --homepage-content-size: 0.9375rem;   /* 15px - matches body text size */
+  --homepage-content-weight: 400;
+}
+
+/* Dark Mode - Ocean Depth */
+[data-theme="dark"] {
+  color-scheme: dark; /* Tell browser to use dark mode for native UI elements */
+
+  --bg-primary: var(--ocean-950);
+  --bg-secondary: var(--ocean-900);
+  --bg-tertiary: var(--ocean-800);
+
+  --text-primary: var(--pearl-50);
+  --text-secondary: var(--pearl-100);
+  --text-tertiary: var(--pearl-100);
+  --text-inverse: var(--ocean-900);
+
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.3);
+
+  /* Navigation & Surface Colors (Dark) */
+  --border-color: rgba(255, 255, 255, 0.15);
+  --border-hover: rgba(255, 255, 255, 0.3);
+  --surface: var(--ocean-900);
+  --surface-hover: var(--ocean-800);
+  --surface-elevated: var(--ocean-900);
+}
+
+/* Dark Mode - Component Overrides */
+[data-theme="dark"]::selection {
+  background: var(--teal-700);
+  color: var(--white);
+}
+
+/* Dark mode: Backup info box */
+[data-theme="dark"] #backupInfo {
+  background-color: var(--bg-tertiary) !important;  /* Ocean 800: #1E293B */
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] #backupInfo h6 {
+  color: var(--text-primary);
+}
+
+/* Dark mode: Ensure .text-muted is visible (e.g., form helper text) */
+[data-theme="dark"] .text-muted {
+  color: var(--pearl-100) !important;  /* Light gray text for dark mode */
+}
+
+/* Dark mode: Ensure cash input number is visible */
+[data-theme="dark"] .cash-input {
+  color: var(--pearl-50) !important;  /* Bright white for maximum visibility */
+}
+
+[data-theme="dark"] .stat-change:not(.value-positive):not(.value-negative) {
+  color: var(--pearl-200) !important;
+}
+
+[data-theme="dark"] .value-positive {
+  color: var(--success);
+}
+
+[data-theme="dark"] .value-negative {
+  color: var(--error);
+}
+
+/* ========================================
+   Base Styles & Reset
+   ======================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  background-color: var(--bg-primary);
+  min-height: 100vh;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  transition: background var(--transition-smooth), color var(--transition-smooth);
+}
+
+::selection {
+  background: var(--aqua-200);
+  color: var(--ocean-900);
+}
+
+/* ========================================
+   Typography - Modern & Clean
+   ======================================== */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+h2 {
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  margin-bottom: var(--space-4);
+}
+
+h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+h4 {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+p {
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+a {
+  color: var(--aqua-500);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+  position: relative;
+}
+
+a:hover {
+  color: var(--aqua-400);
+}
+
+a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: var(--aqua-500);
+  transition: width var(--transition-base) var(--ease-out);
+}
+
+a:hover::after {
+  width: 100%;
+}
+
+/* ========================================
+   Layout - Container System
+   ======================================== */
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: var(--space-6) var(--space-4);
+  }
+}
+
+
+/* ========================================
+   Theme Toggle - Quadratic Button
+   ======================================== */
+.theme-toggle {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  transition: all var(--transition-fast);
+  z-index: 100;
+}
+
+.theme-toggle:hover {
+  border-color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+/* ========================================
+   Stats Grid - Plain Layout
+   ======================================== */
+/* Stats Grid Layout */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-8);
+  margin: var(--space-10) 0;
+  padding: var(--space-6) 0;
+}
+
+.stat-card {
+  display: grid;
+  grid-template-rows: 2rem 2.5rem auto;
+  align-items: start;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  padding-left: var(--space-6);
+}
+
+.stat-card:first-child {
+  padding-left: 0;
+}
+
+.stat-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+}
+
+.stat-change {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+
+.stat-change.positive {
+  color: var(--success);
+  background: rgba(20, 184, 166, 0.1);
+}
+
+.stat-change.negative {
+  color: var(--error);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ========================================
+   Button System (Unified with Centralized Sizing)
+   ======================================== */
+
+/* Base Button (Required for all buttons) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  border-radius: 0; /* Quadratic design */
+  border: 1px solid;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+
+  /* Default to standard size (can be overridden with .btn-compact) */
+  height: var(--btn-height-standard);
+  padding: 0 var(--btn-padding-standard);
+  font-size: var(--btn-font-size-standard);
+  line-height: var(--btn-line-height-standard);
+}
+
+/* Tier 1: Compact Size Modifier */
+.btn-compact {
+  height: var(--btn-height-compact);
+  padding: 0 var(--btn-padding-compact);
+  font-size: var(--btn-font-size-compact);
+  line-height: var(--btn-line-height-compact);
+}
+
+/* Tier 2: Standard Size (Default - No modifier needed) */
+/* All buttons are standard by default unless .btn-compact is added */
+
+/* DEPRECATED - Keep for backwards compatibility, alias to compact */
+.btn-sm {
+  height: var(--btn-height-compact);
+  padding: 0 var(--btn-padding-compact);
+  font-size: var(--btn-font-size-compact);
+  line-height: var(--btn-line-height-compact);
+}
+
+/* Primary Buttons - Solid fill */
+.btn-primary {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  border-color: var(--text-primary);
+}
+
+.btn-primary:hover {
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+  color: var(--bg-primary);
+}
+
+/* Secondary Buttons - Outlined */
+.btn-secondary {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-primary);
+}
+
+/* Accent Buttons - Colored fill */
+.btn-accent {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+.btn-accent:hover {
+  background: var(--aqua-400);
+  border-color: var(--aqua-400);
+  color: var(--white);
+}
+
+/* Ghost Buttons - Minimal, no border */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* Danger Buttons - Error state */
+.btn-danger {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.btn-danger:hover {
+  background: var(--error);
+  border-color: var(--error);
+  color: var(--white);
+}
+
+/* Success Buttons - Positive action (restore, save, etc.) */
+.btn-success {
+  background: var(--teal-500);
+  color: white;
+  border-color: var(--teal-500);
+}
+
+.btn-success:hover {
+  background: var(--teal-600);
+  border-color: var(--teal-600);
+}
+
+.btn-success:focus {
+  border-color: var(--teal-500);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+}
+
+/* Disabled state for danger buttons (outlined red) */
+.btn-danger:disabled,
+.btn-danger.disabled {
+  background: transparent !important;      /* Keep outlined style */
+  color: var(--error) !important;          /* Red text */
+  border-color: var(--error) !important;   /* Red border */
+  opacity: 0.4;                            /* 40% opacity for darker appearance */
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Disabled state for success buttons (filled teal) */
+.btn-success:disabled,
+.btn-success.disabled {
+  background: var(--teal-500) !important;  /* Keep filled style */
+  color: var(--white) !important;          /* White text */
+  border-color: var(--teal-500) !important;
+  opacity: 0.4;                            /* 40% opacity for darker appearance */
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Ensure hover states don't apply to disabled buttons */
+.btn-danger:disabled:hover,
+.btn-success:disabled:hover,
+.btn-danger.disabled:hover,
+.btn-success.disabled:hover {
+  background: inherit !important;
+  border-color: inherit !important;
+  color: inherit !important;
+  opacity: 0.4;
+}
+
+/* Info Buttons - Informational actions (Backup, Archive, etc.) */
+.btn-info {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+.btn-info:hover {
+  background: var(--aqua-400);
+  border-color: var(--aqua-400);
+  color: var(--white);
+}
+
+.btn-group {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+/* ========================================
+   Tables - Plain Data Display
+   ======================================== */
+.table-container {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: var(--space-10);
+  margin-top: var(--space-10);
+}
+
+table {
+  width: 100%;
+  table-layout: fixed;  /* Prevent content-driven width shifts */
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+thead th {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+th.numeric,
+th.align-right {
+  text-align: right;
+}
+
+tbody tr {
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+/* Minimalistic drag-and-drop */
+.draggable-row {
+  cursor: grab;
+  user-select: none;
+}
+
+.draggable-row:active {
+  cursor: grabbing;
+}
+
+.draggable-row.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  background-color: var(--bg-tertiary) !important;
+}
+
+.draggable-row.drag-over {
+  border-top: 2px solid var(--aqua-500) !important;
+  background-color: rgba(6, 182, 212, 0.05);
+}
+
+tbody tr:hover.draggable-row:not(.dragging) {
+  background-color: var(--bg-tertiary);
+}
+
+td {
+  padding: var(--space-4) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--text-primary);
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+td.numeric {
+  text-align: right;
+}
+
+/* Align all content in numeric cells vertically */
+td.numeric * {
+  vertical-align: middle;
+}
+
+.position-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Legacy nth-child column width rules removed - using class-based width system instead */
+/* See .col-shares, .col-avg-price, etc. below for explicit column widths */
+
+.gain-positive,
+.value-positive {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.gain-negative,
+.value-negative {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.value-neutral {
+  color: var(--text-secondary);
+}
+
+/* ========================================
+   Charts - Plain Containers
+   ======================================== */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-8);
+  margin: var(--space-10) 0;
+}
+
+.chart-container {
+  background: transparent;
+  border: none;
+  padding: var(--space-4) 0;
+  max-width: 400px;
+}
+
+.chart-container canvas {
+  max-height: 280px !important;
+  height: 280px;
+}
+
+.chart-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Chart Header with Toggle */
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+  gap: var(--space-4);
+}
+
+.chart-header .chart-title {
+  margin-bottom: 0; /* Override existing margin since we're using flex */
+  flex-shrink: 0;
+}
+
+.chart-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.chart-toggle .form-check-input {
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.chart-toggle .form-check-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.chart-toggle .form-check-label {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chart-toggle .form-check-label .text-muted {
+  font-weight: 400;
+  font-size: var(--text-xs);
+}
+
+.chart-toggle .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Responsive: Stack on smaller screens */
+@media (max-width: 768px) {
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
+/* ========================================
+   Cards & Sections - Plain
+   ======================================== */
+.card {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: var(--space-10);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+}
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.card-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* ========================================
+   Portfolio List - Plain
+   ======================================== */
+.portfolio-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: var(--space-10) 0;
+}
+
+.portfolio-card {
+  background: transparent;
+  border: none;
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.portfolio-card:hover {
+  background: var(--bg-tertiary);
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+  margin-left: calc(var(--space-4) * -1);
+  margin-right: calc(var(--space-4) * -1);
+}
+
+.portfolio-name {
+  font-size: var(--homepage-content-size);  /* 13px - standardized */
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.portfolio-meta {
+  font-size: var(--homepage-content-size);  /* 13px - standardized */
+  color: var(--text-tertiary);
+}
+
+/* ========================================
+   Forms - Modern Inputs
+   ======================================== */
+.form-group {
+  margin-bottom: var(--space-6);
+}
+
+label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Form labels - Explicit class for Bootstrap compatibility */
+.form-label {
+  display: block;
+  margin-bottom: var(--space-2); /* 0.5rem */
+  font-size: var(--homepage-content-size);  /* 13px - standardized */
+  font-weight: 500; /* Medium weight for better hierarchy */
+  color: var(--text-secondary);
+}
+
+/* Base input reset - minimal styling */
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+/* Remove number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Form controls - for modals and forms only */
+.form-control {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+  transition: all var(--transition-fast);
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--text-primary);
+  box-shadow: none;
+}
+
+/* Select dropdowns - Override Bootstrap to match Ocean Depth design system */
+.form-select {
+  height: var(--btn-height-compact);  /* 20px - matches Restore/Delete buttons */
+  padding: 0 2rem 0 var(--space-3);  /* Minimal padding, room for chevron */
+  font-size: var(--btn-font-size-compact);  /* 12px - matches compact buttons */
+  font-weight: 500;
+  font-family: var(--font-sans);
+  line-height: var(--btn-line-height-compact);  /* 18px - matches compact buttons */
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 0; /* Quadratic aesthetic */
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+
+  /* Custom chevron icon */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2364748b' d='M4.5 5.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+  padding-right: 2.5rem; /* Space for arrow */
+
+  appearance: none; /* Remove default arrow */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.form-select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+.form-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-tertiary);
+}
+
+/* Dark mode adjustments */
+[data-theme="dark"] .form-select {
+  background-color: var(--ocean-900);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+
+  /* Update chevron color for dark mode */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M4.5 5.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.form-check input[type="radio"],
+.form-check input[type="checkbox"] {
+  width: auto;
+  cursor: pointer;
+  accent-color: var(--aqua-500);
+}
+
+.form-check-label {
+  cursor: pointer;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ========================================
+   Badges - Quadratic Design
+   ======================================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+.badge-gain {
+  background: transparent;
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.badge-loss {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.badge-sector {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+
+/* ========================================
+   Alerts - Plain Notifications
+   ======================================== */
+.alert {
+  padding: var(--space-4);
+  border-radius: 0;
+  margin-bottom: var(--space-6);
+  border-left: 3px solid;
+  background: transparent;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.alert-warning {
+  border-color: var(--coral-500);
+  color: var(--text-primary);
+}
+
+.alert-error {
+  border-color: var(--error);
+  color: var(--text-primary);
+}
+
+.alert-success {
+  border-color: var(--success);
+  color: var(--text-primary);
+}
+
+.alert-info {
+  border-color: var(--info);
+  color: var(--text-primary);
+}
+
+/* ========================================
+   Modals - Quadratic Design
+   ======================================== */
+.modal-content {
+  border-radius: 0;
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+  background: var(--bg-secondary);
+}
+
+.modal-header {
+  padding: var(--space-6);
+}
+
+.modal-title {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.modal-body {
+  padding: var(--space-6);
+  background: var(--bg-secondary);
+}
+
+.modal-footer {
+  padding: var(--space-6);
+  background: var(--bg-secondary);
+}
+
+/* Modal close button - standardized quadratic */
+.btn-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 0;
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+
+.btn-close:hover {
+  opacity: 1;
+}
+
+/* ========================================
+   Header & Navigation - Plain
+   ======================================== */
+.header {
+  margin-bottom: var(--space-10);
+  padding-bottom: var(--space-6);
+}
+
+.header-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.masthead {
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.tagline {
+  font-size: 0.9375rem;
+  color: var(--text-tertiary);
+  font-style: normal;
+}
+
+.positions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+/* ========================================
+   Loading States & Animations
+   ======================================== */
+.loading-spinner {
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--aqua-500);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 0%,
+    var(--bg-secondary) 50%,
+    var(--bg-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Micro-interactions */
+.interactive {
+  transition: transform var(--transition-fast) var(--spring);
+}
+
+.interactive:hover {
+  transform: scale(1.02);
+}
+
+.interactive:active {
+  transform: scale(0.98);
+}
+
+/* ========================================
+   Utilities
+   ======================================== */
+
+/* Text Utilities */
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-muted { color: var(--text-tertiary); }
+.text-strong { font-weight: 600; }
+
+/* Flexbox Utilities */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm { gap: var(--space-2); }
+.gap-md { gap: var(--space-4); }
+
+/* Grid Utilities */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 calc(var(--space-3) * -1);
+}
+
+.col-12 {
+  flex: 0 0 100%;
+  max-width: 100%;
+  padding: 0 var(--space-3);
+}
+
+.col-md-6 {
+  flex: 0 0 100%;
+  max-width: 100%;
+  padding: 0 var(--space-3);
+}
+
+@media (min-width: 768px) {
+  .col-md-6 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+}
+
+/* Responsive Utilities */
+.hide-mobile {
+  display: table-cell;
+}
+
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none;
+  }
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+@media (max-width: 768px) {
+  .stats,
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+  }
+
+  .charts {
+    grid-template-columns: 1fr;
+    gap: var(--space-6);
+  }
+
+  .chart-container {
+    max-width: 100%;
+  }
+
+  .chart-container canvas {
+    max-height: 240px !important;
+    height: 240px;
+  }
+
+  .portfolio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .header-title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  .theme-toggle {
+    top: var(--space-4);
+    right: var(--space-4);
+  }
+
+  .btn-group {
+    width: 100%;
+  }
+
+  .btn {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+@media print {
+  body {
+    background: white;
+    background-image: none;
+  }
+
+  .theme-toggle,
+  .btn-group {
+    display: none;
+  }
+
+  .hero,
+  .card,
+  .stat-card,
+  .portfolio-card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    page-break-inside: avoid;
+  }
+}
+
+/* ========================================
+   Notes Functionality
+   ======================================== */
+
+/* Notes input - matches other table inputs */
+.notes-input {
+  cursor: pointer;
+}
+
+/* Textarea styling for notes in modals */
+textarea.form-control {
+  font-family: var(--font-sans);
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.5;
+}
+
+/* Character counter styling */
+.form-group small.text-muted {
+  display: block;
+  margin-top: var(--space-2);
+}
+
+/* ========================================
+   Centralized Portfolio Components
+   ======================================== */
+
+/* Portfolio header section */
+.portfolio-header {
+  margin-bottom: var(--space-8);
+}
+
+.portfolio-header-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: baseline;
+  margin-bottom: var(--space-3);
+}
+
+.portfolio-name-wrapper {
+  flex: 1;
+}
+
+/* Portfolio Title - Large, Bold, Capital */
+.portfolio-title {
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0;
+  text-transform: uppercase;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 3px solid transparent;
+  padding-bottom: 2px;
+  outline: none;
+}
+
+.portfolio-title:hover {
+  opacity: 0.7;
+}
+
+.portfolio-title[contenteditable="true"] {
+  border-bottom-color: var(--aqua-500);
+  opacity: 1;
+}
+
+/* Portfolio Value Display - Large, Bold */
+.portfolio-value-display {
+  text-align: right;
+}
+
+.portfolio-amount {
+  font-family: var(--font-mono);
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border-bottom: 3px solid transparent;
+  padding-bottom: 2px;
+  outline: none;
+  display: inline-block;
+}
+
+.portfolio-amount:hover {
+  opacity: 0.7;
+}
+
+.portfolio-amount[contenteditable="true"] {
+  border-bottom-color: var(--aqua-500);
+  opacity: 1;
+}
+
+/* Large editable headings (portfolio name & value) */
+.input-large {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: var(--space-2) 0;
+  margin: 0;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-bottom-color 0.2s ease;
+}
+
+.input-large:hover {
+  cursor: text;
+}
+
+.input-large:focus {
+  border-bottom-color: var(--aqua-500);
+}
+
+/* Portfolio name input - takes full width */
+.portfolio-name-wrapper .input-large {
+  width: 100%;
+}
+
+/* Portfolio value input (with monospace font) */
+.input-large.input-value {
+  font-family: var(--font-mono);
+  padding: var(--space-2);
+  width: 280px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Currency symbol */
+.currency-symbol {
+  font-size: 1.5rem;
+  color: var(--text-tertiary);
+}
+
+/* Value input container */
+.value-input-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Last updated text */
+.last-updated {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+/* Section header with alignment */
+.section-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+/* Section title */
+.section-title {
+  font-size: var(--homepage-title-size);       /* 14px - standardized */
+  font-weight: var(--homepage-title-weight);   /* 700 */
+  text-transform: uppercase;
+  letter-spacing: var(--homepage-title-spacing); /* 0.05em */
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* Cash Row in table - no special styling, blends with other rows */
+.cash-row {
+  /* No special background - uses default table row styling */
+}
+
+/* Prevent cash row from being draggable */
+.cash-row[draggable] {
+  cursor: default;
+}
+
+/* Cash input styling - must match plain text in Current Value column */
+.cash-input {
+  /* Override .table-input to match plain text */
+  font-size: 0.8125rem !important;        /* Match td font-size */
+  font-weight: 400;
+  color: var(--text-primary) !important;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+
+  /* Remove input-like appearance */
+  padding: 0 !important;                  /* No padding, use td padding */
+  border: none !important;                /* No border like plain text */
+  border-radius: 0 !important;            /* No rounded corners */
+  background: transparent !important;     /* Always transparent */
+
+  /* Remove hover/focus states */
+  cursor: default;                        /* No text cursor, looks like plain text */
+}
+
+.cash-input:hover,
+.cash-input:focus {
+  background: transparent !important;     /* Keep transparent on hover/focus */
+  outline: none !important;               /* No focus outline */
+}
+
+/* Section container */
+.section-container {
+  margin-bottom: var(--space-10);
+}
+
+/* Base class for all table inputs - invisible by default, styled on interaction */
+input.table-input {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  border: none;                    /* Invisible by default - no border */
+  border-radius: 0;                /* No rounding by default */
+  background: transparent;
+  padding: 0;                      /* No padding by default */
+  width: 100%;
+  transition: all 0.15s ease;
+  cursor: default;                 /* Default cursor - looks like plain text */
+  vertical-align: middle;
+  outline: none;
+}
+
+input.table-input:focus {
+  background: var(--bg-secondary);              /* Clear background when focused */
+  border: 1px solid var(--aqua-500);            /* Aqua border matches drag-drop */
+  border-radius: 4px;                           /* Rounded when active */
+  padding: 4px 8px;                             /* Add padding when focused */
+  cursor: text;                                 /* Text cursor when focused */
+  outline: none;
+}
+
+input.table-input:hover {
+  background: rgba(100, 116, 139, 0.05);        /* Slightly more visible */
+  cursor: text;                                 /* Show text cursor on hover */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Subtle underline */
+}
+
+/* Edited field indicator - orange font for manually edited fields */
+input.table-input.field-edited,
+input.table-input.ticker-editing {
+  color: var(--coral-500) !important;
+  font-weight: 400; /* Changed from 600 to normal weight */
+}
+
+/* Specific table input types */
+.sector-input {
+  /* Inherits from .table-input */
+  text-align: left;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+
+.allocation-input {
+  /* Inherits from .table-input */
+  text-align: right;
+}
+
+
+/* Invalid ticker warning badge */
+.invalid-ticker-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  cursor: help;
+  transition: transform 0.15s ease;
+}
+
+.invalid-ticker-badge:hover {
+  transform: scale(1.15);
+}
+
+.invalid-ticker-badge svg {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+/* Empty state */
+.empty-state {
+  padding: 3rem;
+  text-align: center;
+  color: var(--color-ink-lighter);
+}
+
+.empty-state-text {
+  font-size: 1.125rem;
+}
+
+/* Ticker input uppercase */
+.ticker-input {
+  text-transform: uppercase;
+}
+
+/* Inline form */
+.form-inline {
+  display: inline;
+}
+
+/* Portfolio card layout */
+.portfolio-card-layout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  width: 100%;
+}
+
+.portfolio-name-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.portfolio-meta-col {
+  flex-shrink: 0;
+}
+
+.portfolio-updated {
+  flex-shrink: 0;
+  font-size: var(--homepage-content-size);  /* 15px */
+  color: var(--text-tertiary);  /* FIX: Ensure dark mode visibility */
+}
+
+/* Dark mode: Increase timestamp visibility */
+[data-theme="dark"] .portfolio-updated {
+  color: #F8FAFC !important;  /* Brightest white - force visibility */
+}
+
+.portfolio-value {
+  font-family: var(--font-mono);
+  font-size: var(--homepage-content-size);  /* 13px - standardized */
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 120px;
+  text-align: right;
+}
+
+.portfolio-actions {
+  flex-shrink: 0;
+}
+
+/* Empty state with border */
+.empty-state-bordered {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state-title {
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+}
+
+.empty-state-description {
+  font-size: var(--homepage-content-size);  /* 13px - standardized */
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-6);
+}
+
+/* Homepage card body text - standardized to content size */
+.card-body p {
+  font-size: var(--homepage-content-size);  /* 15px - standardized */
+}
+
+/* Align recovery section with portfolio names */
+.card-body {
+  padding: 0;
+}
+
+/* Homepage buttons and dropdowns - use content font size */
+.form-select {
+  font-size: var(--homepage-content-size);  /* 15px - matches homepage content */
+}
+
+.portfolio-actions .btn,
+.modal .btn,
+header .btn,
+#restoreBackupBtn,
+#deleteBackupBtn {
+  font-size: var(--homepage-content-size);  /* 15px - matches homepage content */
+}
+
+/* ========================================
+   Content Section Header & Tab Navigation
+   ======================================== */
+.content-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--space-8) 0 var(--space-6);
+  padding-bottom: var(--space-4);
+}
+
+.section-heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  line-height: 1.2;
+}
+
+/* Tab Navigation - Inline Text Links */
+.tab-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Tab Navigation Container (Standalone - Prominent) */
+.tab-nav-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-5);
+  padding-bottom: var(--space-3);
+}
+
+.tab-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 1.625rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+
+.tab-link:hover {
+  color: var(--text-secondary);
+}
+
+.tab-link.active {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.tab-separator {
+  color: var(--border-default);
+  font-size: 1.375rem;
+  font-weight: 300;
+  user-select: none;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========================================
+   Positions Action Toolbar (Matches Simulation Gold Standard)
+   ======================================== */
+.positions-action-toolbar {
+  display: flex;
+  gap: var(--space-3);              /* 12px - match simulation */
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;        /* Right-align like simulation */
+  padding: var(--space-4) 0;        /* Vertical only - match simulation */
+  margin: var(--space-4) 0 var(--space-6);  /* Match simulation margins */
+  background: none;                  /* Remove background */
+  border-radius: 0;                  /* Remove rounding */
+  border: none;                      /* Remove all borders */
+}
+
+/* Fixed width for primary action buttons in toolbars */
+.positions-action-toolbar .btn[data-bs-target="#addPositionModal"],
+.simulation-section-header .btn[data-bs-target="#addSimulatedPositionModal"] {
+  width: 150px;  /* Fixed width - same for all action buttons */
+}
+
+/* Simulation button group - stacked layout with perfect alignment */
+.simulation-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2); /* 8px vertical gap between buttons and dropdown */
+  align-items: stretch;
+}
+
+.simulation-button-group .btn-group {
+  display: flex;
+  gap: var(--space-2); /* 8px horizontal gap between buttons */
+}
+
+.simulation-button-group .btn {
+  width: 120px; /* Fixed width for both buttons */
+  flex-shrink: 0;
+}
+
+.simulation-button-group .simulation-select {
+  width: 248px; /* 120px + 8px + 120px - perfectly matches buttons + gap */
+  min-width: 248px;
+}
+
+/* ========================================
+   Simulation Layer Styles
+   ======================================== */
+.simulation-layer {
+  margin-bottom: var(--space-6);
+}
+
+.simulation-layer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.simulation-layer-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Simulation Section Header (for BASE PORTFOLIO and SIMULATION LAYER) */
+.simulation-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.simulation-section-title {
+  font-size: 1.25rem;  /* 20px - middle between tab-link (26px) and metric-value (14px) */
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.simulation-layer-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  background: var(--surface-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.simulation-layer-badge.locked {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.simulation-layer-badge.editable {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+/* Live badge variant for portfolio table (aqua accent - indicates real-time data) */
+.simulation-layer-badge.live {
+  color: var(--aqua-500);
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid var(--aqua-500);
+  box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.3);
+}
+
+.simulation-layer-badge.live:hover {
+  box-shadow: 0 0 12px 0 rgba(6, 182, 212, 0.3);
+}
+
+[data-theme="light"] .simulation-layer-badge.live {
+  color: var(--aqua-600);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.base-positions-table {
+  opacity: 0.7;
+}
+
+.base-positions-table tbody tr {
+  background: var(--surface-elevated);
+  cursor: not-allowed;
+}
+
+.base-positions-table .table-input {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ========================================
+   Simulation Controls Toolbar
+   ======================================== */
+
+.simulation-controls-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: var(--space-4) 0;
+  margin: var(--space-4) 0 var(--space-6);
+}
+
+/* ========================================
+   Simulation Metrics Panel
+   ======================================== */
+
+.simulation-metrics-panel {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(248, 250, 252, 0.8);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.metric-label {
+  font-family: var(--font-sans);
+  font-size: 0.875rem; /* 14px - matches button/dropdown size */
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ocean-400);
+  white-space: nowrap;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 0.875rem; /* 14px */
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ocean-900);
+  white-space: nowrap;
+}
+
+.metric-sublabel {
+  font-size: 0.75rem; /* 12px */
+  font-weight: 400;
+  color: var(--ocean-500);
+  margin-left: 6px;
+}
+
+/* Dark Mode Overrides */
+[data-theme="dark"] .simulation-metrics-panel {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+[data-theme="dark"] .metric-label {
+  color: var(--ocean-500);
+}
+
+[data-theme="dark"] .metric-value {
+  color: var(--ocean-50);
+}
+
+[data-theme="dark"] .metric-sublabel {
+  color: var(--ocean-400);
+}
+
+/* Responsive Layout: Stack in 2x2 grid on smaller screens */
+@media (max-width: 1200px) {
+  .simulation-metrics-panel {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px 16px;
+  }
+}
+
+.simulation-select {
+  min-width: 240px;
+  height: 24px;        /* Minimal - matches standard buttons */
+  padding: 0 2.5rem 0 var(--space-3);
+  font-size: 0.875rem; /* 14px - matches table headers */
+  font-weight: 500;
+  font-family: var(--font-sans);
+  line-height: 22px;   /* Tight - matches standard buttons */
+  color: var(--text-primary);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 0;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  cursor: pointer;
+
+  /* Custom chevron icon */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2364748b' d='M4.5 5.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.simulation-select:hover {
+  border-color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.simulation-select:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+/* Dark mode */
+[data-theme="dark"] .simulation-select {
+  background-color: var(--ocean-900);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M4.5 5.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
+}
+
+/* Disabled state for Clear All and Save buttons */
+.simulation-controls-toolbar .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+  color: var(--text-tertiary);
+}
+
+/* Responsive: Stack vertically on mobile */
+@media (max-width: 768px) {
+  .simulation-controls-toolbar {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .simulation-controls-left,
+  .simulation-controls-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .simulation-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .simulation-controls-right {
+    justify-content: flex-end;
+  }
+}
+
+/* ========================================
+   Accessibility
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--aqua-500);
+  outline-offset: 2px;
+}
+
+/* ========================================
+   Data Source Badge Component
+   ======================================== */
+.data-source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  border-radius: 0;
+  border: 1px solid;
+  background: transparent;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.data-source-badge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0.08;
+  transition: opacity 0.2s ease;
+}
+
+.data-source-badge:hover::before {
+  opacity: 0.12;
+}
+
+/* CSV Import Badge - Teal */
+.data-source-badge.csv {
+  color: var(--teal-400);
+  border-color: var(--teal-500);
+  box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.3);
+}
+
+.data-source-badge.csv:hover {
+  box-shadow: 0 0 12px 0 rgba(20, 184, 166, 0.3);
+}
+
+/* Manual Entry Badge - Coral */
+.data-source-badge.manual {
+  color: var(--coral-400);
+  border-color: var(--coral-500);
+  box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.3);
+}
+
+.data-source-badge.manual:hover {
+  box-shadow: 0 0 12px 0 rgba(249, 115, 22, 0.3);
+}
+
+/* Source Column - Minimal Width for Badge Column */
+.source-column {
+  width: 60px;
+  max-width: 60px;
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Numeric Column Widths - UNIFORM 120px for all 5 columns */
+/* Using element+class selectors (specificity 11) to override any remaining nth-child rules */
+th.col-shares, td.col-shares {
+  width: 120px;
+  min-width: 120px;
+}
+
+th.col-avg-price, td.col-avg-price {
+  width: 120px;
+  min-width: 120px;
+}
+
+th.col-current-price, td.col-current-price {
+  width: 120px;
+  min-width: 120px;
+}
+
+th.col-current-value, td.col-current-value {
+  width: 120px;
+  min-width: 120px;
+}
+
+th.col-gain-loss, td.col-gain-loss {
+  width: 120px;
+  min-width: 120px;
+}
+
+th.col-portfolio-pct, td.col-portfolio-pct {
+  width: 120px;
+  min-width: 120px;
+}
+
+/* Optional: Non-numeric column widths (for future use) */
+/* These classes are defined but not required in HTML templates */
+th.col-ticker, td.col-ticker {
+  width: 100px;
+  min-width: 100px;
+}
+
+th.col-name, td.col-name {
+  width: 200px;
+  min-width: 150px;
+}
+
+th.col-sector, td.col-sector {
+  width: 120px;
+  min-width: 100px;
+}
+
+th.col-notes, td.col-notes {
+  width: 200px;
+  min-width: 150px;
+}
+
+th.col-actions, td.col-actions {
+  width: 80px;
+  min-width: 80px;
+}
+
+/* =============================================================================
+   ALLOCATION TYPE SELECTOR (NEW FEATURE: Percentage/Amount-based Allocations)
+   ============================================================================= */
+
+/* Allocation Type Radio Button Selector */
+.allocation-type-selector {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.allocation-type-selector label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.625rem 1rem;
+  border: 1.5px solid var(--ocean-700);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ocean-400);
+}
+
+[data-theme="light"] .allocation-type-selector label {
+  border-color: var(--pearl-300);
+  color: var(--ocean-700);
+}
+
+.allocation-type-selector label:hover {
+  background: var(--ocean-800);
+  border-color: var(--aqua-500);
+  color: var(--aqua-300);
+}
+
+[data-theme="light"] .allocation-type-selector label:hover {
+  background: var(--pearl-50);
+  border-color: var(--aqua-500);
+  color: var(--aqua-600);
+}
+
+.allocation-type-selector input[type="radio"] {
+  accent-color: var(--aqua-500);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.allocation-type-selector input[type="radio"]:checked + span {
+  color: var(--aqua-400);
+}
+
+[data-theme="light"] .allocation-type-selector input[type="radio"]:checked + span {
+  color: var(--aqua-600);
+}
+
+.allocation-type-selector label:has(input[type="radio"]:checked) {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: var(--aqua-500);
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.2);
+}
+
+[data-theme="light"] .allocation-type-selector label:has(input[type="radio"]:checked) {
+  background: rgba(6, 182, 212, 0.08);
+  border-color: var(--aqua-600);
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.15);
+}
+
+/* Allocation Input Container */
+.allocation-input {
+  margin-bottom: 1rem;
+}
+
+.allocation-input input[type="number"] {
+  width: 100%;
+}
+
+/* Conversion Preview (for percentage input) */
+.conversion-preview {
+  margin-top: 0.625rem;
+  padding: 0.75rem 1rem;
+  background: var(--ocean-900);
+  border-left: 3px solid var(--aqua-400);
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.875rem;
+  color: var(--ocean-300);
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="light"] .conversion-preview {
+  background: var(--pearl-50);
+  border-left-color: var(--aqua-600);
+  color: var(--ocean-700);
+}
+
+.conversion-preview strong {
+  color: var(--aqua-400);
+  font-weight: 600;
+}
+
+[data-theme="light"] .conversion-preview strong {
+  color: var(--aqua-600);
+}
+
+/* Allocation Column in Table */
+.allocation-cell {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-weight: 500;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.allocation-cell.percentage {
+  color: var(--teal-400);
+}
+
+[data-theme="light"] .allocation-cell.percentage {
+  color: var(--teal-600);
+}
+
+.allocation-cell.amount {
+  color: var(--coral-400);
+}
+
+[data-theme="light"] .allocation-cell.amount {
+  color: var(--coral-600);
+}
+
+.allocation-cell.shares {
+  color: var(--ocean-400);
+}
+
+[data-theme="light"] .allocation-cell.shares {
+  color: var(--ocean-600);
+}
+
+.allocation-cell .allocation-secondary {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ocean-500);
+  margin-top: 0.125rem;
+}
+
+[data-theme="light"] .allocation-cell .allocation-secondary {
+  color: var(--ocean-500);
+}
+
+/* Warning for zero portfolio value */
+.percentage-warning {
+  margin-top: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background: rgba(251, 146, 60, 0.1);
+  border-left: 3px solid var(--coral-500);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--coral-400);
+  display: none;
+}
+
+[data-theme="light"] .percentage-warning {
+  background: rgba(251, 146, 60, 0.08);
+  color: var(--coral-600);
+}

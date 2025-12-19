@@ -1,87 +1,92 @@
-<aside class="menu p-4">
+<!-- Sidebar Navigation -->
+<aside class="sidebar p-4" style="height: 100%;">
     {% if session.account_id %}
-    <p class="menu-label">
-        Overview
-    </p>
-    <ul class="menu-list">
-        <li>
-            <a href="{{ url_for('main.index') }}" class="{{ 'is-active' if request.endpoint == 'main.index' }}">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-home"></i>
-                    </span>
+
+    <!-- Overview Section -->
+    <div class="sidebar-section mb-4">
+        <h6 class="sidebar-label text-uppercase mb-3" style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; color: var(--text-tertiary);">
+            Overview
+        </h6>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a href="{{ url_for('main.index') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'main.index' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'main.index' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-home me-3" style="width: 20px; color: var(--aqua-500);"></i>
                     <span>Overview</span>
-                </span>
-            </a>
-        </li>
-    </ul>
+                </a>
+            </li>
+        </ul>
+    </div>
 
-    <p class="menu-label">
-        Portfolios
-    </p>
-    <ul class="menu-list">
-        <li>
-            <a href="{{ url_for('portfolio.enrich') }}"
-                class="{{ 'is-active' if request.endpoint == 'portfolio.enrich' }}">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-gem"></i>
-                    </span>
+    <!-- Portfolios Section -->
+    <div class="sidebar-section mb-4">
+        <h6 class="sidebar-label text-uppercase mb-3" style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; color: var(--text-tertiary);">
+            Portfolios
+        </h6>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.enrich') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.enrich' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.enrich' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-gem me-3" style="width: 20px; color: var(--teal-500);"></i>
                     <span>Enrich</span>
-                </span>
-            </a>
-        </li>
-        <li>
-            <a href="{{ url_for('portfolio.risk_overview') }}"
-                class="{{ 'is-active' if request.endpoint == 'portfolio.risk_overview' }}">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-chart-pie"></i>
-                    </span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.risk_overview') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.risk_overview' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.risk_overview' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-chart-pie me-3" style="width: 20px; color: var(--coral-500);"></i>
                     <span>Risk Overview</span>
-                </span>
-            </a>
-        </li>
-        <li>
-            <a href="{{ url_for('portfolio.analyse') }}"
-                class="{{ 'is-active' if request.endpoint == 'portfolio.analyse' }}">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-search"></i>
-                    </span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.analyse') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.analyse' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.analyse' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-search me-3" style="width: 20px; color: var(--aqua-400);"></i>
                     <span>Category Analysis</span>
-                </span>
-            </a>
-        </li>
-    </ul>
+                </a>
+            </li>
+        </ul>
+    </div>
 
-    <p class="menu-label mt-5">
-        Allocation
-    </p>
-    <ul class="menu-list">
-        <li>
-            <a href="{{ url_for('portfolio.build') }}" {% if request.endpoint=='portfolio.build' %}class="is-active" {%
-                endif %}>
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-cubes"></i>
-                    </span>
+    <!-- Allocation Section -->
+    <div class="sidebar-section">
+        <h6 class="sidebar-label text-uppercase mb-3" style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; color: var(--text-tertiary);">
+            Allocation
+        </h6>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.build') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.build' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.build' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-cubes me-3" style="width: 20px; color: var(--teal-400);"></i>
                     <span>Allocation Builder</span>
-                </span>
-            </a>
-        </li>
-        <li>
-            <a href="{{ url_for('portfolio.allocate') }}"
-                class="{{ 'is-active' if request.endpoint == 'portfolio.allocate' }}">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-balance-scale"></i>
-                    </span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.allocate') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.allocate' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.allocate' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-balance-scale me-3" style="width: 20px; color: var(--coral-400);"></i>
                     <span>Capital Allocation</span>
-                </span>
-            </a>
-        </li>
-    </ul>
-    {% else %}
+                </a>
+            </li>
+        </ul>
+    </div>
+
     {% endif %}
 </aside>
+
+<style>
+    .sidebar .nav-link:hover {
+        background: var(--bg-tertiary) !important;
+        border-left: 3px solid var(--aqua-400);
+    }
+
+    .sidebar .nav-link.active {
+        font-weight: 500;
+    }
+</style>

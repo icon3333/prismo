@@ -1,112 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Portfolio Rebalancer{% endblock %}</title>
 
+    <!-- Prevent white flash on page load -->
+    <style>
+        html, body {
+            background-color: #F8FAFC;
+            margin: 0;
+            padding: 0;
+        }
+        [data-theme="dark"] html,
+        [data-theme="dark"] body,
+        html[data-theme="dark"],
+        html[data-theme="dark"] body {
+            background-color: #020617;
+        }
+    </style>
+
+    <!-- Set theme before any content renders -->
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') ||
+                         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.backgroundColor = theme === 'dark' ? '#020617' : '#F8FAFC';
+        })();
+    </script>
+
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}">
 
-    <!-- Bulma CSS (base styles) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Bulma Tooltip Extension -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-tooltip@3.0.2/dist/css/bulma-tooltip.min.css">
+    <!-- Ocean Depth Design System -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ocean-depth.css') }}">
 
-    <!-- External libraries will be loaded at the bottom before our scripts -->
-
-    <!-- Custom CSS (overrides) -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v=fix-analyse-20251218">
-
-    <!-- Bulk Edit Styles -->
-    <link rel="stylesheet"
-        href="{{ url_for('static', filename='css/bulk-edit.css') }}?v=restore-inline-20250128">
-
+    <!-- Page-specific CSS -->
     {% block head_extras %}{% endblock %}
 
     <style>
-        /* Fix for the empty space issue */
-        body {
+        /* Sidebar Layout System */
+        .app-wrapper {
             display: flex;
-            flex-direction: column;
             min-height: 100vh;
         }
 
-        .main-wrapper {
-            flex: 1;
-            display: flex;
-        }
-
-        .content-container {
-            flex-grow: 1;
-            overflow-y: auto;
-        }
-
-        .footer {
-            margin-top: 0;
-            padding-top: 1.5rem;
-            padding-bottom: 1.5rem;
-        }
-
-        /* Sidebar scrolling fix */
         .sidebar-container {
+            width: 240px;
+            flex-shrink: 0;
             position: sticky;
             top: 0;
             height: 100vh;
             overflow-y: auto;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-subtle);
+            z-index: 50;
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .app-footer {
+            padding: 1.5rem 0;
+            border-top: 1px solid var(--border-subtle);
+            color: var(--text-tertiary);
+            font-size: 0.875rem;
+            text-align: center;
+        }
+
+        /* Full width mode (no sidebar) */
+        .main-container.full-width {
+            width: 100%;
+        }
+
+        /* Responsive sidebar */
+        @media (max-width: 768px) {
+            .sidebar-container {
+                display: none;
+            }
+            .main-container {
+                width: 100%;
+            }
         }
     </style>
 </head>
 
 <body>
-    <!-- Navigation -->
-    {% include 'components/navbar.html' %}
+    <!-- Theme Toggle (fixed position) -->
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <span id="theme-icon">🌙</span>
+    </button>
 
-    <div class="main-wrapper">
-        <!-- Sidebar - Show by default unless show_sidebar is explicitly set to false by child template -->
+    <div class="app-wrapper">
+        <!-- Sidebar - Show by default unless show_sidebar is explicitly set to false -->
         {% if show_sidebar is not defined or show_sidebar %}
-        <div class="sidebar-container" style="width: 240px; flex-shrink: 0;">
+        <div class="sidebar-container">
             {% include 'components/sidebar.html' %}
         </div>
         {% endif %}
 
         <!-- Main Content -->
-        <div class="content-container" {% if show_sidebar is defined and not show_sidebar %} style="width: 100%;" {%
-            endif %}>
-            <main class="section">
-                <div class="container">
+        <div class="main-container {% if show_sidebar is defined and not show_sidebar %}full-width{% endif %}">
+            <!-- Navigation -->
+            {% include 'components/navbar.html' %}
+
+            <!-- Content -->
+            <div class="content-wrapper">
+                <main class="container">
                     <!-- Flash Messages -->
                     {% include 'components/messages.html' %}
 
                     <!-- Page Content -->
                     {% block content %}{% endblock %}
-                </div>
-            </main>
+                </main>
+            </div>
+
+            <!-- Footer -->
+            {% include 'components/footer.html' %}
         </div>
     </div>
 
-    <!-- Footer -->
-    {% include 'components/footer.html' %}
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- External Libraries - Load in correct order -->
+    <!-- External Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.44.0/dist/apexcharts.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-    <!-- Chart Configuration (depends on ApexCharts) -->
-    <script src="{{ url_for('static', filename='js/apex_chart_config.js') }}?v=colorfix2{{ range(1, 10000) | random }}"></script>
+    <!-- Theme Toggle JS -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 
-    <!-- Main JavaScript (depends on Vue) -->
+    <!-- Chart Configuration -->
+    <script src="{{ url_for('static', filename='js/apex_chart_config.js') }}"></script>
+
+    <!-- Main JavaScript -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
     {% block scripts %}{% endblock %}
 </body>
-
 </html>

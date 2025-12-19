@@ -2,259 +2,255 @@
 
 {% block title %}Account Management - Portfolio Rebalancer{% endblock %}
 
+{% block head_extras %}
+<style>
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 1.5rem;
+    }
+
+    .page-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 2rem;
+    }
+
+    .page-title i {
+        color: var(--aqua-500);
+    }
+
+    .nav-tabs {
+        display: flex;
+        gap: 0.5rem;
+        border-bottom: 1px solid var(--border-subtle);
+        margin-bottom: 1.5rem;
+    }
+
+    .nav-tabs .nav-link {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: transparent;
+        color: var(--text-tertiary);
+        font-weight: 500;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .nav-tabs .nav-link.active {
+        color: var(--aqua-500);
+    }
+
+    .nav-tabs .nav-link.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--aqua-500);
+    }
+
+    .nav-tabs .nav-link:hover:not(.active) {
+        color: var(--text-primary);
+    }
+
+    .info-box {
+        background: rgba(6, 182, 212, 0.1);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .warning-box {
+        background: rgba(249, 115, 22, 0.1);
+        border: 1px solid rgba(249, 115, 22, 0.3);
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .danger-box {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
-    <h1 class="title">
-        <span class="icon-text">
-            <span class="icon">
-                <i class="fas fa-user-cog"></i>
-            </span>
-            <span>Account Management</span>
-        </span>
+    <h1 class="page-title">
+        <i class="fas fa-user-cog"></i>
+        <span>Account Management</span>
     </h1>
 
     <h2 class="section-title">Account Information</h2>
-    <div class="columns">
-        <div class="column is-4">
-            <div class="card">
-                <header class="card-header">
-                    <p class="card-header-title">
-                        <span class="icon-text">
-                            <span class="icon">
-                                <i class="fas fa-id-card"></i>
-                            </span>
-                            <span>Account Details</span>
-                        </span>
-                    </p>
-                </header>
-                <div class="card-content">
-                    <div class="content">
-                        <div class="field">
-                            <label class="label">Username</label>
-                            <div class="control">
-                                <input class="input" type="text" value="{{ account.username }}" disabled>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label class="label">Account ID</label>
-                            <div class="control">
-                                <input class="input" type="text" value="{{ account.id }}" disabled>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label class="label">Created At</label>
-                            <div class="control">
-                                <input class="input" type="text" value="{{ account.created_at }}" disabled>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label class="label">Last Price Update</label>
-                            <div class="control">
-                                <input class="input" type="text" value="{{ account.last_price_update or 'Never' }}"
-                                    disabled>
-                            </div>
-                        </div>
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h3 class="card-title mb-0">
+                        <i class="fas fa-id-card me-2" style="color: var(--aqua-500);"></i>
+                        Account Details
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input class="form-control" type="text" value="{{ account.username }}" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Account ID</label>
+                        <input class="form-control" type="text" value="{{ account.id }}" disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Created At</label>
+                        <input class="form-control" type="text" value="{{ account.created_at }}" disabled>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Last Price Update</label>
+                        <input class="form-control" type="text" value="{{ account.last_price_update or 'Never' }}" disabled>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="column is-8">
-            <div class="tabs mb-4">
-                <ul class="nav-tabs" id="accountTabs">
-                    <li class="nav-item">
-                        <button class="nav-link active" id="settings-tab" type="button">Settings</button>
-                    </li>
-                    <li class="nav-item">
-                        <button class="nav-link" id="delete-tab" type="button">Delete</button>
-                    </li>
-                </ul>
+        <div class="col-md-8">
+            <div class="nav-tabs" id="accountTabs">
+                <button class="nav-link active" id="settings-tab" type="button">Settings</button>
+                <button class="nav-link" id="delete-tab" type="button">Delete</button>
             </div>
-            <div class="tab-content" id="accountTabsContent">
-                <div class="tab-pane active" id="settings" role="tabpanel">
-                    <div class="card mb-5">
-                        <header class="card-header">
-                            <p class="card-header-title">
-                                <span class="icon-text">
-                                    <span class="icon">
-                                        <i class="fas fa-edit"></i>
-                                    </span>
-                                    <span>Update Username</span>
-                                </span>
-                            </p>
-                        </header>
-                        <div class="card-content">
-                            <form action="{{ url_for('account.update_account') }}" method="post">
-                                <div class="field">
-                                    <label class="label">New Username</label>
-                                    <div class="control has-icons-left">
-                                        <input class="input" type="text" name="new_username" placeholder="Enter new username" required>
-                                        <span class="icon is-small is-left">
-                                            <i class="fas fa-user"></i>
-                                        </span>
-                                    </div>
-                                    <p class="help">Choose a unique username for your account</p>
-                                </div>
 
-                                <div class="field">
-                                    <div class="control">
-                                        <button type="submit" class="button is-primary">
-                                            <span class="icon">
-                                                <i class="fas fa-save"></i>
-                                            </span>
-                                            <span>Update Username</span>
-                                        </button>
+            <div class="tab-content" id="accountTabsContent">
+                <!-- Settings Tab -->
+                <div class="tab-pane active" id="settings" role="tabpanel">
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h3 class="card-title mb-0">
+                                <i class="fas fa-edit me-2" style="color: var(--aqua-500);"></i>
+                                Update Username
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('account.update_account') }}" method="post">
+                                <div class="mb-3">
+                                    <label class="form-label">New Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text" style="background: var(--bg-tertiary); border-color: var(--border-default);">
+                                            <i class="fas fa-user" style="color: var(--text-tertiary);"></i>
+                                        </span>
+                                        <input class="form-control" type="text" name="new_username" placeholder="Enter new username" required>
                                     </div>
+                                    <div class="form-text">Choose a unique username for your account</div>
                                 </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>
+                                    Update Username
+                                </button>
                             </form>
                         </div>
                     </div>
 
-                    <div class="card mb-5">
-                        <header class="card-header has-background-primary-light">
-                            <p class="card-header-title has-text-primary-dark">
-                                <span class="icon-text">
-                                    <span class="icon">
-                                        <i class="fas fa-exchange-alt"></i>
-                                    </span>
-                                    <span>Data Migration</span>
-                                </span>
-                            </p>
-                        </header>
-                        <div class="card-content">
-                            <div class="content">
-                                <div class="notification is-info is-light">
-                                    <p><strong>Export:</strong> Download all your account data as a JSON file for backup or migration.</p>
-                                    <p><strong>Import:</strong> Upload a JSON file to replace all current account data. This will permanently overwrite your existing data.</p>
+                    <div class="card mb-4">
+                        <div class="card-header" style="background: rgba(6, 182, 212, 0.1);">
+                            <h3 class="card-title mb-0" style="color: var(--aqua-500);">
+                                <i class="fas fa-exchange-alt me-2"></i>
+                                Data Migration
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-box">
+                                <p class="mb-1"><strong>Export:</strong> Download all your account data as a JSON file for backup or migration.</p>
+                                <p class="mb-0"><strong>Import:</strong> Upload a JSON file to replace all current account data. This will permanently overwrite your existing data.</p>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <a href="{{ url_for('account.export_data') }}" class="btn btn-primary w-100">
+                                        <i class="fas fa-download me-2"></i>
+                                        Export Account Data
+                                    </a>
                                 </div>
-
-                                <div class="columns">
-                                    <div class="column">
-                                        <a href="{{ url_for('account.export_data') }}" class="button is-primary is-fullwidth">
-                                            <span class="icon">
-                                                <i class="fas fa-download"></i>
-                                            </span>
-                                            <span>Export Account Data</span>
-                                        </a>
-                                    </div>
-                                    <div class="column">
-                                        <button type="button" class="button is-warning is-fullwidth" onclick="openImportModal()">
-                                            <span class="icon">
-                                                <i class="fas fa-upload"></i>
-                                            </span>
-                                            <span>Import Account Data</span>
-                                        </button>
-                                    </div>
+                                <div class="col-md-6">
+                                    <button type="button" class="btn btn-accent w-100" onclick="openImportModal()">
+                                        <i class="fas fa-upload me-2"></i>
+                                        Import Account Data
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="tab-pane" id="delete" role="tabpanel" style="display: none;">
-                    <div class="card mb-5">
-                        <header class="card-header has-background-warning-light">
-                            <p class="card-header-title has-text-warning-dark">
-                                <span class="icon-text">
-                                    <span class="icon">
-                                        <i class="fas fa-trash"></i>
-                                    </span>
-                                    <span>Delete Stock/Crypto</span>
-                                </span>
-                            </p>
-                        </header>
-                        <div class="card-content">
-                            <div class="content">
-                                <div class="notification is-info is-light">
-                                    <p><strong>Info:</strong> This will remove all stock and crypto data for your current account, including companies, shares, and market prices. This action cannot be undone.</p>
-                                </div>
 
-                                <form action="{{ url_for('account.delete_stocks_crypto') }}" method="post" id="delete-stocks-form">
-                                    <div class="field">
-                                        <div class="control">
-                                            <button type="submit" class="button is-warning">
-                                                <span class="icon">
-                                                    <i class="fas fa-chart-line"></i>
-                                                </span>
-                                                <span>Delete All Stocks & Crypto</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
+                <!-- Delete Tab -->
+                <div class="tab-pane" id="delete" role="tabpanel" style="display: none;">
+                    <div class="card mb-4">
+                        <div class="card-header" style="background: rgba(249, 115, 22, 0.1);">
+                            <h3 class="card-title mb-0" style="color: var(--coral-500);">
+                                <i class="fas fa-trash me-2"></i>
+                                Delete Stock/Crypto
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="warning-box">
+                                <p class="mb-0"><strong>Info:</strong> This will remove all stock and crypto data for your current account, including companies, shares, and market prices. This action cannot be undone.</p>
                             </div>
+                            <form action="{{ url_for('account.delete_stocks_crypto') }}" method="post" id="delete-stocks-form">
+                                <button type="submit" class="btn btn-accent">
+                                    <i class="fas fa-chart-line me-2"></i>
+                                    Delete All Stocks & Crypto
+                                </button>
+                            </form>
                         </div>
                     </div>
 
-                    <div class="card mb-5">
-                        <header class="card-header has-background-info-light">
-                            <p class="card-header-title has-text-info-dark">
-                                <span class="icon-text">
-                                    <span class="icon">
-                                        <i class="fas fa-undo"></i>
-                                    </span>
-                                    <span>Reset Account Settings</span>
-                                </span>
-                            </p>
-                        </header>
-                        <div class="card-content">
-                            <div class="content">
-                                <div class="notification is-info is-light">
-                                    <p><strong>Info:</strong> This will clear all saved settings for this account and restore defaults.</p>
-                                </div>
-
-                                <form action="{{ url_for('account.reset_account_settings') }}" method="post" id="reset-account-form">
-                                    <div class="field">
-                                        <div class="control">
-                                            <button type="submit" class="button is-info">
-                                                <span class="icon">
-                                                    <i class="fas fa-undo"></i>
-                                                </span>
-                                                <span>Reset Account Settings</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
+                    <div class="card mb-4">
+                        <div class="card-header" style="background: rgba(6, 182, 212, 0.1);">
+                            <h3 class="card-title mb-0" style="color: var(--aqua-500);">
+                                <i class="fas fa-undo me-2"></i>
+                                Reset Account Settings
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-box">
+                                <p class="mb-0"><strong>Info:</strong> This will clear all saved settings for this account and restore defaults.</p>
                             </div>
+                            <form action="{{ url_for('account.reset_account_settings') }}" method="post" id="reset-account-form">
+                                <button type="submit" class="btn btn-secondary">
+                                    <i class="fas fa-undo me-2"></i>
+                                    Reset Account Settings
+                                </button>
+                            </form>
                         </div>
                     </div>
 
                     <div class="card">
-                        <header class="card-header has-background-danger-light">
-                            <p class="card-header-title has-text-danger">
-                                <span class="icon-text">
-                                    <span class="icon">
-                                        <i class="fas fa-exclamation-triangle"></i>
-                                    </span>
-                                    <span>Delete Account</span>
-                                </span>
-                            </p>
-                        </header>
-                        <div class="card-content">
-                            <div class="content">
-                                <div class="notification is-warning is-light">
-                                    <p><strong>Warning:</strong> Deleting your account is permanent and cannot be undone. All your portfolio data, preferences, and history will be permanently removed.</p>
-                                </div>
-
-                                <form action="{{ url_for('account.delete_account') }}" method="post" id="delete-account-form">
-                                    <div class="field">
-                                        <label class="label">Confirmation</label>
-                                        <div class="control">
-                                            <input class="input" type="text" name="confirmation" placeholder="Type DELETE to confirm" required>
-                                        </div>
-                                        <p class="help">Type <strong>DELETE</strong> in uppercase to confirm account deletion</p>
-                                    </div>
-
-                                    <div class="field">
-                                        <div class="control">
-                                            <button type="submit" class="button is-danger" id="delete-button" disabled>
-                                                <span class="icon">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </span>
-                                                <span>Delete My Account</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
+                        <div class="card-header" style="background: rgba(239, 68, 68, 0.1);">
+                            <h3 class="card-title mb-0" style="color: var(--error);">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Delete Account
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="danger-box">
+                                <p class="mb-0"><strong>Warning:</strong> Deleting your account is permanent and cannot be undone. All your portfolio data, preferences, and history will be permanently removed.</p>
                             </div>
+                            <form action="{{ url_for('account.delete_account') }}" method="post" id="delete-account-form">
+                                <div class="mb-3">
+                                    <label class="form-label">Confirmation</label>
+                                    <input class="form-control" type="text" name="confirmation" placeholder="Type DELETE to confirm" required>
+                                    <div class="form-text">Type <strong>DELETE</strong> in uppercase to confirm account deletion</div>
+                                </div>
+                                <button type="submit" class="btn btn-danger" id="delete-button" disabled>
+                                    <i class="fas fa-trash-alt me-2"></i>
+                                    Delete My Account
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -264,60 +260,72 @@
 </div>
 
 <!-- Import Data Modal -->
-<div class="modal" id="import-modal">
-    <div class="modal-background" onclick="closeImportModal()"></div>
-    <div class="modal-card">
-        <header class="modal-card-head">
-            <p class="modal-card-title">
-                <span class="icon-text">
-                    <span class="icon">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </span>
-                    <span>Import Account Data</span>
-                </span>
-            </p>
-            <button class="delete" aria-label="close" onclick="closeImportModal()"></button>
-        </header>
-        <section class="modal-card-body">
-            <div class="notification is-warning">
-                <p><strong>⚠️ Warning:</strong> This action will permanently delete all data in your current account and replace it with the imported data.</p>
-                <p>This includes:</p>
-                <ul>
-                    <li>All portfolios and companies</li>
-                    <li>All share quantities and overrides</li>
-                    <li>All saved settings and preferences</li>
-                    <li>All identifier mappings</li>
-                </ul>
-                <p><strong>This action cannot be undone!</strong> A backup will be created automatically before import.</p>
+<div class="modal fade" id="import-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2" style="color: var(--coral-500);"></i>
+                    Import Account Data
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            
-            <form id="import-form" action="{{ url_for('account.import_data') }}" method="post" enctype="multipart/form-data">
-                <div class="field">
-                    <label class="label">Select JSON Export File</label>
-                    <div class="control">
-                        <input class="input" type="file" name="import_file" accept=".json" required>
-                    </div>
-                    <p class="help">Only JSON files exported from this application are supported</p>
+            <div class="modal-body">
+                <div class="warning-box">
+                    <p><strong>Warning:</strong> This action will permanently delete all data in your current account and replace it with the imported data.</p>
+                    <p>This includes:</p>
+                    <ul class="mb-2">
+                        <li>All portfolios and companies</li>
+                        <li>All share quantities and overrides</li>
+                        <li>All saved settings and preferences</li>
+                        <li>All identifier mappings</li>
+                    </ul>
+                    <p class="mb-0"><strong>This action cannot be undone!</strong> A backup will be created automatically before import.</p>
                 </div>
-            </form>
-        </section>
-        <footer class="modal-card-foot">
-            <button class="button is-danger" onclick="confirmImport()">
-                <span class="icon">
-                    <i class="fas fa-upload"></i>
-                </span>
-                <span>Import Data (Overwrite Everything)</span>
-            </button>
-            <button class="button" onclick="closeImportModal()">Cancel</button>
-        </footer>
+
+                <form id="import-form" action="{{ url_for('account.import_data') }}" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Select JSON Export File</label>
+                        <input class="form-control" type="file" name="import_file" accept=".json" required>
+                        <div class="form-text">Only JSON files exported from this application are supported</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmImport()">
+                    <i class="fas fa-upload me-2"></i>
+                    Import Data (Overwrite Everything)
+                </button>
+            </div>
+        </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // Tab switching
+        const settingsTab = document.getElementById('settings-tab');
+        const deleteTab = document.getElementById('delete-tab');
+        const settingsPane = document.getElementById('settings');
+        const deletePane = document.getElementById('delete');
+
+        settingsTab.addEventListener('click', () => {
+            settingsTab.classList.add('active');
+            deleteTab.classList.remove('active');
+            settingsPane.style.display = 'block';
+            deletePane.style.display = 'none';
+        });
+
+        deleteTab.addEventListener('click', () => {
+            deleteTab.classList.add('active');
+            settingsTab.classList.remove('active');
+            deletePane.style.display = 'block';
+            settingsPane.style.display = 'none';
+        });
+
         // Delete account confirmation validator
         const confirmInput = document.querySelector('input[name="confirmation"]');
         const deleteButton = document.getElementById('delete-button');
@@ -360,13 +368,8 @@
 
         // Import data modal functions
         window.openImportModal = function() {
-            document.getElementById('import-modal').classList.add('is-active');
-        };
-
-        window.closeImportModal = function() {
-            document.getElementById('import-modal').classList.remove('is-active');
-            // Reset form
-            document.getElementById('import-form').reset();
+            const modal = new bootstrap.Modal(document.getElementById('import-modal'));
+            modal.show();
         };
 
         window.confirmImport = function() {

@@ -2456,3 +2456,1058 @@ th.col-actions, td.col-actions {
   background: rgba(251, 146, 60, 0.08);
   color: var(--coral-600);
 }
+
+/* ========================================
+   BULMA COMPATIBILITY LAYER
+   Allows existing Bulma-based components to work with Ocean Depth
+   ======================================== */
+
+/* Grid System - Bulma columns → Bootstrap-like flex */
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -0.75rem;
+}
+
+.column {
+  flex: 1 1 0%;
+  padding: 0.75rem;
+}
+
+.column.is-1 { flex: 0 0 8.33333%; max-width: 8.33333%; }
+.column.is-2 { flex: 0 0 16.66667%; max-width: 16.66667%; }
+.column.is-3 { flex: 0 0 25%; max-width: 25%; }
+.column.is-4 { flex: 0 0 33.33333%; max-width: 33.33333%; }
+.column.is-5 { flex: 0 0 41.66667%; max-width: 41.66667%; }
+.column.is-6 { flex: 0 0 50%; max-width: 50%; }
+.column.is-7 { flex: 0 0 58.33333%; max-width: 58.33333%; }
+.column.is-8 { flex: 0 0 66.66667%; max-width: 66.66667%; }
+.column.is-9 { flex: 0 0 75%; max-width: 75%; }
+.column.is-10 { flex: 0 0 83.33333%; max-width: 83.33333%; }
+.column.is-11 { flex: 0 0 91.66667%; max-width: 91.66667%; }
+.column.is-12 { flex: 0 0 100%; max-width: 100%; }
+
+.columns.is-multiline { flex-wrap: wrap; }
+.columns.is-centered { justify-content: center; }
+.columns.is-vcentered { align-items: center; }
+
+@media screen and (max-width: 768px) {
+  .columns {
+    margin: 0;
+  }
+  .column {
+    flex: 0 0 100%;
+    max-width: 100%;
+    padding: 0.75rem 0;
+  }
+}
+
+/* Bulma Display Utilities */
+.is-flex { display: flex !important; }
+.is-block { display: block !important; }
+.is-inline { display: inline !important; }
+.is-inline-block { display: inline-block !important; }
+.is-inline-flex { display: inline-flex !important; }
+.is-hidden { display: none !important; }
+
+/* Bulma Flexbox Utilities */
+.is-justify-content-space-between { justify-content: space-between !important; }
+.is-justify-content-center { justify-content: center !important; }
+.is-justify-content-flex-start { justify-content: flex-start !important; }
+.is-justify-content-flex-end { justify-content: flex-end !important; }
+.is-align-items-center { align-items: center !important; }
+.is-align-items-flex-start { align-items: flex-start !important; }
+.is-align-items-flex-end { align-items: flex-end !important; }
+.is-flex-wrap-wrap { flex-wrap: wrap !important; }
+.is-flex-direction-column { flex-direction: column !important; }
+
+/* Bulma Text Utilities */
+.has-text-centered { text-align: center !important; }
+.has-text-left { text-align: left !important; }
+.has-text-right { text-align: right !important; }
+.has-text-weight-bold { font-weight: 700 !important; }
+.has-text-weight-semibold { font-weight: 600 !important; }
+.has-text-weight-medium { font-weight: 500 !important; }
+.has-text-weight-normal { font-weight: 400 !important; }
+.has-text-grey { color: var(--text-tertiary) !important; }
+.has-text-primary { color: var(--aqua-500) !important; }
+.has-text-danger { color: var(--error) !important; }
+.has-text-success { color: var(--success) !important; }
+.has-text-warning { color: var(--coral-500) !important; }
+.has-text-info { color: var(--info) !important; }
+.has-text-white { color: var(--white) !important; }
+.has-text-black { color: var(--text-primary) !important; }
+
+/* Bulma Font Sizes */
+.is-size-1 { font-size: 3rem !important; }
+.is-size-2 { font-size: 2.5rem !important; }
+.is-size-3 { font-size: 2rem !important; }
+.is-size-4 { font-size: 1.5rem !important; }
+.is-size-5 { font-size: 1.25rem !important; }
+.is-size-6 { font-size: 1rem !important; }
+.is-size-7 { font-size: 0.75rem !important; }
+
+/* Bulma Spacing */
+.mr-0 { margin-right: 0 !important; }
+.mr-1 { margin-right: 0.25rem !important; }
+.mr-2 { margin-right: 0.5rem !important; }
+.mr-3 { margin-right: 0.75rem !important; }
+.mr-4 { margin-right: 1rem !important; }
+.mr-5 { margin-right: 1.5rem !important; }
+.mr-6 { margin-right: 2rem !important; }
+.ml-0 { margin-left: 0 !important; }
+.ml-1 { margin-left: 0.25rem !important; }
+.ml-2 { margin-left: 0.5rem !important; }
+.ml-3 { margin-left: 0.75rem !important; }
+.ml-4 { margin-left: 1rem !important; }
+.ml-5 { margin-left: 1.5rem !important; }
+.ml-6 { margin-left: 2rem !important; }
+.mt-0 { margin-top: 0 !important; }
+.mt-1 { margin-top: 0.25rem !important; }
+.mt-2 { margin-top: 0.5rem !important; }
+.mt-3 { margin-top: 0.75rem !important; }
+.mt-4 { margin-top: 1rem !important; }
+.mt-5 { margin-top: 1.5rem !important; }
+.mt-6 { margin-top: 2rem !important; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-1 { margin-bottom: 0.25rem !important; }
+.mb-2 { margin-bottom: 0.5rem !important; }
+.mb-3 { margin-bottom: 0.75rem !important; }
+.mb-4 { margin-bottom: 1rem !important; }
+.mb-5 { margin-bottom: 1.5rem !important; }
+.mb-6 { margin-bottom: 2rem !important; }
+.mx-0 { margin-left: 0 !important; margin-right: 0 !important; }
+.mx-2 { margin-left: 0.5rem !important; margin-right: 0.5rem !important; }
+.my-0 { margin-top: 0 !important; margin-bottom: 0 !important; }
+.my-4 { margin-top: 1rem !important; margin-bottom: 1rem !important; }
+.p-0 { padding: 0 !important; }
+.p-1 { padding: 0.25rem !important; }
+.p-2 { padding: 0.5rem !important; }
+.p-3 { padding: 0.75rem !important; }
+.p-4 { padding: 1rem !important; }
+.p-5 { padding: 1.5rem !important; }
+.p-6 { padding: 2rem !important; }
+.px-0 { padding-left: 0 !important; padding-right: 0 !important; }
+.px-4 { padding-left: 1rem !important; padding-right: 1rem !important; }
+.py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
+.py-4 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+
+/* Bulma Button Classes */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.button:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-primary);
+}
+
+.button.is-primary {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+.button.is-primary:hover {
+  background: var(--aqua-400);
+  border-color: var(--aqua-400);
+}
+
+.button.is-danger {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.button.is-danger:hover {
+  background: var(--error);
+  color: var(--white);
+}
+
+.button.is-warning {
+  background: var(--coral-500);
+  color: var(--white);
+  border-color: var(--coral-500);
+}
+
+.button.is-warning:hover {
+  background: var(--coral-400);
+  border-color: var(--coral-400);
+}
+
+.button.is-success {
+  background: var(--teal-500);
+  color: var(--white);
+  border-color: var(--teal-500);
+}
+
+.button.is-success:hover {
+  background: var(--teal-400);
+  border-color: var(--teal-400);
+}
+
+.button.is-info {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+.button.is-info:hover {
+  background: var(--aqua-400);
+  border-color: var(--aqua-400);
+}
+
+.button.is-light {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.button.is-small {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+}
+
+.button.is-medium {
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+}
+
+.button.is-large {
+  padding: 1rem 1.5rem;
+  font-size: 1.125rem;
+}
+
+.button.is-fullwidth {
+  width: 100%;
+}
+
+.button.is-loading {
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.button.is-loading::after {
+  content: '';
+  position: absolute;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.button:disabled,
+.button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.button .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.buttons.are-small .button { font-size: 0.75rem; }
+.buttons.are-medium .button { font-size: 1rem; }
+
+/* Bulma Notification/Alert */
+.notification {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--border-default);
+}
+
+.notification .delete {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  float: right;
+  margin-left: 0.5rem;
+}
+
+.notification .delete::before,
+.notification .delete::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+}
+
+.notification .delete::before { transform: translate(-50%, -50%) rotate(45deg); }
+.notification .delete::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+.notification.is-primary { border-color: var(--aqua-500); background: rgba(6, 182, 212, 0.1); }
+.notification.is-success { border-color: var(--success); background: rgba(20, 184, 166, 0.1); }
+.notification.is-warning { border-color: var(--coral-500); background: rgba(249, 115, 22, 0.1); }
+.notification.is-danger { border-color: var(--error); background: rgba(239, 68, 68, 0.1); }
+.notification.is-info { border-color: var(--info); background: rgba(6, 182, 212, 0.1); }
+.notification.is-light { background: var(--bg-tertiary); border-color: var(--border-subtle); }
+
+/* Bulma Title and Subtitle */
+.title {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.title.is-1 { font-size: 3rem; }
+.title.is-2 { font-size: 2.5rem; }
+.title.is-3 { font-size: 2rem; }
+.title.is-4 { font-size: 1.5rem; }
+.title.is-5 { font-size: 1.25rem; }
+.title.is-6 { font-size: 1rem; }
+
+.subtitle {
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-bottom: 0.75rem;
+}
+
+/* Bulma Icon */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.icon.is-small { width: 1rem; height: 1rem; font-size: 0.75rem; }
+.icon.is-medium { width: 2rem; height: 2rem; font-size: 1.25rem; }
+.icon.is-large { width: 3rem; height: 3rem; font-size: 2rem; }
+
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Bulma Form Elements */
+.field {
+  margin-bottom: 0.75rem;
+}
+
+.field:not(:last-child) {
+  margin-bottom: 0.75rem;
+}
+
+.field.has-addons {
+  display: flex;
+  align-items: stretch;
+}
+
+.field.has-addons .control:not(:last-child) .input,
+.field.has-addons .control:not(:last-child) .button,
+.field.has-addons .control:not(:last-child) .select select {
+  border-right: none;
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.control {
+  position: relative;
+}
+
+.control.has-icons-left .input,
+.control.has-icons-left .select select {
+  padding-left: 2.25rem;
+}
+
+.control.has-icons-left .icon.is-left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.control.has-icons-right .input,
+.control.has-icons-right .select select {
+  padding-right: 2.25rem;
+}
+
+.control.has-icons-right .icon.is-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  transition: border-color 0.15s ease;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--aqua-500);
+  outline: none;
+}
+
+.input.is-small { font-size: 0.75rem; padding: 0.25rem 0.5rem; }
+.input.is-medium { font-size: 1rem; padding: 0.625rem 0.875rem; }
+.input.is-large { font-size: 1.25rem; padding: 0.75rem 1rem; }
+
+.select {
+  display: inline-block;
+  position: relative;
+  vertical-align: top;
+}
+
+.select select {
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  appearance: none;
+}
+
+.select select:focus {
+  border-color: var(--aqua-500);
+  outline: none;
+}
+
+.select::after {
+  content: '';
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--text-tertiary);
+  pointer-events: none;
+}
+
+.select.is-small select { font-size: 0.75rem; padding: 0.25rem 1.5rem 0.25rem 0.5rem; }
+
+.checkbox,
+.radio {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.checkbox input,
+.radio input {
+  cursor: pointer;
+  accent-color: var(--aqua-500);
+}
+
+.help {
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+  color: var(--text-tertiary);
+}
+
+.help.is-danger { color: var(--error); }
+.help.is-success { color: var(--success); }
+
+/* Bulma Table */
+.table {
+  width: 100%;
+  background: transparent;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.table.is-striped tbody tr:nth-child(odd) {
+  background: var(--bg-tertiary);
+}
+
+.table.is-hoverable tbody tr:hover {
+  background: var(--bg-tertiary);
+}
+
+.table.is-fullwidth {
+  width: 100%;
+}
+
+/* Bulma Modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+
+.modal.is-active {
+  display: flex;
+}
+
+.modal-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  margin: 0 20px;
+}
+
+.modal-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  max-height: calc(100vh - 40px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  margin: 0 20px;
+}
+
+.modal-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.modal-card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-card-body {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+}
+
+.modal-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.modal-close,
+.delete {
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.modal-close::before,
+.modal-close::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 2px;
+  background: var(--text-tertiary);
+}
+
+.modal-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+.modal-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+.modal-close:hover::before,
+.modal-close:hover::after {
+  background: var(--text-primary);
+}
+
+/* Bulma Tabs */
+.tabs {
+  display: flex;
+  margin-bottom: 1rem;
+}
+
+.tabs ul {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-grow: 1;
+}
+
+.tabs li {
+  margin-bottom: -1px;
+}
+
+.tabs li a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.tabs li a:hover {
+  color: var(--text-primary);
+}
+
+.tabs li.is-active a {
+  color: var(--aqua-500);
+  border-bottom-color: var(--aqua-500);
+}
+
+/* Bulma Progress */
+.progress {
+  height: 0.5rem;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.progress::-webkit-progress-bar {
+  background: var(--bg-tertiary);
+}
+
+.progress::-webkit-progress-value {
+  background: var(--aqua-500);
+}
+
+.progress::-moz-progress-bar {
+  background: var(--aqua-500);
+}
+
+.progress.is-info::-webkit-progress-value { background: var(--info); }
+.progress.is-success::-webkit-progress-value { background: var(--success); }
+.progress.is-warning::-webkit-progress-value { background: var(--coral-500); }
+.progress.is-danger::-webkit-progress-value { background: var(--error); }
+
+/* Bulma File Input */
+.file {
+  display: flex;
+  align-items: stretch;
+}
+
+.file-label {
+  display: flex;
+  cursor: pointer;
+}
+
+.file-input {
+  opacity: 0;
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+}
+
+.file-cta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-left: none;
+  color: var(--text-secondary);
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file.has-name .file-cta {
+  border-right: none;
+}
+
+.file.is-fullwidth .file-label {
+  width: 100%;
+}
+
+.file.is-fullwidth .file-name {
+  flex-grow: 1;
+  max-width: none;
+}
+
+/* Bulma Tag */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.tag.is-primary { background: var(--aqua-500); color: var(--white); }
+.tag.is-success { background: var(--success); color: var(--white); }
+.tag.is-warning { background: var(--coral-500); color: var(--white); }
+.tag.is-danger { background: var(--error); color: var(--white); }
+.tag.is-info { background: var(--info); color: var(--white); }
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Bulma Background Utilities */
+.has-background-white { background: var(--white) !important; }
+.has-background-white-ter { background: var(--bg-tertiary) !important; }
+.has-background-light { background: var(--bg-tertiary) !important; }
+.has-background-primary-light { background: rgba(6, 182, 212, 0.1) !important; }
+.has-background-success-light { background: rgba(20, 184, 166, 0.1) !important; }
+.has-background-warning-light { background: rgba(249, 115, 22, 0.1) !important; }
+.has-background-danger-light { background: rgba(239, 68, 68, 0.1) !important; }
+.has-background-info-light { background: rgba(6, 182, 212, 0.1) !important; }
+
+.has-text-primary-dark { color: var(--aqua-600) !important; }
+.has-text-success-dark { color: var(--teal-700) !important; }
+.has-text-warning-dark { color: var(--coral-600) !important; }
+.has-text-danger-dark { color: var(--error) !important; }
+.has-text-info-dark { color: var(--aqua-600) !important; }
+
+/* Bulma Card - Enhanced */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 1.5rem;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.card-header-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-content {
+  padding: 1.5rem;
+}
+
+.card-footer {
+  display: flex;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.card-footer-item {
+  flex: 1;
+  padding: 0.75rem;
+  text-align: center;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.card-footer-item:last-child {
+  border-right: none;
+}
+
+/* Risk Overview Specific Styles */
+.portfolio-selection-section {
+  margin-bottom: 2rem;
+}
+
+.portfolio-subtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.portfolio-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.global-overview-section {
+  margin-bottom: 2rem;
+}
+
+.gauge-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.overview-chart-header {
+  margin-bottom: 1rem;
+}
+
+.overview-chart-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.overview-chart-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+}
+
+.overview-chart-container {
+  width: 100%;
+}
+
+/* ========================================
+   PORTFOLIO PILLS - RISK OVERVIEW PAGE
+   ======================================== */
+
+.portfolio-selection-section {
+  margin-bottom: 2rem;
+}
+
+.portfolio-subtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.portfolio-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  border: 2px solid transparent;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-height: 44px;
+  user-select: none;
+}
+
+.portfolio-pill.selected {
+  background: var(--aqua-500);
+  color: white;
+  transform: scale(1.02);
+}
+
+.portfolio-pill:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-default);
+  transform: translateY(-1px);
+}
+
+.portfolio-pill.selected:hover {
+  background: var(--aqua-600);
+}
+
+.portfolio-pill.all-pill {
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-default);
+  font-weight: 600;
+}
+
+.portfolio-pill.all-pill:hover {
+  background: var(--bg-secondary);
+  border-color: var(--aqua-500);
+}
+
+.portfolio-pill-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portfolio-pill-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.portfolio-pill-value {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+/* Empty state styling */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-tertiary);
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+
+/* ========================================
+   APEXCHARTS OCEAN DEPTH STYLING
+   ======================================== */
+
+/* Custom tooltip styling */
+.ocean-depth-tooltip,
+.apexcharts-tooltip {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-default) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.apexcharts-tooltip-title {
+  background: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.apexcharts-tooltip-text {
+  color: var(--text-secondary) !important;
+}
+
+.apexcharts-tooltip-marker {
+  border-radius: 2px !important;
+}
+
+/* Chart axis labels */
+.apexcharts-xaxis-label,
+.apexcharts-yaxis-label {
+  fill: var(--text-tertiary) !important;
+}
+
+/* Chart title */
+.apexcharts-title-text {
+  fill: var(--text-primary) !important;
+}
+
+/* Donut chart center labels */
+.apexcharts-datalabel-label {
+  fill: var(--text-secondary) !important;
+}
+
+.apexcharts-datalabel-value {
+  fill: var(--text-primary) !important;
+}
+
+/* Legend text */
+.apexcharts-legend-text {
+  color: var(--text-secondary) !important;
+}
+
+/* Grid lines (when visible) */
+.apexcharts-gridline {
+  stroke: var(--border-subtle) !important;
+}
+
+/* Bar chart data labels */
+.apexcharts-data-labels text {
+  fill: white !important;
+}
+

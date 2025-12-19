@@ -1,20 +1,65 @@
 /**
- * ChartConfig for ApexCharts
+ * ChartConfig for ApexCharts - Ocean Depth Theme
  *
  * This configuration object provides a centralized way to create and manage
- * ApexCharts instances with consistent styling and options.
+ * ApexCharts instances with consistent styling matching the Ocean Depth design.
  */
 const ChartConfig = {
+    // Ocean Depth color palette
+    oceanDepthColors: {
+        // Primary accent colors
+        aqua: '#06b6d4',
+        aquaLight: '#22d3ee',
+        aquaDark: '#0891b2',
+        coral: '#f97316',
+        coralLight: '#fb923c',
+        coralDark: '#ea580c',
+
+        // Chart palette - vibrant, ocean-inspired
+        palette: [
+            '#06b6d4', // Aqua (primary)
+            '#f97316', // Coral (accent)
+            '#8b5cf6', // Purple
+            '#10b981', // Emerald
+            '#f59e0b', // Amber
+            '#ec4899', // Pink
+            '#3b82f6', // Blue
+            '#14b8a6', // Teal
+            '#6366f1', // Indigo
+            '#84cc16', // Lime
+            '#f43f5e', // Rose
+            '#a855f7', // Violet
+            '#0ea5e9', // Sky
+            '#22c55e', // Green
+            '#eab308', // Yellow
+            '#d946ef', // Fuchsia
+            '#06b6d4', // Cyan
+            '#64748b', // Slate
+            '#78716c', // Stone
+            '#71717a'  // Zinc
+        ],
+
+        // Text colors (will be dynamically set based on theme)
+        textPrimary: 'var(--text-primary)',
+        textSecondary: 'var(--text-secondary)',
+        textTertiary: 'var(--text-tertiary)',
+
+        // Background colors
+        bgPrimary: 'var(--bg-primary)',
+        bgSecondary: 'var(--bg-secondary)'
+    },
+
     // Default options for all charts
     defaultOptions: {
         chart: {
-            fontFamily: '"Helvetica Neue", Arial, sans-serif',
+            fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
             toolbar: {
                 show: false
             },
             zoom: {
                 enabled: false
-            }
+            },
+            background: 'transparent'
         },
         grid: {
             show: false
@@ -23,14 +68,15 @@ const ChartConfig = {
             enabled: true,
             style: {
                 fontSize: '12px',
-                fontWeight: 'bold'
+                fontWeight: '500'
             }
         },
         tooltip: {
-            theme: 'light',
+            theme: 'dark',
             style: {
                 fontSize: '12px'
-            }
+            },
+            cssClass: 'ocean-depth-tooltip'
         },
         legend: {
             show: false // Hiding legend by default as requested
@@ -70,65 +116,70 @@ const ChartConfig = {
     },
 
     // Centralized color mapping for consistent colors across all donut charts
+    // Updated for Ocean Depth theme
     colorMapping: {
-        // Companies - Crypto
-        'Bitcoin': '#FF6B6B',
-        'Ethereum': '#4ECDC4',
-        'Solana': '#45B7D1',
-        'Chainlink': '#96CEB4',
-        'Loopring': '#FFEAA7',
-        'Dogecoin': '#DDA0DD',
-        'Pepe': '#98D8C8',
-        'IOTA': '#F7DC6F',
-        'TRON': '#BB8FCE',
-        'Convex Finance': '#85C1E9',
-        'Apu Apustaja': '#F8C471',
+        // Companies - Crypto (Ocean-inspired colors)
+        'Bitcoin': '#f97316',  // Coral (highlight)
+        'Ethereum': '#06b6d4', // Aqua (primary)
+        'Solana': '#8b5cf6',   // Purple
+        'Chainlink': '#3b82f6', // Blue
+        'Loopring': '#14b8a6', // Teal
+        'Dogecoin': '#f59e0b', // Amber
+        'Pepe': '#10b981',     // Emerald
+        'IOTA': '#6366f1',     // Indigo
+        'TRON': '#ec4899',     // Pink
+        'Convex Finance': '#0ea5e9', // Sky
+        'Apu Apustaja': '#84cc16',   // Lime
 
         // Companies - Others
-        'Gamestop \'A\'': '#E74C3C',
-        'Xetra-Gold ETC': '#FFD700',
-        'Cosmos': '#9B59B6',
-        'Téléperformance': '#3498DB',
-        'VanEck Vectors Gold Miners UCITS ETF': '#F39C12',
-        'British American Tobacco (ADR)': '#8B4513',
-        'Volkswagen': '#34495E',
-        'Stellantis N.V.': '#2C3E50',
-        'BOSS ENERGY LTD.': '#16A085',
-        'Paladin Energy': '#27AE60',
+        'Gamestop \'A\'': '#f43f5e', // Rose
+        'Xetra-Gold ETC': '#eab308', // Yellow/Gold
+        'Cosmos': '#a855f7',   // Violet
+        'Téléperformance': '#3b82f6', // Blue
+        'VanEck Vectors Gold Miners UCITS ETF': '#f59e0b', // Amber
+        'British American Tobacco (ADR)': '#78716c', // Stone
+        'Volkswagen': '#64748b', // Slate
+        'Stellantis N.V.': '#475569', // Slate dark
+        'BOSS ENERGY LTD.': '#10b981', // Emerald
+        'Paladin Energy': '#22c55e',   // Green
 
-        // Categories
-        'Blue Chip': '#4B7BEC',
-        'L1': '#45B7D1',
-        'Infra': '#A55EEA',
-        'DeFi': '#FD9644',
-        'Meme': '#F6B93B',
-        'Uncategorized': '#778CA3',
-        'Gold': '#FFD700',
-        'Oil': '#2F3542',
-        'Shipping': '#3867D6',
-        'Tobacco': '#8B4513',
-        'Automotive': '#34495E',
-        'Service Industry': '#E74C3C',
+        // Categories (Ocean Depth theme)
+        'Blue Chip': '#3b82f6',  // Blue
+        'L1': '#06b6d4',         // Aqua
+        'Infra': '#8b5cf6',      // Purple
+        'DeFi': '#f97316',       // Coral
+        'Meme': '#f59e0b',       // Amber
+        'Uncategorized': '#64748b', // Slate
+        'Gold': '#eab308',       // Yellow
+        'Oil': '#1e293b',        // Slate 800
+        'Shipping': '#0ea5e9',   // Sky
+        'Tobacco': '#78716c',    // Stone
+        'Automotive': '#475569', // Slate dark
+        'Service Industry': '#f43f5e', // Rose
 
         // Countries
-        'USA': '#3498DB',
-        'Europe': '#2ECC71',
-        'China': '#E74C3C',
-        'Japan': '#F39C12',
-        'Unknown': '#95A5A6',
+        'USA': '#3b82f6',   // Blue
+        'Europe': '#10b981', // Emerald
+        'China': '#f43f5e', // Rose
+        'Japan': '#f97316', // Coral
+        'Unknown': '#64748b', // Slate
+
+        // Investment Types
+        'Stock': '#3b82f6', // Blue
+        'ETF': '#10b981',   // Emerald
 
         // Portfolios
-        'crypto': '#9B59B6',
-        'dividend': '#1ABC9C',
-        'GME': '#E74C3C',
-        'value': '#3498DB',
+        'crypto': '#8b5cf6',  // Purple
+        'dividend': '#10b981', // Emerald
+        'GME': '#f43f5e',     // Rose
+        'value': '#3b82f6',   // Blue
 
-        // Fallback colors for items not in the mapping
+        // Fallback colors - Ocean Depth palette
         fallback: [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-            '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-            '#F8C471', '#82E0AA', '#F1948A', '#AED6F1', '#F4D03F',
-            '#D2B4DE', '#A3E4D7', '#FAD7A0', '#D5A6BD', '#AED6F1'
+            '#06b6d4', '#f97316', '#8b5cf6', '#10b981', '#f59e0b',
+            '#ec4899', '#3b82f6', '#14b8a6', '#6366f1', '#84cc16',
+            '#f43f5e', '#a855f7', '#0ea5e9', '#22c55e', '#eab308',
+            '#d946ef', '#64748b', '#78716c', '#71717a', '#06b6d4'
         ]
     },
 
@@ -174,17 +225,13 @@ const ChartConfig = {
     /**
      * Generates an array of consistent, well-distributed colors.
      * This is the centralized color palette for all charts in the application.
+     * Updated for Ocean Depth theme.
      * @param {number} count - The number of colors to generate.
      * @returns {Array<string>}
      */
     generateColors(count) {
-        // Primary color palette for consistent theming
-        const basePalette = [
-            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-            '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-            '#F8C471', '#82E0AA', '#F1948A', '#AED6F1', '#F4D03F',
-            '#D2B4DE', '#A3E4D7', '#FAD7A0', '#D5A6BD', '#AED6F1'
-        ];
+        // Ocean Depth primary color palette
+        const basePalette = this.oceanDepthColors.palette;
 
         const result = [];
 
@@ -201,8 +248,8 @@ const ChartConfig = {
             const additionalCount = count - basePalette.length;
             for (let i = 0; i < additionalCount; i++) {
                 const hue = (i * 137.508) % 360; // Golden angle distribution
-                const saturation = 65 + (i % 3) * 10; // Vary saturation slightly
-                const lightness = 60 + (i % 2) * 10; // Vary lightness slightly
+                const saturation = 70 + (i % 3) * 8; // Ocean depth vibrancy
+                const lightness = 55 + (i % 2) * 10; // Balanced visibility
                 result.push(this.hslToHex(hue, saturation, lightness));
             }
         }

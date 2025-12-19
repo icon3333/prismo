@@ -1,21 +1,25 @@
-<footer class="footer has-background-white-ter pt-4 pb-4">
-    <div class="content has-text-centered">
-        <p>
-            <strong>Portfolio Rebalancer</strong> by
-            <a href="https://github.com/icon3333" target="_blank">icon3333</a>
-            <span class="mx-2">|</span>
-            <a href="https://github.com/icon3333/portfolio_rebalancer" target="_blank">
-                <span class="icon is-small"><i class="fab fa-github"></i></span>
+<footer class="app-footer">
+    <div class="container">
+        <p class="mb-2">
+            <strong style="color: var(--text-primary);">Portfolio Rebalancer</strong>
+            <span style="color: var(--text-tertiary);">by</span>
+            <a href="https://github.com/icon3333" target="_blank" style="color: var(--aqua-500);">icon3333</a>
+            <span class="mx-2" style="color: var(--text-tertiary);">|</span>
+            <a href="https://github.com/icon3333/portfolio_rebalancer" target="_blank" class="d-inline-flex align-items-center" style="color: var(--aqua-500);">
+                <i class="fab fa-github me-1"></i>
                 <span>Source</span>
             </a>
         </p>
-        <p class="is-size-7 has-text-grey mt-2">
-            Built with <a href="https://flask.palletsprojects.com/" target="_blank">Flask</a>,
-            <a href="https://bulma.io/" target="_blank">Bulma</a>,
-            <a href="https://vuejs.org/" target="_blank">Vue.js</a>, and
-            <a href="https://plotly.com/javascript/" target="_blank">Plotly.js</a>
+        <p class="mb-0" style="font-size: 0.8125rem; color: var(--text-tertiary);">
+            Built with
+            <a href="https://flask.palletsprojects.com/" target="_blank" style="color: var(--text-secondary);">Flask</a>,
+            <a href="https://getbootstrap.com/" target="_blank" style="color: var(--text-secondary);">Bootstrap</a>,
+            <a href="https://vuejs.org/" target="_blank" style="color: var(--text-secondary);">Vue.js</a>, and
+            <a href="https://apexcharts.com/" target="_blank" style="color: var(--text-secondary);">ApexCharts</a>
             <span class="mx-2">•</span>
-            v0.9 &copy; {{ now.year }}
+            Ocean Depth Design System
+            <span class="mx-2">•</span>
+            v1.0 &copy; {{ now.year if now is defined else 2025 }}
         </p>
     </div>
 </footer>

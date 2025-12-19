@@ -1,16 +1,17 @@
 {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
         {% for category, message in messages %}
-            {% set message_class = {
-                'error': 'is-danger',
-                'warning': 'is-warning',
-                'info': 'is-info',
-                'success': 'is-success'
-            }.get(category, 'is-info') %}
-            
-            <div class="notification {{ message_class }} message-notification notification-overlay">
-                <button class="delete"></button>
-                {{ message }}
+            {% set alert_class = {
+                'error': 'alert-error',
+                'danger': 'alert-error',
+                'warning': 'alert-warning',
+                'info': 'alert-info',
+                'success': 'alert-success'
+            }.get(category, 'alert-info') %}
+
+            <div class="alert {{ alert_class }} message-notification d-flex justify-content-between align-items-start" role="alert">
+                <span>{{ message }}</span>
+                <button type="button" class="btn-close ms-3" aria-label="Close" onclick="this.parentElement.remove()"></button>
             </div>
         {% endfor %}
     {% endif %}
@@ -20,24 +21,17 @@
     // Auto-dismiss notifications after 5 seconds
     document.addEventListener('DOMContentLoaded', () => {
         const notifications = document.querySelectorAll('.message-notification');
-        
+
         notifications.forEach(notification => {
-            // Add click event for delete button
-            const deleteButton = notification.querySelector('.delete');
-            if (deleteButton) {
-                deleteButton.addEventListener('click', () => {
-                    notification.remove();
-                });
-            }
-            
             // Auto-dismiss after 5 seconds
             setTimeout(() => {
-                notification.classList.add('is-fading-out');
-                
-                // Remove element after fade-out animation (0.5s)
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.3s ease';
+
+                // Remove element after fade-out animation
                 setTimeout(() => {
                     notification.remove();
-                }, 500);
+                }, 300);
             }, 5000);
         });
     });

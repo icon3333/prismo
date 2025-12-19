@@ -4,12 +4,29 @@
 {% block title %}Risk Overview{% endblock %}
 
 {% block head_extras %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}?v={{ range(1000, 9999) | random }}">
+<style>
+    .page-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 2rem;
+    }
+
+    .page-title i {
+        color: var(--aqua-500);
+    }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
-    <h1 class="title is-3 mb-4">Risk Overview</h1>
+    <h1 class="page-title">
+        <i class="fas fa-chart-pie"></i>
+        <span>Risk Overview</span>
+    </h1>
 
     <!-- Loading indicator -->
     <div id="loadingIndicator">
@@ -110,9 +127,6 @@
         <!-- Risk indicators removed - now only available on main page -->
     </div>
 </div>
-
-<!-- Include Font Awesome -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 
 {% include "components/analyse_components.html" %}
 

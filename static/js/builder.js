@@ -1271,9 +1271,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 csvData.push([
                   '',
                   group.companyName,
-                  `${((portfolio.allocation * group.weight * group.count) / 100).toFixed(1)}%`,
-                  `${(parseFloat(group.weight) * group.count).toFixed(1)}%`,
-                  `${this.formatCurrency(this.calculateAllocationAmount(portfolio.allocation) * group.weight * group.count / 100)} (${this.formatCurrency(this.calculateAllocationAmount(portfolio.allocation) * group.weight / 100)} each)`
+                  `${((portfolio.allocation * group.weight) / 100).toFixed(1)}% each`,
+                  `${parseFloat(group.weight).toFixed(1)}% each`,
+                  `${this.formatCurrency(this.calculateAllocationAmount(portfolio.allocation) * group.weight / 100)} each`
                 ]);
               } else {
                 csvData.push([
@@ -1511,25 +1511,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 let secondLineData = null;
 
                 if (group.isPlaceholder) {
-                  const totalAmount = this.calculateAllocationAmount(portfolio.allocation) * group.weight * group.count / 100;
                   const eachAmount = this.calculateAllocationAmount(portfolio.allocation) * group.weight / 100;
                   positionRow = [
                     '',
                     group.companyName.length > 30 ? group.companyName.substring(0, 27) + '...' : group.companyName,
-                    `${((portfolio.allocation * group.weight * group.count) / 100).toFixed(1)}%`,
-                    `${(parseFloat(group.weight) * group.count).toFixed(1)}%`,
-                    this.formatCurrency(totalAmount)
+                    `${((portfolio.allocation * group.weight) / 100).toFixed(1)}% each`,
+                    `${parseFloat(group.weight).toFixed(1)}% each`,
+                    `${this.formatCurrency(eachAmount)} each`
                   ];
 
-                  // Second line for "(each)" information
-                  hasSecondLine = true;
-                  secondLineData = [
-                    '',
-                    '',
-                    '',
-                    '',
-                    `(${this.formatCurrency(eachAmount)} each)`
-                  ];
+                  // No second line needed - all info on one line now
+                  hasSecondLine = false;
                 } else {
                   positionRow = [
                     '',

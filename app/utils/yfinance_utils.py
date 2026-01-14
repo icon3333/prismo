@@ -382,7 +382,7 @@ def get_historical_prices(identifiers, years=5):
 
         data = yf.download(identifiers, start=start_date,
                            end=end_date, auto_adjust=True)['Close']
-        return data.fillna(method='ffill')
+        return data.ffill()
     except Exception as e:
         logger.error(f"Error fetching historical prices: {e}")
         return None

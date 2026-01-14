@@ -1211,7 +1211,11 @@ class PortfolioTableApp {
                     isBulkProcessing: false,
                     isUpdatingSelected: false,
                     // Track which items/fields are currently saving
-                    savingStates: {}
+                    savingStates: {},
+                    // Track original values for commit-on-blur editing
+                    editingOriginals: {},
+                    // Track local editing values (prevents re-sorting while typing)
+                    editingValues: {}
                     // Country options now server-rendered like portfolios
                 };
             },
@@ -1835,6 +1839,185 @@ class PortfolioTableApp {
                     }
                 },
 
+                // ========================================
+                // Commit-on-blur editing support methods
+                // Uses local editing values to prevent re-sorting while typing
+                // ========================================
+
+                // Get local editing value (or fall back to item value if not editing)
+                getEditingValue(item, field) {
+                    return this.editingValues[item.id]?.[field] ?? item[field];
+                },
+
+                // Set local editing value (doesn't modify item, so no re-sort)
+                setEditingValue(item, field, value) {
+                    if (!this.editingValues[item.id]) {
+                        this.$set(this.editingValues, item.id, {});
+                    }
+                    this.$set(this.editingValues[item.id], field, value);
+                },
+
+                // Track original value and initialize local editing value
+                trackOriginal(item, field) {
+                    // Store original for comparison on commit
+                    if (!this.editingOriginals[item.id]) {
+                        this.$set(this.editingOriginals, item.id, {});
+                    }
+                    this.$set(this.editingOriginals[item.id], field, item[field]);
+
+                    // Initialize local editing value
+                    if (!this.editingValues[item.id]) {
+                        this.$set(this.editingValues, item.id, {});
+                    }
+                    this.$set(this.editingValues[item.id], field, item[field]);
+                },
+
+                // Track original shares value
+                trackOriginalShares(item) {
+                    if (!this.editingOriginals[item.id]) {
+                        this.$set(this.editingOriginals, item.id, {});
+                    }
+                    this.$set(this.editingOriginals[item.id], 'shares', item.effective_shares);
+
+                    // Initialize local editing value
+                    if (!this.editingValues[item.id]) {
+                        this.$set(this.editingValues, item.id, {});
+                    }
+                    this.$set(this.editingValues[item.id], 'shares', item.effective_shares);
+                },
+
+                // Track original total value
+                trackOriginalTotalValue(item) {
+                    if (!this.editingOriginals[item.id]) {
+                        this.$set(this.editingOriginals, item.id, {});
+                    }
+                    const originalValue = item.custom_total_value ||
+                        (item.price_eur ? item.price_eur * item.effective_shares : 0);
+                    this.$set(this.editingOriginals[item.id], 'totalValue', originalValue);
+
+                    // Initialize local editing value (store raw number)
+                    if (!this.editingValues[item.id]) {
+                        this.$set(this.editingValues, item.id, {});
+                    }
+                    this.$set(this.editingValues[item.id], 'totalValue', originalValue);
+                },
+
+                // Commit identifier change (on blur or enter)
+                commitIdentifier(item) {
+                    const original = this.editingOriginals[item.id]?.identifier;
+                    const newValue = this.editingValues[item.id]?.identifier ?? item.identifier;
+
+                    if (newValue !== original) {
+                        // Sync local value to item (triggers one re-sort)
+                        item.identifier = newValue;
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'identifier', true);
+                        this.saveIdentifierChange(item);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].identifier;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].identifier;
+                    }
+                },
+
+                // Commit category change (on blur or enter)
+                commitCategory(item) {
+                    const original = this.editingOriginals[item.id]?.category;
+                    const newValue = this.editingValues[item.id]?.category ?? item.category;
+
+                    if (newValue !== original) {
+                        // Sync local value to item (triggers one re-sort)
+                        item.category = newValue;
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'category', true);
+                        this.saveCategoryChange(item);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].category;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].category;
+                    }
+                },
+
+                // Commit shares change (on blur or enter)
+                commitShares(item) {
+                    const original = this.editingOriginals[item.id]?.shares;
+                    const newShares = this.editingValues[item.id]?.shares ?? item.effective_shares;
+
+                    if (newShares !== original) {
+                        // Sync local value to item (triggers one re-sort)
+                        item.effective_shares = newShares;
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'shares', true);
+                        this.saveSharesChange(item, newShares);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].shares;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].shares;
+                    }
+                },
+
+                // Commit total value change (on blur or enter)
+                commitTotalValue(item, formattedValue) {
+                    const original = this.editingOriginals[item.id]?.totalValue;
+                    const newValue = parseGermanNumber(formattedValue);
+
+                    if (newValue !== original && newValue > 0) {
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'totalValue', true);
+                        this.saveTotalValueChange(item, formattedValue);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].totalValue;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].totalValue;
+                    }
+                },
+
+                // ========================================
+                // End commit-on-blur editing methods
+                // ========================================
+
+                // ========================================
+                // Tooltip methods (using native title attribute)
+                // ========================================
+
+                showOverflowTooltip(event, content) {
+                    if (content) {
+                        event.target.title = content;
+                    }
+                },
+
+                hideOverflowTooltip(event) {
+                    event.target.title = '';
+                },
+
+                // ========================================
+                // End tooltip methods
+                // ========================================
+
                 async savePortfolioChange(item) {
                     debugLog('savePortfolioChange called with item:', item);
                     if (!item || !item.id) {
@@ -2410,17 +2593,8 @@ class PortfolioTableApp {
                 }
             },
             created() {
-                // Create debounced versions of save methods for text inputs
-                // This prevents premature auto-save while user is still typing
-                // Dropdowns remain immediate for snappy feedback
-
-                // Helper to set saving state (with Vue reactivity)
-                const setSaving = (itemId, field) => {
-                    if (!this.savingStates[itemId]) {
-                        this.$set(this.savingStates, itemId, {});
-                    }
-                    this.$set(this.savingStates[itemId], field, true);
-                };
+                // Wrap save methods to auto-clear saving state when done
+                // This ensures "Saving..." indicator disappears after API call completes
 
                 // Helper to clear saving state
                 const clearSaving = (itemId, field) => {
@@ -2449,33 +2623,6 @@ class PortfolioTableApp {
                 wrapSaveMethod('saveIdentifierChange', 'identifier');
                 wrapSaveMethod('saveSharesChange', 'shares');
                 wrapSaveMethod('saveTotalValueChange', 'totalValue');
-
-                // Create debounced versions (once)
-                const debouncedSaveCategory = _.debounce(this.saveCategoryChange, 500);
-                const debouncedSaveIdentifier = _.debounce(this.saveIdentifierChange, 500);
-                const debouncedSaveShares = _.debounce(this.saveSharesChange, 500);
-                const debouncedSaveTotalValue = _.debounce(this.saveTotalValueChange, 500);
-
-                // Create wrapper methods that set saving state immediately, then call debounced
-                this.debouncedSaveCategory = (item) => {
-                    setSaving(item.id, 'category');
-                    debouncedSaveCategory(item);
-                };
-
-                this.debouncedSaveIdentifier = (item) => {
-                    setSaving(item.id, 'identifier');
-                    debouncedSaveIdentifier(item);
-                };
-
-                this.debouncedSaveShares = (item, shares) => {
-                    setSaving(item.id, 'shares');
-                    debouncedSaveShares(item, shares);
-                };
-
-                this.debouncedSaveTotalValue = (item, value) => {
-                    setSaving(item.id, 'totalValue');
-                    debouncedSaveTotalValue(item, value);
-                };
             },
             mounted() {
                 // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)

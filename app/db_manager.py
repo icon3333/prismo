@@ -168,48 +168,65 @@ def init_db(app):
         logger.info(f"Database file exists: {os.path.exists(db_path)}")
         
         db = get_db()
-        # Load schema from the version-controlled file in app directory
-        try:
-            with app.open_resource('schema.sql', mode='r') as f:
-                db.cursor().executescript(f.read())
-            logger.info("Schema loaded from app/schema.sql")
-        except FileNotFoundError:
-            logger.warning("app/schema.sql not found - will use fallback table creation")
-        
-        # Add the identifier_mappings table if it doesn't exist
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS identifier_mappings (
-                id INTEGER PRIMARY KEY,
-                account_id INTEGER NOT NULL,
-                csv_identifier TEXT NOT NULL,
-                preferred_identifier TEXT NOT NULL,
-                company_name TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (account_id) REFERENCES accounts (id),
-                UNIQUE (account_id, csv_identifier)
-            )
-        ''')
-        
-        # Add the background_jobs table if it doesn't exist
-        db.execute('''
-            CREATE TABLE IF NOT EXISTS background_jobs (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                status TEXT,
-                progress INTEGER,
-                total INTEGER,
-                result TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
 
-        # Drop old auto-update trigger (migration)
-        # This trigger doubled write operations unnecessarily since code already sets updated_at
-        db.execute('DROP TRIGGER IF EXISTS update_background_jobs_timestamp')
-        db.commit()
-        logger.info("Removed redundant auto-update trigger for background_jobs (if it existed)")
+        # Perform all initialization in a single transaction for atomicity
+        with db:
+            # Load schema from the version-controlled file in app directory
+            try:
+                with app.open_resource('schema.sql', mode='r') as f:
+                    db.cursor().executescript(f.read())
+                logger.debug("Schema loaded from app/schema.sql")
+            except FileNotFoundError:
+                logger.warning("app/schema.sql not found - will use fallback table creation")
+
+            # Add the identifier_mappings table if it doesn't exist
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS identifier_mappings (
+                    id INTEGER PRIMARY KEY,
+                    account_id INTEGER NOT NULL,
+                    csv_identifier TEXT NOT NULL,
+                    preferred_identifier TEXT NOT NULL,
+                    company_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (account_id) REFERENCES accounts (id),
+                    UNIQUE (account_id, csv_identifier)
+                )
+            ''')
+
+            # Add the background_jobs table if it doesn't exist
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS background_jobs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    status TEXT,
+                    progress INTEGER,
+                    total INTEGER,
+                    result TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Create schema_version table for migration tracking
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Initialize version to 0 if table is empty
+            cursor = db.cursor()
+            cursor.execute('SELECT version FROM schema_version LIMIT 1')
+            if not cursor.fetchone():
+                db.execute('INSERT INTO schema_version (version) VALUES (0)')
+
+            # Drop old auto-update trigger (cleanup from previous version)
+            db.execute('DROP TRIGGER IF EXISTS update_background_jobs_timestamp')
+
+        # Transaction committed automatically by 'with' block
+        logger.info("Database tables initialized successfully")
 
         try:
             # Create tables if not present
@@ -401,148 +418,104 @@ def execute_db(query, args=()):
         logger.error(f"Args were: {args}")
         raise
 
+def _safe_add_column(cursor, table, column_def):
+    """
+    Safely add a column to a table, ignoring duplicate column errors.
+
+    Args:
+        cursor: Database cursor
+        table: Table name
+        column_def: Column definition (e.g., "my_col TEXT")
+    """
+    try:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e).lower():
+            raise
+        # Column already exists, that's fine
+        logger.debug(f"Column {column_def.split()[0]} already exists in {table}")
+
 def migrate_database():
     """
-    Run database migrations with proper error handling.
+    Run database migrations using version tracking for efficiency.
 
-    Uses specific exception handling to distinguish between expected
-    (missing columns) and unexpected errors.
+    Only runs migrations that haven't been applied yet, tracked via schema_version table.
+    This avoids redundant SELECT queries on every startup.
     """
     db = get_db()
     cursor = db.cursor()
 
-    try:
-        # Migration 1: Add user-edited shares tracking columns
-        try:
-            cursor.execute("SELECT manual_edit_date FROM company_shares LIMIT 1")
-            logger.debug("Column manual_edit_date exists - migration 1 already applied")
-        except sqlite3.OperationalError as e:
-            if "no such column" in str(e).lower():
-                logger.info("Applying migration 1: Adding user-edited shares tracking columns")
-                try:
-                    cursor.execute("ALTER TABLE company_shares ADD COLUMN manual_edit_date DATETIME")
-                    cursor.execute("ALTER TABLE company_shares ADD COLUMN is_manually_edited BOOLEAN DEFAULT 0")
-                    cursor.execute("ALTER TABLE company_shares ADD COLUMN csv_modified_after_edit BOOLEAN DEFAULT 0")
-                    db.commit()
-                    logger.info("Migration 1 completed successfully")
+    # Latest migration version
+    LATEST_VERSION = 5
 
-                    # Verify migration
-                    cursor.execute("SELECT manual_edit_date FROM company_shares LIMIT 1")
-                    logger.debug("Migration 1 verified - columns accessible")
-                except sqlite3.Error as alter_error:
-                    db.rollback()
-                    logger.error(f"Migration 1 failed: {alter_error}")
-                    raise RuntimeError(f"Database migration 1 failed: {alter_error}") from alter_error
-            else:
-                # Unexpected OperationalError - re-raise
-                raise
+    try:
+        # Get current schema version
+        cursor.execute('SELECT version FROM schema_version LIMIT 1')
+        result = cursor.fetchone()
+        current_version = result[0] if result else 0
+
+        if current_version >= LATEST_VERSION:
+            logger.debug(f"Database schema is up to date (version {current_version})")
+            return
+
+        logger.info(f"Database schema version {current_version}, migrating to {LATEST_VERSION}")
+
+        # Migration 1: Add user-edited shares tracking columns
+        if current_version < 1:
+            logger.info("Applying migration 1: Adding user-edited shares tracking columns")
+            _safe_add_column(cursor, "company_shares", "manual_edit_date DATETIME")
+            _safe_add_column(cursor, "company_shares", "is_manually_edited BOOLEAN DEFAULT 0")
+            _safe_add_column(cursor, "company_shares", "csv_modified_after_edit BOOLEAN DEFAULT 0")
+            cursor.execute("UPDATE schema_version SET version = 1, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 1 completed")
 
         # Migration 2: Add country override columns
-        try:
-            cursor.execute("SELECT override_country FROM companies LIMIT 1")
-            logger.debug("Column override_country exists - migration 2 already applied")
-        except sqlite3.OperationalError as e:
-            if "no such column" in str(e).lower():
-                logger.info("Applying migration 2: Adding country override columns")
-                try:
-                    cursor.execute("ALTER TABLE companies ADD COLUMN override_country TEXT")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN country_manually_edited BOOLEAN DEFAULT 0")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN country_manual_edit_date DATETIME")
-                    db.commit()
-                    logger.info("Migration 2 completed successfully")
-
-                    # Verify migration
-                    cursor.execute("SELECT override_country FROM companies LIMIT 1")
-                    logger.debug("Migration 2 verified - columns accessible")
-                except sqlite3.Error as alter_error:
-                    db.rollback()
-                    logger.error(f"Migration 2 failed: {alter_error}")
-                    raise RuntimeError(f"Database migration 2 failed: {alter_error}") from alter_error
-            else:
-                # Unexpected OperationalError - re-raise
-                raise
+        if current_version < 2:
+            logger.info("Applying migration 2: Adding country override columns")
+            _safe_add_column(cursor, "companies", "override_country TEXT")
+            _safe_add_column(cursor, "companies", "country_manually_edited BOOLEAN DEFAULT 0")
+            _safe_add_column(cursor, "companies", "country_manual_edit_date DATETIME")
+            cursor.execute("UPDATE schema_version SET version = 2, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 2 completed")
 
         # Migration 3: Add custom value columns
-        try:
-            cursor.execute("SELECT custom_total_value FROM companies LIMIT 1")
-            logger.debug("Column custom_total_value exists - migration 3 already applied")
-        except sqlite3.OperationalError as e:
-            if "no such column" in str(e).lower():
-                logger.info("Applying migration 3: Adding custom value columns")
-                try:
-                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_total_value REAL")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_price_eur REAL")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN is_custom_value BOOLEAN DEFAULT 0")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN custom_value_date DATETIME")
-                    db.commit()
-                    logger.info("Migration 3 completed successfully")
-
-                    # Verify migration
-                    cursor.execute("SELECT custom_total_value FROM companies LIMIT 1")
-                    logger.debug("Migration 3 verified - columns accessible")
-                except sqlite3.Error as alter_error:
-                    db.rollback()
-                    logger.error(f"Migration 3 failed: {alter_error}")
-                    raise RuntimeError(f"Database migration 3 failed: {alter_error}") from alter_error
-            else:
-                # Unexpected OperationalError - re-raise
-                raise
+        if current_version < 3:
+            logger.info("Applying migration 3: Adding custom value columns")
+            _safe_add_column(cursor, "companies", "custom_total_value REAL")
+            _safe_add_column(cursor, "companies", "custom_price_eur REAL")
+            _safe_add_column(cursor, "companies", "is_custom_value BOOLEAN DEFAULT 0")
+            _safe_add_column(cursor, "companies", "custom_value_date DATETIME")
+            cursor.execute("UPDATE schema_version SET version = 3, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 3 completed")
 
         # Migration 4: Add investment_type column
-        try:
-            cursor.execute("SELECT investment_type FROM companies LIMIT 1")
-            logger.debug("Column investment_type exists - migration 4 already applied")
-        except sqlite3.OperationalError as e:
-            if "no such column" in str(e).lower():
-                logger.info("Applying migration 4: Adding investment_type column")
-                try:
-                    cursor.execute("ALTER TABLE companies ADD COLUMN investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF'))")
-                    # Create index for investment_type
-                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)")
-                    db.commit()
-                    logger.info("Migration 4 completed successfully")
-
-                    # Verify migration
-                    cursor.execute("SELECT investment_type FROM companies LIMIT 1")
-                    logger.debug("Migration 4 verified - column accessible")
-                except sqlite3.Error as alter_error:
-                    db.rollback()
-                    logger.error(f"Migration 4 failed: {alter_error}")
-                    raise RuntimeError(f"Database migration 4 failed: {alter_error}") from alter_error
-            else:
-                # Unexpected OperationalError - re-raise
-                raise
+        if current_version < 4:
+            logger.info("Applying migration 4: Adding investment_type column")
+            _safe_add_column(cursor, "companies", "investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF'))")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)")
+            cursor.execute("UPDATE schema_version SET version = 4, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 4 completed")
 
         # Migration 5: Add identifier manual edit tracking columns
-        try:
-            cursor.execute("SELECT override_identifier FROM companies LIMIT 1")
-            logger.debug("Column override_identifier exists - migration 5 already applied")
-        except sqlite3.OperationalError as e:
-            if "no such column" in str(e).lower():
-                logger.info("Applying migration 5: Adding identifier manual edit tracking columns")
-                try:
-                    cursor.execute("ALTER TABLE companies ADD COLUMN override_identifier TEXT")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN identifier_manually_edited BOOLEAN DEFAULT 0")
-                    cursor.execute("ALTER TABLE companies ADD COLUMN identifier_manual_edit_date DATETIME")
-                    db.commit()
-                    logger.info("Migration 5 completed successfully")
+        if current_version < 5:
+            logger.info("Applying migration 5: Adding identifier manual edit tracking columns")
+            _safe_add_column(cursor, "companies", "override_identifier TEXT")
+            _safe_add_column(cursor, "companies", "identifier_manually_edited BOOLEAN DEFAULT 0")
+            _safe_add_column(cursor, "companies", "identifier_manual_edit_date DATETIME")
+            cursor.execute("UPDATE schema_version SET version = 5, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 5 completed")
 
-                    # Verify migration
-                    cursor.execute("SELECT override_identifier FROM companies LIMIT 1")
-                    logger.debug("Migration 5 verified - columns accessible")
-                except sqlite3.Error as alter_error:
-                    db.rollback()
-                    logger.error(f"Migration 5 failed: {alter_error}")
-                    raise RuntimeError(f"Database migration 5 failed: {alter_error}") from alter_error
-            else:
-                # Unexpected OperationalError - re-raise
-                raise
+        logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 
-        logger.info("All database migrations completed successfully")
-
-    except RuntimeError:
-        # Re-raise migration failures
-        raise
+    except sqlite3.Error as e:
+        logger.error(f"Database migration failed: {e}")
+        db.rollback()
+        raise RuntimeError(f"Database migration failed: {e}") from e
     except Exception as e:
         logger.error(f"Unexpected error during database migration: {e}")
         db.rollback()

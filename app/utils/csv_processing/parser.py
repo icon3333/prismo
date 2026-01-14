@@ -121,11 +121,21 @@ def _clean_and_validate_data(df: pd.DataFrame) -> pd.DataFrame:
     if len(df) == 0:
         raise ValueError("No valid entries found in CSV file")
 
-    # Convert numeric columns
-    df['shares'] = df['shares'].apply(_convert_numeric)
-    df['price'] = df['price'].apply(_convert_numeric)
-    df['fee'] = df['fee'].apply(_convert_numeric)
-    df['tax'] = df['tax'].apply(_convert_numeric)
+    # Convert numeric columns with field names for better error messages
+    df['shares'] = df['shares'].apply(lambda x: _convert_numeric(x, 'shares'))
+    df['price'] = df['price'].apply(lambda x: _convert_numeric(x, 'price'))
+    df['fee'] = df['fee'].apply(lambda x: _convert_numeric(x, 'fee'))
+    df['tax'] = df['tax'].apply(lambda x: _convert_numeric(x, 'tax'))
+
+    # Log how many rows have conversion failures
+    shares_null = df['shares'].isna().sum()
+    price_null = df['price'].isna().sum()
+    if shares_null > 0 or price_null > 0:
+        logger.warning(
+            f"CSV contains invalid numeric values: "
+            f"{shares_null} invalid shares, {price_null} invalid prices. "
+            f"These rows will be skipped."
+        )
 
     # Drop rows with invalid numeric data
     df = df.dropna(subset=['shares', 'price'])
@@ -158,17 +168,35 @@ def _normalize_transaction_type(t):
         return 'buy'
 
 
-def _convert_numeric(val):
-    """Convert value to numeric, handling various formats."""
+def _convert_numeric(val, field_name: str = None):
+    """
+    Convert value to numeric, handling various formats.
+
+    Args:
+        val: Value to convert
+        field_name: Optional field name for better error logging
+
+    Returns:
+        float: Converted value, or None if conversion fails (to allow proper filtering)
+    """
     if pd.isna(val):
-        return 0
+        return 0.0
     if isinstance(val, (int, float)):
         return float(val)
     try:
         val_str = str(val).strip().replace(',', '.')
+        # Handle empty strings after stripping
+        if not val_str:
+            return 0.0
         return float(val_str)
-    except (ValueError, TypeError):
-        return 0
+    except (ValueError, TypeError) as e:
+        # Log the conversion failure instead of silently returning 0
+        logger.warning(
+            f"Failed to convert '{val}' to numeric"
+            f"{f' for field {field_name}' if field_name else ''}: {e}"
+        )
+        # Return None to signal conversion failure - allows proper filtering downstream
+        return None
 
 
 def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:

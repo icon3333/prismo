@@ -127,9 +127,29 @@ def apply_share_changes(
             )
             positions_added.append(company_name)
 
+    # Pre-fetch identifiers used by OTHER accounts to avoid N+1 queries during removal
+    # This single query replaces the per-company query in _remove_company
+    identifiers_to_check = {
+        existing_company_map[name]['identifier']
+        for name in companies_to_remove
+        if name in existing_company_map and existing_company_map[name].get('identifier')
+    }
+
+    shared_identifiers = set()
+    if identifiers_to_check:
+        # Single query to find all identifiers used by other accounts
+        placeholders = ','.join('?' * len(identifiers_to_check))
+        shared_rows = query_db(
+            f'''SELECT DISTINCT identifier FROM companies
+                WHERE identifier IN ({placeholders}) AND account_id != ?''',
+            list(identifiers_to_check) + [account_id]
+        )
+        shared_identifiers = {row['identifier'] for row in shared_rows}
+        logger.debug(f"Found {len(shared_identifiers)} identifiers shared with other accounts")
+
     # Remove companies not in CSV or with zero shares
     for company_name in companies_to_remove:
-        if _remove_company(company_name, existing_company_map, account_id, cursor):
+        if _remove_company(company_name, existing_company_map, account_id, cursor, shared_identifiers):
             positions_removed.append(company_name)
 
     return {
@@ -280,8 +300,27 @@ def _insert_new_company(
     logger.info(f"Added new company: {company_name} with {current_shares} shares")
 
 
-def _remove_company(company_name: str, existing_company_map: Dict, account_id: int, cursor) -> bool:
-    """Remove a company and clean up related records."""
+def _remove_company(
+    company_name: str,
+    existing_company_map: Dict,
+    account_id: int,
+    cursor,
+    shared_identifiers: Set[str] = None
+) -> bool:
+    """
+    Remove a company and clean up related records.
+
+    Args:
+        company_name: Name of company to remove
+        existing_company_map: Map of company names to their DB records
+        account_id: Current account ID
+        cursor: Database cursor
+        shared_identifiers: Pre-computed set of identifiers used by other accounts
+                           (optimization to avoid N+1 queries)
+
+    Returns:
+        True if company was removed successfully, False otherwise
+    """
     if company_name not in existing_company_map:
         logger.warning(
             f"Cannot remove company '{company_name}' - not found in existing_company_map. "
@@ -309,7 +348,13 @@ def _remove_company(company_name: str, existing_company_map: Dict, account_id: i
         logger.error(f"Failed to delete company '{company_name}' (ID: {company_id}) from database")
 
     # Clean up market prices if no other accounts use this identifier
-    if identifier:
+    # Use pre-computed shared_identifiers set (avoids N+1 queries)
+    if identifier and shared_identifiers is not None:
+        if identifier not in shared_identifiers:
+            logger.info(f"No other accounts use {identifier}, removing from market_prices")
+            cursor.execute('DELETE FROM market_prices WHERE identifier = ?', [identifier])
+    elif identifier:
+        # Fallback to query if shared_identifiers not provided (backwards compatibility)
         other_companies_count = query_db(
             'SELECT COUNT(*) as count FROM companies WHERE identifier = ? AND account_id != ?',
             [identifier, account_id],

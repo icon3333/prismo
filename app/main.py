@@ -14,8 +14,15 @@ def create_app(config_name=None):
 
     # Load configuration from config.py
     from config import config
-    _config_load_time = time.time() - _create_app_start
-    print(f"  ⏱️  Config loaded: {_config_load_time:.3f}s")
+
+    # Only show timing in debug mode AND in the main process (not reloader parent)
+    _is_debug = os.environ.get('FLASK_ENV') == 'development'
+    _is_reloader_parent = not os.environ.get('WERKZEUG_RUN_MAIN') and _is_debug
+    _show_timing = _is_debug and not _is_reloader_parent
+
+    if _show_timing:
+        _config_load_time = time.time() - _create_app_start
+        print(f"  ⏱️  Config loaded: {_config_load_time:.3f}s")
 
     # Determine config name from environment or parameter
     if config_name is None:
@@ -65,13 +72,14 @@ def create_app(config_name=None):
             ))
             file_handler.setLevel(logging.WARNING)
             app.logger.addHandler(file_handler)
-    
-    app.logger.info("Application startup completed")
-    
-    # Ensure session configuration is properly set
-    app.logger.info(f"Session configuration: SECRET_KEY set: {bool(app.config.get('SECRET_KEY'))}")
-    app.logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
-    app.logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
+
+    # Only log startup info in the main process (not reloader parent) to avoid duplicate output
+    if not _is_reloader_parent:
+        app.logger.info("Application startup completed")
+        # Ensure session configuration is properly set
+        app.logger.info(f"Session configuration: SECRET_KEY set: {bool(app.config.get('SECRET_KEY'))}")
+        app.logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
+        app.logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
     
     # Security headers disabled for demo
     
@@ -81,7 +89,9 @@ def create_app(config_name=None):
         return {'now': datetime.now()}
     
     # Register blueprints
-    _blueprint_start = time.time()
+    if _show_timing:
+        _blueprint_start = time.time()
+
     from app.routes.main_routes import main_bp
     app.register_blueprint(main_bp)
 
@@ -93,11 +103,15 @@ def create_app(config_name=None):
 
     from app.routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
-    _blueprint_time = time.time() - _blueprint_start
-    print(f"  ⏱️  Blueprints registered: {_blueprint_time:.3f}s")
-    
+
+    if _show_timing:
+        _blueprint_time = time.time() - _blueprint_start
+        print(f"  ⏱️  Blueprints registered: {_blueprint_time:.3f}s")
+
     # Initialize the database
-    _db_start = time.time()
+    if _show_timing:
+        _db_start = time.time()
+
     from app.db_manager import init_db, migrate_database
     init_db(app)
 
@@ -107,13 +121,14 @@ def create_app(config_name=None):
             migrate_database()
     except Exception as e:
         app.logger.error(f"Database migration failed: {e}")
-    _db_time = time.time() - _db_start
-    print(f"  ⏱️  Database init + migrations: {_db_time:.3f}s")
+
+    if _show_timing:
+        _db_time = time.time() - _db_start
+        print(f"  ⏱️  Database init + migrations: {_db_time:.3f}s")
 
     # Only run startup tasks in the main process (not during Werkzeug reloader restart)
-    if not os.environ.get('WERKZEUG_RUN_MAIN'):
-        app.logger.info("Skipping startup tasks during reloader initialization")
-    else:
+    # Skip silently in parent process to avoid duplicate/confusing output
+    if os.environ.get('WERKZEUG_RUN_MAIN'):
         # OPTIMIZATION: Run startup tasks in background thread to avoid blocking startup
         # This makes the app responsive immediately while background tasks complete
         def run_startup_tasks():
@@ -142,8 +157,9 @@ def create_app(config_name=None):
         startup_thread.start()
         app.logger.info("Startup tasks scheduled in background thread")
 
-    _total_time = time.time() - _create_app_start
-    print(f"  ⏱️  TOTAL create_app() time: {_total_time:.3f}s\n")
+    if _show_timing:
+        _total_time = time.time() - _create_app_start
+        print(f"  ⏱️  TOTAL create_app() time: {_total_time:.3f}s\n")
 
     @app.route('/health')
     def health_check():

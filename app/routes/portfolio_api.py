@@ -437,6 +437,10 @@ def manage_state():
                 # Commit transaction
                 db.commit()
 
+                # Invalidate cache if build page state was modified (affects allocation calculations)
+                if page_name == 'build':
+                    invalidate_portfolio_cache(account_id)
+
             logger.info(
                 f"State saved successfully for account {account_id}, page {page_name}")
             return success_response(message='State saved successfully')
@@ -452,6 +456,27 @@ def manage_state():
 
 # API endpoint to get companies for a specific portfolio
 
+def invalidate_portfolio_cache(account_id: int) -> None:
+    """
+    Invalidate the portfolio allocation cache for a specific account.
+
+    Call this function after any operation that modifies portfolio data:
+    - CSV upload
+    - Price updates
+    - Company modifications
+    - Portfolio add/rename/delete
+
+    Args:
+        account_id: The account ID whose cache should be invalidated
+    """
+    try:
+        cache.delete_memoized(_get_allocate_portfolio_data_internal, account_id)
+        logger.debug(f"Cache invalidated for account_id: {account_id}")
+    except Exception as e:
+        # Cache invalidation failure is not critical - log and continue
+        logger.warning(f"Failed to invalidate cache for account_id {account_id}: {e}")
+
+
 @cache.memoize(timeout=60)
 def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
     """
@@ -461,7 +486,7 @@ def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
     making it testable and reusable across different contexts.
 
     Cached for 60 seconds to reduce database load and CPU usage on repeated calls.
-    Cache is automatically invalidated when portfolio data is modified.
+    Cache is invalidated via invalidate_portfolio_cache() when portfolio data is modified.
 
     Args:
         account_id: The account ID to fetch data for
@@ -718,8 +743,8 @@ def get_single_portfolio_data_api(portfolio_id):
             )
 
             # Calculate P&L (Profit & Loss)
-            total_invested = float(company.get('total_invested', 0))
-            current_value = float(company['current_value'])
+            total_invested = float(company.get('total_invested', 0) or 0)
+            current_value = float(company.get('current_value', 0) or 0)
 
             if total_invested > 0:
                 pnl_absolute = current_value - total_invested
@@ -815,7 +840,24 @@ def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[st
 
     Returns:
         List of position data dictionaries with field_value, company details, and values
+
+    Raises:
+        ValueError: If field_sql is not in the allowed whitelist
     """
+    # SECURITY: Whitelist of allowed SQL expressions to prevent SQL injection
+    # Only predefined expressions are allowed - no user input should reach here
+    ALLOWED_FIELD_EXPRESSIONS = {
+        "COALESCE(c.category, 'Uncategorized')",
+        "COALESCE(c.override_country, mp.country, 'Unknown')",
+        "c.category",
+        "c.override_country",
+        "mp.country",
+    }
+
+    if field_sql not in ALLOWED_FIELD_EXPRESSIONS:
+        logger.error(f"SQL injection attempt blocked: {field_sql}")
+        raise ValueError(f"Invalid field_sql expression: {field_sql}")
+
     return query_db(f'''
         SELECT
             {field_sql} as field_value,
@@ -1529,6 +1571,13 @@ def update_portfolio_api():
                     elif investment_type is None or investment_type == '':
                         # Allow clearing investment_type
                         update_fields.append('investment_type = NULL')
+                    else:
+                        # Reject invalid investment_type values
+                        logger.warning(f"Invalid investment_type value: {investment_type}")
+                        return error_response(
+                            f"Invalid investment_type: '{investment_type}'. Must be 'Stock', 'ETF', or empty.",
+                            status=400
+                        )
 
                 # Add company_id for WHERE clause
                 update_values.append(company_id)
@@ -1624,6 +1673,10 @@ def update_portfolio_api():
 
             # Commit transaction if all updates successful
             db.commit()
+
+            # Invalidate cache after portfolio data modifications
+            invalidate_portfolio_cache(account_id)
+
             logger.info(f"Successfully committed {updated_count} updates")
             return success_response(message=f'Successfully updated {updated_count} items')
 

@@ -7,7 +7,7 @@ Philosophy: Simple, clear price calculations and conversions.
 
 from typing import Dict, Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,16 @@ class PriceService:
         Returns:
             True if price is stale
         """
-        age = datetime.now() - last_updated
+        # Handle timezone-aware vs naive datetime comparison
+        now = datetime.now(timezone.utc) if last_updated.tzinfo else datetime.now()
+
+        # If last_updated is timezone-aware, convert now to UTC for comparison
+        if last_updated.tzinfo and now.tzinfo is None:
+            now = datetime.now(timezone.utc)
+        elif last_updated.tzinfo is None and now.tzinfo:
+            now = now.replace(tzinfo=None)
+
+        age = now - last_updated
         age_hours = age.total_seconds() / 3600
 
         return age_hours > max_age_hours

@@ -164,10 +164,19 @@ def check_and_setup_environment():
 # Create the Flask application at module level
 # This is required for gunicorn to find the app object
 import time
-_app_creation_start = time.time()
+
+# Only show timing in debug/development mode AND in the main process (not reloader parent)
+_is_debug = os.environ.get('FLASK_ENV', 'development') == 'development'
+_is_reloader_parent = not os.environ.get('WERKZEUG_RUN_MAIN') and _is_debug
+
+if _is_debug and not _is_reloader_parent:
+    _app_creation_start = time.time()
+
 app = create_app()
-_app_creation_time = time.time() - _app_creation_start
-print(f"⏱️  App creation took: {_app_creation_time:.3f} seconds")
+
+if _is_debug and not _is_reloader_parent:
+    _app_creation_time = time.time() - _app_creation_start
+    print(f"⏱️  App creation took: {_app_creation_time:.3f} seconds")
 
 if __name__ == '__main__':
     # Parse command line arguments first to check for skip flag
@@ -202,8 +211,9 @@ if __name__ == '__main__':
     # Debug mode should be controlled by FLASK_ENV, not hardcoded
     debug_mode = os.environ.get('FLASK_ENV', 'development') == 'development'
 
-    _run_start = time.time()
-    print(f"⏱️  Starting Flask server (debug={debug_mode})...")
+    # Only print startup message in main process (not reloader parent) to avoid duplicate output
+    is_reloader_child = os.environ.get('WERKZEUG_RUN_MAIN')
+    if debug_mode and is_reloader_child:
+        print(f"⏱️  Starting Flask server (debug={debug_mode})...")
+
     app.run(host='0.0.0.0', port=args.port, debug=debug_mode, threaded=True)
-    _run_time = time.time() - _run_start
-    print(f"⏱️  Flask app.run() took: {_run_time:.3f} seconds")

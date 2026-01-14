@@ -9,6 +9,10 @@ from typing import Dict, Set
 
 logger = logging.getLogger(__name__)
 
+# Standardized epsilon for floating point comparisons
+# Use this constant throughout for consistent zero-share detection
+SHARE_EPSILON = 1e-6
+
 
 def calculate_share_changes(
     df: pd.DataFrame,
@@ -95,7 +99,7 @@ def calculate_share_changes(
 
                         # Skip if both CSV and override shares are zero (company should be removed)
                         # Use abs() to handle potential negative values from floating point errors
-                        if abs(final_csv_shares) <= 1e-6 and abs(final_override_shares) <= 1e-6:
+                        if abs(final_csv_shares) <= SHARE_EPSILON and abs(final_override_shares) <= SHARE_EPSILON:
                             logger.info(
                                 f"Skipping {company_name} - both CSV and override shares are zero "
                                 f"(csv={final_csv_shares}, override={final_override_shares}). "
@@ -119,7 +123,7 @@ def calculate_share_changes(
 
                         # Skip if both CSV and override shares are zero (company should be removed)
                         # Use abs() to handle potential negative values from floating point errors
-                        if abs(final_csv_shares) <= 1e-6 and abs(manual_shares) <= 1e-6:
+                        if abs(final_csv_shares) <= SHARE_EPSILON and abs(manual_shares) <= SHARE_EPSILON:
                             logger.info(
                                 f"Skipping {company_name} - both CSV and override shares are zero "
                                 f"(csv={final_csv_shares}, override={manual_shares}). "
@@ -154,7 +158,7 @@ def calculate_share_changes(
             # No user edit for this company - normal CSV processing
             # Skip companies with zero or negative shares (will be removed)
             # Use abs() to handle potential negative values from floating point errors
-            if abs(current_shares) <= 1e-6:
+            if abs(current_shares) <= SHARE_EPSILON:
                 logger.info(
                     f"Skipping {company_name} - CSV shares are zero or negative "
                     f"(shares={current_shares}). Company will be marked for removal."
@@ -218,7 +222,7 @@ def identify_companies_to_remove(
     # Companies with zero shares
     companies_with_zero_shares = {
         name for name, position in company_positions.items()
-        if position['total_shares'] <= 1e-6
+        if position['total_shares'] <= SHARE_EPSILON
     }
 
     # Companies not in CSV

@@ -14,8 +14,15 @@
 
         <!-- Nav Items -->
         <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-            {% if session.account_id %}
-            <ul class="navbar-nav">
+            <ul class="navbar-nav align-items-center">
+                <!-- Theme Toggle -->
+                <li class="nav-item me-3">
+                    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                        <span id="theme-icon">🌙</span>
+                    </button>
+                </li>
+                {% if session.account_id %}
+                <!-- User Dropdown -->
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" style="color: var(--text-primary);">
                         <i class="fas fa-user me-2" style="color: var(--aqua-500);"></i>
@@ -37,8 +44,8 @@
                         </li>
                     </ul>
                 </li>
+                {% endif %}
             </ul>
-            {% endif %}
         </div>
     </div>
 </nav>

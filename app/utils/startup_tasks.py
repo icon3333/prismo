@@ -69,6 +69,8 @@ def auto_update_prices_if_needed():
 
 def schedule_automatic_backups():
     """Schedule automatic database backups based on configuration interval."""
+    # Capture app reference while context is active (for use in background thread)
+    app = current_app._get_current_object()
     backup_interval_hours = current_app.config.get('BACKUP_INTERVAL_HOURS', 6)
     backup_interval_seconds = backup_interval_hours * 60 * 60
 
@@ -79,12 +81,13 @@ def schedule_automatic_backups():
                 # Wait for configured interval between backups
                 time.sleep(backup_interval_seconds)
 
-                # Perform backup
-                backup_file = backup_database()
-                if backup_file:
-                    logger.info(f"Automatic database backup completed: {backup_file}")
-                else:
-                    logger.error("Automatic database backup failed")
+                # Perform backup (with app context for database access)
+                with app.app_context():
+                    backup_file = backup_database()
+                    if backup_file:
+                        logger.info(f"Automatic database backup completed: {backup_file}")
+                    else:
+                        logger.error("Automatic database backup failed")
 
             except Exception as e:
                 logger.error(f"Error in automatic backup worker: {e}")

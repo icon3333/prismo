@@ -12,26 +12,38 @@ def query_background_db(query, args=(), one=False):
     Query the database from background threads and return results as dictionary objects.
     This function doesn't require Flask application context.
     """
+    db = None
+    cursor = None
     try:
         logger.debug(f"Executing background query: {query}")
         logger.debug(f"Query args: {args}")
-        
+
         db = get_background_db()
         cursor = db.execute(query, args)
         rv = cursor.fetchall()
-        cursor.close()
-        db.close()
-        
+
         # Convert rows to dictionaries
         result = [dict(row) for row in rv]
         logger.debug(f"Background query returned {len(result)} rows")
-        
+
         return (result[0] if result else None) if one else result
     except Exception as e:
         logger.error(f"Background database query failed: {str(e)}")
         logger.error(f"Query was: {query}")
         logger.error(f"Args were: {args}")
         raise
+    finally:
+        # Ensure resources are always cleaned up
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if db:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def execute_background_db(query, args=()):
@@ -39,23 +51,22 @@ def execute_background_db(query, args=()):
     Execute a statement from background threads and commit changes, returning the rowcount.
     This function doesn't require Flask application context.
     """
+    db = None
+    cursor = None
     try:
         logger.debug(f"Executing background statement: {query}")
         logger.debug(f"📋 Statement args: {args}")
-        
+
         db = get_background_db()
         logger.debug(f"🔗 Got background database connection: {db}")
-        
+
         cursor = db.execute(query, args)
         rowcount = cursor.rowcount
         logger.debug(f"Statement executed, rowcount: {rowcount}")
-        
+
         db.commit()
         logger.debug(f"Database changes committed")
-        
-        cursor.close()
-        db.close()
-        
+
         logger.debug(f"📈 Background statement affected {rowcount} rows")
         return rowcount
     except Exception as e:
@@ -65,6 +76,18 @@ def execute_background_db(query, args=()):
         logger.error(f"🚨 Exception type: {type(e).__name__}")
         logger.error(f"Full exception details:", exc_info=True)
         raise
+    finally:
+        # Ensure resources are always cleaned up
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if db:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def update_price_in_db_background(identifier: str, price: float, currency: str, price_eur: float, country: Optional[str] = None, modified_identifier: Optional[str] = None) -> bool:

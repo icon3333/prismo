@@ -48,7 +48,8 @@ class PortfolioService:
         """
         total_value = PortfolioService.calculate_portfolio_value(holdings)
 
-        if total_value == 0:
+        # Handle both int 0 and Decimal('0') explicitly
+        if not total_value or total_value == 0 or total_value == Decimal('0'):
             return {}
 
         category_values = {}
@@ -82,7 +83,8 @@ class PortfolioService:
         """
         total_value = PortfolioService.calculate_portfolio_value(holdings)
 
-        if total_value == 0:
+        # Handle both int 0 and Decimal('0') explicitly
+        if not total_value or total_value == 0 or total_value == Decimal('0'):
             return {}
 
         country_values = {}
@@ -182,7 +184,8 @@ class PortfolioService:
         """
         total_value = PortfolioService.calculate_portfolio_value(holdings)
 
-        if total_value == 0:
+        # Handle both int 0 and Decimal('0') explicitly
+        if not total_value or total_value == 0 or total_value == Decimal('0'):
             return {}
 
         field_values = {}

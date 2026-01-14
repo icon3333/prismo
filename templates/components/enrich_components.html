@@ -270,6 +270,14 @@
         cursor: pointer;
     }
 
+    /* Checkbox column - minimal width for checkbox */
+    th.col-checkbox, td.col-checkbox {
+        width: 40px;
+        min-width: 40px;
+        max-width: 40px;
+        text-align: center;
+    }
+
     /* Note: Column width styling moved to custom.css unified system */
 
     /* Note: User-edited field styling moved to custom.css for centralization */
@@ -648,7 +656,7 @@
         <!-- Progress Indicator positioned outside Vue app but visually under buttons -->
         <div id="price-fetch-progress" style="display: none;" class="progress-bar-container">
             <progress id="progress-bar" class="progress is-primary" value="0" max="100" style="width: 100%; height: 8px;"></progress>
-            <p id="progress-text" class="has-text-centered has-text-weight-medium mt-2" style="font-size: 0.9rem; color: #363636;">0 / 0 companies updated</p>
+            <p id="progress-text" class="has-text-centered has-text-weight-medium mt-2" style="font-size: 0.9rem;">0 / 0 companies updated</p>
             <p id="progress-percentage" class="is-hidden">0%</p>
         </div>
 
@@ -909,22 +917,30 @@
                                         <div class="control is-expanded">
                                             <input class="input is-small"
                                                    type="text"
-                                                   v-model="item.identifier"
+                                                   :value="getEditingValue(item, 'identifier')"
+                                                   @input="setEditingValue(item, 'identifier', $event.target.value)"
                                                    :class="{ 'user-edited': item.identifier_manually_edited }"
                                                    :title="item.identifier_manually_edited
                                                            ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
                                                            : ''"
-                                                   @input="debouncedSaveIdentifier(item)">
+                                                   @focus="trackOriginal(item, 'identifier')"
+                                                   @blur="commitIdentifier(item)"
+                                                   @keydown.enter="commitIdentifier(item); $event.target.blur()"
+                                                   @dblclick="$event.target.select()"
+                                                   @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'identifier'))"
+                                                   @mouseleave="hideOverflowTooltip($event)">
                                         </div>
                                         <div class="control" v-if="savingStates[item.id] && savingStates[item.id].identifier">
                                             <span class="tag is-small is-info">Saving...</span>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="col-company has-tooltip-top" :data-tooltip="item.company">
-                                    <span class="truncate" v-text="item.company"></span>
+                                <td class="col-company">
+                                    <span class="truncate" v-text="item.company"
+                                          @mouseenter="showOverflowTooltip($event, item.company)"
+                                          @mouseleave="hideOverflowTooltip($event)"></span>
                                 </td>
-                                <td class="col-price has-tooltip-top" :data-tooltip="formatDateAgo(item.last_updated)">
+                                <td class="col-price">
                                     <!-- Show custom price in orange if set -->
                                     <span v-if="item.is_custom_value && item.custom_price_eur"
                                           class="user-edited"
@@ -948,8 +964,15 @@
                                 <td class="col-input-small">
                                     <div class="field has-addons" style="margin-bottom: 0;">
                                         <div class="control is-expanded">
-                                            <input class="input is-small" type="text" v-model="item.category"
-                                                @input="debouncedSaveCategory(item)">
+                                            <input class="input is-small" type="text"
+                                                :value="getEditingValue(item, 'category')"
+                                                @input="setEditingValue(item, 'category', $event.target.value)"
+                                                @focus="trackOriginal(item, 'category')"
+                                                @blur="commitCategory(item)"
+                                                @keydown.enter="commitCategory(item); $event.target.blur()"
+                                                @dblclick="$event.target.select()"
+                                                @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'category'))"
+                                                @mouseleave="hideOverflowTooltip($event)">
                                         </div>
                                         <div class="control" v-if="savingStates[item.id] && savingStates[item.id].category">
                                             <span class="tag is-small is-info">Saving...</span>
@@ -1000,11 +1023,13 @@
                                             <input class="input is-small" :class="{
                                                        'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
                                                        'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
-                                                   }" type="text" :value="formatNumber(item.effective_shares)" @input="(e) => {
-                                                       const newShares = parseGermanNumber(e.target.value);
-                                                       item.effective_shares = newShares;
-                                                       debouncedSaveShares(item, newShares);
-                                                   }" :title="getSharesTitle(item)">
+                                                   }" type="text" :value="formatNumber(getEditingValue(item, 'shares') ?? item.effective_shares)"
+                                                   @focus="trackOriginalShares(item)"
+                                                   @input="(e) => { setEditingValue(item, 'shares', parseGermanNumber(e.target.value)); }"
+                                                   @blur="commitShares(item)"
+                                                   @keydown.enter="commitShares(item); $event.target.blur()"
+                                                   @dblclick="$event.target.select()"
+                                                   :title="getSharesTitle(item)">
                                         </div>
                                         <div class="control" v-if="savingStates[item.id] && savingStates[item.id].shares">
                                             <span class="tag is-small is-info">Saving...</span>
@@ -1018,7 +1043,10 @@
                                             <input class="input is-small user-edited"
                                                    type="text"
                                                    :value="formatCurrency(item.custom_total_value)"
-                                                   @input="(e) => debouncedSaveTotalValue(item, e.target.value)"
+                                                   @focus="trackOriginalTotalValue(item)"
+                                                   @blur="commitTotalValue(item, $event.target.value)"
+                                                   @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
+                                                   @dblclick="$event.target.select()"
                                                    title="Custom total value - manually entered">
                                         </div>
                                         <div class="control" v-if="savingStates[item.id] && savingStates[item.id].totalValue">
@@ -1038,7 +1066,10 @@
                                             <input class="input is-small"
                                                    type="text"
                                                    value="€0.00"
-                                                   @input="(e) => debouncedSaveTotalValue(item, e.target.value)"
+                                                   @focus="trackOriginalTotalValue(item)"
+                                                   @blur="commitTotalValue(item, $event.target.value)"
+                                                   @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
+                                                   @dblclick="$event.target.select()"
                                                    placeholder="Enter value"
                                                    title="No price available - enter total value manually">
                                         </div>

@@ -15,6 +15,25 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+def _test_yfinance_format(identifier: str) -> bool:
+    """
+    Test if an identifier works with yfinance.
+
+    Args:
+        identifier: Stock identifier to test
+
+    Returns:
+        True if identifier returns valid data from yfinance, False otherwise
+    """
+    try:
+        from .yfinance_utils import _fetch_yfinance_data_robust
+        result = _fetch_yfinance_data_robust(identifier)
+        return result is not None and bool(result)
+    except Exception as e:
+        logger.debug(f"yfinance test failed for {identifier}: {e}")
+        return False
+
+
 def normalize_identifier(identifier: str) -> str:
     """
     Normalize identifier by cleaning up formatting only.
@@ -46,16 +65,15 @@ def normalize_identifier(identifier: str) -> str:
 
 def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     """
-    Strategy 1: Simple two-step cascade for price fetching.
+    Two-step cascade for price fetching with ISIN-aware logic.
 
     Process:
     1. Try original identifier (1 API call)
-    2. If failed, try {identifier}-USD format (1 more API call)
+    2. If failed AND not an ISIN, try {identifier}-USD format (1 more API call)
     3. Return result with effective_identifier
 
-    No guessing or rules - just try both formats and see what works.
-    The working format is returned as 'effective_identifier' and cached
-    by update_price_in_db() to avoid future cascade attempts.
+    ISINs (12-char identifiers with 2-letter country code) skip the -USD suffix
+    attempt since ISINs are never cryptocurrencies.
 
     Args:
         identifier: Identifier to fetch price for (cleaned but not converted)
@@ -63,9 +81,12 @@ def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
     Returns:
         Price data dictionary with 'effective_identifier' showing which format worked
     """
-    from .yfinance_utils import _fetch_yfinance_data_robust
+    from .yfinance_utils import _fetch_yfinance_data_robust, _is_valid_isin_format
 
     logger.info(f"Two-step cascade for: '{identifier}'")
+
+    # Check if this is an ISIN (12 chars, 2-letter country code)
+    is_isin = _is_valid_isin_format(identifier)
 
     # Step 1: Try original identifier
     logger.debug(f"  Step 1: Trying original format '{identifier}'")
@@ -75,18 +96,21 @@ def fetch_price_with_crypto_fallback(identifier: str) -> Dict[str, Any]:
         logger.info(f"  ✓ Original format successful: {identifier}")
         return {**result, 'effective_identifier': identifier}
 
-    # Step 2: Try crypto format (-USD suffix)
-    crypto_identifier = f"{identifier}-USD"
-    logger.info(f"  Step 2: Original failed, trying crypto format: {identifier} → {crypto_identifier}")
+    # Step 2: Only try crypto format (-USD suffix) for non-ISINs
+    if not is_isin:
+        crypto_identifier = f"{identifier}-USD"
+        logger.info(f"  Step 2: Original failed, trying crypto format: {identifier} → {crypto_identifier}")
 
-    result = _fetch_yfinance_data_robust(crypto_identifier)
+        result = _fetch_yfinance_data_robust(crypto_identifier)
 
-    if result:
-        logger.info(f"  ✓ Crypto format successful: {crypto_identifier}")
-        return {**result, 'effective_identifier': crypto_identifier}
+        if result:
+            logger.info(f"  ✓ Crypto format successful: {crypto_identifier}")
+            return {**result, 'effective_identifier': crypto_identifier}
 
-    # Both formats failed
-    logger.warning(f"  ✗ Both formats failed: '{identifier}' and '{crypto_identifier}'")
+        logger.warning(f"  ✗ Both formats failed: '{identifier}' and '{crypto_identifier}'")
+    else:
+        logger.warning(f"  ✗ ISIN lookup failed: '{identifier}' - yfinance may not support this ISIN directly")
+
     return {}
 
 
@@ -109,7 +133,7 @@ def cleanup_crypto_duplicates() -> Dict[str, Any]:
         Dictionary with cleanup results and statistics
     """
     from .db_utils import query_db
-    from ..database.db_manager import get_db
+    from app.db_manager import get_db
     
     logger.info("Starting crypto duplicates cleanup")
     

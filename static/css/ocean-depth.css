@@ -74,6 +74,10 @@
   --border-default: var(--pearl-300);
   --border-strong: var(--ocean-500);
 
+  /* Component-specific colors */
+  --hover-bg: rgba(0, 0, 0, 0.02);
+  --section-bg: var(--bg-secondary);
+
   /* Minimal shadows - subtle only */
   --shadow-xs: none;
   --shadow-sm: none;
@@ -187,12 +191,56 @@
   --surface: var(--ocean-900);
   --surface-hover: var(--ocean-800);
   --surface-elevated: var(--ocean-900);
+
+  /* Component-specific colors (Dark) */
+  --hover-bg: var(--bg-tertiary);
+  --section-bg: var(--bg-tertiary);
+
+  /* Bootstrap overrides for dark mode */
+  --bs-body-bg: var(--bg-secondary);  /* Fixes table cell fallback */
+  --bs-body-color: var(--text-primary);  /* Fixes black text */
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text-primary);
+  --bs-table-striped-bg: var(--bg-tertiary);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: var(--bg-tertiary);
+  --bs-table-hover-color: var(--text-primary);
+  --bs-table-border-color: var(--border-subtle);
 }
 
 /* Dark Mode - Component Overrides */
 [data-theme="dark"]::selection {
   background: var(--teal-700);
   color: var(--white);
+}
+
+/* Dark mode: Table backgrounds */
+[data-theme="dark"] .table,
+[data-theme="dark"] .table tbody,
+[data-theme="dark"] .table tbody tr {
+  background-color: transparent;
+}
+
+[data-theme="dark"] .table tbody tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .table.is-striped tbody tr:nth-child(odd) {
+  background-color: var(--bg-tertiary);
+}
+
+/* Dark mode: Explicit text colors for table cells and headers */
+[data-theme="dark"] .table td {
+  color: var(--text-primary);  /* White text for all table cells */
+}
+
+[data-theme="dark"] .table th {
+  color: var(--text-secondary);  /* Light gray for headers (already set but explicit here) */
+}
+
+/* Ensure plain spans inherit the white color (safety net) */
+[data-theme="dark"] .table td span:not(.user-edited):not(.csv-modified):not(.has-text-danger):not(.tag) {
+  color: inherit;
 }
 
 /* Dark mode: Backup info box */
@@ -347,11 +395,8 @@ a:hover::after {
    Theme Toggle - Quadratic Button
    ======================================== */
 .theme-toggle {
-  position: fixed;
-  top: var(--space-4);
-  right: var(--space-4);
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 0;
   border: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
@@ -359,9 +404,8 @@ a:hover::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.125rem;
+  font-size: 1rem;
   transition: all var(--transition-fast);
-  z-index: 100;
 }
 
 .theme-toggle:hover {
@@ -2941,6 +2985,15 @@ th.col-actions, td.col-actions {
 
 .select.is-small select { font-size: 0.75rem; padding: 0.25rem 1.5rem 0.25rem 0.5rem; }
 
+.select.is-fullwidth {
+  width: 100%;
+  display: block;
+}
+
+.select.is-fullwidth select {
+  width: 100%;
+}
+
 .checkbox,
 .radio {
   cursor: pointer;
@@ -3509,5 +3562,63 @@ th.col-actions, td.col-actions {
 /* Bar chart data labels */
 .apexcharts-data-labels text {
   fill: white !important;
+}
+
+/* =================================
+   Truncation & Overflow Tooltips
+   ================================= */
+
+/* Text truncation helper */
+.truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Ensure inputs show truncation for overflow detection */
+.col-identifier input.input,
+.col-input-small input.input {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+/* Data-tooltip CSS (custom implementation) */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip].has-tooltip-top::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-elevated, #1a1a2e);
+  color: var(--text-primary, #fff);
+  font-size: 0.8rem;
+  border-radius: 4px;
+  z-index: 1000;
+  pointer-events: none;
+  margin-bottom: 5px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Arrow pointing down */
+[data-tooltip].has-tooltip-top::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--bg-elevated, #1a1a2e);
+  margin-bottom: -5px;
+  z-index: 1001;
 }
 

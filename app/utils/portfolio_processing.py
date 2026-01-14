@@ -61,6 +61,17 @@ _progress_update_lock = threading.Lock()
 # See: update_csv_progress_background() at line 682
 
 
+def update_csv_progress(current: int, total: int, message: str = "Processing...", status: str = "processing"):
+    """
+    DEPRECATED: No-op stub for backwards compatibility.
+
+    The old session-based progress tracking doesn't work in background threads.
+    This stub exists only to prevent NameError if the deprecated process_csv_data() is called.
+    Use update_csv_progress_background() with a job_id for proper progress tracking.
+    """
+    logger.debug(f"DEPRECATED update_csv_progress called: {current}/{total} - {message} ({status})")
+
+
 def process_csv_data(account_id, file_content):
     """
     DEPRECATED: This function uses session-based progress tracking which doesn't work in background threads.

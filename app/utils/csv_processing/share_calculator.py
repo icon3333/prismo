@@ -177,7 +177,7 @@ def calculate_share_changes(
 
 def _calculate_net_change(transactions: pd.DataFrame) -> float:
     """
-    Calculate net share change from a set of transactions.
+    Calculate net share change from a set of transactions using vectorized operations.
 
     Args:
         transactions: DataFrame of transactions
@@ -185,18 +185,17 @@ def _calculate_net_change(transactions: pd.DataFrame) -> float:
     Returns:
         float: Net change in shares (positive = bought, negative = sold)
     """
-    net_change = 0.0
+    if transactions.empty:
+        return 0.0
 
-    for _, transaction in transactions.iterrows():
-        transaction_type = transaction['type']
-        shares = float(transaction['shares'])
+    # Vectorized: sum buys, subtract sells (5-10x faster than iterrows())
+    buy_mask = transactions['type'].isin(['buy', 'transferin'])
+    sell_mask = transactions['type'].isin(['sell', 'transferout'])
 
-        if transaction_type in ['buy', 'transferin']:
-            net_change += shares
-        elif transaction_type in ['sell', 'transferout']:
-            net_change -= shares
+    buys = transactions.loc[buy_mask, 'shares'].sum()
+    sells = transactions.loc[sell_mask, 'shares'].sum()
 
-    return net_change
+    return float(buys - sells)
 
 
 def identify_companies_to_remove(

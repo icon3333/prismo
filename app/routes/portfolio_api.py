@@ -707,6 +707,8 @@ def get_single_portfolio_data_api(portfolio_id):
             return not_found_response(f'Portfolio {portfolio_id} not found')
 
         # Fetch companies for this portfolio
+        # Note: We fetch mp.price (native currency) and mp.currency to allow Python
+        # to calculate values using consistent daily exchange rates via calculate_item_value()
         companies = query_db('''
             SELECT
                 c.id, c.name, c.identifier, c.category, c.investment_type,
@@ -714,27 +716,29 @@ def get_single_portfolio_data_api(portfolio_id):
                 COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
                 cs.shares, cs.override_share,
                 COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
-                mp.price_eur, mp.currency, mp.last_updated,
-                c.custom_total_value, c.is_custom_value,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-                        THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as current_value
+                mp.price, mp.price_eur, mp.currency, mp.last_updated,
+                c.custom_total_value, c.is_custom_value
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
             WHERE c.portfolio_id = ? AND c.account_id = ?
             AND COALESCE(cs.override_share, cs.shares, 0) > 0
-            ORDER BY current_value DESC
         ''', [portfolio_id, account_id])
 
         if not companies:
             logger.info(f"No companies found for portfolio {portfolio_id}")
             companies = []
 
+        # Calculate current_value for each company using calculate_item_value()
+        # This ensures consistent currency conversion using daily exchange rates
+        for company in companies:
+            company['current_value'] = float(calculate_item_value(company))
+
+        # Sort by current_value descending (was previously done in SQL)
+        companies.sort(key=lambda c: c['current_value'], reverse=True)
+
         # Calculate totals and percentages
-        total_value = sum(float(c['current_value']) for c in companies)
+        total_value = sum(c['current_value'] for c in companies)
 
         for company in companies:
             company['percentage'] = (
@@ -1084,6 +1088,237 @@ def get_category_capacity_data():
     except Exception as e:
         logger.exception(f"Unexpected error getting category capacity data")
         return error_response('Failed to calculate category capacity', 500)
+
+
+@require_auth
+def get_effective_capacity_data():
+    """
+    API endpoint for the Allocation Simulator.
+
+    Returns all data needed for the interactive two-panel slider simulator:
+    - availableToInvest: Cash available to allocate (from Allocation Builder)
+    - All countries with positions and current values
+    - All categories with current values
+    - Rules (maxPerCountry, maxPerCategory)
+    - Position-level detail for proportional distribution
+
+    This supports the Linked Dual-View Simulator where:
+    - User adjusts country sliders (primary) → category totals are derived
+    - Or user toggles to category-first mode
+    - Warnings shown when constraints are exceeded (but not hard-stopped)
+    """
+    logger.info("API request for allocation simulator data")
+
+    account_id = g.account_id
+    logger.info(f"Getting allocation simulator data for account_id: {account_id}")
+
+    try:
+        # Get budget and rules settings from expanded_state in single query
+        state_data = query_db('''
+            SELECT variable_name, variable_value
+            FROM expanded_state
+            WHERE account_id = ? AND page_name = ? AND variable_name IN (?, ?)
+        ''', [account_id, 'build', 'budgetData', 'rules'])
+
+        # Parse budget and rules data
+        total_investable_capital = 0
+        available_to_invest = 0  # NEW: Cash available from Allocation Builder
+        max_per_country = 10  # Default value
+        max_per_category = 25  # Default value
+
+        for row in state_data:
+            var_name = row.get('variable_name')
+            var_value = row.get('variable_value', '{}')
+            try:
+                parsed_json = json.loads(var_value)
+                if var_name == 'budgetData':
+                    total_investable_capital = float(parsed_json.get('totalInvestableCapital', 0))
+                    # availableToInvest is the cash the user wants to allocate
+                    available_to_invest = float(parsed_json.get('availableToInvest', 0))
+                elif var_name == 'rules':
+                    max_per_country = float(parsed_json.get('maxPerCountry', 10))
+                    max_per_category = float(parsed_json.get('maxPerCategory', 25))
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse {var_name} data: {e}")
+
+        logger.info(f"Budget settings - Total: {total_investable_capital}, Max Country: {max_per_country}%, Max Category: {max_per_category}%")
+
+        # Get all positions with BOTH country AND category data
+        position_data = query_db('''
+            SELECT
+                COALESCE(c.override_country, mp.country, 'Unknown') as country,
+                COALESCE(c.category, 'Uncategorized') as category,
+                c.name as company_name,
+                p.name as portfolio_name,
+                COALESCE(cs.override_share, cs.shares, 0) as shares,
+                COALESCE(mp.price_eur, 0) as price,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as position_value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            WHERE c.account_id = ?
+            AND COALESCE(cs.override_share, cs.shares, 0) > 0
+            AND (COALESCE(mp.price_eur, 0) > 0 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL))
+            ORDER BY country, position_value DESC
+        ''', [account_id])
+
+        # Build position lookup structures
+        positions_by_country = {}  # country -> list of positions
+        positions_by_category = {}  # category -> list of positions
+        category_totals = {}  # category -> total value
+
+        if position_data:
+            for row in position_data:
+                country = row['country']
+                category = row['category']
+                position_value = float(row['position_value'])
+
+                position_info = {
+                    'name': row['company_name'],  # Used by JS renderPositionsList
+                    'company_name': row['company_name'],
+                    'portfolio_name': row['portfolio_name'],
+                    'country': country,  # Needed for category-first mode position lists
+                    'category': category,
+                    'shares': float(row['shares']),
+                    'price': float(row['price']),
+                    'value': position_value
+                }
+
+                # Group by country
+                if country not in positions_by_country:
+                    positions_by_country[country] = []
+                positions_by_country[country].append(position_info)
+
+                # Group by category
+                if category not in positions_by_category:
+                    positions_by_category[category] = []
+                positions_by_category[category].append(position_info)
+
+                # Track category totals
+                category_totals[category] = category_totals.get(category, 0) + position_value
+
+        # Calculate effective capacity for each country
+        country_capacity = []
+        max_per_country_amount = total_investable_capital * (max_per_country / 100) if total_investable_capital > 0 else 0
+        max_per_category_amount = total_investable_capital * (max_per_category / 100) if total_investable_capital > 0 else 0
+
+        for country, positions in positions_by_country.items():
+            country_current = sum(p['value'] for p in positions)
+            country_remaining = max_per_country_amount - country_current
+
+            # Find the tightest category constraint for positions in this country
+            binding_constraint = None
+            effective_remaining = country_remaining
+
+            # Get unique categories in this country
+            categories_in_country = set(p['category'] for p in positions)
+
+            for category in categories_in_country:
+                category_current = category_totals.get(category, 0)
+                category_remaining = max_per_category_amount - category_current
+
+                # If this category's remaining capacity is tighter than current effective
+                if category_remaining < effective_remaining:
+                    effective_remaining = category_remaining
+                    category_pct = (category_current / max_per_category_amount * 100) if max_per_category_amount > 0 else 0
+                    binding_constraint = f"{category} at {category_pct:.0f}%"
+
+            # Calculate category impact preview (what happens if user invests max in this country)
+            category_impact = {}
+            country_total_value = sum(p['value'] for p in positions)
+
+            if country_total_value > 0 and effective_remaining > 0:
+                for category in categories_in_country:
+                    # Calculate how much of new investment would go to this category
+                    # (proportional to existing distribution)
+                    category_value_in_country = sum(p['value'] for p in positions if p['category'] == category)
+                    proportion = category_value_in_country / country_total_value
+
+                    additional_to_category = effective_remaining * proportion
+                    category_current = category_totals.get(category, 0)
+                    new_category_total = category_current + additional_to_category
+
+                    current_pct = (category_current / total_investable_capital * 100) if total_investable_capital > 0 else 0
+                    new_pct = (new_category_total / total_investable_capital * 100) if total_investable_capital > 0 else 0
+
+                    category_impact[category] = {
+                        'current': round(current_pct, 1),
+                        'if_max_invest': round(new_pct, 1),
+                        'is_ok': new_pct <= max_per_category
+                    }
+
+            country_capacity.append({
+                'country': country,
+                'current_invested': round(country_current, 2),
+                'country_max': round(max_per_country_amount, 2),
+                'country_remaining': round(country_remaining, 2),
+                'effective_remaining': round(max(0, effective_remaining), 2),
+                'binding_constraint': binding_constraint,
+                'positions': positions,
+                'category_impact': category_impact
+            })
+
+        # Sort by effective remaining capacity (ascending - blocked first, then least capacity)
+        country_capacity.sort(key=lambda x: x['effective_remaining'])
+
+        # Build category data for the simulator
+        categories_list = []
+        max_per_category_amount = total_investable_capital * (max_per_category / 100) if total_investable_capital > 0 else 0
+        for category, total in category_totals.items():
+            category_remaining = max_per_category_amount - total
+            category_pct = (total / total_investable_capital * 100) if total_investable_capital > 0 else 0
+            categories_list.append({
+                'category': category,
+                'current_invested': round(total, 2),
+                'category_max': round(max_per_category_amount, 2),
+                'category_remaining': round(category_remaining, 2),
+                'current_percent': round(category_pct, 1),
+                'positions': positions_by_category.get(category, [])
+            })
+
+        # Sort categories by current invested (descending)
+        categories_list.sort(key=lambda x: x['current_invested'], reverse=True)
+
+        # Build summary
+        blocked_countries = [c['country'] for c in country_capacity if c['effective_remaining'] <= 0]
+        constrained_by_category = [c['country'] for c in country_capacity if c['binding_constraint'] is not None and c['effective_remaining'] > 0]
+        total_effective_capacity = sum(max(0, c['effective_remaining']) for c in country_capacity)
+
+        # Count constraint violations for warnings
+        countries_over_limit = sum(1 for c in country_capacity
+                                   if c['current_invested'] > c['country_max'])
+        categories_over_limit = sum(1 for c in categories_list
+                                    if c['current_invested'] > c['category_max'])
+
+        logger.info(f"Returning allocation simulator data: {len(country_capacity)} countries, {len(categories_list)} categories")
+        return jsonify({
+            'countries': country_capacity,
+            'categories': categories_list,  # NEW: For category panel
+            'available_to_invest': available_to_invest,  # NEW: Cash to allocate
+            'total_investable_capital': total_investable_capital,
+            'rules': {
+                'maxPerCountry': max_per_country,
+                'maxPerCategory': max_per_category
+            },
+            'summary': {
+                'total_effective_capacity': round(total_effective_capacity, 2),
+                'blocked_countries': blocked_countries,
+                'constrained_by_category': constrained_by_category,
+                'countries_over_limit': countries_over_limit,
+                'categories_over_limit': categories_over_limit
+            }
+        })
+
+    except (DataIntegrityError, ValidationError) as e:
+        logger.error(f"Error getting effective capacity data: {str(e)}")
+        return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
+    except Exception as e:
+        logger.exception(f"Unexpected error getting effective capacity data")
+        return error_response('Failed to calculate effective capacity', 500)
 
 
 @require_auth

@@ -9,7 +9,9 @@ from app.decorators import require_auth
 from app.cache import cache
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, get_single_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data, update_portfolio_api, upload_csv, manage_portfolios, csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution
+    get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data,
+    get_effective_capacity_data, update_portfolio_api, upload_csv, manage_portfolios,
+    csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -255,6 +257,8 @@ portfolio_bp.add_url_rule('/api/allocate/country-capacity',
                           view_func=get_country_capacity_data)
 portfolio_bp.add_url_rule('/api/allocate/category-capacity',
                           view_func=get_category_capacity_data)
+portfolio_bp.add_url_rule('/api/allocate/effective-capacity',
+                          view_func=get_effective_capacity_data)
 portfolio_bp.add_url_rule('/api/portfolios', view_func=get_portfolios_api)
 # Simple upload - no background complexity
 from app.routes.simple_upload import upload_csv_simple, get_simple_upload_progress

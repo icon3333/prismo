@@ -25,7 +25,7 @@ def require_auth(f):
     exists and sets g.account for template access.
 
     Usage:
-        # For API endpoints (auto-detected via request.is_json or /api/ path)
+        # For API endpoints (auto-detected via request.is_json or /api/ in path)
         @blueprint.route('/api/data')
         @require_auth
         def get_data():
@@ -58,7 +58,8 @@ def require_auth(f):
             )
 
             # Auto-detect: For API/JSON requests, return JSON error
-            if request.is_json or request.path.startswith('/api/'):
+            # Note: Using 'in' instead of startswith to handle blueprint prefixes like /portfolio/api/
+            if request.is_json or '/api/' in request.path:
                 return jsonify({
                     'error': 'Authentication required. Please select an account.'
                 }), 401
@@ -76,7 +77,7 @@ def require_auth(f):
         )
 
         # For non-JSON routes (templates), verify account exists and load it
-        if not (request.is_json or request.path.startswith('/api/')):
+        if not (request.is_json or '/api/' in request.path):
             account = query_db(
                 'SELECT * FROM accounts WHERE id = ?',
                 [g.account_id],

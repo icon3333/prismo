@@ -494,9 +494,19 @@ def update_batch_prices_in_db(results):
 
     try:
         for isin, result in results.items():
-            if result.get('success') and result.get('price') is not None:
-                # Check if we have a modified identifier
+            if result.get('success'):
+                # Extract nested data structure (matches yfinance_utils.get_isin_data return format)
+                data = result.get('data', {})
+                price = data.get('currentPrice')
+                currency = data.get('currency', 'USD')
+                price_eur = data.get('priceEUR', price)
+                country = data.get('country')
                 modified_identifier = result.get('modified_identifier')
+
+                if price is None:
+                    logger.warning(f"No price data for {isin}, skipping")
+                    failed_count += 1
+                    continue
 
                 if modified_identifier:
                     logger.info(
@@ -505,10 +515,10 @@ def update_batch_prices_in_db(results):
 
                 success = update_price_in_db(
                     isin,
-                    result.get('price'),
-                    result.get('currency', 'USD'),
-                    result.get('price_eur', result.get('price')),
-                    result.get('country'),
+                    price,
+                    currency,
+                    price_eur,
+                    country,
                     modified_identifier      # Pass modified_identifier if present
                 )
 

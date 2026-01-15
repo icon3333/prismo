@@ -41,6 +41,7 @@ class PortfolioRepository:
                 cs.shares,
                 cs.purchase_price,
                 cs.purchase_date,
+                mp.price,
                 mp.price_eur,
                 mp.currency,
                 mp.last_updated as price_updated
@@ -71,7 +72,9 @@ class PortfolioRepository:
                 c.*,
                 p.name as portfolio_name,
                 cs.shares,
-                mp.price_eur
+                mp.price,
+                mp.price_eur,
+                mp.currency
             FROM companies c
             LEFT JOIN portfolios p ON c.portfolio_id = p.id
             LEFT JOIN company_shares cs ON c.id = cs.company_id
@@ -214,6 +217,7 @@ class PortfolioRepository:
                 c.*,
                 cs.shares,
                 cs.purchase_price,
+                mp.price,
                 mp.price_eur,
                 mp.currency
             FROM companies c
@@ -365,6 +369,7 @@ class PortfolioRepository:
                 cs.is_manually_edited,
                 cs.purchase_price,
                 cs.purchase_date,
+                mp.price,
                 mp.price_eur,
                 mp.currency,
                 mp.last_updated as price_updated,
@@ -415,7 +420,9 @@ class PortfolioRepository:
                 c.category,
                 c.country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
+                COALESCE(mp.price, 0) as price,
                 COALESCE(mp.price_eur, 0) as price_eur,
+                mp.currency,
                 (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)) as value
             FROM companies c
             LEFT JOIN portfolios p ON c.portfolio_id = p.id
@@ -670,6 +677,7 @@ class PortfolioRepository:
                 cs.manual_edit_date,
                 cs.is_manually_edited,
                 cs.csv_modified_after_edit,
+                mp.price,
                 mp.price_eur,
                 mp.currency,
                 mp.last_updated,
@@ -727,6 +735,7 @@ class PortfolioRepository:
                     'manual_edit_date': row.get('manual_edit_date'),
                     'is_manually_edited': bool(row.get('is_manually_edited', False)),
                     'csv_modified_after_edit': bool(row.get('csv_modified_after_edit', False)),
+                    'price': float(row['price']) if row.get('price') is not None else None,
                     'price_eur': float(row['price_eur']) if row.get('price_eur') is not None else None,
                     'currency': row.get('currency'),
                     'country': row.get('country'),

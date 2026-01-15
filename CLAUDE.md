@@ -88,7 +88,7 @@ Database (SQLite with proper indexing)
 
 ## Database Schema
 
-**SQLite** database with 9 core tables:
+**SQLite** database with 10 core tables:
 - `accounts`: User accounts (single-user but multi-account support)
 - `portfolios`: Portfolio definitions
 - `companies`: Holdings (securities/positions) with:
@@ -98,25 +98,53 @@ Database (SQLite with proper indexing)
   - Identifier protection (`override_identifier`, `identifier_manually_edited`, `identifier_manual_edit_date`)
   - Total invested tracking (for P&L calculations)
 - `company_shares`: Share quantities with manual override support and edit tracking
-- `market_prices`: Cached market prices (updated via yfinance)
+- `market_prices`: Cached market prices (updated via yfinance) - stores both native currency (`price`) and EUR (`price_eur`)
+- `exchange_rates`: Daily exchange rates for consistent currency conversion (refreshed every 24h)
 - `identifier_mappings`: Custom ticker symbol mappings
 - `expanded_state`: UI state persistence
 - `background_jobs`: Job status tracking
 - Schema in `app/schema.sql` (automatically applied on startup)
-- **Database migrations** handle schema evolution (5 migrations currently implemented in `db_manager.py`):
+- **Database migrations** handle schema evolution (6 migrations currently implemented in `db_manager.py`):
   1. User-edited shares tracking columns
   2. Country override columns
   3. Custom value columns
   4. Investment type column
   5. Identifier manual edit tracking columns
+  6. Exchange rates table for consistent currency conversion
 
 ## Caching Strategy
 
 **Flask-Caching** with SimpleCache (in-memory, perfect for single-user):
 - **15 minutes**: Stock prices (`get_isin_data`, `get_yfinance_info`)
-- **1 hour**: Exchange rates
+- **1 hour**: Exchange rates (in-memory cache for yfinance API)
 - **Expected impact**: 50-90% reduction in API calls
 - Cache configured in `app/cache.py` and `app/main.py`
+
+## Currency Handling
+
+**Consistent Daily Exchange Rates** - ensures portfolio values don't diverge from broker reports:
+
+**Architecture:**
+- Native currency prices stored in `market_prices.price` (e.g., $150 USD)
+- Exchange rates stored in `exchange_rates` table (refreshed every 24h on startup)
+- EUR values calculated on-the-fly using consistent daily rates
+- All positions use the **same exchange rate** for a given day
+
+**Calculation Priority** (in `value_calculator.py`):
+1. Custom value: If `is_custom_value=True`, use `custom_total_value`
+2. Native currency: `price * exchange_rate(currency) * shares`
+3. Legacy fallback: `price_eur * shares` (for backward compatibility)
+
+**Key Components:**
+- `ExchangeRateRepository`: Database access for exchange rates (`app/repositories/exchange_rate_repository.py`)
+- `refresh_exchange_rates_if_needed()`: Startup task to refresh stale rates (`app/utils/startup_tasks.py`)
+- `calculate_item_value()`: Central value calculation with currency conversion (`app/utils/value_calculator.py`)
+
+**Exchange Rate Refresh:**
+- Automatically refreshed on app startup if rates are >24h old
+- Common currencies fetched: USD, GBP, CHF, JPY, CAD, AUD, SEK, NOK, DKK, HKD, SGD, NZD
+- Additional currencies fetched based on what's in the portfolio
+- Rates logged for audit trail
 
 ## CSV Processing
 

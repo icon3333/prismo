@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="container">
-  <h1 class="title is-3 mb-4">Portfolio Allocation</h1>
+  <h1 class="page-title">Portfolio Allocation</h1>
 
   <!-- Tab Navigation -->
   <div class="header-content">
@@ -29,9 +29,11 @@
   </div>
 
   <!-- Tab Content -->
-  <div class="tab-content" id="allocationTabsContent">
+  <!-- Note: inline style overrides ocean-depth.css .tab-content { display: none } -->
+  <div class="tab-content" id="allocationTabsContent" style="display: block;">
     <!-- Global Overview Tab -->
-    <div class="tab-pane active" id="global" role="tabpanel">
+    <!-- Note: inline style ensures visibility even if JS fails to load -->
+    <div class="tab-pane active" id="global" role="tabpanel" style="display: block;">
       <h2 class="section-title">Investment Settings</h2>
       <!-- Investment Input in Global Overview -->
       <div class="card">
@@ -73,80 +75,129 @@
         </div>
       </div>
 
-      <!-- Country Allocation Expander -->
-      <div class="card mt-4">
-        <div class="card-header" style="cursor: pointer;" onclick="toggleCountryCapacityExpander()">
+      <!-- Allocation Simulator -->
+      <div class="card mt-4" id="allocation-simulator-card">
+        <div class="card-header" style="cursor: pointer;" onclick="toggleAllocationSimulator()">
           <h3 class="card-header-title">
-            <i class="fas fa-globe mr-2"></i>
-            Country Allocation
+            <i class="fas fa-sliders-h mr-2"></i>
+            Allocation Simulator
           </h3>
           <button class="card-header-icon" aria-label="expand">
             <span class="icon">
-              <i class="fas fa-angle-down" id="country-capacity-arrow"></i>
+              <i class="fas fa-angle-down" id="allocation-simulator-arrow"></i>
             </span>
           </button>
         </div>
-        <div class="card-content" id="country-capacity-content" style="display: none;">
+        <div class="card-content" id="allocation-simulator-content" style="display: none;">
           <div class="content">
-            <p class="subtitle is-6" style="color: var(--text-muted); margin-bottom: var(--space-md);">
-              Investment capacity and over-allocation by country based on your allocation rules
-            </p>
-            <div class="table-responsive">
-              <div id="country-capacity-chart" style="
-                min-height: 300px; 
-                background-color: var(--card-bg);
-                border-radius: var(--border-radius);
-                padding: var(--space-md);
-                border: 1px solid var(--border-color);
-              ">
-                <!-- Chart will be rendered here -->
-                <div class="has-text-centered">
-                  <div class="spinner-border" role="status">
-                    <span class="is-sr-only">Loading country data...</span>
+            <!-- Simulator Header -->
+            <div class="simulator-header">
+              <div class="simulator-header-left">
+                <span class="available-to-invest-label">Available to Invest:</span>
+                <span class="available-to-invest-value" id="available-to-invest-display">€0</span>
+              </div>
+              <div class="simulator-header-right">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-simulator-btn">
+                  <i class="fas fa-undo me-1"></i>Reset
+                </button>
+              </div>
+            </div>
+
+            <!-- Two-Column Slider Layout -->
+            <div class="simulator-panels">
+              <!-- Left Panel: Country Sliders (Primary) -->
+              <div class="simulator-panel simulator-panel-primary" id="country-panel">
+                <div class="panel-header">
+                  <h4 class="panel-title">
+                    <i class="fas fa-globe me-1"></i>Allocate by Country
+                  </h4>
+                  <span class="panel-subtitle">(drag sliders to allocate)</span>
+                </div>
+                <div class="slider-list" id="country-sliders">
+                  <!-- Country sliders will be rendered here by JS -->
+                  <div class="has-text-centered">
+                    <div class="spinner-border" role="status">
+                      <span class="is-sr-only">Loading...</span>
+                    </div>
                   </div>
                 </div>
+                <div class="panel-footer">
+                  <span class="panel-total-label">Total Allocated:</span>
+                  <span class="panel-total-value" id="country-total-display">€0 / €0</span>
+                </div>
+              </div>
+
+              <!-- Right Panel: Category Allocation -->
+              <div class="simulator-panel simulator-panel-primary" id="category-panel">
+                <div class="panel-header">
+                  <h4 class="panel-title">
+                    <i class="fas fa-tags me-1"></i>Allocate by Category
+                  </h4>
+                  <span class="panel-subtitle">(drag sliders to allocate)</span>
+                </div>
+                <div class="slider-list" id="category-sliders">
+                  <!-- Category bars will be rendered here by JS -->
+                  <div class="has-text-centered">
+                    <div class="spinner-border" role="status">
+                      <span class="is-sr-only">Loading...</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="panel-footer">
+                  <span class="panel-total-label">Total:</span>
+                  <span class="panel-total-value" id="category-total-display">€0 / €0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Allocation Matrix -->
+            <div class="allocation-matrix-card" id="allocation-matrix-card">
+              <div class="matrix-header" style="cursor: pointer;" onclick="toggleAllocationMatrix()">
+                <h4 class="matrix-title">
+                  <i class="fas fa-th me-1"></i>Allocation Matrix
+                </h4>
+                <span class="matrix-subtitle">Where your money flows</span>
+                <button class="matrix-toggle-icon" aria-label="expand">
+                  <i class="fas fa-angle-down" id="allocation-matrix-arrow"></i>
+                </button>
+              </div>
+              <div class="matrix-content" id="allocation-matrix-content" style="display: none;">
+                <div id="allocation-matrix">
+                  <!-- Matrix will be rendered here by JS -->
+                  <div class="has-text-centered">
+                    <div class="spinner-border" role="status">
+                      <span class="is-sr-only">Loading...</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="matrix-footer">
+                  <i class="fas fa-info-circle me-1"></i>
+                  Hover over cells to see positions at each intersection
+                </div>
+              </div>
+            </div>
+
+            <!-- Constraint Warnings -->
+            <div class="constraint-warnings" id="constraint-warnings" style="display: none;">
+              <div class="warnings-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Constraint Warnings</span>
+              </div>
+              <div class="warnings-content" id="warnings-content">
+                <!-- Warnings will be rendered here by JS -->
+              </div>
+              <div class="warnings-footer">
+                These allocations violate your rules. Adjust sliders or update your limits in Allocation Builder.
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Category Allocation Expander -->
-      <div class="card mt-4">
-        <div class="card-header" style="cursor: pointer;" onclick="toggleCategoryCapacityExpander()">
-          <h3 class="card-header-title">
-            <i class="fas fa-tags mr-2"></i>
-            Category Allocation
-          </h3>
-          <button class="card-header-icon" aria-label="expand">
-            <span class="icon">
-              <i class="fas fa-angle-down" id="category-capacity-arrow"></i>
-            </span>
-          </button>
-        </div>
-        <div class="card-content" id="category-capacity-content" style="display: none;">
-          <div class="content">
-            <p class="subtitle is-6" style="color: var(--text-muted); margin-bottom: var(--space-md);">
-              Investment capacity and over-allocation by category based on your allocation rules
-            </p>
-            <div class="table-responsive">
-              <div id="category-capacity-chart" style="
-                min-height: 300px;
-                background-color: var(--card-bg);
-                border-radius: var(--border-radius);
-                padding: var(--space-md);
-                border: 1px solid var(--border-color);
-              ">
-                <!-- Chart will be rendered here -->
-                <div class="has-text-centered">
-                  <div class="spinner-border" role="status">
-                    <span class="is-sr-only">Loading category data...</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <!-- Legacy Country/Category Charts (hidden, kept for backward compatibility) -->
+      <div id="legacy-charts" style="display: none;">
+        <div id="country-capacity-chart"></div>
+        <div id="category-capacity-chart"></div>
       </div>
     </div>
 

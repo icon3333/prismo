@@ -137,6 +137,14 @@ def create_app(config_name=None):
             time.sleep(0.1)  # Small delay to ensure app is fully initialized
 
             with app.app_context():
+                # Refresh exchange rates on startup if needed (before price updates)
+                # This ensures consistent currency conversion for all calculations
+                try:
+                    from app.utils.startup_tasks import refresh_exchange_rates_if_needed
+                    refresh_exchange_rates_if_needed()
+                except Exception as e:
+                    app.logger.error(f"Exchange rate refresh failed: {e}")
+
                 # Trigger automatic price update on startup if needed
                 try:
                     from app.utils.startup_tasks import auto_update_prices_if_needed

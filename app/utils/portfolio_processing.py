@@ -653,13 +653,21 @@ def process_csv_data(account_id, file_content):
                     # This is the actual API call - 1 call per stock
                     result = get_isin_data(identifier)
                     
-                    if result['success'] and result.get('price') is not None:
-                        price = result.get('price')
-                        currency = result.get('currency', 'USD')
-                        price_eur = result.get('price_eur', price)
-                        country = result.get('country')
+                    if result['success']:
+                        # Extract nested data structure (matches yfinance_utils.get_isin_data return format)
+                        data = result.get('data', {})
+                        price = data.get('currentPrice')
+                        currency = data.get('currency', 'USD')
+                        price_eur = data.get('priceEUR', price)
+                        country = data.get('country')
+
+                        if price is None:
+                            logger.warning(f"API call returned no price for {identifier}")
+                            failed_prices.append(identifier)
+                            continue
+
                         logger.info(
-                            f"API call successful for {identifier}: {price_eur} EUR")
+                            f"API call successful for {identifier}: {price} {currency} ({price_eur} EUR)")
                         if not update_price_in_db(identifier, price, currency, price_eur, country):
                             logger.warning(
                                 f"Failed to update price and metadata in database for {identifier}")

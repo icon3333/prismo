@@ -90,6 +90,17 @@ CREATE TABLE IF NOT EXISTS background_jobs (
  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create exchange_rates table for consistent currency conversion
+-- Stores latest exchange rate per currency pair (no historical tracking)
+CREATE TABLE IF NOT EXISTS exchange_rates (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ from_currency TEXT NOT NULL,
+ to_currency TEXT DEFAULT 'EUR',
+ rate REAL NOT NULL,
+ last_updated DATETIME NOT NULL,
+ UNIQUE(from_currency, to_currency)
+);
+
 -- Create indexes for market_prices (only if they don't exist)
 CREATE INDEX IF NOT EXISTS idx_market_prices_last_updated ON market_prices(last_updated);
 CREATE INDEX IF NOT EXISTS idx_market_prices_identifier ON market_prices(identifier);
@@ -119,6 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_companies_portfolio_category ON companies(portfol
 -- Create indexes for background_jobs
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_created_at ON background_jobs(created_at);
+-- Create index for exchange_rates
+CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency ON exchange_rates(from_currency, to_currency);
 
 -- Create trigger for expanded_state (only if it doesn't exist)
 CREATE TRIGGER IF NOT EXISTS update_state_timestamp

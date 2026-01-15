@@ -33,6 +33,16 @@ document.addEventListener('DOMContentLoaded', function () {
     const globalContent = document.getElementById('global');
     const detailedContent = document.getElementById('detailed');
 
+    // Defensive check: ensure all required elements exist
+    if (!globalTab || !detailedTab || !globalContent || !detailedContent) {
+        console.error('Required tab elements not found. Page may not be fully loaded.');
+        // Show the global content by default if elements are missing
+        if (globalContent) {
+            globalContent.style.display = 'block';
+        }
+        return;
+    }
+
     // Function to handle tab switching
     function switchTab(tabId) {
         // Remove active class from all tabs and content
@@ -193,8 +203,29 @@ document.addEventListener('DOMContentLoaded', function () {
         async fetchPortfolioData() {
             try {
                 const response = await fetch('/portfolio/api/allocate/portfolio-data');
+
+                // Check for redirect (usually means session expired)
+                if (response.redirected) {
+                    console.error('Session expired or auth failed, redirecting to home');
+                    window.location.href = '/';
+                    return;
+                }
+
+                // Check for non-OK responses
                 if (!response.ok) {
+                    // Try to get error details from response
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
                     throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                // Verify we got JSON response
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Session may have expired.');
                 }
 
                 this.portfolioData = await response.json();
@@ -209,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 this.renderDetailedView();
             } catch (error) {
                 console.error('Error fetching portfolio data:', error);
-                this.showError('Failed to load portfolio data. Please try again later.');
+                this.showError(`Failed to load portfolio data: ${error.message}`);
             }
         }
 
@@ -283,6 +314,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         formatCurrency(value) {
+            // Defensive check for invalid values
+            if (value === undefined || value === null || isNaN(value)) {
+                return '€0.00';
+            }
             return this.currencyFormatter.format(value);
         }
 
@@ -517,7 +552,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Show indicator for completely empty portfolios
                 if (portfolio.currentValue === 0 || !portfolio.currentValue) {
-                    portfolioNameDisplay = `${portfolio.name} <span class="badge bg-info" style="font-size: 0.75em; padding: 0.25em 0.5em; margin-left: 0.5em;">Empty - Needs Positions</span>`;
+                    portfolioNameDisplay = `${portfolio.name}<br><span class="badge bg-info" style="font-size: 0.75em; padding: 0.25em 0.5em;">Empty - Needs Positions</span>`;
                 } else if (positionDeficit > 0) {
                     // Show warning for portfolios that need more positions
                     portfolioNameDisplay = `${portfolio.name} <span class="text-warning" title="Needs ${positionDeficit} more positions">⚠️</span>`;
@@ -1530,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     show: false
                 },
                 background: 'transparent',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                 animations: {
                     enabled: false // Remove animations for lightweight performance
                 }
@@ -1660,7 +1695,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             border-radius: 6px;
                             padding: 12px;
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            font-family: Inter, system-ui, -apple-system, sans-serif;
                             min-width: 250px;
                             max-width: 350px;
                         ">
@@ -1833,7 +1868,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 height: Math.max(350, categories.length * 45),
                 toolbar: { show: false },
                 background: 'transparent',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                 animations: { enabled: false }
             },
             plotOptions: {
@@ -1959,7 +1994,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             border-radius: 6px;
                             padding: 12px;
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            font-family: Inter, system-ui, -apple-system, sans-serif;
                             min-width: 250px;
                             max-width: 350px;
                         ">
@@ -2059,6 +2094,870 @@ document.addEventListener('DOMContentLoaded', function () {
                     No category capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
                 </div>
             `;
+        }
+    }
+
+    // ========================================
+    // Allocation Simulator
+    // Independent dual-slider UI with allocation matrix
+    // Both country AND category sliders are interactive
+    // Matrix shows where money flows (country-category intersections)
+    // ========================================
+
+    let simulatorExpanded = false;
+    let matrixExpanded = false;
+    let simulatorData = null;
+    let countryAllocations = {};  // { countryName: allocatedAmount }
+    let categoryAllocations = {}; // { categoryName: allocatedAmount }
+    let allocationMatrix = {};    // { 'country|category': amount } - intersection matrix
+    let availableToInvest = 0;
+    let currentCountrySort = 'value';  // 'name', 'value', 'headroom'
+    let currentCategorySort = 'value';
+    let expandedPositions = new Set();  // Track expanded country/category position lists
+
+    // Sort options
+    const sortOptions = {
+        name: (a, b) => (a.country || a.category).localeCompare(b.country || b.category),
+        value: (a, b) => b.current_invested - a.current_invested,
+        headroom: (a, b) => {
+            const aMax = a.country_max || a.category_max;
+            const bMax = b.country_max || b.category_max;
+            const aHeadroom = aMax - a.current_invested;
+            const bHeadroom = bMax - b.current_invested;
+            return bHeadroom - aHeadroom;  // Most headroom first
+        }
+    };
+
+    // Toggle Allocation Simulator expander
+    window.toggleAllocationSimulator = function() {
+        const content = document.getElementById('allocation-simulator-content');
+        const arrow = document.getElementById('allocation-simulator-arrow');
+
+        if (!content || !arrow) return;
+
+        simulatorExpanded = !simulatorExpanded;
+
+        if (simulatorExpanded) {
+            content.style.display = 'block';
+            arrow.classList.remove('fa-angle-down');
+            arrow.classList.add('fa-angle-up');
+
+            // Load data when expanded for the first time
+            if (!simulatorData) {
+                fetchSimulatorData();
+            }
+        } else {
+            content.style.display = 'none';
+            arrow.classList.remove('fa-angle-up');
+            arrow.classList.add('fa-angle-down');
+        }
+    };
+
+    // Fetch simulator data from API
+    async function fetchSimulatorData() {
+        try {
+            const response = await fetch('/portfolio/api/allocate/effective-capacity');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            simulatorData = await response.json();
+            console.log('Simulator data loaded:', simulatorData);
+
+            // Initialize availableToInvest from API
+            availableToInvest = simulatorData.available_to_invest || 0;
+
+            // Initialize country allocations to 0
+            countryAllocations = {};
+            simulatorData.countries.forEach(c => {
+                countryAllocations[c.country] = 0;
+            });
+
+            // Initialize category allocations to 0 (for category-first mode)
+            categoryAllocations = {};
+            simulatorData.categories.forEach(c => {
+                categoryAllocations[c.category] = 0;
+            });
+
+            // Clear expanded positions when loading new data
+            expandedPositions.clear();
+
+            renderSimulator();
+            setupSimulatorEventHandlers();
+        } catch (error) {
+            console.error('Error fetching simulator data:', error);
+            showSimulatorError('Failed to load allocation simulator data. Please try again later.');
+        }
+    }
+
+    // Render the complete simulator UI
+    function renderSimulator() {
+        if (!simulatorData) return;
+
+        // Update available to invest display
+        const availableDisplay = document.getElementById('available-to-invest-display');
+        if (availableDisplay) {
+            availableDisplay.textContent = formatCurrency(availableToInvest);
+        }
+
+        // Both panels are always interactive sliders
+        renderCountrySliders();
+        renderCategorySliders();
+
+        // Calculate and render the allocation matrix
+        calculateAllocationMatrix();
+        renderAllocationMatrix();
+
+        updateTotals();
+        checkConstraints();
+    }
+
+    // Toggle Allocation Matrix expander
+    window.toggleAllocationMatrix = function() {
+        const content = document.getElementById('allocation-matrix-content');
+        const arrow = document.getElementById('allocation-matrix-arrow');
+
+        if (!content || !arrow) return;
+
+        matrixExpanded = !matrixExpanded;
+
+        if (matrixExpanded) {
+            content.style.display = 'block';
+            arrow.classList.remove('fa-angle-down');
+            arrow.classList.add('fa-angle-up');
+        } else {
+            content.style.display = 'none';
+            arrow.classList.remove('fa-angle-up');
+            arrow.classList.add('fa-angle-down');
+        }
+    };
+
+    // ========================================
+    // Allocation Matrix - IPF Algorithm
+    // Calculates intersection of country-category allocations
+    // Uses Iterative Proportional Fitting to find matrix
+    // that satisfies both row totals and column totals
+    // ========================================
+
+    // Build intersection map: which positions exist at each country-category pair
+    function buildIntersectionMap() {
+        const intersections = {};
+
+        if (!simulatorData) return intersections;
+
+        // Use country data which has positions with category info
+        simulatorData.countries.forEach(country => {
+            if (!country.positions) return;
+
+            country.positions.forEach(pos => {
+                const key = `${country.country}|${pos.category}`;
+                if (!intersections[key]) {
+                    intersections[key] = {
+                        country: country.country,
+                        category: pos.category,
+                        positions: [],
+                        totalValue: 0
+                    };
+                }
+                intersections[key].positions.push(pos);
+                intersections[key].totalValue += pos.value;
+            });
+        });
+
+        return intersections;
+    }
+
+    // Calculate allocation matrix using IPF algorithm
+    // Given country targets and category targets, find matrix that satisfies both
+    function calculateAllocationMatrix() {
+        allocationMatrix = {};
+
+        if (!simulatorData) return;
+
+        const intersections = buildIntersectionMap();
+        const countries = simulatorData.countries.map(c => c.country);
+        const categories = simulatorData.categories.map(c => c.category);
+
+        // Check if we have any allocations to distribute
+        const countryTotal = Object.values(countryAllocations).reduce((sum, v) => sum + v, 0);
+        const categoryTotal = Object.values(categoryAllocations).reduce((sum, v) => sum + v, 0);
+
+        if (countryTotal === 0 && categoryTotal === 0) {
+            // No allocations yet - matrix is all zeros
+            return;
+        }
+
+        // Initialize matrix with seed values based on position composition
+        // Seed = proportion of total that this intersection represents
+        const matrix = {};
+        let totalPositionValue = 0;
+
+        Object.values(intersections).forEach(inter => {
+            totalPositionValue += inter.totalValue;
+        });
+
+        if (totalPositionValue === 0) return;
+
+        // Seed matrix with proportional values
+        Object.entries(intersections).forEach(([key, inter]) => {
+            matrix[key] = inter.totalValue / totalPositionValue;
+        });
+
+        // IPF: Iteratively scale to match row and column totals
+        const maxIterations = 50;
+        const tolerance = 0.01;
+
+        for (let iter = 0; iter < maxIterations; iter++) {
+            let maxDiff = 0;
+
+            // Scale rows to match country targets
+            countries.forEach(country => {
+                const countryTarget = countryAllocations[country] || 0;
+                let rowSum = 0;
+
+                categories.forEach(category => {
+                    const key = `${country}|${category}`;
+                    rowSum += matrix[key] || 0;
+                });
+
+                if (rowSum > 0 && countryTarget > 0) {
+                    const scale = countryTarget / rowSum;
+                    categories.forEach(category => {
+                        const key = `${country}|${category}`;
+                        if (matrix[key]) {
+                            const oldVal = matrix[key];
+                            matrix[key] = matrix[key] * scale;
+                            maxDiff = Math.max(maxDiff, Math.abs(matrix[key] - oldVal));
+                        }
+                    });
+                } else if (countryTarget === 0) {
+                    // Zero out this row
+                    categories.forEach(category => {
+                        const key = `${country}|${category}`;
+                        if (matrix[key]) {
+                            matrix[key] = 0;
+                        }
+                    });
+                }
+            });
+
+            // Scale columns to match category targets
+            categories.forEach(category => {
+                const categoryTarget = categoryAllocations[category] || 0;
+                let colSum = 0;
+
+                countries.forEach(country => {
+                    const key = `${country}|${category}`;
+                    colSum += matrix[key] || 0;
+                });
+
+                if (colSum > 0 && categoryTarget > 0) {
+                    const scale = categoryTarget / colSum;
+                    countries.forEach(country => {
+                        const key = `${country}|${category}`;
+                        if (matrix[key]) {
+                            const oldVal = matrix[key];
+                            matrix[key] = matrix[key] * scale;
+                            maxDiff = Math.max(maxDiff, Math.abs(matrix[key] - oldVal));
+                        }
+                    });
+                } else if (categoryTarget === 0) {
+                    // Zero out this column
+                    countries.forEach(country => {
+                        const key = `${country}|${category}`;
+                        if (matrix[key]) {
+                            matrix[key] = 0;
+                        }
+                    });
+                }
+            });
+
+            // Check for convergence
+            if (maxDiff < tolerance) {
+                console.log(`IPF converged after ${iter + 1} iterations`);
+                break;
+            }
+        }
+
+        // Store result in allocationMatrix
+        allocationMatrix = matrix;
+    }
+
+    // Render the allocation matrix as HTML table
+    function renderAllocationMatrix() {
+        const container = document.getElementById('allocation-matrix');
+        if (!container || !simulatorData) return;
+
+        const intersections = buildIntersectionMap();
+        const countries = simulatorData.countries.map(c => c.country);
+        const categories = simulatorData.categories.map(c => c.category);
+
+        // Check if we have any allocations
+        const hasAllocations = Object.values(allocationMatrix).some(v => v > 0);
+
+        if (!hasAllocations) {
+            container.innerHTML = `
+                <div class="matrix-empty">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Adjust the sliders above to see how your allocation flows across countries and categories.</span>
+                </div>
+            `;
+            return;
+        }
+
+        // Build table HTML
+        let html = '<table class="allocation-matrix-table">';
+
+        // Header row with categories
+        html += '<thead><tr><th class="matrix-corner"></th>';
+        categories.forEach(category => {
+            html += `<th class="matrix-col-header">${category}</th>`;
+        });
+        html += '<th class="matrix-row-total-header">Total</th></tr></thead>';
+
+        // Body rows for each country
+        html += '<tbody>';
+        countries.forEach(country => {
+            let rowTotal = 0;
+            html += `<tr><th class="matrix-row-header">${country}</th>`;
+
+            categories.forEach(category => {
+                const key = `${country}|${category}`;
+                const value = allocationMatrix[key] || 0;
+                const intersection = intersections[key];
+                const isEmpty = !intersection || intersection.positions.length === 0;
+                rowTotal += value;
+
+                // Build tooltip with position names
+                let tooltip = '';
+                if (intersection && intersection.positions.length > 0) {
+                    const posNames = intersection.positions.map(p => p.name).join(', ');
+                    tooltip = `title="${intersection.positions.length} position(s): ${posNames}"`;
+                }
+
+                html += `<td class="matrix-cell ${isEmpty ? 'matrix-cell-empty' : ''} ${value > 0 ? 'matrix-cell-active' : ''}" ${tooltip}>
+                    ${value > 0 ? formatCurrency(value) : (isEmpty ? '-' : '€0')}
+                </td>`;
+            });
+
+            html += `<td class="matrix-row-total">${formatCurrency(rowTotal)}</td></tr>`;
+        });
+
+        // Footer row with category totals
+        html += '<tr class="matrix-totals-row"><th class="matrix-col-total-header">Total</th>';
+        let grandTotal = 0;
+        categories.forEach(category => {
+            let colTotal = 0;
+            countries.forEach(country => {
+                const key = `${country}|${category}`;
+                colTotal += allocationMatrix[key] || 0;
+            });
+            grandTotal += colTotal;
+            html += `<td class="matrix-col-total">${formatCurrency(colTotal)}</td>`;
+        });
+        html += `<td class="matrix-grand-total">${formatCurrency(grandTotal)}</td></tr>`;
+
+        html += '</tbody></table>';
+
+        container.innerHTML = html;
+    }
+
+    // Render sort controls HTML
+    function renderSortControls(type, currentSort) {
+        return `
+            <div class="sort-controls">
+                <span class="sort-label">Sort:</span>
+                <button class="sort-btn ${currentSort === 'name' ? 'active' : ''}" data-sort="name" data-type="${type}">Name</button>
+                <button class="sort-btn ${currentSort === 'value' ? 'active' : ''}" data-sort="value" data-type="${type}">Value</button>
+                <button class="sort-btn ${currentSort === 'headroom' ? 'active' : ''}" data-sort="headroom" data-type="${type}">Headroom</button>
+            </div>
+        `;
+    }
+
+    // Render expandable positions list
+    function renderPositionsList(positions, expandKey, groupType) {
+        const isExpanded = expandedPositions.has(expandKey);
+        const positionCount = positions ? positions.length : 0;
+
+        if (positionCount === 0) return '';
+
+        const positionsHtml = positions.map(pos => {
+            const displayCategory = groupType === 'country' ? pos.category : pos.country;
+            const percentage = ((pos.value / positions.reduce((s, p) => s + p.value, 0)) * 100).toFixed(0);
+            return `
+                <div class="position-list-item">
+                    <span class="position-name">${pos.name}</span>
+                    <span class="position-type">${displayCategory}</span>
+                    <span class="position-value">${formatCurrency(pos.value)}</span>
+                    <span class="position-percent">${percentage}%</span>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="position-expand-trigger" data-expand-key="${expandKey}">
+                <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i>
+                <span>${positionCount} position${positionCount !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="position-list ${isExpanded ? 'expanded' : ''}" data-positions-key="${expandKey}">
+                ${positionsHtml}
+            </div>
+        `;
+    }
+
+    // Handle position expand/collapse toggle
+    function handlePositionExpand(event) {
+        const trigger = event.target.closest('.position-expand-trigger');
+        if (!trigger) return;
+
+        const expandKey = trigger.dataset.expandKey;
+        const positionList = document.querySelector(`.position-list[data-positions-key="${expandKey}"]`);
+        const icon = trigger.querySelector('i');
+
+        if (expandedPositions.has(expandKey)) {
+            expandedPositions.delete(expandKey);
+            positionList?.classList.remove('expanded');
+            icon?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+        } else {
+            expandedPositions.add(expandKey);
+            positionList?.classList.add('expanded');
+            icon?.classList.replace('fa-chevron-right', 'fa-chevron-down');
+        }
+    }
+
+    // Handle sort button click
+    function handleSortClick(event) {
+        const btn = event.target.closest('.sort-btn');
+        if (!btn) return;
+
+        const sortBy = btn.dataset.sort;
+        const type = btn.dataset.type;
+
+        if (type === 'country') {
+            currentCountrySort = sortBy;
+            renderCountrySliders();
+        } else if (type === 'category') {
+            currentCategorySort = sortBy;
+            renderCategorySliders();
+        }
+    }
+
+    // Render country sliders (primary in country-first mode)
+    function renderCountrySliders() {
+        const container = document.getElementById('country-sliders');
+        if (!container || !simulatorData) return;
+
+        const countries = simulatorData.countries;
+        const { rules, total_investable_capital } = simulatorData;
+        const maxPerCountryAmount = total_investable_capital * (rules.maxPerCountry / 100);
+
+        if (!countries || countries.length === 0) {
+            container.innerHTML = `
+                <div class="notification is-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    No countries found. Please ensure you have positions in your portfolio.
+                </div>
+            `;
+            return;
+        }
+
+        // Sort countries based on current sort option
+        const sortedCountries = [...countries].sort(sortOptions[currentCountrySort]);
+
+        // Build HTML with sort controls at top
+        let html = renderSortControls('country', currentCountrySort);
+
+        html += sortedCountries.map(country => {
+            const countryId = country.country.replace(/\s+/g, '-').replace(/[()]/g, '');
+            const allocation = countryAllocations[country.country] || 0;
+            const newTotal = country.current_invested + allocation;
+            const isOverLimit = newTotal > maxPerCountryAmount;
+            const percentOfLimit = maxPerCountryAmount > 0 ? (newTotal / maxPerCountryAmount * 100) : 0;
+
+            return `
+                <div class="slider-item ${isOverLimit ? 'slider-over-limit' : ''}" data-country="${country.country}">
+                    <div class="slider-header">
+                        <span class="slider-name">${country.country}</span>
+                        <span class="slider-value" id="value-${countryId}">${formatCurrency(allocation)}</span>
+                    </div>
+                    <div class="slider-track-container">
+                        <input type="range"
+                               class="slider-input country-slider"
+                               id="slider-${countryId}"
+                               data-country="${country.country}"
+                               min="0"
+                               max="${Math.max(availableToInvest, allocation)}"
+                               value="${allocation}"
+                               step="100">
+                        <div class="slider-fill" id="fill-${countryId}" style="width: ${allocation > 0 ? (allocation / availableToInvest * 100) : 0}%"></div>
+                    </div>
+                    <div class="slider-footer">
+                        <span class="slider-constraint ${isOverLimit ? 'constraint-over' : 'constraint-ok'}">
+                            ${percentOfLimit.toFixed(0)}% of ${rules.maxPerCountry}% max
+                            ${isOverLimit ? '<i class="fas fa-exclamation-triangle"></i> OVER' : ''}
+                        </span>
+                        <span class="slider-current">Current: ${formatCurrency(country.current_invested)}</span>
+                    </div>
+                    ${renderPositionsList(country.positions, `country-${countryId}`, 'country')}
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+
+        // Add event listeners
+        container.querySelectorAll('.country-slider').forEach(slider => {
+            slider.addEventListener('input', handleCountrySliderChange);
+        });
+        container.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', handleSortClick);
+        });
+        container.querySelectorAll('.position-expand-trigger').forEach(trigger => {
+            trigger.addEventListener('click', handlePositionExpand);
+        });
+    }
+
+    // Render category sliders (interactive)
+    function renderCategorySliders() {
+        const container = document.getElementById('category-sliders');
+        if (!container || !simulatorData) return;
+
+        const categories = simulatorData.categories;
+        const { rules, total_investable_capital } = simulatorData;
+        const maxPerCategoryAmount = total_investable_capital * (rules.maxPerCategory / 100);
+
+        if (!categories || categories.length === 0) {
+            container.innerHTML = `
+                <div class="notification is-info">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    No categories found.
+                </div>
+            `;
+            return;
+        }
+
+        // Sort categories based on current sort option
+        const sortedCategories = [...categories].sort(sortOptions[currentCategorySort]);
+
+        // Build HTML with sort controls at top
+        let html = renderSortControls('category', currentCategorySort);
+
+        html += sortedCategories.map(category => {
+            const categoryId = category.category.replace(/\s+/g, '-').replace(/[()]/g, '');
+            const allocation = categoryAllocations[category.category] || 0;
+            const newTotal = category.current_invested + allocation;
+            const isOverLimit = newTotal > maxPerCategoryAmount;
+            const percentOfLimit = maxPerCategoryAmount > 0 ? (newTotal / maxPerCategoryAmount * 100) : 0;
+
+            return `
+                <div class="slider-item ${isOverLimit ? 'slider-over-limit' : ''}" data-category="${category.category}">
+                    <div class="slider-header">
+                        <span class="slider-name">${category.category}</span>
+                        <span class="slider-value" id="cat-value-${categoryId}">${formatCurrency(allocation)}</span>
+                    </div>
+                    <div class="slider-track-container">
+                        <input type="range"
+                               class="slider-input category-slider"
+                               id="cat-slider-${categoryId}"
+                               data-category="${category.category}"
+                               min="0"
+                               max="${Math.max(availableToInvest, allocation)}"
+                               value="${allocation}"
+                               step="100">
+                        <div class="slider-fill" id="cat-fill-${categoryId}" style="width: ${allocation > 0 ? (allocation / availableToInvest * 100) : 0}%"></div>
+                    </div>
+                    <div class="slider-footer">
+                        <span class="slider-constraint ${isOverLimit ? 'constraint-over' : 'constraint-ok'}">
+                            ${percentOfLimit.toFixed(0)}% of ${rules.maxPerCategory}% max
+                            ${isOverLimit ? '<i class="fas fa-exclamation-triangle"></i> OVER' : ''}
+                        </span>
+                        <span class="slider-current">Current: ${formatCurrency(category.current_invested)}</span>
+                    </div>
+                    ${renderPositionsList(category.positions, `category-${categoryId}`, 'category')}
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = html;
+
+        // Add event listeners
+        container.querySelectorAll('.category-slider').forEach(slider => {
+            slider.addEventListener('input', handleCategorySliderChange);
+        });
+        container.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', handleSortClick);
+        });
+        container.querySelectorAll('.position-expand-trigger').forEach(trigger => {
+            trigger.addEventListener('click', handlePositionExpand);
+        });
+    }
+
+    // Handle country slider change
+    function handleCountrySliderChange(event) {
+        const slider = event.target;
+        const countryName = slider.dataset.country;
+        const newValue = parseFloat(slider.value) || 0;
+
+        // Update allocation
+        countryAllocations[countryName] = newValue;
+
+        // Update UI for this slider
+        const countryId = countryName.replace(/\s+/g, '-').replace(/[()]/g, '');
+        const valueDisplay = document.getElementById(`value-${countryId}`);
+        const fillDiv = document.getElementById(`fill-${countryId}`);
+
+        if (valueDisplay) {
+            valueDisplay.textContent = formatCurrency(newValue);
+        }
+        if (fillDiv && availableToInvest > 0) {
+            fillDiv.style.width = `${(newValue / availableToInvest) * 100}%`;
+        }
+
+        // Recalculate allocation matrix and update totals/constraints
+        calculateAllocationMatrix();
+        renderAllocationMatrix();
+        updateTotals();
+        checkConstraints();
+        updateSliderConstraintStatus();
+    }
+
+    // Handle category slider change
+    function handleCategorySliderChange(event) {
+        const slider = event.target;
+        const categoryName = slider.dataset.category;
+        const newValue = parseFloat(slider.value) || 0;
+
+        // Update allocation
+        categoryAllocations[categoryName] = newValue;
+
+        // Update UI for this slider
+        const categoryId = categoryName.replace(/\s+/g, '-').replace(/[()]/g, '');
+        const valueDisplay = document.getElementById(`cat-value-${categoryId}`);
+        const fillDiv = document.getElementById(`cat-fill-${categoryId}`);
+
+        if (valueDisplay) {
+            valueDisplay.textContent = formatCurrency(newValue);
+        }
+        if (fillDiv && availableToInvest > 0) {
+            fillDiv.style.width = `${(newValue / availableToInvest) * 100}%`;
+        }
+
+        // Recalculate allocation matrix and update totals/constraints
+        calculateAllocationMatrix();
+        renderAllocationMatrix();
+        updateTotals();
+        checkConstraints();
+        updateCategorySliderConstraintStatus();
+    }
+
+    // Update the constraint status on category sliders (category-first mode)
+    function updateCategorySliderConstraintStatus() {
+        if (!simulatorData) return;
+
+        const { rules, total_investable_capital } = simulatorData;
+        const maxPerCategoryAmount = total_investable_capital * (rules.maxPerCategory / 100);
+
+        simulatorData.categories.forEach(category => {
+            const allocation = categoryAllocations[category.category] || 0;
+            const newTotal = category.current_invested + allocation;
+            const isOverLimit = newTotal > maxPerCategoryAmount;
+            const percentOfLimit = maxPerCategoryAmount > 0 ? (newTotal / maxPerCategoryAmount * 100) : 0;
+
+            const sliderItem = document.querySelector(`.slider-item[data-category="${category.category}"]`);
+            if (sliderItem && !sliderItem.classList.contains('slider-readonly')) {
+                sliderItem.classList.toggle('slider-over-limit', isOverLimit);
+
+                const constraintSpan = sliderItem.querySelector('.slider-constraint');
+                if (constraintSpan) {
+                    constraintSpan.className = `slider-constraint ${isOverLimit ? 'constraint-over' : 'constraint-ok'}`;
+                    constraintSpan.innerHTML = `
+                        ${percentOfLimit.toFixed(0)}% of ${rules.maxPerCategory}% max
+                        ${isOverLimit ? '<i class="fas fa-exclamation-triangle"></i> OVER' : ''}
+                    `;
+                }
+            }
+        });
+    }
+
+    // Update the constraint status on country sliders
+    function updateSliderConstraintStatus() {
+        if (!simulatorData) return;
+
+        const { rules, total_investable_capital } = simulatorData;
+        const maxPerCountryAmount = total_investable_capital * (rules.maxPerCountry / 100);
+
+        simulatorData.countries.forEach(country => {
+            const allocation = countryAllocations[country.country] || 0;
+            const newTotal = country.current_invested + allocation;
+            const isOverLimit = newTotal > maxPerCountryAmount;
+            const percentOfLimit = maxPerCountryAmount > 0 ? (newTotal / maxPerCountryAmount * 100) : 0;
+
+            const sliderItem = document.querySelector(`.slider-item[data-country="${country.country}"]`);
+            if (sliderItem) {
+                sliderItem.classList.toggle('slider-over-limit', isOverLimit);
+
+                const constraintSpan = sliderItem.querySelector('.slider-constraint');
+                if (constraintSpan) {
+                    constraintSpan.className = `slider-constraint ${isOverLimit ? 'constraint-over' : 'constraint-ok'}`;
+                    constraintSpan.innerHTML = `
+                        ${percentOfLimit.toFixed(0)}% of ${rules.maxPerCountry}% max
+                        ${isOverLimit ? '<i class="fas fa-exclamation-triangle"></i> OVER' : ''}
+                    `;
+                }
+            }
+        });
+    }
+
+    // Update total displays - both dimensions are independent
+    function updateTotals() {
+        const countryTotalDisplay = document.getElementById('country-total-display');
+        const categoryTotalDisplay = document.getElementById('category-total-display');
+
+        // Both totals show user-allocated amounts
+        const countryTotal = Object.values(countryAllocations).reduce((sum, val) => sum + val, 0);
+        const categoryTotal = Object.values(categoryAllocations).reduce((sum, val) => sum + val, 0);
+
+        if (countryTotalDisplay) {
+            const isOver = countryTotal > availableToInvest;
+            countryTotalDisplay.textContent = `${formatCurrency(countryTotal)} / ${formatCurrency(availableToInvest)}`;
+            countryTotalDisplay.classList.toggle('total-over', isOver);
+        }
+
+        if (categoryTotalDisplay) {
+            const isOver = categoryTotal > availableToInvest;
+            categoryTotalDisplay.textContent = `${formatCurrency(categoryTotal)} / ${formatCurrency(availableToInvest)}`;
+            categoryTotalDisplay.classList.toggle('total-over', isOver);
+        }
+
+        // Check if totals match (both should equal available to invest)
+        if (countryTotal !== categoryTotal && countryTotal > 0 && categoryTotal > 0) {
+            console.log(`Totals mismatch: Country €${countryTotal} vs Category €${categoryTotal}`);
+        }
+    }
+
+    // Check constraints and show warnings - both dimensions independent
+    function checkConstraints() {
+        if (!simulatorData) return;
+
+        const warnings = [];
+        const { rules, total_investable_capital } = simulatorData;
+        const maxPerCountryAmount = total_investable_capital * (rules.maxPerCountry / 100);
+        const maxPerCategoryAmount = total_investable_capital * (rules.maxPerCategory / 100);
+
+        // Check country constraints
+        simulatorData.countries.forEach(country => {
+            const allocation = countryAllocations[country.country] || 0;
+            const newTotal = country.current_invested + allocation;
+
+            if (newTotal > maxPerCountryAmount) {
+                warnings.push({
+                    type: 'country',
+                    name: country.country,
+                    allocated: newTotal,
+                    max: maxPerCountryAmount,
+                    percent: (newTotal / total_investable_capital * 100).toFixed(1)
+                });
+            }
+        });
+
+        // Check category constraints
+        simulatorData.categories.forEach(category => {
+            const allocation = categoryAllocations[category.category] || 0;
+            const newTotal = category.current_invested + allocation;
+
+            if (newTotal > maxPerCategoryAmount) {
+                warnings.push({
+                    type: 'category',
+                    name: category.category,
+                    allocated: newTotal,
+                    max: maxPerCategoryAmount,
+                    percent: (newTotal / total_investable_capital * 100).toFixed(1)
+                });
+            }
+        });
+
+        // Show/hide warnings panel
+        const warningsContainer = document.getElementById('constraint-warnings');
+        const warningsContent = document.getElementById('warnings-content');
+
+        if (warningsContainer && warningsContent) {
+            if (warnings.length > 0) {
+                warningsContainer.style.display = 'block';
+
+                const countryWarnings = warnings.filter(w => w.type === 'country');
+                const categoryWarnings = warnings.filter(w => w.type === 'category');
+
+                warningsContent.innerHTML = `
+                    ${countryWarnings.length > 0 ? `
+                        <div class="warning-group">
+                            <i class="fas fa-globe"></i>
+                            <span>${countryWarnings.length} country ${countryWarnings.length === 1 ? 'limit' : 'limits'} exceeded:</span>
+                            <span class="warning-names">${countryWarnings.map(w => `${w.name} (${w.percent}%)`).join(', ')}</span>
+                        </div>
+                    ` : ''}
+                    ${categoryWarnings.length > 0 ? `
+                        <div class="warning-group">
+                            <i class="fas fa-tags"></i>
+                            <span>${categoryWarnings.length} category ${categoryWarnings.length === 1 ? 'limit' : 'limits'} exceeded:</span>
+                            <span class="warning-names">${categoryWarnings.map(w => `${w.name} (${w.percent}%)`).join(', ')}</span>
+                        </div>
+                    ` : ''}
+                `;
+            } else {
+                warningsContainer.style.display = 'none';
+            }
+        }
+    }
+
+    // Setup event handlers for simulator controls
+    function setupSimulatorEventHandlers() {
+        // Reset button
+        const resetBtn = document.getElementById('reset-simulator-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', () => {
+                // Reset all allocations to 0
+                Object.keys(countryAllocations).forEach(key => {
+                    countryAllocations[key] = 0;
+                });
+                Object.keys(categoryAllocations).forEach(key => {
+                    categoryAllocations[key] = 0;
+                });
+                // Clear matrix
+                allocationMatrix = {};
+                // Collapse all expanded positions
+                expandedPositions.clear();
+                renderSimulator();
+            });
+        }
+    }
+
+    // Format currency helper
+    function formatCurrency(value) {
+        return new Intl.NumberFormat('de-DE', {
+            style: 'currency',
+            currency: 'EUR',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(value);
+    }
+
+    // Show error message
+    function showSimulatorError(message) {
+        const countryContainer = document.getElementById('country-sliders');
+        const categoryContainer = document.getElementById('category-sliders');
+
+        const errorHtml = `
+            <div class="notification is-danger">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                ${message}
+            </div>
+        `;
+
+        if (countryContainer) {
+            countryContainer.innerHTML = errorHtml;
+        }
+        if (categoryContainer) {
+            categoryContainer.innerHTML = '';
         }
     }
 });

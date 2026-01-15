@@ -11,6 +11,7 @@ portfolio_data_section %}
 {% endblock %}
 
 {% block content %}
+<div class="enrich-page">
 {{ page_header() }}
 
 <!-- Upload and Management Section -->
@@ -27,6 +28,7 @@ portfolio_data_section %}
 <!-- Hidden data elements for JavaScript -->
 <script id="portfolios-data" type="application/json">{{ portfolios|tojson|safe }}</script>
 <script id="default-portfolio" type="text/plain">{{ use_default_portfolio|lower|default('false')|string }}</script>
+</div>
 {% endblock %}
 
 {% block scripts %}

@@ -56,6 +56,7 @@
   --success: var(--teal-500);
   --warning: var(--coral-500);
   --error: #EF4444;
+  --danger: var(--error);  /* Alias for error */
   --info: var(--aqua-500);
 
   /* Background & Surfaces */
@@ -77,6 +78,8 @@
   /* Component-specific colors */
   --hover-bg: rgba(0, 0, 0, 0.02);
   --section-bg: var(--bg-secondary);
+  --darker-bg: var(--bg-tertiary);
+  --primary-light: rgba(6, 182, 212, 0.1);  /* Aqua with 10% opacity */
 
   /* Minimal shadows - subtle only */
   --shadow-xs: none;
@@ -105,6 +108,13 @@
   --space-16: 4rem;
   --space-20: 5rem;
   --space-24: 6rem;
+
+  /* Semantic Spacing Aliases */
+  --space-xs: var(--space-1);   /* 0.25rem / 4px */
+  --space-sm: var(--space-2);   /* 0.5rem / 8px */
+  --space-md: var(--space-4);   /* 1rem / 16px */
+  --space-lg: var(--space-6);   /* 1.5rem / 24px */
+  --space-xl: var(--space-8);   /* 2rem / 32px */
 
   /* Border Radius */
   --radius-sm: 0.375rem;
@@ -195,6 +205,8 @@
   /* Component-specific colors (Dark) */
   --hover-bg: var(--bg-tertiary);
   --section-bg: var(--bg-tertiary);
+  --darker-bg: var(--ocean-800);
+  --primary-light: rgba(6, 182, 212, 0.15);  /* Aqua with 15% opacity for dark mode */
 
   /* Bootstrap overrides for dark mode */
   --bs-body-bg: var(--bg-secondary);  /* Fixes table cell fallback */
@@ -347,6 +359,41 @@ h4 {
 p {
   color: var(--text-secondary);
   margin-bottom: var(--space-4);
+}
+
+/* Page Title - Main heading for each page */
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: var(--space-lg);
+  letter-spacing: -0.01em;
+}
+
+/* Section Title - Section headers within pages */
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: var(--space-xl);
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--primary-light);
+}
+
+/* First section title on page shouldn't have top margin */
+.page-title + .section-title,
+.container > .section-title:first-child {
+  margin-top: 0;
+}
+
+/* Subsection Title - Card/component headers (level 3) */
+.subsection-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-sm);
 }
 
 a {
@@ -1562,16 +1609,6 @@ textarea.form-control {
   justify-content: flex-end;
   align-items: center;
   margin-bottom: var(--space-6);
-}
-
-/* Section title */
-.section-title {
-  font-size: var(--homepage-title-size);       /* 14px - standardized */
-  font-weight: var(--homepage-title-weight);   /* 700 */
-  text-transform: uppercase;
-  letter-spacing: var(--homepage-title-spacing); /* 0.05em */
-  color: var(--text-tertiary);
-  margin: 0;
 }
 
 /* Cash Row in table - no special styling, blends with other rows */
@@ -2882,7 +2919,7 @@ th.col-actions, td.col-actions {
   display: block;
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
 }
 

@@ -5,18 +5,85 @@ Single source of truth for calculating portfolio item values.
 This module provides consistent value calculation across the entire application,
 ensuring that custom values are properly used when available.
 
+Currency Conversion Strategy:
+- Prices are stored in native currency (USD, GBP, etc.)
+- Exchange rates are fetched once per 24h and stored in database
+- All EUR conversions use the same daily rate for consistency
+- Fallback to price_eur for backward compatibility
+
+Calculation Priority:
+1. Custom value (if is_custom_value and custom_total_value)
+2. Native currency: price * exchange_rate(currency) * shares
+3. Legacy fallback: price_eur * shares
+
 Philosophy: Simple, Modular, Elegant, Efficient, Robust
 """
 from decimal import Decimal
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Module-level cache for exchange rates (loaded once per request cycle)
+_exchange_rates_cache: Optional[Dict[str, float]] = None
+
+
+def _get_exchange_rate(currency: str) -> float:
+    """
+    Get exchange rate for a currency to EUR.
+
+    Uses cached rates from ExchangeRateRepository for consistency.
+    All positions use the same daily rate.
+
+    Args:
+        currency: Currency code (e.g., 'USD', 'GBP')
+
+    Returns:
+        Exchange rate to EUR, or 1.0 if not found
+    """
+    global _exchange_rates_cache
+
+    if currency == 'EUR' or not currency:
+        return 1.0
+
+    # Lazy load rates on first access
+    if _exchange_rates_cache is None:
+        try:
+            from app.repositories.exchange_rate_repository import ExchangeRateRepository
+            _exchange_rates_cache = ExchangeRateRepository.get_all_rates('EUR')
+            logger.debug(f"Loaded {len(_exchange_rates_cache)} exchange rates for value calculation")
+        except Exception as e:
+            logger.warning(f"Could not load exchange rates: {e}")
+            _exchange_rates_cache = {'EUR': 1.0}
+
+    rate = _exchange_rates_cache.get(currency)
+    if rate is None:
+        logger.warning(f"No exchange rate found for {currency}, using 1.0")
+        return 1.0
+
+    return rate
+
+
+def clear_exchange_rate_cache() -> None:
+    """
+    Clear the module-level exchange rate cache.
+
+    Call this when exchange rates are refreshed to ensure
+    subsequent calculations use the new rates.
+    """
+    global _exchange_rates_cache
+    _exchange_rates_cache = None
+    logger.debug("Cleared value_calculator exchange rate cache")
 
 
 def calculate_item_value(item: Dict[str, Any]) -> Decimal:
     """
-    Calculate the total value of a portfolio item.
+    Calculate the total value of a portfolio item in EUR.
 
-    Uses custom_total_value if available and valid,
-    otherwise calculates from price_eur * effective_shares.
+    Calculation Priority:
+    1. Custom value: If is_custom_value=True, use custom_total_value
+    2. Native currency: price * exchange_rate(currency) * shares
+    3. Legacy fallback: price_eur * shares (for backward compatibility)
 
     This is the single source of truth for value calculation.
     Use this function everywhere to ensure consistency.
@@ -25,19 +92,26 @@ def calculate_item_value(item: Dict[str, Any]) -> Decimal:
         item: Portfolio item dict with keys:
               - is_custom_value (bool): Whether custom value is set
               - custom_total_value (float/Decimal/None): Custom total value if set
-              - price_eur (float/Decimal/None): Market price in EUR
+              - price (float/Decimal/None): Native currency price
+              - currency (str/None): Currency code (e.g., 'USD', 'GBP')
+              - price_eur (float/Decimal/None): Legacy EUR price (fallback)
               - effective_shares (float/Decimal/None): Number of shares
 
     Returns:
         Decimal: Total value in EUR
 
     Examples:
-        >>> # Item with custom value
+        >>> # Item with custom value (highest priority)
         >>> item = {'is_custom_value': True, 'custom_total_value': 165938.39}
         >>> calculate_item_value(item)
         Decimal('165938.39')
 
-        >>> # Item with market price
+        >>> # Item with native currency (assumes USD/EUR rate loaded)
+        >>> item = {'price': 150, 'currency': 'USD', 'effective_shares': 10}
+        >>> calculate_item_value(item)  # 150 * rate * 10
+        Decimal('1388.89')  # example with rate 0.926
+
+        >>> # Item with legacy price_eur (fallback)
         >>> item = {'price_eur': 100, 'effective_shares': 10}
         >>> calculate_item_value(item)
         Decimal('1000.00')
@@ -47,14 +121,24 @@ def calculate_item_value(item: Dict[str, Any]) -> Decimal:
         >>> calculate_item_value(item)
         Decimal('0')
     """
-    # Use custom value if explicitly set
+    # Priority 1: Use custom value if explicitly set
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return Decimal(str(item.get('custom_total_value', 0)))
 
-    # Otherwise calculate from price * shares
-    price = Decimal(str(item.get('price_eur', 0) or 0))
     shares = Decimal(str(item.get('effective_shares', 0) or 0))
-    return price * shares
+
+    # Priority 2: Native currency conversion (price * exchange_rate * shares)
+    native_price = item.get('price')
+    currency = item.get('currency')
+
+    if native_price is not None and native_price > 0 and currency:
+        exchange_rate = _get_exchange_rate(currency)
+        price_eur = Decimal(str(native_price)) * Decimal(str(exchange_rate))
+        return price_eur * shares
+
+    # Priority 3: Legacy fallback (price_eur * shares)
+    price_eur = Decimal(str(item.get('price_eur', 0) or 0))
+    return price_eur * shares
 
 
 def calculate_portfolio_total(items: List[Dict[str, Any]]) -> Decimal:
@@ -129,6 +213,8 @@ def has_price_or_custom_value(item: Dict[str, Any]) -> bool:
         bool: True if item has price or custom value, False otherwise
 
     Examples:
+        >>> has_price_or_custom_value({'price': 100, 'currency': 'USD'})
+        True
         >>> has_price_or_custom_value({'price_eur': 100})
         True
         >>> has_price_or_custom_value({'is_custom_value': True, 'custom_total_value': 1000})
@@ -140,7 +226,11 @@ def has_price_or_custom_value(item: Dict[str, Any]) -> bool:
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return True
 
-    # Has market price
+    # Has native currency price
+    if item.get('price') is not None and item.get('price') > 0 and item.get('currency'):
+        return True
+
+    # Has legacy EUR price (fallback)
     if item.get('price_eur') is not None and item.get('price_eur') > 0:
         return True
 
@@ -163,6 +253,8 @@ def get_value_source(item: Dict[str, Any]) -> str:
     Examples:
         >>> get_value_source({'is_custom_value': True, 'custom_total_value': 1000})
         'custom'
+        >>> get_value_source({'price': 100, 'currency': 'USD', 'effective_shares': 10})
+        'market'
         >>> get_value_source({'price_eur': 100, 'effective_shares': 10})
         'market'
         >>> get_value_source({})
@@ -170,6 +262,8 @@ def get_value_source(item: Dict[str, Any]) -> str:
     """
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return 'custom'
+    elif item.get('price') is not None and item.get('price') > 0 and item.get('currency'):
+        return 'market'
     elif item.get('price_eur') is not None and item.get('price_eur') > 0:
         return 'market'
     else:

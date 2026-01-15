@@ -265,7 +265,7 @@ def verify_schema(db):
     """
     required_tables = [
         'accounts', 'portfolios', 'companies', 'company_shares',
-        'market_prices', 'expanded_state', 'identifier_mappings'
+        'market_prices', 'expanded_state', 'identifier_mappings', 'exchange_rates'
     ]
     cursor = db.cursor()
     for table in required_tables:
@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 5
+    LATEST_VERSION = 6
 
     try:
         # Get current schema version
@@ -507,6 +507,27 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 5, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 5 completed")
+
+        # Migration 6: Add exchange_rates table for consistent currency conversion
+        if current_version < 6:
+            logger.info("Applying migration 6: Adding exchange_rates table")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS exchange_rates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_currency TEXT NOT NULL,
+                    to_currency TEXT DEFAULT 'EUR',
+                    rate REAL NOT NULL,
+                    last_updated DATETIME NOT NULL,
+                    UNIQUE(from_currency, to_currency)
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency
+                ON exchange_rates(from_currency, to_currency)
+            ''')
+            cursor.execute("UPDATE schema_version SET version = 6, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 6 completed: exchange_rates table created")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

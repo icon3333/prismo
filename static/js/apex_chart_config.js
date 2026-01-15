@@ -307,7 +307,7 @@ const ChartConfig = {
             chart: {
                 type: 'donut',
                 height: height,
-                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                 toolbar: {
                     show: false
                 },
@@ -548,7 +548,7 @@ const ChartConfig = {
             chart: {
                 type: 'heatmap',
                 height: height,
-                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                 toolbar: {
                     show: false
                 },
@@ -737,7 +737,7 @@ const ChartConfig = {
             chart: {
                 type: 'bar',
                 height: height,
-                fontFamily: '"Helvetica Neue", Arial, sans-serif',
+                fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
                 toolbar: {
                     show: false
                 },

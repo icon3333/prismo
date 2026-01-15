@@ -1,548 +1,16 @@
 {% macro head_extras() %}
-<!-- Lodash is now loaded in base.html -->
-<style>
-    /* Wider layout for enrich page */
-    .container {
-        max-width: 1600px !important;
-    }
-
-    /* Improved layout and spacing consistency */
-    .card {
-        box-shadow: var(--shadow);
-        border-radius: var(--border-radius);
-        transition: box-shadow 0.2s ease;
-    }
-
-    .card:hover {
-        box-shadow: var(--shadow-md);
-    }
-
-    .card-header {
-        border-radius: var(--border-radius) var(--border-radius) 0 0;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .card-content {
-        padding: 0.75rem;
-    }
-
-    /* Tighter spacing between columns */
-    .columns:not(.is-variable) {
-        margin-left: -0.375rem;
-        margin-right: -0.375rem;
-    }
-
-    .columns:not(.is-variable) > .column {
-        padding: 0.375rem;
-    }
-
-    /* Align portfolio management form with upload section */
-    #manage-portfolios-form > .columns:first-child {
-        margin-top: 0;
-    }
-
-    #manage-portfolios-form > .columns:first-child > .column {
-        padding-top: 0;
-    }
-
-    /* Remove padding from nested columns (Rename/Delete fields) */
-    #manage-portfolios-form .columns .columns {
-        margin-top: 0;
-    }
-
-    #manage-portfolios-form .columns .columns > .column,
-    #portfolio-action-fields .columns > .column {
-        padding-top: 0;
-    }
-
-    /* Consistent form element heights in portfolio management */
-    #manage-portfolios-form .select select,
-    #manage-portfolios-form .input {
-        height: 2.5em;
-    }
-
-    /* More consistent form elements */
-    .file-label {
-        width: 100%;
-    }
-
-    .file-name {
-        max-width: none;
-        width: 100%;
-    }
-
-    .select,
-    .select select,
-    .input,
-    .button {
-        border-radius: var(--border-radius-sm);
-        transition: all 0.2s ease;
-    }
-
-    /* Button consistency */
-    .button {
-        height: 2.25em;
-        padding-left: 1em;
-        padding-right: 1em;
-        font-weight: var(--font-weight-medium);
-    }
-
-    .button.is-small {
-        height: 2em;
-        font-size: 0.875rem;
-    }
-
-    .buttons.are-small {
-        margin-bottom: 0;
-    }
-
-    /* Input fields with consistent styling */
-    .control.has-icons-left .input,
-    .control.has-icons-left .select select {
-        padding-left: 2.25em;
-    }
-
-    .control.has-icons-left .icon.is-left {
-        height: 2.25em;
-    }
-
-    /* Portfolio table styling */
-    .portfolio-editor {
-        height: 600px;
-        display: flex;
-        flex-direction: column;
-        padding: 0;
-    }
-
-    .portfolio-controls-container {
-        flex-shrink: 0;
-        /* Prevent controls from shrinking */
-        background-color: var(--bg);
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        border-bottom: 1px solid var(--border-color);
-        padding: var(--space-md);
-        margin-bottom: 0;
-        /* Remove any default margin */
-    }
-
-    .portfolio-table-container {
-        flex: 1;
-        overflow: auto;
-        /* Only the table area scrolls */
-        padding: 0;
-    }
-
-    /* Section title spacing override - matches mb-4 from upload section */
-    .section-title {
-        margin-bottom: 1.5rem;
-    }
-
-    /* Enrich page control layout */
-    .enrich-main-controls {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: var(--space-md);
-    }
-
-    .enrich-controls-left {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: var(--space-lg);  /* Space between control groups */
-    }
-
-    .enrich-control-group-close {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);  /* 0.5rem between items in group */
-    }
-
-    /* Consistent font for all control elements */
-    .enrich-control-group-close .select select,
-    .enrich-control-group-close .input,
-    .enrich-control-group-close .button {
-        font-size: 0.875rem;
-        font-family: inherit;
-    }
-
-    .enrich-metrics-box {
-        display: flex;
-        align-items: center;
-        gap: var(--space-md);
-        background-color: var(--section-bg);
-        border-radius: var(--border-radius-sm);
-        padding: 0.5rem 1rem;
-        font-size: 0.9rem;
-        box-shadow: var(--shadow);
-    }
-
-    /* Make sure form elements are properly spaced */
-    .field:not(:last-child) {
-        margin-bottom: 0.75rem;
-    }
-
-    /* Improved control bar styling */
-    .card-header-controls .is-flex {
-        flex-wrap: wrap;
-        align-items: center;
-    }
-
-    /* Ensure all elements in the header controls are vertically aligned */
-    .card-header-controls .control,
-    .card-header-controls .select,
-    .card-header-controls .input,
-    .card-header-controls .checkbox,
-    .card-header-controls .button,
-    .card-header-controls .buttons {
-        margin-bottom: 0;
-        height: 2em;
-        display: flex;
-        align-items: center;
-    }
-
-    .card-header-controls .field.has-addons {
-        margin-bottom: 0;
-        height: 2em;
-    }
-
-    .card-header-controls .checkbox input[type="checkbox"] {
-        margin-top: 0;
-    }
-
-    @media screen and (max-width: 768px) {
-        .card-header-controls .is-flex {
-            gap: var(--space-sm) !important;
-            padding: var(--space-sm) var(--space-md);
-            justify-content: flex-start !important;
-        }
-    }
-
-    /* KPI metrics styling */
-    .controls-and-metrics-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0;
-        /* Remove margin since it's in the fixed container */
-    }
-
-    .controls-group {
-        flex-shrink: 0;
-        margin-right: var(--space-md);
-    }
-
-    .controls-group .is-flex {
-        flex-wrap: wrap;
-        align-items: center;
-    }
-
-    .portfolio-metrics {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        background-color: var(--section-bg);
-        border-radius: var(--border-radius-sm);
-        padding: 0.5rem 1rem;
-        margin-left: auto;
-        font-size: 0.9rem;
-        box-shadow: var(--shadow);
-    }
-
-    .portfolio-metrics.is-success {
-        background-color: var(--success-light);
-    }
-
-    .portfolio-metrics.is-warning {
-        background-color: var(--warning-light);
-    }
-
-    .portfolio-metrics.is-danger {
-        background-color: var(--danger-light);
-    }
-
-    .metrics-item {
-        display: inline-flex;
-        align-items: center;
-        margin-right: 1.5rem;
-        white-space: nowrap;
-    }
-
-    .metrics-item:last-child {
-        margin-right: 0;
-    }
-
-    .metric-label {
-        font-weight: var(--font-weight-semibold);
-        margin-right: 0.3rem;
-        color: var(--text-color);
-    }
-
-    .metric-value {
-        color: var(--text-muted);
-    }
-
-    /* Table styling improvements */
-    .table {
-        border-radius: var(--border-radius-sm);
-        overflow: hidden;
-        box-shadow: none;
-    }
-
-    .table th {
-        color: var(--text-color);
-        font-weight: 700;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        vertical-align: middle;
-        padding: 0.5rem 0.6rem;
-        border: none !important;
-    }
-
-    .table td {
-        vertical-align: middle;
-        padding: 0.35rem 0.6rem;
-        font-size: 0.85rem;
-        border: none !important;
-    }
-
-    .table tbody tr {
-        border: none !important;
-    }
-
-    .table tbody tr:hover {
-        background-color: var(--hover-bg, rgba(0, 0, 0, 0.02));
-        transition: background-color 0.2s ease;
-    }
-
-    .table td .button {
-        margin-bottom: 0;
-    }
-
-    /* Ensure consistent font-size across all table cell elements */
-    .table td,
-    .table td span,
-    .table td .input,
-    .table td input.input,
-    .table td .input.is-small,
-    .table td .select,
-    .table td .select select,
-    .table td select,
-    .table td .select.is-small select {
-        font-size: 0.85rem !important;
-    }
-
-    .is-sortable {
-        cursor: pointer;
-    }
-
-    /* Checkbox column - minimal width for checkbox */
-    th.col-checkbox, td.col-checkbox {
-        width: 40px;
-        min-width: 40px;
-        max-width: 40px;
-        text-align: center;
-    }
-
-    /* Note: Column width styling moved to custom.css unified system */
-
-    /* Note: User-edited field styling moved to custom.css for centralization */
-    /* Keeping only enrich-specific styling here */
-
-    /* Progress bar container positioning - visually under buttons but structurally outside Vue */
-    .progress-bar-container {
-        margin-top: 1rem;
-        padding: 0 var(--space-md);
-        /* Match the padding of portfolio-controls-container */
-        background-color: var(--bg);
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: var(--space-md);
-    }
-
-    /* Ensure progress element visibility when shown */
-    #price-fetch-progress[style*="block"] {
-        display: block !important;
-        visibility: visible !important;
-    }
-
-    /* Modal styling improvements */
-    .modal-card-head {
-        background-color: var(--section-bg);
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .modal-card-foot {
-        background-color: var(--section-bg);
-        border-top: 1px solid var(--border-color);
-    }
-
-    .modal-card-body {
-        padding: var(--space-lg);
-    }
-
-    /* Tab styling */
-    .tabs li.is-active a {
-        border-bottom-color: var(--primary);
-        color: var(--primary);
-    }
-
-    /* Bulk edit styling */
-    .company-list-container {
-        max-height: 400px;
-        overflow-y: auto;
-        border-radius: var(--border-radius-sm);
-        border: 1px solid var(--border-color);
-        background-color: var(--bg);
-    }
-
-    .portfolio-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.5rem 1rem;
-        background-color: var(--section-bg);
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .portfolio-title {
-        font-weight: var(--font-weight-semibold);
-        font-size: 1rem;
-        margin: 0;
-        flex-grow: 1;
-    }
-
-    /* Column health indicators */
-    .column-health {
-        display: block;
-        font-size: 0.7rem;
-        font-weight: var(--font-weight-medium);
-        margin-top: 2px;
-        line-height: 1;
-    }
-
-    .column-health.health-red {
-        color: #e53e3e;
-    }
-
-    .column-health.health-orange {
-        color: #dd6b20;
-    }
-
-    .column-health.health-green {
-        color: #38a169;
-    }
-
-    /* Responsive adjustments */
-    @media screen and (max-width: 768px) {
-        .columns .column .card {
-            min-height: auto !important;
-            height: auto !important;
-            margin-bottom: 1rem;
-        }
-
-        .controls-and-metrics-row {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .controls-group {
-            margin-right: 0;
-            margin-bottom: var(--space-md);
-            width: 100%;
-        }
-
-        .controls-group .is-flex {
-            gap: var(--space-sm) !important;
-            flex-wrap: wrap;
-        }
-
-        .portfolio-metrics {
-            flex-wrap: wrap;
-            padding: 0.4rem 0.8rem;
-            margin-left: 0;
-            margin-top: 0;
-            width: 100%;
-        }
-
-        .metrics-item {
-            margin-right: 1rem;
-            margin-bottom: 0.3rem;
-            font-size: 0.85rem;
-        }
-    }
-
-    /* ===== CRITICAL: USER-EDITED STYLING (MUST BE INLINE FOR RELIABILITY) ===== */
-    /* Inline to ensure it ALWAYS loads and overrides everything else */
-    /* Also defined in custom.css but duplicated here as fallback */
-
-    .unified-table .user-edited,
-    .unified-table .input.user-edited,
-    .unified-table input.input.user-edited,
-    .unified-table .select select.user-edited,
-    .unified-table select.user-edited,
-    .unified-table select.user-edited option,
-    .unified-table .select .user-edited,
-    .unified-table td .user-edited,
-    .unified-table td input.user-edited,
-    .unified-table td select.user-edited,
-    .unified-table td span.user-edited,
-    .portfolio-table .user-edited,
-    .portfolio-table .input.user-edited,
-    .portfolio-table input.input.user-edited,
-    .portfolio-table .select select.user-edited,
-    .portfolio-table select.user-edited,
-    .portfolio-table select.user-edited option,
-    .portfolio-table .select .user-edited,
-    .portfolio-table td .user-edited,
-    .portfolio-table td input.user-edited,
-    .portfolio-table td select.user-edited,
-    .portfolio-table td span.user-edited,
-    .table .user-edited,
-    .table input.user-edited,
-    .table select.user-edited,
-    .table span.user-edited {
-        color: #ff7f00 !important;
-    }
-
-    /* Red color for CSV-modified fields */
-    .unified-table .csv-modified,
-    .unified-table .input.csv-modified,
-    .unified-table input.input.csv-modified,
-    .unified-table .select select.csv-modified,
-    .unified-table select.csv-modified,
-    .unified-table select.csv-modified option,
-    .unified-table td .csv-modified,
-    .unified-table td input.csv-modified,
-    .unified-table td select.csv-modified,
-    .portfolio-table .csv-modified,
-    .portfolio-table .input.csv-modified,
-    .portfolio-table input.input.csv-modified,
-    .portfolio-table .select select.csv-modified,
-    .portfolio-table select.csv-modified,
-    .portfolio-table select.csv-modified option,
-    .portfolio-table td .csv-modified,
-    .portfolio-table td input.csv-modified,
-    .portfolio-table td select.csv-modified,
-    .table .csv-modified,
-    .table input.csv-modified,
-    .table select.csv-modified {
-        color: #dc3545 !important;
-    }
-</style>
+<!-- Enrich Page Styles -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/enrich.css') }}">
 {% endmacro %}
 
 {% macro page_header() %}
-<h1 class="title">Enrich Portfolio Data</h1>
+<h1 class="page-title">Enrich Portfolio Data</h1>
 {% endmacro %}
 
 {% macro upload_section(url_for) %}
 <div class="column is-6">
     <div id="upload-card" class="mb-5">
-        <h3 class="subtitle is-6 has-text-weight-semibold mt-5 mb-4">Upload Portfolio Data</h3>
+        <h3 class="subsection-title">Upload Portfolio Data</h3>
         <div>
             <form action="{{ url_for('portfolio.upload_csv') }}" method="post" enctype="multipart/form-data">
                 <div class="field">
@@ -602,7 +70,7 @@
 {% macro portfolio_management(url_for, portfolios) %}
 <div class="column is-6">
     <div class="mb-5">
-        <h3 class="subtitle is-6 has-text-weight-semibold mt-5 mb-4">Portfolio Management</h3>
+        <h3 class="subsection-title">Portfolio Management</h3>
         <div>
             <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form">
                 <!-- Row 1: Action dropdown and all dynamic fields in columns -->
@@ -620,6 +88,16 @@
                                         <option value="delete">Delete Portfolio</option>
                                     </select>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="control">
+                                <button type="submit" class="button is-info is-fullwidth" id="portfolio-action-btn" disabled>
+                                    <span class="icon">
+                                        <i class="fas fa-check"></i>
+                                    </span>
+                                    <span>Apply</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -702,18 +180,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- Row 2: Apply button -->
-                <div class="field">
-                    <div class="control">
-                        <button type="submit" class="button is-info" id="portfolio-action-btn" disabled>
-                            <span class="icon">
-                                <i class="fas fa-check"></i>
-                            </span>
-                            <span>Apply</span>
-                        </button>
-                    </div>
-                </div>
             </form>
         </div>
     </div>
@@ -739,7 +205,7 @@
                         <!-- Group 1: Portfolio Filter and Company Search (Close spacing) -->
                         <div class="enrich-control-group-close">
                             <!-- Portfolio Filter -->
-                            <div class="control has-icons-left">
+                            <div class="control">
                                 <div class="select">
                                     <select id="filter-portfolio">
                                         <option value="">All Portfolios</option>
@@ -748,9 +214,6 @@
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <span class="icon is-left">
-                                    <i class="fas fa-folder"></i>
-                                </span>
                             </div>
 
                             <!-- Company Search Filter -->
@@ -829,59 +292,38 @@
             <!-- Bulk Edit Controls -->
             <div class="portfolio-table-container">
                 <div v-if="!loading && filteredPortfolioItems.length > 0 && selectedItemIds.length > 0"
-                    class="box mb-4 p-4">
-                    <div class="level">
-                        <div class="level-left">
-                            <div class="level-item">
-                                <span class="has-text-weight-semibold">
-                                    {% raw %}{{ selectedItemIds.length }} item{{ selectedItemIds.length === 1 ? '' : 's'
-                                    }} selected{% endraw %}
-                                </span>
-                            </div>
+                    class="bulk-action-bar">
+                    <div class="bulk-action-left">
+                        <span class="has-text-weight-semibold">
+                            {% raw %}{{ selectedItemIds.length }} item{{ selectedItemIds.length === 1 ? '' : 's' }} selected{% endraw %}
+                        </span>
+                    </div>
+                    <div class="bulk-action-controls">
+                        <div class="select">
+                            <select v-model="bulkPortfolio">
+                                <option value="">Select Portfolio</option>
+                                {% for portfolio in portfolios %}
+                                <option value="{{ portfolio }}">{{ portfolio }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <div class="level-right">
-                            <div class="level-item">
-                                <div class="field has-addons">
-                                    <div class="control">
-                                        <div class="select">
-                                            <select v-model="bulkPortfolio">
-                                                <option value="">Select Portfolio</option>
-                                                {% for portfolio in portfolios %}
-                                                <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="control">
-                                        <input class="input" type="text" v-model="bulkCategory"
-                                            placeholder="Category">
-                                    </div>
-                                    <div class="control">
-                                        <div class="select">
-                                            <select v-model="bulkCountry">
-                                                <option value="">Select Country</option>
-                                                <!-- Server-side rendering like portfolios -->
-                                                {% for country in countries %}
-                                                <option value="{{ country }}">{{ country }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="control">
-                                        <button class="button is-primary" @click="applyBulkChanges"
-                                            :disabled="(!bulkPortfolio && !bulkCategory && !bulkCountry) || isBulkProcessing"
-                                            :class="{'is-loading': isBulkProcessing}">
-                                            Apply Changes
-                                        </button>
-                                    </div>
-                                    <div class="control">
-                                        <button class="button" @click="clearSelection">
-                                            Clear Selection
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                        <input class="input" type="text" v-model="bulkCategory" placeholder="Category">
+                        <div class="select">
+                            <select v-model="bulkCountry">
+                                <option value="">Select Country</option>
+                                {% for country in countries %}
+                                <option value="{{ country }}">{{ country }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
+                        <button class="button is-primary" @click="applyBulkChanges"
+                            :disabled="(!bulkPortfolio && !bulkCategory && !bulkCountry) || isBulkProcessing"
+                            :class="{'is-loading': isBulkProcessing}">
+                            Apply Changes
+                        </button>
+                        <button class="button" @click="clearSelection">
+                            Clear Selection
+                        </button>
                     </div>
                 </div>
 

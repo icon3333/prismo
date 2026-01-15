@@ -1,0 +1,638 @@
+/**
+ * Portfolio Manager - Enrich Page Styles
+ * Extends the Ocean Depth design system with page-specific styles
+ *
+ * Design Principles:
+ * - Uses semantic color variables (--success, --warning, --danger)
+ * - Uses design token spacing (--space-xs, --space-sm, --space-md, --space-lg)
+ * - No shadows (follows Ocean Depth flat design)
+ * - Consistent typography scale (0.875rem base for controls)
+ */
+
+/* ===== Page Layout ===== */
+
+/* Wider container for data-heavy enrich page */
+.enrich-page .container {
+  max-width: 1600px;
+}
+
+/* Card styling - no shadows for flat design */
+.enrich-page .card {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-base);
+}
+
+.enrich-page .card:hover {
+  border-color: var(--border-default);
+}
+
+.enrich-page .card-header {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.enrich-page .card-content {
+  padding: var(--space-3);
+}
+
+/* ===== Column Spacing ===== */
+
+/* Tighter spacing between columns */
+.enrich-page .columns:not(.is-variable) {
+  margin-left: calc(var(--space-sm) * -1);
+  margin-right: calc(var(--space-sm) * -1);
+}
+
+.enrich-page .columns:not(.is-variable) > .column {
+  padding: var(--space-sm);
+}
+
+/* Portfolio management form alignment */
+#manage-portfolios-form > .columns:first-child {
+  margin-top: 0;
+}
+
+#manage-portfolios-form > .columns:first-child > .column {
+  padding-top: 0;
+}
+
+#manage-portfolios-form .columns .columns {
+  margin-top: 0;
+}
+
+#manage-portfolios-form .columns .columns > .column,
+#portfolio-action-fields .columns > .column {
+  padding-top: 0;
+}
+
+/* Form element heights */
+#manage-portfolios-form .select select,
+#manage-portfolios-form .input {
+  height: 2.5em;
+}
+
+/* ===== Form Elements ===== */
+
+.enrich-page .file-label {
+  width: 100%;
+}
+
+.enrich-page .file-name {
+  max-width: none;
+  width: 100%;
+}
+
+.enrich-page .select,
+.enrich-page .select select,
+.enrich-page .input,
+.enrich-page .button {
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-base);
+}
+
+/* Ensure dropdown text is vertically centered */
+.enrich-page .select,
+.enrich-page .select select,
+.bulk-action-controls .select,
+.bulk-action-controls .select select {
+  height: 2.25em;
+}
+
+.enrich-page .select select,
+.bulk-action-controls .select select {
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 2.25em;
+}
+
+/* Button consistency */
+.enrich-page .button {
+  height: 2.25em;
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.enrich-page .button.is-small {
+  height: 2em;
+  font-size: 0.875rem;
+}
+
+.enrich-page .buttons.are-small {
+  margin-bottom: 0;
+}
+
+/* Input fields with icons */
+.enrich-page .control.has-icons-left .input,
+.enrich-page .control.has-icons-left .select select {
+  padding-left: 2.25em;
+}
+
+.enrich-page .control.has-icons-left .icon.is-left {
+  height: 2.25em;
+}
+
+/* Form field spacing */
+.enrich-page .field:not(:last-child) {
+  margin-bottom: var(--space-3);
+}
+
+/* ===== Portfolio Editor Layout ===== */
+
+.portfolio-editor {
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.portfolio-controls-container {
+  flex-shrink: 0;
+  background-color: var(--bg-primary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--border-default);
+  padding: var(--space-md);
+  margin-bottom: 0;
+}
+
+.portfolio-table-container {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+/* Section title spacing */
+.enrich-page .section-title {
+  margin-bottom: var(--space-lg);
+}
+
+/* ===== Control Layout ===== */
+
+.enrich-main-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.enrich-controls-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.enrich-control-group-close {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* Consistent font for control elements */
+.enrich-control-group-close .select select,
+.enrich-control-group-close .input,
+.enrich-control-group-close .button {
+  font-size: 0.875rem;
+  font-family: inherit;
+}
+
+/* Metrics box - no shadow */
+.enrich-metrics-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.875rem;
+}
+
+/* Group metrics with separators */
+.enrich-metrics-box .metric-value {
+  margin-right: var(--space-sm);
+  padding-right: var(--space-sm);
+  border-right: 1px solid var(--border-subtle);
+}
+
+.enrich-metrics-box .metric-value:last-child {
+  margin-right: 0;
+  padding-right: 0;
+  border-right: none;
+}
+
+/* ===== Controls and Metrics Row ===== */
+
+.controls-and-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.controls-group {
+  flex-shrink: 0;
+  margin-right: var(--space-md);
+}
+
+.controls-group .is-flex {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Portfolio metrics - no shadow */
+.portfolio-metrics {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  margin-left: auto;
+  font-size: 0.875rem;
+}
+
+.portfolio-metrics.is-success {
+  background-color: var(--success-light, rgba(20, 184, 166, 0.1));
+  border-color: var(--success);
+}
+
+.portfolio-metrics.is-warning {
+  background-color: var(--warning-light, rgba(249, 115, 22, 0.1));
+  border-color: var(--warning);
+}
+
+.portfolio-metrics.is-danger {
+  background-color: var(--danger-light, rgba(239, 68, 68, 0.1));
+  border-color: var(--danger);
+}
+
+.metrics-item {
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--space-lg);
+  white-space: nowrap;
+}
+
+.metrics-item:last-child {
+  margin-right: 0;
+}
+
+.metric-label {
+  font-weight: 600;
+  margin-right: var(--space-1);
+  color: var(--text-primary);
+}
+
+.metric-value {
+  color: var(--text-secondary);
+}
+
+/* ===== Header Controls ===== */
+
+.card-header-controls .is-flex {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.card-header-controls .control,
+.card-header-controls .select,
+.card-header-controls .input,
+.card-header-controls .checkbox,
+.card-header-controls .button,
+.card-header-controls .buttons {
+  margin-bottom: 0;
+  height: 2em;
+  display: flex;
+  align-items: center;
+}
+
+.card-header-controls .field.has-addons {
+  margin-bottom: 0;
+  height: 2em;
+}
+
+.card-header-controls .checkbox input[type="checkbox"] {
+  margin-top: 0;
+}
+
+/* ===== Table Styling ===== */
+
+.enrich-page .table {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.enrich-page .table th {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  padding: var(--space-sm) var(--space-sm);
+  border: none;
+}
+
+.enrich-page .table td {
+  vertical-align: middle;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 0.875rem;
+  border: none;
+}
+
+.enrich-page .table tbody tr {
+  border: none;
+}
+
+.enrich-page .table tbody tr:hover {
+  background-color: var(--hover-bg);
+  transition: background-color var(--transition-base);
+}
+
+.enrich-page .table td .button {
+  margin-bottom: 0;
+}
+
+/* Consistent font-size across all table cell elements */
+.enrich-page .table td,
+.enrich-page .table td span,
+.enrich-page .table td .input,
+.enrich-page .table td input.input,
+.enrich-page .table td .input.is-small,
+.enrich-page .table td .select,
+.enrich-page .table td .select select,
+.enrich-page .table td select,
+.enrich-page .table td .select.is-small select {
+  font-size: 0.875rem;
+}
+
+/* Vertically center text in table dropdowns */
+.enrich-page .table td .select.is-small,
+.enrich-page .table td .select.is-small select {
+  height: 2em;
+}
+
+.enrich-page .table td .select.is-small select {
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 2em;
+}
+
+.is-sortable {
+  cursor: pointer;
+}
+
+/* Checkbox column */
+th.col-checkbox,
+td.col-checkbox {
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  text-align: center;
+}
+
+/* ===== Progress Bar ===== */
+
+.progress-bar-container {
+  margin-top: var(--space-md);
+  padding: 0 var(--space-md);
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-default);
+  padding-bottom: var(--space-md);
+}
+
+#price-fetch-progress[style*="block"] {
+  display: block !important;
+  visibility: visible !important;
+}
+
+/* ===== Modal Styling ===== */
+
+.enrich-page .modal-card-head {
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.enrich-page .modal-card-foot {
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+}
+
+.enrich-page .modal-card-body {
+  padding: var(--space-lg);
+}
+
+/* Tab styling */
+.enrich-page .tabs li.is-active a {
+  border-bottom-color: var(--info);
+  color: var(--info);
+}
+
+/* ===== Bulk Action Bar ===== */
+
+.bulk-action-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    margin: 0 var(--space-md) var(--space-md) var(--space-md);
+    gap: var(--space-md);
+}
+
+.bulk-action-left {
+    flex-shrink: 0;
+    font-size: 0.875rem;
+}
+
+.bulk-action-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+}
+
+/* Standardize control widths in bulk action bar */
+.bulk-action-controls .select,
+.bulk-action-controls .select select {
+    min-width: 140px;
+    max-width: 180px;
+}
+
+.bulk-action-controls .select select,
+.bulk-action-controls .input {
+    font-size: 0.875rem;
+    height: 2.25em;
+    border-radius: var(--radius-sm);
+}
+
+.bulk-action-controls .input {
+    min-width: 120px;
+    max-width: 140px;
+}
+
+.bulk-action-controls .button {
+    height: 2.25em;
+    font-size: 0.875rem;
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
+}
+
+/* ===== Bulk Edit Styling ===== */
+
+.company-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-primary);
+}
+
+.portfolio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.portfolio-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0;
+  flex-grow: 1;
+}
+
+/* ===== Column Health Indicators ===== */
+
+.column-health {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.column-health.health-red {
+  color: var(--danger);
+}
+
+.column-health.health-orange {
+  color: var(--warning);
+}
+
+.column-health.health-green {
+  color: var(--success);
+}
+
+/* ===== User-Edited & CSV-Modified Field Styling ===== */
+
+/* User-edited fields (warning color) */
+.unified-table .user-edited,
+.unified-table .input.user-edited,
+.unified-table input.input.user-edited,
+.unified-table .select select.user-edited,
+.unified-table select.user-edited,
+.unified-table select.user-edited option,
+.unified-table .select .user-edited,
+.unified-table td .user-edited,
+.unified-table td input.user-edited,
+.unified-table td select.user-edited,
+.unified-table td span.user-edited,
+.portfolio-table .user-edited,
+.portfolio-table .input.user-edited,
+.portfolio-table input.input.user-edited,
+.portfolio-table .select select.user-edited,
+.portfolio-table select.user-edited,
+.portfolio-table select.user-edited option,
+.portfolio-table .select .user-edited,
+.portfolio-table td .user-edited,
+.portfolio-table td input.user-edited,
+.portfolio-table td select.user-edited,
+.portfolio-table td span.user-edited,
+.table .user-edited,
+.table input.user-edited,
+.table select.user-edited,
+.table span.user-edited {
+  color: var(--warning) !important;
+}
+
+/* CSV-modified fields (danger color) */
+.unified-table .csv-modified,
+.unified-table .input.csv-modified,
+.unified-table input.input.csv-modified,
+.unified-table .select select.csv-modified,
+.unified-table select.csv-modified,
+.unified-table select.csv-modified option,
+.unified-table td .csv-modified,
+.unified-table td input.csv-modified,
+.unified-table td select.csv-modified,
+.portfolio-table .csv-modified,
+.portfolio-table .input.csv-modified,
+.portfolio-table input.input.csv-modified,
+.portfolio-table .select select.csv-modified,
+.portfolio-table select.csv-modified,
+.portfolio-table select.csv-modified option,
+.portfolio-table td .csv-modified,
+.portfolio-table td input.csv-modified,
+.portfolio-table td select.csv-modified,
+.table .csv-modified,
+.table input.csv-modified,
+.table select.csv-modified {
+  color: var(--danger) !important;
+}
+
+/* ===== Responsive Adjustments ===== */
+
+@media screen and (max-width: 768px) {
+  .card-header-controls .is-flex {
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    justify-content: flex-start;
+  }
+
+  .enrich-page .columns .column .card {
+    min-height: auto;
+    height: auto;
+    margin-bottom: var(--space-md);
+  }
+
+  .controls-and-metrics-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .controls-group {
+    margin-right: 0;
+    margin-bottom: var(--space-md);
+    width: 100%;
+  }
+
+  .controls-group .is-flex {
+    gap: var(--space-sm);
+    flex-wrap: wrap;
+  }
+
+  .portfolio-metrics {
+    flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-sm);
+    margin-left: 0;
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .metrics-item {
+    margin-right: var(--space-md);
+    margin-bottom: var(--space-xs);
+    font-size: 0.875rem;
+  }
+}

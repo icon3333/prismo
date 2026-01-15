@@ -2,11 +2,125 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta
+from typing import Dict, List
 from flask import current_app
 from app.db_manager import query_db, backup_database
 from app.utils.batch_processing import start_batch_process
 
 logger = logging.getLogger(__name__)
+
+# Common currencies to fetch exchange rates for
+COMMON_CURRENCIES = ['USD', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD', 'SEK', 'NOK', 'DKK', 'HKD', 'SGD', 'NZD']
+
+
+def refresh_exchange_rates_if_needed() -> bool:
+    """
+    Refresh exchange rates if they are stale (>24 hours old) or missing.
+
+    This ensures all portfolio calculations use consistent daily exchange rates.
+    Rates are fetched from yfinance and stored in the database.
+
+    Returns:
+        bool: True if rates were refreshed, False if they were already fresh
+    """
+    try:
+        from app.repositories.exchange_rate_repository import ExchangeRateRepository
+
+        # Check if refresh is needed
+        if not ExchangeRateRepository.is_refresh_needed(hours=24):
+            last_update = ExchangeRateRepository.get_last_update_time()
+            logger.info(f"✅ Exchange rates are fresh (last updated: {last_update})")
+            # Preload into cache for fast access
+            ExchangeRateRepository.preload_cache()
+            return False
+
+        logger.info("🔄 Refreshing exchange rates...")
+
+        # Get currencies actually used in the portfolio
+        used_currencies = _get_portfolio_currencies()
+
+        # Merge with common currencies list
+        currencies_to_fetch = list(set(COMMON_CURRENCIES + used_currencies))
+        currencies_to_fetch = [c for c in currencies_to_fetch if c and c != 'EUR']
+
+        if not currencies_to_fetch:
+            logger.info("No currencies to fetch (all EUR)")
+            return False
+
+        # Fetch rates from yfinance
+        rates = _fetch_exchange_rates(currencies_to_fetch)
+
+        if not rates:
+            logger.warning("❌ Could not fetch any exchange rates")
+            return False
+
+        # Store rates in database
+        ExchangeRateRepository.upsert_rates_batch(rates, 'EUR')
+
+        # Clear value calculator cache to use new rates
+        from app.utils.value_calculator import clear_exchange_rate_cache
+        clear_exchange_rate_cache()
+
+        # Preload into cache for fast access
+        ExchangeRateRepository.preload_cache()
+
+        logger.info(f"✅ Refreshed {len(rates)} exchange rates: {list(rates.keys())}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to refresh exchange rates: {e}", exc_info=True)
+        return False
+
+
+def _get_portfolio_currencies() -> List[str]:
+    """
+    Get list of currencies actually used in the portfolio.
+
+    Returns:
+        List of currency codes found in market_prices table
+    """
+    try:
+        results = query_db(
+            """
+            SELECT DISTINCT mp.currency
+            FROM market_prices mp
+            INNER JOIN companies c ON c.identifier = mp.identifier
+            WHERE mp.currency IS NOT NULL AND mp.currency != ''
+            """
+        )
+        currencies = [r['currency'] for r in results] if results else []
+        logger.debug(f"Found {len(currencies)} currencies in portfolio: {currencies}")
+        return currencies
+    except Exception as e:
+        logger.warning(f"Could not get portfolio currencies: {e}")
+        return []
+
+
+def _fetch_exchange_rates(currencies: List[str]) -> Dict[str, float]:
+    """
+    Fetch exchange rates from yfinance for a list of currencies.
+
+    Args:
+        currencies: List of currency codes (e.g., ['USD', 'GBP'])
+
+    Returns:
+        Dict mapping currency -> EUR exchange rate
+    """
+    from app.utils.yfinance_utils import get_exchange_rate
+
+    rates = {}
+    for currency in currencies:
+        try:
+            rate = get_exchange_rate(currency, 'EUR')
+            if rate and rate > 0:
+                rates[currency] = rate
+                logger.info(f"  {currency}/EUR: {rate:.6f}")
+            else:
+                logger.warning(f"  {currency}/EUR: invalid rate {rate}")
+        except Exception as e:
+            logger.warning(f"  {currency}/EUR: fetch failed - {e}")
+
+    return rates
 
 
 def auto_update_prices_if_needed():

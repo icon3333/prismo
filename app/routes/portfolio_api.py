@@ -1332,8 +1332,10 @@ def get_portfolios_api():
             'include_ids', 'false').lower() == 'true'
         has_companies = request.args.get(
             'has_companies', 'false').lower() == 'true'
+        include_values = request.args.get(
+            'include_values', 'false').lower() == 'true'
         logger.info(
-            f"Getting portfolios for account_id: {account_id}, include_ids: {include_ids}, has_companies: {has_companies}")
+            f"Getting portfolios for account_id: {account_id}, include_ids: {include_ids}, has_companies: {has_companies}, include_values: {include_values}")
 
         # Get portfolio data from portfolios table, including all portfolios with non-null names
         if include_ids:
@@ -1417,6 +1419,34 @@ def get_portfolios_api():
                     portfolios.append({'id': portfolio_id, 'name': '-'})
                     logger.info(
                         "Created and added '-' portfolio to the response")
+
+            # Add portfolio values if requested
+            if include_values and portfolios:
+                portfolio_values = query_db('''
+                    SELECT p.id, COALESCE(SUM(
+                        CASE
+                            WHEN c.is_custom_value = 1 THEN c.custom_total_value
+                            ELSE COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)
+                        END
+                    ), 0) as total_value
+                    FROM portfolios p
+                    LEFT JOIN companies c ON p.id = c.portfolio_id
+                    LEFT JOIN company_shares cs ON c.id = cs.company_id
+                    LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+                    WHERE p.account_id = ? AND p.name IS NOT NULL
+                    GROUP BY p.id
+                ''', [account_id])
+
+                # Create a lookup dict for portfolio values
+                value_lookup = {}
+                if portfolio_values:
+                    value_lookup = {pv['id']: pv['total_value'] for pv in portfolio_values if isinstance(pv, dict)}
+
+                # Add total_value to each portfolio
+                for portfolio in portfolios:
+                    portfolio['total_value'] = value_lookup.get(portfolio['id'], 0)
+
+                logger.info(f"Added portfolio values: {[(p['name'], p.get('total_value', 0)) for p in portfolios]}")
 
             json_response = jsonify(portfolios)
         else:
@@ -2269,6 +2299,8 @@ def simulator_ticker_lookup():
         - category: Sector/industry (e.g., "Technology")
         - country: Country of origin (e.g., "United States")
         - name: Company name (e.g., "Apple Inc.")
+        - existsInPortfolio: Boolean indicating if ticker exists in user's portfolio
+        - portfolioData: Position data if ticker exists in portfolio (value, shares, etc.)
     """
     try:
         data = request.get_json()
@@ -2279,7 +2311,30 @@ def simulator_ticker_lookup():
         if not ticker:
             return validation_error_response('Ticker symbol is required')
 
+        account_id = g.account_id
         logger.info(f"Simulator ticker lookup for: {ticker}")
+
+        # Check if ticker exists in user's portfolio
+        existing_position = query_db('''
+            SELECT
+                c.id,
+                c.name,
+                c.identifier,
+                c.category,
+                COALESCE(c.override_country, mp.country) as country,
+                COALESCE(cs.override_share, cs.shares, 0) as shares,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+            AND UPPER(c.identifier) = ?
+            LIMIT 1
+        ''', [account_id, ticker], one=True)
 
         # Fetch info from yfinance (uses 15-minute cache)
         info = get_yfinance_info(ticker)
@@ -2303,15 +2358,405 @@ def simulator_ticker_lookup():
         # Name: prefer shortName for cleaner display
         name = info.get('shortName') or info.get('longName', ticker)
 
-        logger.info(f"Ticker lookup success: {ticker} -> {category}, {country}")
+        # If position exists in portfolio, prefer its data
+        exists_in_portfolio = existing_position is not None
+        portfolio_data = None
+
+        if exists_in_portfolio:
+            portfolio_data = {
+                'id': existing_position['id'],
+                'name': existing_position['name'],
+                'category': existing_position['category'] or category,
+                'country': existing_position['country'] or country,
+                'shares': float(existing_position['shares']) if existing_position['shares'] else 0,
+                'value': round(float(existing_position['value']), 2) if existing_position['value'] else 0
+            }
+            # Use portfolio data for category/country if available
+            if existing_position['category']:
+                category = existing_position['category']
+            if existing_position['country']:
+                country = existing_position['country']
+
+        logger.info(f"Ticker lookup success: {ticker} -> {category}, {country}, exists={exists_in_portfolio}")
 
         return success_response({
             'ticker': ticker,
             'category': category if category else '—',
             'country': country if country else '—',
-            'name': name
+            'name': name,
+            'existsInPortfolio': exists_in_portfolio,
+            'portfolioData': portfolio_data
         })
 
     except Exception as e:
         logger.exception(f"Error in simulator ticker lookup")
         return error_response('Failed to fetch ticker data', 500)
+
+
+@require_auth
+def simulator_portfolio_allocations():
+    """
+    Get portfolio allocation data for the simulator combined view.
+
+    GET /portfolio/api/simulator/portfolio-allocations
+    Query params:
+        - scope: 'global' (all portfolios) or 'portfolio' (specific portfolio)
+        - portfolio_id: Required if scope='portfolio'
+
+    Returns:
+        - scope: The scope used
+        - portfolio_name: Name of portfolio (if scope='portfolio')
+        - total_value: Total portfolio value in EUR
+        - countries: List of country allocations with value and percentage
+        - categories: List of category allocations with value and percentage
+        - positions: List of positions for ticker matching
+    """
+    try:
+        account_id = g.account_id
+        scope = request.args.get('scope', 'global')
+        portfolio_id = request.args.get('portfolio_id', type=int)
+
+        logger.info(f"Simulator portfolio allocations: scope={scope}, portfolio_id={portfolio_id}")
+
+        # Build query based on scope
+        portfolio_filter = ''
+        params = [account_id]
+        portfolio_name = None
+
+        if scope == 'portfolio' and portfolio_id:
+            portfolio_filter = 'AND c.portfolio_id = ?'
+            params.append(portfolio_id)
+
+            # Get portfolio name
+            portfolio = query_db(
+                'SELECT name FROM portfolios WHERE id = ? AND account_id = ?',
+                [portfolio_id, account_id], one=True
+            )
+            if portfolio:
+                portfolio_name = portfolio['name']
+
+        # Get all positions with values
+        positions_query = f'''
+            SELECT
+                c.id,
+                c.name,
+                c.identifier,
+                c.category,
+                COALESCE(c.override_country, mp.country) as country,
+                COALESCE(cs.override_share, cs.shares, 0) as shares,
+                mp.price_eur,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ?
+            {portfolio_filter}
+            AND (
+                (COALESCE(cs.override_share, cs.shares, 0) > 0)
+                OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
+            )
+            ORDER BY value DESC
+        '''
+
+        positions = query_db(positions_query, params)
+
+        if not positions:
+            return success_response({
+                'scope': scope,
+                'portfolio_name': portfolio_name,
+                'total_value': 0,
+                'countries': [],
+                'categories': [],
+                'positions': []
+            })
+
+        # Calculate total value
+        total_value = sum(float(p['value'] or 0) for p in positions)
+
+        # Aggregate by country
+        country_totals = {}
+        for p in positions:
+            country = p['country'] or 'Unknown'
+            country_totals[country] = country_totals.get(country, 0) + float(p['value'] or 0)
+
+        countries = []
+        for country, value in sorted(country_totals.items(), key=lambda x: -x[1]):
+            percentage = (value / total_value * 100) if total_value > 0 else 0
+            countries.append({
+                'name': country,
+                'value': round(value, 2),
+                'percentage': round(percentage, 2)
+            })
+
+        # Aggregate by category
+        category_totals = {}
+        for p in positions:
+            category = p['category'] or 'Unknown'
+            category_totals[category] = category_totals.get(category, 0) + float(p['value'] or 0)
+
+        categories = []
+        for category, value in sorted(category_totals.items(), key=lambda x: -x[1]):
+            percentage = (value / total_value * 100) if total_value > 0 else 0
+            categories.append({
+                'name': category,
+                'value': round(value, 2),
+                'percentage': round(percentage, 2)
+            })
+
+        # Format positions for response
+        positions_list = []
+        for p in positions:
+            positions_list.append({
+                'id': p['id'],
+                'ticker': p['identifier'],
+                'name': p['name'],
+                'country': p['country'] or 'Unknown',
+                'category': p['category'] or 'Unknown',
+                'value': round(float(p['value'] or 0), 2)
+            })
+
+        logger.info(f"Returning allocations: {len(countries)} countries, {len(categories)} categories, total={total_value:.2f}")
+
+        return success_response({
+            'scope': scope,
+            'portfolio_name': portfolio_name,
+            'total_value': round(total_value, 2),
+            'countries': countries,
+            'categories': categories,
+            'positions': positions_list
+        })
+
+    except Exception as e:
+        logger.exception("Error getting simulator portfolio allocations")
+        return error_response('Failed to get portfolio allocations', 500)
+
+
+@require_auth
+def simulator_simulations_list():
+    """
+    List all saved simulations for the current user.
+
+    GET /portfolio/api/simulator/simulations
+
+    Returns:
+        List of simulations with id, name, scope, portfolio info, timestamps
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+        simulations = SimulationRepository.get_all(account_id)
+
+        logger.info(f"Returning {len(simulations)} simulations for account {account_id}")
+        return success_response({'simulations': simulations})
+
+    except Exception as e:
+        logger.exception("Error listing simulations")
+        return error_response('Failed to list simulations', 500)
+
+
+@require_auth
+def simulator_simulation_create():
+    """
+    Create a new saved simulation.
+
+    POST /portfolio/api/simulator/simulations
+    Body: {
+        "name": "My Simulation",
+        "scope": "global" | "portfolio",
+        "portfolio_id": 123,  // required if scope="portfolio"
+        "items": [...]
+    }
+
+    Returns:
+        Created simulation with ID
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return error_response('Request body is required', 400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return error_response('Simulation name is required', 400)
+
+        if len(name) > 100:
+            return error_response('Simulation name too long (max 100 characters)', 400)
+
+        scope = data.get('scope', 'global')
+        if scope not in ('global', 'portfolio'):
+            return error_response("Scope must be 'global' or 'portfolio'", 400)
+
+        portfolio_id = data.get('portfolio_id')
+        if scope == 'portfolio' and not portfolio_id:
+            return error_response('portfolio_id is required when scope is "portfolio"', 400)
+
+        items = data.get('items', [])
+        if not isinstance(items, list):
+            return error_response('Items must be a list', 400)
+
+        # Check for duplicate name
+        if SimulationRepository.exists(name, account_id):
+            return error_response(f'A simulation named "{name}" already exists', 409)
+
+        # Create simulation
+        simulation_id = SimulationRepository.create(
+            account_id=account_id,
+            name=name,
+            scope=scope,
+            items=items,
+            portfolio_id=portfolio_id if scope == 'portfolio' else None
+        )
+
+        # Fetch the created simulation
+        simulation = SimulationRepository.get_by_id(simulation_id, account_id)
+
+        logger.info(f"Created simulation '{name}' (id={simulation_id})")
+        return success_response({'simulation': simulation}, status=201)
+
+    except Exception as e:
+        logger.exception("Error creating simulation")
+        return error_response('Failed to create simulation', 500)
+
+
+@require_auth
+def simulator_simulation_get(simulation_id: int):
+    """
+    Get a simulation by ID with full items data.
+
+    GET /portfolio/api/simulator/simulations/<id>
+
+    Returns:
+        Full simulation data including items
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+        simulation = SimulationRepository.get_by_id(simulation_id, account_id)
+
+        if not simulation:
+            return not_found_response('Simulation', simulation_id)
+
+        return success_response({'simulation': simulation})
+
+    except Exception as e:
+        logger.exception(f"Error getting simulation {simulation_id}")
+        return error_response('Failed to get simulation', 500)
+
+
+@require_auth
+def simulator_simulation_update(simulation_id: int):
+    """
+    Update an existing simulation.
+
+    PUT /portfolio/api/simulator/simulations/<id>
+    Body: {
+        "name": "New Name",  // optional
+        "scope": "global",   // optional
+        "portfolio_id": 123, // optional
+        "items": [...]       // optional
+    }
+
+    Returns:
+        Updated simulation
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return error_response('Request body is required', 400)
+
+        # Verify simulation exists
+        existing = SimulationRepository.get_by_id(simulation_id, account_id)
+        if not existing:
+            return not_found_response('Simulation', simulation_id)
+
+        # Validate name if provided
+        name = data.get('name')
+        if name is not None:
+            name = name.strip()
+            if not name:
+                return error_response('Simulation name cannot be empty', 400)
+            if len(name) > 100:
+                return error_response('Simulation name too long (max 100 characters)', 400)
+            # Check for duplicate name (excluding current)
+            if SimulationRepository.exists(name, account_id, exclude_id=simulation_id):
+                return error_response(f'A simulation named "{name}" already exists', 409)
+
+        # Validate scope if provided
+        scope = data.get('scope')
+        if scope is not None and scope not in ('global', 'portfolio'):
+            return error_response("Scope must be 'global' or 'portfolio'", 400)
+
+        # Validate items if provided
+        items = data.get('items')
+        if items is not None and not isinstance(items, list):
+            return error_response('Items must be a list', 400)
+
+        # Update simulation
+        success = SimulationRepository.update(
+            simulation_id=simulation_id,
+            account_id=account_id,
+            name=name,
+            scope=scope,
+            items=items,
+            portfolio_id=data.get('portfolio_id')
+        )
+
+        if not success:
+            return error_response('Failed to update simulation', 500)
+
+        # Fetch updated simulation
+        simulation = SimulationRepository.get_by_id(simulation_id, account_id)
+
+        logger.info(f"Updated simulation {simulation_id}")
+        return success_response({'simulation': simulation})
+
+    except Exception as e:
+        logger.exception(f"Error updating simulation {simulation_id}")
+        return error_response('Failed to update simulation', 500)
+
+
+@require_auth
+def simulator_simulation_delete(simulation_id: int):
+    """
+    Delete a simulation.
+
+    DELETE /portfolio/api/simulator/simulations/<id>
+
+    Returns:
+        Success message
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+
+        # Verify simulation exists
+        existing = SimulationRepository.get_by_id(simulation_id, account_id)
+        if not existing:
+            return not_found_response('Simulation', simulation_id)
+
+        success = SimulationRepository.delete(simulation_id, account_id)
+
+        if not success:
+            return error_response('Failed to delete simulation', 500)
+
+        logger.info(f"Deleted simulation {simulation_id}")
+        return success_response({'message': 'Simulation deleted successfully'})
+
+    except Exception as e:
+        logger.exception(f"Error deleting simulation {simulation_id}")
+        return error_response('Failed to delete simulation', 500)

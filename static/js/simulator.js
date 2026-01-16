@@ -31,6 +31,14 @@ class AllocationSimulator {
     this.countryChart = null;
     this.categoryChart = null;
 
+    // Expanded chart bar state (one at a time per chart type)
+    this.expandedCountryBar = null;   // Label of expanded country bar
+    this.expandedCategoryBar = null;  // Label of expanded category bar
+
+    // Auto-expand tracking for newly added items
+    this.pendingExpandCategory = null;
+    this.pendingExpandCountry = null;
+
     // Debounced chart update for real-time feedback
     this.debouncedChartUpdate = this.debounce(() => this.updateCharts(), 300);
 
@@ -144,15 +152,23 @@ class AllocationSimulator {
 
       if (result.success) {
         this.portfolioData = result.data;
+
+        // Recalculate percentage-based items when baseline changes
+        this.recalculateAllPercentageItems();
+        this.renderTable();
         this.updateCharts();
       } else {
         console.error('Failed to load portfolio allocations:', result.error);
         this.portfolioData = { countries: [], categories: [], positions: [], total_value: 0 };
+        this.recalculateAllPercentageItems();
+        this.renderTable();
         this.updateCharts();
       }
     } catch (error) {
       console.error('Error loading portfolio allocations:', error);
       this.portfolioData = { countries: [], categories: [], positions: [], total_value: 0 };
+      this.recalculateAllPercentageItems();
+      this.renderTable();
       this.updateCharts();
     }
   }
@@ -396,16 +412,28 @@ class AllocationSimulator {
         <div class="simulator-input-form">
           <label class="label">Add Category</label>
           <div class="input-row">
-            <input type="text" class="input" id="simulator-category-input"
-                   placeholder="e.g., Healthcare">
+            <div class="combobox-wrapper" id="simulator-category-combobox">
+              <input type="text" class="input combobox-input" id="simulator-category-input"
+                     placeholder="Select or type category..." autocomplete="off">
+              <button class="combobox-toggle" type="button" tabindex="-1">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div class="combobox-dropdown" id="simulator-category-dropdown"></div>
+            </div>
             <button class="btn btn-primary btn-sm" id="simulator-add-category-btn">Add</button>
           </div>
         </div>
         <div class="simulator-input-form">
           <label class="label">Add Country</label>
           <div class="input-row">
-            <input type="text" class="input" id="simulator-country-input"
-                   placeholder="e.g., Germany">
+            <div class="combobox-wrapper" id="simulator-country-combobox">
+              <input type="text" class="input combobox-input" id="simulator-country-input"
+                     placeholder="Select or type country..." autocomplete="off">
+              <button class="combobox-toggle" type="button" tabindex="-1">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div class="combobox-dropdown" id="simulator-country-dropdown"></div>
+            </div>
             <button class="btn btn-primary btn-sm" id="simulator-add-country-btn">Add</button>
           </div>
         </div>
@@ -421,7 +449,7 @@ class AllocationSimulator {
               <th class="col-portfolio">Portfolio</th>
               <th class="col-category">Category</th>
               <th class="col-country">Country</th>
-              <th class="col-value">Value (€)</th>
+              <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
               <th class="col-delete"></th>
             </tr>
           </thead>
@@ -484,28 +512,38 @@ class AllocationSimulator {
     const tickerInput = document.getElementById('simulator-ticker-input');
     const tickerBtn = document.getElementById('simulator-add-ticker-btn');
 
-    tickerBtn.addEventListener('click', () => this.handleAddTicker());
-    tickerInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') this.handleAddTicker();
-    });
+    if (tickerBtn && tickerInput) {
+      tickerBtn.addEventListener('click', () => this.handleAddTicker());
+      tickerInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleAddTicker();
+      });
+    }
 
-    // Add Category
+    // Add Category with combobox
     const categoryInput = document.getElementById('simulator-category-input');
     const categoryBtn = document.getElementById('simulator-add-category-btn');
+    const categoryCombobox = document.getElementById('simulator-category-combobox');
 
-    categoryBtn.addEventListener('click', () => this.handleAddCategory());
-    categoryInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') this.handleAddCategory();
-    });
+    if (categoryBtn && categoryInput) {
+      categoryBtn.addEventListener('click', () => this.handleAddCategory());
+      categoryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleAddCategory();
+      });
+      this.initCombobox(categoryCombobox, categoryInput, 'category');
+    }
 
-    // Add Country
+    // Add Country with combobox
     const countryInput = document.getElementById('simulator-country-input');
     const countryBtn = document.getElementById('simulator-add-country-btn');
+    const countryCombobox = document.getElementById('simulator-country-combobox');
 
-    countryBtn.addEventListener('click', () => this.handleAddCountry());
-    countryInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') this.handleAddCountry();
-    });
+    if (countryBtn && countryInput) {
+      countryBtn.addEventListener('click', () => this.handleAddCountry());
+      countryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleAddCountry();
+      });
+      this.initCombobox(countryCombobox, countryInput, 'country');
+    }
 
     // Table event delegation (for edit and delete)
     this.tableBody.addEventListener('click', (e) => this.handleTableClick(e));
@@ -606,6 +644,7 @@ class AllocationSimulator {
           category: this.normalizeLabel(data.category) || '—',
           country: this.normalizeLabel(data.country) || '—',
           value: 0,
+          valueMode: 'absolute', // Default to absolute mode
           source: 'ticker',
           name: data.name,
           existsInPortfolio: data.existsInPortfolio || false,
@@ -639,16 +678,26 @@ class AllocationSimulator {
       return;
     }
 
+    const normalizedCategory = this.normalizeLabel(category);
+
+    // Set pending expand so the chart auto-expands this category
+    this.pendingExpandCategory = normalizedCategory;
+
     this.addItem({
       id: this.generateId(),
       ticker: '—',
-      category: this.normalizeLabel(category),
+      category: normalizedCategory,
       country: '—',
       value: 0,
+      valueMode: 'absolute', // Default to absolute mode
       source: 'category',
       portfolio_id: null
     });
     input.value = '';
+
+    // Hide dropdown
+    const dropdown = document.getElementById('simulator-category-dropdown');
+    if (dropdown) dropdown.classList.remove('show');
   }
 
   handleAddCountry() {
@@ -660,16 +709,26 @@ class AllocationSimulator {
       return;
     }
 
+    const normalizedCountry = this.normalizeLabel(country);
+
+    // Set pending expand so the chart auto-expands this country
+    this.pendingExpandCountry = normalizedCountry;
+
     this.addItem({
       id: this.generateId(),
       ticker: '—',
       category: '—',
-      country: this.normalizeLabel(country),
+      country: normalizedCountry,
       value: 0,
+      valueMode: 'absolute', // Default to absolute mode
       source: 'country',
       portfolio_id: null
     });
     input.value = '';
+
+    // Hide dropdown
+    const dropdown = document.getElementById('simulator-country-dropdown');
+    if (dropdown) dropdown.classList.remove('show');
   }
 
   // ============================================================================
@@ -726,49 +785,75 @@ class AllocationSimulator {
       return;
     }
 
-    this.tableBody.innerHTML = this.items.map(item => `
-      <tr data-id="${item.id}">
-        <td class="col-ticker">
-          ${item.source === 'ticker'
-            ? `<span class="ticker-badge">${item.ticker}</span>
-               ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
-            : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
-                     data-field="ticker" placeholder="—">`
-          }
-        </td>
-        <td class="col-name">
-          <span class="name-display">${this.escapeHtml(item.name || '—')}</span>
-        </td>
-        <td class="col-portfolio">
-          <select class="editable-cell portfolio-select" data-field="portfolio_id">
-            <option value="">—</option>
-            ${this.portfolios.map(p =>
-              `<option value="${p.id}" ${item.portfolio_id == p.id ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>`
-            ).join('')}
-          </select>
-        </td>
-        <td class="col-category">
-          <input type="text" class="editable-cell category-input" value="${this.escapeHtml(item.category === '—' ? item.category : (item.category || '').toLowerCase())}"
-                 data-field="category" placeholder="—">
-        </td>
-        <td class="col-country">
-          <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
-                 data-field="country" placeholder="—">
-        </td>
-        <td class="col-value">
-          <div class="value-input-wrapper">
-            <span class="currency-symbol">€</span>
-            <input type="text" class="editable-cell value-input" value="${this.formatValue(item.value)}"
-                   data-field="value" placeholder="0">
-          </div>
-        </td>
-        <td class="col-delete">
-          <button class="btn-delete" title="Remove">
-            <i class="fas fa-times"></i>
-          </button>
-        </td>
-      </tr>
-    `).join('');
+    this.tableBody.innerHTML = this.items.map(item => {
+      // Determine value mode display
+      const isPercentMode = item.valueMode === 'percentage';
+      const displayValue = isPercentMode ? (item.targetPercent || 0) : item.value;
+      const modeSymbol = isPercentMode ? '%' : '€';
+      const formattedValue = isPercentMode
+        ? (item.targetPercent || 0).toFixed(1)
+        : this.formatValue(item.value);
+
+      // Show calculated € value for percentage mode items
+      const calculatedHint = isPercentMode && item.value > 0
+        ? `<span class="value-calculated-hint" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
+        : '';
+
+      // Warning if target is below current
+      const warningHint = item.targetWarning
+        ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
+        : '';
+
+      return `
+        <tr data-id="${item.id}">
+          <td class="col-ticker">
+            ${item.source === 'ticker'
+              ? `<span class="ticker-badge">${item.ticker}</span>
+                 ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
+              : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
+                       data-field="ticker" placeholder="—">`
+            }
+          </td>
+          <td class="col-name">
+            <span class="name-display">${this.escapeHtml(item.name || '—')}</span>
+          </td>
+          <td class="col-portfolio">
+            <select class="editable-cell portfolio-select" data-field="portfolio_id">
+              <option value="">—</option>
+              ${this.portfolios.map(p =>
+                `<option value="${p.id}" ${item.portfolio_id == p.id ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>`
+              ).join('')}
+            </select>
+          </td>
+          <td class="col-category">
+            <input type="text" class="editable-cell category-input" value="${this.escapeHtml(item.category === '—' ? item.category : (item.category || '').toLowerCase())}"
+                   data-field="category" placeholder="—">
+          </td>
+          <td class="col-country">
+            <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
+                   data-field="country" placeholder="—">
+          </td>
+          <td class="col-value">
+            <div class="value-input-wrapper">
+              <button class="value-mode-toggle ${isPercentMode ? 'mode-percent' : 'mode-euro'}"
+                      data-field="valueMode" title="Toggle between € amount and % target">
+                ${modeSymbol}
+              </button>
+              <input type="text" class="editable-cell value-input ${isPercentMode ? 'percent-mode' : ''}"
+                     value="${formattedValue}"
+                     data-field="value" placeholder="0">
+              ${calculatedHint}
+              ${warningHint}
+            </div>
+          </td>
+          <td class="col-delete">
+            <button class="btn-delete" title="Remove">
+              <i class="fas fa-times"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   }
 
   // ============================================================================
@@ -786,7 +871,51 @@ class AllocationSimulator {
         row.style.transform = 'translateX(10px)';
         setTimeout(() => this.deleteItem(id), 200);
       }
+      return;
     }
+
+    // Value mode toggle button
+    if (e.target.closest('.value-mode-toggle')) {
+      const row = e.target.closest('tr');
+      if (row) {
+        const id = row.dataset.id;
+        this.toggleValueMode(id);
+      }
+    }
+  }
+
+  toggleValueMode(id) {
+    const item = this.items.find(i => i.id === id);
+    if (!item) return;
+
+    const wasPercentMode = item.valueMode === 'percentage';
+
+    if (wasPercentMode) {
+      // Switching to absolute euro mode
+      item.valueMode = 'absolute';
+      // Keep the calculated value as the new absolute value
+    } else {
+      // Switching to percentage mode
+      item.valueMode = 'percentage';
+      // Calculate target percentage based on current value
+      const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
+      const combinedTotal = baselineTotal + item.value;
+      if (combinedTotal > 0) {
+        // Current allocation would be: (baselineValue + item.value) / combinedTotal * 100
+        const currentPercent = ((baselineValue + item.value) / combinedTotal) * 100;
+        item.targetPercent = parseFloat(currentPercent.toFixed(1));
+      } else {
+        item.targetPercent = 0;
+      }
+    }
+
+    // Recalculate if now in percentage mode
+    if (item.valueMode === 'percentage') {
+      this.recalculatePercentageItem(item);
+    }
+
+    this.renderTable();
+    this.updateCharts();
   }
 
   handleTableBlur(e) {
@@ -830,9 +959,19 @@ class AllocationSimulator {
       const id = row.dataset.id;
       const item = this.items.find(i => i.id === id);
       if (item) {
-        // Temporarily update value for chart preview
-        const newValue = this.parseValue(e.target.value);
-        item.value = newValue;
+        if (item.valueMode === 'percentage') {
+          // For percentage mode, update target percent and recalculate
+          const cleanedValue = e.target.value.replace('%', '').trim();
+          const percentValue = parseFloat(cleanedValue);
+          if (!isNaN(percentValue)) {
+            item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
+            this.recalculatePercentageItem(item);
+          }
+        } else {
+          // For absolute mode, update value directly
+          const newValue = this.parseValue(e.target.value);
+          item.value = newValue;
+        }
         this.debouncedChartUpdate();
       }
     }
@@ -845,29 +984,64 @@ class AllocationSimulator {
     const id = row.dataset.id;
     const field = input.dataset.field;
     let value = input.value.trim();
+    const item = this.items.find(i => i.id === id);
 
     if (field === 'value') {
-      // Parse numeric value
-      value = this.parseValue(value);
-      input.value = this.formatValue(value);
+      // Check if item is in percentage mode
+      if (item && item.valueMode === 'percentage') {
+        // Parse as percentage target
+        const cleanedValue = value.replace('%', '').trim();
+        const percentValue = parseFloat(cleanedValue);
+
+        if (!isNaN(percentValue)) {
+          item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
+          input.value = item.targetPercent.toFixed(1);
+
+          // Recalculate the € value needed
+          this.recalculatePercentageItem(item);
+        }
+      } else {
+        // Parse numeric euro value
+        value = this.parseValue(value);
+        input.value = this.formatValue(value);
+        this.updateItem(id, 'value', value);
+      }
     } else if (field === 'portfolio_id') {
       // Parse portfolio_id as number or null
       value = value ? parseInt(value) : null;
+      this.updateItem(id, field, value);
     } else if (field === 'category' || field === 'country') {
       // Normalize category/country to lowercase
       if (value && value !== '—') {
         value = this.normalizeLabel(value);
         input.value = value;
       }
+      // Update if value is empty, set to placeholder
+      if (value === '') {
+        value = '—';
+        input.value = '—';
+      }
+      this.updateItem(id, field, value);
+
+      // If category or country changes, recalculate percentage items
+      if (item && item.valueMode === 'percentage') {
+        this.recalculatePercentageItem(item);
+      }
+    } else {
+      // Update if value is empty, set to placeholder
+      if (value === '' && field !== 'value' && field !== 'portfolio_id') {
+        value = '—';
+        input.value = '—';
+      }
+      this.updateItem(id, field, value);
     }
 
-    // Update if value is empty, set to placeholder
-    if (value === '' && field !== 'value' && field !== 'portfolio_id') {
-      value = '—';
-      input.value = '—';
+    // Re-render table to show calculated values
+    if (item && item.valueMode === 'percentage') {
+      this.renderTable();
     }
 
-    this.updateItem(id, field, value);
+    this.updateCharts();
 
     // Visual feedback
     input.classList.add('cell-saved');
@@ -889,8 +1063,11 @@ class AllocationSimulator {
 
   updateCharts() {
     const combined = this.calculateCombinedAllocations();
-    this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal);
-    this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal);
+    // Store for position detail access
+    this.lastCombinedData = combined;
+
+    this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
+    this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
 
     // Update header (use simulatedTotal from combined which respects portfolio filtering)
     const titleEl = document.getElementById('combined-view-title');
@@ -907,6 +1084,32 @@ class AllocationSimulator {
       if (combined.simulatedTotal > 0) {
         totalEl.innerHTML += ` <span class="delta-indicator delta-positive">(+€${this.formatValue(combined.simulatedTotal)})</span>`;
       }
+    }
+
+    // Handle pending auto-expand for newly added items
+    this.handlePendingExpand();
+  }
+
+  /**
+   * Auto-expand chart bars for newly added categories/countries
+   */
+  handlePendingExpand() {
+    if (this.pendingExpandCategory) {
+      // Set the expanded category bar
+      this.expandedCategoryBar = this.pendingExpandCategory;
+      // Re-render the category chart to show expanded state
+      const combined = this.lastCombinedData || this.calculateCombinedAllocations();
+      this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
+      this.pendingExpandCategory = null;
+    }
+
+    if (this.pendingExpandCountry) {
+      // Set the expanded country bar
+      this.expandedCountryBar = this.pendingExpandCountry;
+      // Re-render the country chart to show expanded state
+      const combined = this.lastCombinedData || this.calculateCombinedAllocations();
+      this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
+      this.pendingExpandCountry = null;
     }
   }
 
@@ -969,7 +1172,7 @@ class AllocationSimulator {
     };
   }
 
-  renderBarChart(container, data, total, baseline, baselineTotal) {
+  renderBarChart(container, data, total, baseline, baselineTotal, chartType) {
     if (total === 0 || Object.keys(data).length === 0) {
       container.innerHTML = '<div class="chart-empty">No data to display</div>';
       return;
@@ -979,9 +1182,13 @@ class AllocationSimulator {
     const sorted = Object.entries(data)
       .sort((a, b) => b[1] - a[1]);
 
+    // Determine which bar is currently expanded for this chart type
+    const expandedLabel = chartType === 'country' ? this.expandedCountryBar : this.expandedCategoryBar;
+
     container.innerHTML = sorted.map(([label, value]) => {
       const percentage = (value / total * 100).toFixed(1);
       const isUnknown = label === 'unknown';
+      const isExpanded = label === expandedLabel;
 
       // Calculate delta from baseline
       const baselineValue = baseline?.[label] || 0;
@@ -995,22 +1202,438 @@ class AllocationSimulator {
         deltaHtml = `<span class="delta-indicator ${deltaClass}">(${deltaSign}${deltaPercentage.toFixed(1)}%)</span>`;
       }
 
+      // Generate position details if expanded
+      const positionDetailsHtml = isExpanded ? this.renderPositionDetails(chartType, label, total) : '';
+
       return `
-        <div class="chart-bar-item" title="${label}: €${this.formatValue(value)} (${percentage}%)">
-          <div class="bar-label">${this.escapeHtml(label)}</div>
+        <div class="chart-bar-item ${isExpanded ? 'chart-bar-expanded' : ''}"
+             data-chart-type="${chartType}"
+             data-label="${this.escapeHtml(label)}"
+             title="${label}: €${this.formatValue(value)} (${percentage}%)">
+          <div class="bar-label">
+            <span class="bar-expand-icon">${isExpanded ? '▼' : '▶'}</span>
+            ${this.escapeHtml(label)}
+          </div>
           <div class="bar-track">
             <div class="bar-fill ${isUnknown ? 'bar-fill-unknown' : ''}"
                  style="width: ${percentage}%"></div>
           </div>
           <div class="bar-percentage">${percentage}% ${deltaHtml}</div>
         </div>
+        ${positionDetailsHtml}
       `;
     }).join('');
+
+    // Bind click events to chart bars
+    this.bindChartBarEvents(container, chartType);
+  }
+
+  // ============================================================================
+  // Chart Bar Click Handlers
+  // ============================================================================
+
+  bindChartBarEvents(container, chartType) {
+    const barItems = container.querySelectorAll('.chart-bar-item');
+    barItems.forEach(barItem => {
+      barItem.addEventListener('click', (e) => {
+        const label = barItem.dataset.label;
+        this.togglePositionDetails(chartType, label);
+      });
+    });
+  }
+
+  togglePositionDetails(chartType, label) {
+    if (chartType === 'country') {
+      // Toggle: if clicking same bar, collapse; otherwise expand new one
+      if (this.expandedCountryBar === label) {
+        this.expandedCountryBar = null;
+      } else {
+        this.expandedCountryBar = label;
+      }
+    } else if (chartType === 'category') {
+      if (this.expandedCategoryBar === label) {
+        this.expandedCategoryBar = null;
+      } else {
+        this.expandedCategoryBar = label;
+      }
+    }
+
+    // Re-render the chart to reflect expansion state
+    const combined = this.lastCombinedData || this.calculateCombinedAllocations();
+    if (chartType === 'country') {
+      this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
+    } else {
+      this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
+    }
+  }
+
+  /**
+   * Calculate the global total from all portfolios
+   * Used for global % calculation even when in portfolio scope
+   */
+  getGlobalTotal() {
+    // Sum up all portfolio values
+    const portfolioSum = this.portfolios.reduce((sum, p) => sum + (parseFloat(p.total_value) || 0), 0);
+    // Add simulated items (all of them, regardless of portfolio assignment)
+    const simulatedSum = this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+    return portfolioSum + simulatedSum;
+  }
+
+  renderPositionDetails(chartType, label, totalValue) {
+    // Get all positions (portfolio + simulated) that match the label
+    const positions = this.getPositionsForLabel(chartType, label);
+
+    if (positions.length === 0) {
+      return `
+        <div class="position-details-panel">
+          <div class="position-details-empty">No positions found</div>
+        </div>
+      `;
+    }
+
+    // Sort positions by value descending
+    positions.sort((a, b) => b.value - a.value);
+
+    // Calculate segment total for percentage within segment
+    const segmentTotal = positions.reduce((sum, p) => sum + p.value, 0);
+
+    // Calculate totals for multi-level percentages
+    const portfolioTotal = totalValue; // Combined total for current scope (portfolio + simulated)
+    const globalTotal = this.getGlobalTotal(); // All portfolios combined + all simulated
+
+    // Determine which columns to show based on scope
+    // Global scope: segment % + global % (portfolio % would be redundant)
+    // Portfolio scope: segment % + portfolio % + global %
+    const isGlobalScope = this.scope === 'global';
+
+    const positionRows = positions.map(pos => {
+      const percentOfSegment = segmentTotal > 0 ? ((pos.value / segmentTotal) * 100).toFixed(1) : '0.0';
+      const percentOfPortfolio = portfolioTotal > 0 ? ((pos.value / portfolioTotal) * 100).toFixed(1) : '0.0';
+      const percentOfGlobal = globalTotal > 0 ? ((pos.value / globalTotal) * 100).toFixed(1) : '0.0';
+
+      // Add visual distinction for simulated items
+      const isSimulated = pos.source === 'simulated';
+      const simulatedClass = isSimulated ? 'position-simulated' : '';
+      const simulatedBadge = isSimulated ? '<span class="simulated-badge">+ Simulated</span>' : '';
+      const tickerDisplay = isSimulated
+        ? `${simulatedBadge}`
+        : `${this.escapeHtml(pos.ticker || '—')}`;
+
+      if (isGlobalScope) {
+        // 2 columns: segment % (bold) + global % (smallest)
+        return `
+          <div class="position-detail-row position-detail-row-2col ${simulatedClass}">
+            <span class="position-detail-ticker">${tickerDisplay}</span>
+            <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
+            <span class="position-detail-value">€${this.formatValue(pos.value)}</span>
+            <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
+            <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
+          </div>
+        `;
+      } else {
+        // 3 columns: segment % (bold) + portfolio % (muted) + global % (smallest)
+        return `
+          <div class="position-detail-row position-detail-row-3col ${simulatedClass}">
+            <span class="position-detail-ticker">${tickerDisplay}</span>
+            <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
+            <span class="position-detail-value">€${this.formatValue(pos.value)}</span>
+            <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
+            <span class="position-detail-percent position-detail-percent-port">${percentOfPortfolio}%</span>
+            <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
+          </div>
+        `;
+      }
+    }).join('');
+
+    return `
+      <div class="position-details-panel">
+        <div class="position-details-header">
+          <span class="position-details-count">${positions.length} position${positions.length !== 1 ? 's' : ''}</span>
+          <span class="position-details-total">€${this.formatValue(segmentTotal)}</span>
+        </div>
+        <div class="position-details-list">
+          ${positionRows}
+        </div>
+      </div>
+    `;
+  }
+
+  getPositionsForLabel(chartType, label) {
+    const positions = [];
+    const normalizedLabel = label.toLowerCase().trim();
+
+    // Add portfolio positions
+    if (this.portfolioData && this.portfolioData.positions) {
+      this.portfolioData.positions.forEach(pos => {
+        const matchField = chartType === 'country' ? pos.country : pos.category;
+        const normalizedField = (matchField || 'unknown').toLowerCase().trim();
+
+        if (normalizedField === normalizedLabel) {
+          positions.push({
+            ticker: pos.ticker || pos.identifier || '—',
+            name: pos.name || '—',
+            value: pos.value || 0,
+            source: 'portfolio'
+          });
+        }
+      });
+    }
+
+    // Add simulated items (respecting portfolio scope)
+    this.items.forEach(item => {
+      // Skip items that don't match the selected portfolio (when in portfolio scope)
+      if (this.scope === 'portfolio' && this.portfolioId) {
+        if (item.portfolio_id !== this.portfolioId) {
+          return;
+        }
+      }
+
+      const matchField = chartType === 'country' ? item.country : item.category;
+      const normalizedField = (matchField === '—' || !matchField) ? 'unknown' : matchField.toLowerCase().trim();
+
+      if (normalizedField === normalizedLabel) {
+        positions.push({
+          ticker: item.ticker || '—',
+          name: item.name || '—',
+          value: parseFloat(item.value) || 0,
+          source: 'simulated'
+        });
+      }
+    });
+
+    return positions;
   }
 
   // ============================================================================
   // Utilities
   // ============================================================================
+
+  // ============================================================================
+  // Combobox Functionality
+  // ============================================================================
+
+  initCombobox(wrapper, input, type) {
+    if (!wrapper || !input) return;
+
+    const toggle = wrapper.querySelector('.combobox-toggle');
+    const dropdown = wrapper.querySelector('.combobox-dropdown');
+
+    // Toggle dropdown on button click
+    if (toggle) {
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.toggleComboboxDropdown(wrapper, type);
+      });
+    }
+
+    // Filter on input
+    input.addEventListener('input', () => {
+      this.populateComboboxDropdown(dropdown, type, input.value);
+      dropdown.classList.add('show');
+    });
+
+    // Show dropdown on focus
+    input.addEventListener('focus', () => {
+      this.populateComboboxDropdown(dropdown, type, input.value);
+      dropdown.classList.add('show');
+    });
+
+    // Hide dropdown on click outside
+    document.addEventListener('click', (e) => {
+      if (!wrapper.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+
+    // Handle keyboard navigation
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        dropdown.classList.remove('show');
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const firstOption = dropdown.querySelector('.combobox-option');
+        if (firstOption) firstOption.focus();
+      }
+    });
+
+    // Handle option selection via event delegation
+    dropdown.addEventListener('click', (e) => {
+      const option = e.target.closest('.combobox-option');
+      if (option) {
+        input.value = option.dataset.value;
+        dropdown.classList.remove('show');
+        input.focus();
+      }
+    });
+  }
+
+  toggleComboboxDropdown(wrapper, type) {
+    const dropdown = wrapper.querySelector('.combobox-dropdown');
+    const input = wrapper.querySelector('.combobox-input');
+    const isVisible = dropdown.classList.contains('show');
+
+    if (isVisible) {
+      dropdown.classList.remove('show');
+    } else {
+      this.populateComboboxDropdown(dropdown, type, input.value);
+      dropdown.classList.add('show');
+    }
+  }
+
+  populateComboboxDropdown(dropdown, type, filter = '') {
+    if (!this.portfolioData) {
+      dropdown.innerHTML = '<div class="combobox-empty">Loading portfolio data...</div>';
+      return;
+    }
+
+    const sourceData = type === 'category'
+      ? this.portfolioData.categories || []
+      : this.portfolioData.countries || [];
+
+    const totalValue = this.portfolioData.total_value || 0;
+    const filterLower = filter.toLowerCase().trim();
+
+    // Sort by value (largest first) and filter
+    const filtered = sourceData
+      .filter(item => {
+        if (!filterLower) return true;
+        return (item.name || '').toLowerCase().includes(filterLower);
+      })
+      .sort((a, b) => (b.value || 0) - (a.value || 0));
+
+    if (filtered.length === 0) {
+      dropdown.innerHTML = filterLower
+        ? `<div class="combobox-empty">No matches. Press Enter to add "${this.escapeHtml(filter)}"</div>`
+        : '<div class="combobox-empty">No existing data</div>';
+      return;
+    }
+
+    dropdown.innerHTML = filtered.map(item => {
+      const name = item.name || 'Unknown';
+      const value = item.value || 0;
+      const percent = totalValue > 0 ? ((value / totalValue) * 100).toFixed(1) : '0.0';
+
+      return `
+        <div class="combobox-option" data-value="${this.escapeHtml(name.toLowerCase())}" tabindex="-1">
+          <span class="combobox-option-name">${this.escapeHtml(name)}</span>
+          <span class="combobox-option-percent">${percent}%</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ============================================================================
+  // Percentage Mode Calculation
+  // ============================================================================
+
+  /**
+   * Get baseline value and total for an item based on its category/country
+   * Used for percentage target calculations
+   */
+  getBaselineForItem(item) {
+    const portfolioTotal = this.portfolioData?.total_value || 0;
+    let baselineValue = 0;
+
+    // Determine which baseline to use based on item source
+    if (item.source === 'category' && item.category && item.category !== '—') {
+      const normalizedCategory = item.category.toLowerCase();
+      const categoryData = (this.portfolioData?.categories || [])
+        .find(c => (c.name || '').toLowerCase() === normalizedCategory);
+      baselineValue = categoryData?.value || 0;
+    } else if (item.source === 'country' && item.country && item.country !== '—') {
+      const normalizedCountry = item.country.toLowerCase();
+      const countryData = (this.portfolioData?.countries || [])
+        .find(c => (c.name || '').toLowerCase() === normalizedCountry);
+      baselineValue = countryData?.value || 0;
+    } else if (item.source === 'ticker') {
+      // For ticker items, the baseline is the existing value in portfolio if exists
+      if (item.existsInPortfolio && item.portfolioData) {
+        baselineValue = item.portfolioData.value || 0;
+      }
+    }
+
+    return { baselineValue, baselineTotal: portfolioTotal };
+  }
+
+  /**
+   * Calculate the € amount needed to achieve a target percentage allocation
+   *
+   * Formula:
+   * Let X = amount to add
+   * (baseline + X) / (total + X) = targetPercent / 100
+   *
+   * Solving for X:
+   * baseline + X = (targetPercent / 100) * (total + X)
+   * baseline + X = (targetPercent / 100) * total + (targetPercent / 100) * X
+   * X - (targetPercent / 100) * X = (targetPercent / 100) * total - baseline
+   * X * (1 - targetPercent / 100) = (targetPercent / 100) * total - baseline
+   * X = ((targetPercent / 100) * total - baseline) / (1 - targetPercent / 100)
+   */
+  recalculatePercentageItem(item) {
+    if (item.valueMode !== 'percentage' || !item.targetPercent) {
+      return;
+    }
+
+    const targetPercent = item.targetPercent;
+    const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
+
+    // Edge cases
+    if (targetPercent >= 100) {
+      item.targetWarning = 'Target cannot be 100% or more';
+      item.value = 0;
+      return;
+    }
+
+    if (targetPercent <= 0) {
+      item.targetWarning = null;
+      item.value = 0;
+      return;
+    }
+
+    // Current percentage (before adding anything)
+    const currentPercent = baselineTotal > 0 ? (baselineValue / baselineTotal) * 100 : 0;
+
+    if (targetPercent <= currentPercent && baselineValue > 0) {
+      item.targetWarning = `Already at ${currentPercent.toFixed(1)}%, can't add to reach ${targetPercent}%`;
+      item.value = 0;
+      return;
+    }
+
+    // Calculate required addition
+    const targetFraction = targetPercent / 100;
+    const numerator = (targetFraction * baselineTotal) - baselineValue;
+    const denominator = 1 - targetFraction;
+
+    if (denominator <= 0) {
+      item.targetWarning = 'Invalid target percentage';
+      item.value = 0;
+      return;
+    }
+
+    const requiredAddition = numerator / denominator;
+
+    if (requiredAddition < 0) {
+      item.targetWarning = `Would need to remove €${this.formatValue(Math.abs(requiredAddition))}`;
+      item.value = 0;
+      return;
+    }
+
+    item.targetWarning = null;
+    item.value = Math.round(requiredAddition * 100) / 100;
+  }
+
+  /**
+   * Recalculate all percentage-based items
+   * Called when portfolio baseline changes
+   */
+  recalculateAllPercentageItems() {
+    this.items.forEach(item => {
+      if (item.valueMode === 'percentage') {
+        this.recalculatePercentageItem(item);
+      }
+    });
+  }
 
   formatValue(value) {
     const num = parseFloat(value) || 0;

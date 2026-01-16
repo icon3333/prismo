@@ -649,7 +649,7 @@ class AllocationSimulator {
           name: data.name,
           existsInPortfolio: data.existsInPortfolio || false,
           portfolioData: data.portfolioData || null,
-          portfolio_id: null
+          portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
         });
         input.value = '';
 
@@ -691,7 +691,7 @@ class AllocationSimulator {
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
       source: 'category',
-      portfolio_id: null
+      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
     input.value = '';
 
@@ -722,7 +722,7 @@ class AllocationSimulator {
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
       source: 'country',
-      portfolio_id: null
+      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
     input.value = '';
 

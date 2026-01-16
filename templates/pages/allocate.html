@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Portfolio Allocation{% endblock %}
+{% block title %}Simulator{% endblock %}
 
 {% block head_extras %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/allocate.css') }}?v={{ range(1000, 9999) | random }}">
@@ -8,9 +8,10 @@
 
 {% block content %}
 <div class="container">
-  <h1 class="page-title">Portfolio Allocation</h1>
+  <!-- Rebalancer Section -->
+  <h2 class="section-title">Rebalancer</h2>
 
-  <!-- Tab Navigation -->
+  <!-- Tab Navigation for Rebalancer -->
   <div class="header-content">
     <div class="tabs">
       <ul class="nav-tabs" id="allocationTabs" role="tablist">
@@ -29,30 +30,24 @@
   </div>
 
   <!-- Tab Content -->
-  <!-- Note: inline style overrides ocean-depth.css .tab-content { display: none } -->
   <div class="tab-content" id="allocationTabsContent" style="display: block;">
     <!-- Global Overview Tab -->
-    <!-- Note: inline style ensures visibility even if JS fails to load -->
     <div class="tab-pane active" id="global" role="tabpanel" style="display: block;">
-      <h2 class="section-title">Investment Settings</h2>
-      <!-- Investment Input in Global Overview -->
-      <div class="card">
-        <div class="field">
-          <label class="label">Rebalancing Mode</label>
-          <div class="control">
-            <label class="radio">
-              <input type="radio" name="rebalance-mode" value="existing-only" checked>
-              Rebalance Existing Capital
-            </label>
-            <label class="radio">
-              <input type="radio" name="rebalance-mode" value="new-only">
-              New Capital only (no sales)
-            </label>
-            <label class="radio">
-              <input type="radio" name="rebalance-mode" value="new-with-sells">
-              New Capital (with sales)
-            </label>
-          </div>
+      <!-- Rebalancing Mode -->
+      <div class="rebalancing-controls">
+        <div class="control">
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="existing-only" checked>
+            Rebalance Existing Capital
+          </label>
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="new-only">
+            New Capital only (no sales)
+          </label>
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="new-with-sells">
+            New Capital (with sales)
+          </label>
         </div>
         <div class="investment-input" id="investment-input-container">
           <label class="label">Investment Amount:</label>
@@ -63,132 +58,12 @@
         </div>
       </div>
 
-      <h2 class="section-title">Portfolio Allocations</h2>
+      <!-- Portfolio Table -->
       <div class="card">
         <div id="portfolio-table-container">
-          <!-- Table will be rendered here -->
           <div class="has-text-centered">
             <div class="spinner-border" role="status">
               <span class="is-sr-only">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Allocation Simulator -->
-      <div class="card mt-4" id="allocation-simulator-card">
-        <div class="card-header" style="cursor: pointer;" onclick="toggleAllocationSimulator()">
-          <h3 class="card-header-title">
-            <i class="fas fa-sliders-h mr-2"></i>
-            Allocation Simulator
-          </h3>
-          <button class="card-header-icon" aria-label="expand">
-            <span class="icon">
-              <i class="fas fa-angle-down" id="allocation-simulator-arrow"></i>
-            </span>
-          </button>
-        </div>
-        <div class="card-content" id="allocation-simulator-content" style="display: none;">
-          <div class="content">
-            <!-- Simulator Header -->
-            <div class="simulator-header">
-              <div class="simulator-header-left">
-                <span class="available-to-invest-label">Available to Invest:</span>
-                <span class="available-to-invest-value" id="available-to-invest-display">€0</span>
-              </div>
-              <div class="simulator-header-right">
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-simulator-btn">
-                  <i class="fas fa-undo me-1"></i>Reset
-                </button>
-              </div>
-            </div>
-
-            <!-- Two-Column Slider Layout -->
-            <div class="simulator-panels">
-              <!-- Left Panel: Country Sliders (Primary) -->
-              <div class="simulator-panel simulator-panel-primary" id="country-panel">
-                <div class="panel-header">
-                  <h4 class="panel-title">
-                    <i class="fas fa-globe me-1"></i>Allocate by Country
-                  </h4>
-                  <span class="panel-subtitle">(drag sliders to allocate)</span>
-                </div>
-                <div class="slider-list" id="country-sliders">
-                  <!-- Country sliders will be rendered here by JS -->
-                  <div class="has-text-centered">
-                    <div class="spinner-border" role="status">
-                      <span class="is-sr-only">Loading...</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="panel-footer">
-                  <span class="panel-total-label">Total Allocated:</span>
-                  <span class="panel-total-value" id="country-total-display">€0 / €0</span>
-                </div>
-              </div>
-
-              <!-- Right Panel: Category Allocation -->
-              <div class="simulator-panel simulator-panel-primary" id="category-panel">
-                <div class="panel-header">
-                  <h4 class="panel-title">
-                    <i class="fas fa-tags me-1"></i>Allocate by Category
-                  </h4>
-                  <span class="panel-subtitle">(drag sliders to allocate)</span>
-                </div>
-                <div class="slider-list" id="category-sliders">
-                  <!-- Category bars will be rendered here by JS -->
-                  <div class="has-text-centered">
-                    <div class="spinner-border" role="status">
-                      <span class="is-sr-only">Loading...</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="panel-footer">
-                  <span class="panel-total-label">Total:</span>
-                  <span class="panel-total-value" id="category-total-display">€0 / €0</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Allocation Matrix -->
-            <div class="allocation-matrix-card" id="allocation-matrix-card">
-              <div class="matrix-header" style="cursor: pointer;" onclick="toggleAllocationMatrix()">
-                <h4 class="matrix-title">
-                  <i class="fas fa-th me-1"></i>Allocation Matrix
-                </h4>
-                <span class="matrix-subtitle">Where your money flows</span>
-                <button class="matrix-toggle-icon" aria-label="expand">
-                  <i class="fas fa-angle-down" id="allocation-matrix-arrow"></i>
-                </button>
-              </div>
-              <div class="matrix-content" id="allocation-matrix-content" style="display: none;">
-                <div id="allocation-matrix">
-                  <!-- Matrix will be rendered here by JS -->
-                  <div class="has-text-centered">
-                    <div class="spinner-border" role="status">
-                      <span class="is-sr-only">Loading...</span>
-                    </div>
-                  </div>
-                </div>
-                <div class="matrix-footer">
-                  <i class="fas fa-info-circle me-1"></i>
-                  Hover over cells to see positions at each intersection
-                </div>
-              </div>
-            </div>
-
-            <!-- Constraint Warnings -->
-            <div class="constraint-warnings" id="constraint-warnings" style="display: none;">
-              <div class="warnings-header">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>Constraint Warnings</span>
-              </div>
-              <div class="warnings-content" id="warnings-content">
-                <!-- Warnings will be rendered here by JS -->
-              </div>
-              <div class="warnings-footer">
-                These allocations violate your rules. Adjust sliders or update your limits in Allocation Builder.
-              </div>
             </div>
           </div>
         </div>
@@ -203,14 +78,12 @@
 
     <!-- Detailed Overview Tab -->
     <div class="tab-pane" id="detailed" role="tabpanel">
-      <h2 class="section-title">Portfolio Details</h2>
       <!-- Portfolio Selection Dropdown -->
       <div class="card">
         <div class="portfolio-select">
           <label class="label">Select Portfolio:</label>
           <div class="select is-fullwidth">
             <select class="form-select" id="portfolio-select">
-              <!-- Options will be populated dynamically -->
               <option value="">Select a portfolio</option>
             </select>
           </div>
@@ -238,9 +111,67 @@
       </div>
     </div>
   </div>
+
+  <!-- Simulator Section -->
+  <div class="section-header-collapsible" onclick="toggleAllocationSimulator()" style="cursor: pointer;">
+    <h2 class="section-title" style="margin-bottom: 0;">
+      Simulator
+      <span class="simulator-badge">Sandbox</span>
+    </h2>
+    <i class="fas fa-chevron-down section-collapse-icon" id="allocation-simulator-arrow"></i>
+  </div>
+  <div class="card" id="allocation-simulator-card" style="display: none; padding: var(--space-md);">
+    <div id="allocation-simulator-content">
+      <!-- Simulator will be rendered here by JS -->
+      <div id="allocation-simulator-container">
+        <div class="has-text-centered">
+          <div class="spinner-border" role="status">
+            <span class="is-sr-only">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/allocate.js') }}?v={{ range(1000, 9999) | random }}"></script>
+<script src="{{ url_for('static', filename='js/simulator.js') }}?v={{ range(1000, 9999) | random }}"></script>
+<script>
+  // Initialize Allocation Simulator when section is expanded
+  (function() {
+    let simulatorInstance = null;
+
+    function setupToggle() {
+      window.toggleAllocationSimulator = function() {
+        const card = document.getElementById('allocation-simulator-card');
+        const arrow = document.getElementById('allocation-simulator-arrow');
+
+        if (!card || !arrow) return;
+
+        const isHidden = card.style.display === 'none';
+
+        if (isHidden) {
+          card.style.display = 'block';
+          arrow.classList.add('expanded');
+          // Initialize simulator on first expand
+          if (!simulatorInstance) {
+            simulatorInstance = new AllocationSimulator('allocation-simulator-container');
+          }
+        } else {
+          card.style.display = 'none';
+          arrow.classList.remove('expanded');
+        }
+      };
+    }
+
+    // Run after DOMContentLoaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupToggle);
+    } else {
+      setupToggle();
+    }
+  })();
+</script>
 {% endblock %}

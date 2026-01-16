@@ -1792,7 +1792,7 @@ document.addEventListener('DOMContentLoaded', function () {
             chartContainer.innerHTML = `
                 <div class="notification is-info">
                     <i class="fas fa-info-circle mr-2"></i>
-                    No country capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
+                    No country capacity data available. Please ensure you have budget settings configured in the Builder.
                 </div>
             `;
         }
@@ -2091,7 +2091,7 @@ document.addEventListener('DOMContentLoaded', function () {
             chartContainer.innerHTML = `
                 <div class="notification is-info">
                     <i class="fas fa-info-circle mr-2"></i>
-                    No category capacity data available. Please ensure you have budget settings configured in the Allocation Builder.
+                    No category capacity data available. Please ensure you have budget settings configured in the Builder.
                 </div>
             `;
         }
@@ -2129,29 +2129,9 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // Toggle Allocation Simulator expander
-    window.toggleAllocationSimulator = function() {
-        const content = document.getElementById('allocation-simulator-content');
-        const arrow = document.getElementById('allocation-simulator-arrow');
-
-        if (!content || !arrow) return;
-
-        simulatorExpanded = !simulatorExpanded;
-
-        if (simulatorExpanded) {
-            content.style.display = 'block';
-            arrow.classList.remove('fa-angle-down');
-            arrow.classList.add('fa-angle-up');
-
-            // Load data when expanded for the first time
-            if (!simulatorData) {
-                fetchSimulatorData();
-            }
-        } else {
-            content.style.display = 'none';
-            arrow.classList.remove('fa-angle-up');
-            arrow.classList.add('fa-angle-down');
-        }
-    };
+    // NOTE: This function is now defined in allocate.html inline script
+    // The new AllocationSimulator class replaces the old slider-based implementation
+    // DO NOT define window.toggleAllocationSimulator here - it's defined after DOMContentLoaded
 
     // Fetch simulator data from API
     async function fetchSimulatorData() {

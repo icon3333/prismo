@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% from "components/enrich_components.html" import head_extras, page_header, upload_section, portfolio_management,
+{% from "components/enrich_components.html" import head_extras, upload_section, portfolio_management,
 portfolio_data_section %}
 
 {% block title %}Enrich Portfolio Data - Portfolio Rebalancer{% endblock %}
@@ -12,8 +12,6 @@ portfolio_data_section %}
 
 {% block content %}
 <div class="enrich-page">
-{{ page_header() }}
-
 <!-- Upload and Management Section -->
 <h2 class="section-title">Data Management</h2>
 <div class="columns">

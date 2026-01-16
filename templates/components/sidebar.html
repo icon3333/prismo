@@ -63,15 +63,15 @@
                    class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.build' }}"
                    style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.build' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
                     <i class="fas fa-cubes me-3" style="width: 20px; color: var(--teal-400);"></i>
-                    <span>Allocation Builder</span>
+                    <span>Builder</span>
                 </a>
             </li>
             <li class="nav-item">
                 <a href="{{ url_for('portfolio.allocate') }}"
                    class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.allocate' }}"
                    style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.allocate' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
-                    <i class="fas fa-balance-scale me-3" style="width: 20px; color: var(--coral-400);"></i>
-                    <span>Capital Allocation</span>
+                    <i class="fas fa-flask me-3" style="width: 20px; color: var(--coral-400);"></i>
+                    <span>Simulator</span>
                 </a>
             </li>
         </ul>

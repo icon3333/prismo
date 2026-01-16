@@ -8,6 +8,23 @@ A Flask web application for **Parqet portfolio management** - helping users reba
 
 **Key Philosophy**: 80/20 rule - deliver 80% of the impact with 20% of the effort. Simple, modular, elegant, efficient, and robust.
 
+## Design System
+
+**IMPORTANT**: All UI work must follow the design system documented in [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md).
+
+This document defines:
+- **Ocean Depth** color palette (dark mode primary)
+- Typography, spacing (8px grid), and border radius standards
+- Component patterns: tables, forms, modals, sliders, badges, alerts
+- State patterns: error, success, hover states
+- Implementation checklist and CSS variable quick reference
+
+**Key design principles**:
+- No box shadows - depth through layered backgrounds (#020617 → #0F172A → #1E293B)
+- Primary accent: Aqua (#06B6D4)
+- Danger/error: Coral (#EF4444)
+- Always use CSS variables, never hardcoded colors
+
 ## Running the Application
 
 ### Development

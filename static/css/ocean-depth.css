@@ -59,6 +59,10 @@
   --danger: var(--error);  /* Alias for error */
   --info: var(--aqua-500);
 
+  /* Primary Accent Colors */
+  --primary: var(--aqua-500);        /* #06B6D4 - Main accent color */
+  --primary-hover: var(--aqua-400);  /* #22D3EE - Hover state */
+
   /* Background & Surfaces */
   --bg-primary: var(--pearl-50);
   --bg-secondary: var(--white);
@@ -68,6 +72,7 @@
   --text-primary: var(--ocean-900);
   --text-secondary: var(--ocean-700);
   --text-tertiary: var(--ocean-600);
+  --text-muted: var(--ocean-500);    /* #64748B - Muted/helper text */
   --text-inverse: var(--white);
 
   /* Border & Dividers */
@@ -189,6 +194,7 @@
   --text-primary: var(--pearl-50);
   --text-secondary: var(--pearl-100);
   --text-tertiary: var(--pearl-100);
+  --text-muted: var(--ocean-500);    /* #64748B - Muted/helper text (same for dark) */
   --text-inverse: var(--ocean-900);
 
   --border-subtle: rgba(255, 255, 255, 0.08);
@@ -368,6 +374,39 @@ p {
   color: var(--text-primary);
   margin-bottom: var(--space-lg);
   letter-spacing: -0.01em;
+}
+
+/* Page Header - Card-style page header with icon */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.page-header-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.page-header-title i {
+  color: var(--primary);
+  font-size: 1.25rem;
+}
+
+/* First section title after page-header shouldn't have top margin */
+.page-header + .section-title,
+.page-header + div .section-title:first-of-type {
+  margin-top: 0;
 }
 
 /* Section Title - Section headers within pages */

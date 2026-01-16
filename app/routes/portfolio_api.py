@@ -6,7 +6,7 @@ from app.decorators import require_auth
 from app.utils.db_utils import (
     load_portfolio_data, process_portfolio_dataframe, update_price_in_db, update_batch_prices_in_db
 )
-from app.utils.yfinance_utils import get_isin_data
+from app.utils.yfinance_utils import get_isin_data, get_yfinance_info
 from app.utils.batch_processing import start_batch_process, get_job_status, start_csv_processing_job, cancel_background_job
 from app.utils.portfolio_utils import (
     get_portfolio_data, process_csv_data, has_companies_in_default, get_stock_info
@@ -1096,7 +1096,7 @@ def get_effective_capacity_data():
     API endpoint for the Allocation Simulator.
 
     Returns all data needed for the interactive two-panel slider simulator:
-    - availableToInvest: Cash available to allocate (from Allocation Builder)
+    - availableToInvest: Cash available to allocate (from Builder)
     - All countries with positions and current values
     - All categories with current values
     - Rules (maxPerCountry, maxPerCategory)
@@ -1122,7 +1122,7 @@ def get_effective_capacity_data():
 
         # Parse budget and rules data
         total_investable_capital = 0
-        available_to_invest = 0  # NEW: Cash available from Allocation Builder
+        available_to_invest = 0  # NEW: Cash available from Builder
         max_per_country = 10  # Default value
         max_per_category = 25  # Default value
 
@@ -2250,3 +2250,68 @@ def get_investment_type_distribution():
     except Exception as e:
         logger.exception(f"Unexpected error getting investment type distribution")
         return error_response('Failed to get investment type distribution', 500)
+
+
+# ============================================================================
+# Allocation Simulator API
+# ============================================================================
+
+@require_auth
+def simulator_ticker_lookup():
+    """
+    Lookup ticker information from yfinance for the allocation simulator.
+
+    POST /portfolio/api/simulator/ticker-lookup
+    Body: { "ticker": "AAPL" }
+
+    Returns:
+        - ticker: The ticker symbol
+        - category: Sector/industry (e.g., "Technology")
+        - country: Country of origin (e.g., "United States")
+        - name: Company name (e.g., "Apple Inc.")
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return validation_error_response('Request body is required')
+
+        ticker = data.get('ticker', '').strip().upper()
+        if not ticker:
+            return validation_error_response('Ticker symbol is required')
+
+        logger.info(f"Simulator ticker lookup for: {ticker}")
+
+        # Fetch info from yfinance (uses 15-minute cache)
+        info = get_yfinance_info(ticker)
+
+        if not info or 'error' in info:
+            logger.warning(f"Ticker not found or error: {ticker}")
+            return not_found_response(f"Ticker '{ticker}' not found or no data available")
+
+        # Check if we got meaningful data (not just an empty dict)
+        if not info.get('shortName') and not info.get('longName'):
+            logger.warning(f"No name data for ticker: {ticker}")
+            return not_found_response(f"Ticker '{ticker}' not found or no data available")
+
+        # Extract relevant fields
+        # Category: prefer sector, fall back to industry, then quoteType
+        category = info.get('sector') or info.get('industry') or info.get('quoteType', '—')
+
+        # Country: direct field from yfinance
+        country = info.get('country', '—')
+
+        # Name: prefer shortName for cleaner display
+        name = info.get('shortName') or info.get('longName', ticker)
+
+        logger.info(f"Ticker lookup success: {ticker} -> {category}, {country}")
+
+        return success_response({
+            'ticker': ticker,
+            'category': category if category else '—',
+            'country': country if country else '—',
+            'name': name
+        })
+
+    except Exception as e:
+        logger.exception(f"Error in simulator ticker lookup")
+        return error_response('Failed to fetch ticker data', 500)

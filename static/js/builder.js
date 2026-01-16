@@ -1,4 +1,4 @@
-// Allocation Builder JavaScript - Improved Version with Position Selection
+// Builder JavaScript - Improved Version with Position Selection
 
 // Debug mode - set to true for development, false for production
 const DEBUG_BUILDER = false;

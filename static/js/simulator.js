@@ -22,9 +22,21 @@ class AllocationSimulator {
     this.countryChart = null;
     this.categoryChart = null;
 
+    // Debounced chart update for real-time feedback
+    this.debouncedChartUpdate = this.debounce(() => this.updateCharts(), 300);
+
     // Initialize
     this.render();
     this.bindEvents();
+  }
+
+  // Debounce utility - delays execution until pause in calls
+  debounce(fn, delay) {
+    let timeoutId;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn.apply(this, args), delay);
+    };
   }
 
   // ============================================================================
@@ -154,6 +166,7 @@ class AllocationSimulator {
     this.tableBody.addEventListener('click', (e) => this.handleTableClick(e));
     this.tableBody.addEventListener('blur', (e) => this.handleTableBlur(e), true);
     this.tableBody.addEventListener('keydown', (e) => this.handleTableKeydown(e));
+    this.tableBody.addEventListener('input', (e) => this.handleTableInput(e));
   }
 
   // ============================================================================
@@ -196,6 +209,7 @@ class AllocationSimulator {
           name: data.name
         });
         input.value = '';
+        this.showToast(`Added ${data.ticker} (${data.name})`, 'success');
       } else {
         this.showToast(result.error || 'Ticker not found', 'danger');
       }
@@ -380,6 +394,23 @@ class AllocationSimulator {
     }
   }
 
+  handleTableInput(e) {
+    // Real-time chart updates with debounce (only for value inputs)
+    if (e.target.classList.contains('value-input')) {
+      const row = e.target.closest('tr');
+      if (!row) return;
+
+      const id = row.dataset.id;
+      const item = this.items.find(i => i.id === id);
+      if (item) {
+        // Temporarily update value for chart preview
+        const newValue = this.parseValue(e.target.value);
+        item.value = newValue;
+        this.debouncedChartUpdate();
+      }
+    }
+  }
+
   saveCell(input) {
     const row = input.closest('tr');
     if (!row) return;
@@ -471,7 +502,9 @@ class AllocationSimulator {
 
   formatValue(value) {
     const num = parseFloat(value) || 0;
-    return num.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    // Round to 2 decimal places for consistency with parser
+    const rounded = Math.round(num * 100) / 100;
+    return rounded.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
   }
 
   parseValue(str) {
@@ -479,7 +512,11 @@ class AllocationSimulator {
     // Remove currency symbols, spaces, and handle European format (1.000,50 -> 1000.50)
     const cleaned = str.replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.');
     const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : Math.max(0, num);
+    if (isNaN(num)) return 0;
+    // Clamp to valid range: 0 to 999,999,999 (reasonable portfolio limit)
+    const clamped = Math.min(Math.max(0, num), 999999999);
+    // Round to 2 decimal places for consistency
+    return Math.round(clamped * 100) / 100;
   }
 
   escapeHtml(str) {
@@ -493,8 +530,14 @@ class AllocationSimulator {
     // Create toast element
     const toast = document.createElement('div');
     toast.className = `simulator-toast simulator-toast-${type}`;
+    const iconMap = {
+      danger: 'exclamation-circle',
+      warning: 'exclamation-triangle',
+      success: 'check-circle',
+      info: 'info-circle'
+    };
     toast.innerHTML = `
-      <i class="fas fa-${type === 'danger' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
+      <i class="fas fa-${iconMap[type] || 'info-circle'}"></i>
       <span>${message}</span>
     `;
 

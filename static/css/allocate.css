@@ -2066,6 +2066,14 @@
   color: var(--warning);
 }
 
+.simulator-toast-success {
+  border-color: var(--success);
+}
+
+.simulator-toast-success i {
+  color: var(--success);
+}
+
 /* Responsive */
 @media (max-width: 992px) {
   .simulator-input-forms {

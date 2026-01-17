@@ -7,7 +7,11 @@ Philosophy: Single source of truth for data access, optimized queries.
 
 from typing import List, Dict, Optional
 from app.db_manager import query_db, execute_db, get_db
+from app.cache import cache
 import logging
+
+# Cache timeout for portfolio summary (5 minutes)
+CACHE_TIMEOUT_PORTFOLIO_SUMMARY = 300
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +88,28 @@ class PortfolioRepository:
 
         results = query_db(query, [company_id, account_id])
         return results[0] if results else None
+
+    @staticmethod
+    def company_exists(company_id: int, account_id: int) -> bool:
+        """
+        Lightweight check if company exists and belongs to account.
+
+        More efficient than get_holding_by_id() when you only need
+        to verify existence/ownership without fetching all data.
+
+        Args:
+            company_id: Company ID
+            account_id: Account ID (for security)
+
+        Returns:
+            True if company exists and belongs to account
+        """
+        result = query_db(
+            'SELECT 1 FROM companies WHERE id = ? AND account_id = ? LIMIT 1',
+            [company_id, account_id],
+            one=True
+        )
+        return result is not None
 
     @staticmethod
     def create_holding(
@@ -230,9 +256,12 @@ class PortfolioRepository:
         return query_db(query, [portfolio_id, account_id])
 
     @staticmethod
+    @cache.memoize(timeout=CACHE_TIMEOUT_PORTFOLIO_SUMMARY)
     def get_portfolio_summary(account_id: int) -> List[Dict]:
         """
         Get portfolio summary with aggregated values.
+
+        Cached for 5 minutes to reduce database load on frequently accessed data.
 
         Args:
             account_id: Account ID
@@ -303,9 +332,8 @@ class PortfolioRepository:
         Returns:
             True if successful
         """
-        # Verify company belongs to account
-        company = PortfolioRepository.get_holding_by_id(company_id, account_id)
-        if not company:
+        # Verify company belongs to account (lightweight check)
+        if not PortfolioRepository.company_exists(company_id, account_id):
             return False
 
         # Check if shares record exists

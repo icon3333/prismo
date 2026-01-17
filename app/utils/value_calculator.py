@@ -95,7 +95,8 @@ def calculate_item_value(item: Dict[str, Any]) -> Decimal:
               - price (float/Decimal/None): Native currency price
               - currency (str/None): Currency code (e.g., 'USD', 'GBP')
               - price_eur (float/Decimal/None): Legacy EUR price (fallback)
-              - effective_shares (float/Decimal/None): Number of shares
+              - effective_shares or shares (float/Decimal/None): Number of shares
+                (effective_shares takes priority if both present)
 
     Returns:
         Decimal: Total value in EUR
@@ -125,7 +126,9 @@ def calculate_item_value(item: Dict[str, Any]) -> Decimal:
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return Decimal(str(item.get('custom_total_value', 0)))
 
-    shares = Decimal(str(item.get('effective_shares', 0) or 0))
+    # Support both 'effective_shares' (allocation context) and 'shares' (repository context)
+    shares_value = item.get('effective_shares') or item.get('shares') or 0
+    shares = Decimal(str(shares_value or 0))
 
     # Priority 2: Native currency conversion (price * exchange_rate * shares)
     native_price = item.get('price')

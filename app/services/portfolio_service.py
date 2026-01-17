@@ -56,9 +56,7 @@ class PortfolioService:
 
         for holding in holdings:
             category = holding.get('category', 'Unknown')
-            shares = Decimal(str(holding.get('shares', 0)))
-            price = Decimal(str(holding.get('price_eur', 0)))
-            value = shares * price
+            value = calculate_item_value(holding)
 
             category_values[category] = category_values.get(category, Decimal('0')) + value
 
@@ -91,9 +89,7 @@ class PortfolioService:
 
         for holding in holdings:
             country = holding.get('country', 'Unknown')
-            shares = Decimal(str(holding.get('shares', 0)))
-            price = Decimal(str(holding.get('price_eur', 0)))
-            value = shares * price
+            value = calculate_item_value(holding)
 
             country_values[country] = country_values.get(country, Decimal('0')) + value
 

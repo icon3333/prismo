@@ -231,31 +231,28 @@ class ExchangeRateRepository:
         Returns:
             True if refresh is needed
         """
-        # Check if any rates exist
+        # Single query: check both existence and staleness
         result = query_db(
-            'SELECT COUNT(*) as count FROM exchange_rates WHERE to_currency = ?',
-            ['EUR'],
-            one=True
-        )
-
-        if not result or result['count'] == 0:
-            logger.info("No exchange rates in database - refresh needed")
-            return True
-
-        # Check for stale rates
-        stale_result = query_db(
             '''
-            SELECT COUNT(*) as count
+            SELECT
+                COUNT(*) as total_count,
+                SUM(CASE
+                    WHEN datetime(last_updated) < datetime('now', '-' || ? || ' hours')
+                    THEN 1 ELSE 0
+                END) as stale_count
             FROM exchange_rates
             WHERE to_currency = 'EUR'
-            AND datetime(last_updated) < datetime('now', '-' || ? || ' hours')
             ''',
             [hours],
             one=True
         )
 
-        if stale_result and stale_result['count'] > 0:
-            logger.info(f"Found {stale_result['count']} stale exchange rates - refresh needed")
+        if not result or result['total_count'] == 0:
+            logger.info("No exchange rates in database - refresh needed")
+            return True
+
+        if result['stale_count'] and result['stale_count'] > 0:
+            logger.info(f"Found {result['stale_count']} stale exchange rates - refresh needed")
             return True
 
         return False

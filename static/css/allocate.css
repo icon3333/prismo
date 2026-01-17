@@ -123,6 +123,26 @@
   padding: var(--space-sm) 2.5rem var(--space-sm) var(--space-md);
   font-size: 0.9375rem;
   line-height: 1.5;
+  /* Fix dotted pattern issue - reset Bootstrap's native select styling */
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  /* Use simple chevron icon instead of Bootstrap's dotted pattern */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.portfolio-select .form-select:focus,
+.portfolio-select select:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
 }
 
 /* Expand/Collapse Buttons */
@@ -2441,6 +2461,231 @@
   outline: none;
   border-color: var(--primary);
   background: var(--bg-secondary);
+}
+
+/* ===================================================================
+   DARK THEME OVERRIDES FOR BOOTSTRAP TABLE CLASSES
+   Override Bootstrap's hardcoded light backgrounds for Ocean Depth theme
+   Must override Bootstrap's CSS variables for colored table rows
+   =================================================================== */
+
+/* Override Bootstrap CSS variables for table-warning */
+.table-warning,
+tr.table-warning,
+.table > :not(caption) > * > .table-warning {
+  --bs-table-bg: rgba(249, 115, 22, 0.15);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: rgba(249, 115, 22, 0.18);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: rgba(249, 115, 22, 0.25);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Override Bootstrap CSS variables for table-secondary */
+.table-secondary,
+tr.table-secondary,
+.table > :not(caption) > * > .table-secondary {
+  --bs-table-bg: var(--bg-tertiary);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: var(--bg-tertiary);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: var(--primary-light);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Override Bootstrap CSS variables for table-primary */
+.table-primary,
+tr.table-primary,
+.table > :not(caption) > * > .table-primary {
+  --bs-table-bg: rgba(6, 182, 212, 0.15);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--primary);
+  --bs-table-striped-bg: rgba(6, 182, 212, 0.18);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: rgba(6, 182, 212, 0.25);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* Category rows (table-secondary) - subtle dark background */
+.table-secondary td,
+.table-secondary th,
+tr.table-secondary td,
+tr.table-secondary th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.table-secondary:hover,
+tr.table-secondary:hover {
+  background-color: var(--primary-light) !important;
+}
+
+/* Missing positions row (table-warning) - muted warning style for dark theme */
+.table-warning td,
+.table-warning th,
+tr.table-warning td,
+tr.table-warning th {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.table-warning:hover,
+tr.table-warning:hover {
+  background-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+/* Portfolio total row (table-primary) - accent color for dark theme */
+.table-primary td,
+.table-primary th,
+tr.table-primary td,
+tr.table-primary th {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.table-primary:hover,
+tr.table-primary:hover {
+  background-color: rgba(6, 182, 212, 0.25) !important;
+}
+
+/* Ensure table headers in these rows still look good */
+.table-secondary th,
+.table-warning th,
+.table-primary th,
+tr.table-secondary th,
+tr.table-warning th,
+tr.table-primary th {
+  font-weight: 600;
+}
+
+/* Detailed view table specific fixes */
+#detailed-portfolio-container .table {
+  background-color: transparent;
+}
+
+#detailed-portfolio-container .table th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-default);
+}
+
+#detailed-portfolio-container .table td {
+  background-color: transparent;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+#detailed-portfolio-container .table tbody tr:hover {
+  background-color: var(--primary-light);
+}
+
+/* Position rows within categories */
+#detailed-portfolio-container .position-row {
+  background-color: var(--bg-secondary) !important;
+}
+
+#detailed-portfolio-container .position-row:hover {
+  background-color: var(--primary-light) !important;
+}
+
+/* Info alert styling for dark theme */
+#detailed-portfolio-container .alert-info {
+  background-color: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: var(--text-primary);
+}
+
+#detailed-portfolio-container .alert-warning {
+  background-color: rgba(249, 115, 22, 0.1);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: var(--text-primary);
+}
+
+/* ===================================================================
+   GLOBAL OVERVIEW TABLE (unified-table) DARK THEME FIXES
+   More specific selectors for the striped/hover table in Global Overview
+   =================================================================== */
+
+/* Base table styling for unified-table */
+.unified-table,
+.unified-table tbody,
+.unified-table tbody tr {
+  background-color: var(--bg-secondary) !important;
+}
+
+.unified-table thead th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 2px solid var(--border-default) !important;
+}
+
+.unified-table tbody td {
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Striped rows - alternate with subtle background difference */
+.unified-table.table-striped tbody tr:nth-child(odd) {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.unified-table.table-striped tbody tr:nth-child(even) {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Hover states */
+.unified-table.table-hover tbody tr:hover {
+  background-color: var(--primary-light) !important;
+}
+
+/* Warning rows in unified-table (position deficit warning) */
+.unified-table tbody tr.table-warning,
+.unified-table tbody tr.table-warning td,
+.unified-table.table-striped tbody tr.table-warning,
+.unified-table.table-striped tbody tr.table-warning:nth-child(odd),
+.unified-table.table-striped tbody tr.table-warning:nth-child(even) {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
+.unified-table tbody tr.table-warning:hover,
+.unified-table.table-striped tbody tr.table-warning:hover {
+  background-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+/* Total row in unified-table */
+.unified-table tbody tr.total-row,
+.unified-table tbody tr.total-row td,
+.unified-table.table-striped tbody tr.total-row,
+.unified-table.table-striped tbody tr.total-row:nth-child(odd),
+.unified-table.table-striped tbody tr.total-row:nth-child(even) {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.unified-table tbody tr.total-row td {
+  border-top: 2px solid var(--primary) !important;
+}
+
+.unified-table tbody tr.total-row:hover,
+.unified-table.table-striped tbody tr.total-row:hover {
+  background-color: rgba(6, 182, 212, 0.25) !important;
 }
 
 /* ===================================================================

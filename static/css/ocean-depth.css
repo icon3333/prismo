@@ -247,6 +247,56 @@
   background-color: var(--bg-tertiary);
 }
 
+/* Dark mode: Bootstrap colored table row overrides */
+/* Using darker, more saturated colors that work well on dark backgrounds */
+[data-theme="dark"] .table-warning,
+[data-theme="dark"] .table-warning > td,
+[data-theme="dark"] .table-warning > th,
+[data-theme="dark"] .table > tbody > tr.table-warning,
+[data-theme="dark"] .table > tbody > tr.table-warning > td {
+  --bs-table-bg: rgb(55, 35, 20) !important;
+  --bs-table-color: var(--text-primary) !important;
+  --bs-table-hover-bg: rgb(70, 45, 25) !important;
+  background-color: rgb(55, 35, 20) !important;
+  color: var(--text-primary) !important;
+  border-left: 3px solid rgb(249, 115, 22) !important;
+}
+
+[data-theme="dark"] .table-secondary,
+[data-theme="dark"] .table-secondary > td,
+[data-theme="dark"] .table-secondary > th,
+[data-theme="dark"] .table > tbody > tr.table-secondary,
+[data-theme="dark"] .table > tbody > tr.table-secondary > td {
+  --bs-table-bg: var(--bg-tertiary) !important;
+  --bs-table-color: var(--text-primary) !important;
+  --bs-table-hover-bg: var(--primary-light) !important;
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .table-primary,
+[data-theme="dark"] .table-primary > td,
+[data-theme="dark"] .table-primary > th,
+[data-theme="dark"] .table > tbody > tr.table-primary,
+[data-theme="dark"] .table > tbody > tr.table-primary > td {
+  --bs-table-bg: rgb(15, 45, 50) !important;
+  --bs-table-color: var(--text-primary) !important;
+  --bs-table-hover-bg: rgb(20, 55, 60) !important;
+  background-color: rgb(15, 45, 50) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Dark mode: Total row styling */
+[data-theme="dark"] .total-row,
+[data-theme="dark"] .total-row td,
+[data-theme="dark"] .table > tbody > tr.total-row,
+[data-theme="dark"] .table > tbody > tr.total-row > td {
+  --bs-table-bg: rgb(15, 45, 50) !important;
+  background-color: rgb(15, 45, 50) !important;
+  color: var(--text-primary) !important;
+  border-top: 2px solid var(--primary) !important;
+}
+
 /* Dark mode: Explicit text colors for table cells and headers */
 [data-theme="dark"] .table td {
   color: var(--text-primary);  /* White text for all table cells */
@@ -259,6 +309,21 @@
 /* Ensure plain spans inherit the white color (safety net) */
 [data-theme="dark"] .table td span:not(.user-edited):not(.csv-modified):not(.has-text-danger):not(.tag) {
   color: inherit;
+}
+
+/* Dark mode: P&L sort toggles */
+[data-theme="dark"] .pnl-sort-toggle {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .pnl-sort-toggle:hover {
+  background: rgba(6, 182, 212, 0.2);
+  color: var(--aqua-400);
+}
+
+[data-theme="dark"] .pnl-sort-toggle.pnl-sort-active {
+  background: var(--aqua-500);
+  color: var(--ocean-950);
 }
 
 /* Dark mode: Backup info box */
@@ -2717,16 +2782,17 @@ th.col-actions, td.col-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
   font-size: 0.875rem;
   font-weight: 500;
   font-family: var(--font-sans);
   color: var(--text-primary);
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   text-decoration: none;
   white-space: nowrap;
 }
@@ -2857,10 +2923,11 @@ th.col-actions, td.col-actions {
 
 /* Bulma Notification/Alert */
 .notification {
-  padding: 1rem 1.25rem;
-  margin-bottom: 1rem;
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-md);
   background: var(--bg-tertiary);
   border-left: 3px solid var(--border-default);
+  border-radius: var(--radius-md);
 }
 
 .notification .delete {
@@ -2871,7 +2938,7 @@ th.col-actions, td.col-actions {
   background: none;
   cursor: pointer;
   float: right;
-  margin-left: 0.5rem;
+  margin-left: var(--space-sm);
 }
 
 .notification .delete::before,
@@ -2899,7 +2966,7 @@ th.col-actions, td.col-actions {
 .title {
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-md);
 }
 
 .title.is-1 { font-size: 3rem; }
@@ -2912,7 +2979,26 @@ th.col-actions, td.col-actions {
 .subtitle {
   font-weight: 400;
   color: var(--text-tertiary);
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-sm);
+}
+
+/* Bulma Box - Card container */
+.box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+/* Bulma Heading - Small label text above values */
+.heading {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-xs);
 }
 
 /* Bulma Icon */
@@ -3123,6 +3209,56 @@ th.col-actions, td.col-actions {
 
 .table.is-fullwidth {
   width: 100%;
+}
+
+/* Sortable table headers */
+.is-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.is-sortable:hover {
+  color: var(--aqua-500);
+}
+
+.is-sorted-asc::after,
+.is-sorted-desc::after {
+  margin-left: 0.5rem;
+  color: var(--aqua-500);
+}
+
+.is-sorted-asc::after {
+  content: '▲';
+}
+
+.is-sorted-desc::after {
+  content: '▼';
+}
+
+/* P&L column sort toggles */
+.pnl-sort-toggle {
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-weight: 600;
+  user-select: none;
+  display: inline-block;
+}
+
+.pnl-sort-toggle:hover {
+  background: var(--primary-light);
+  color: var(--aqua-500);
+}
+
+.pnl-sort-toggle.pnl-sort-active {
+  background: var(--aqua-500);
+  color: var(--white);
+}
+
+/* Keep P&L header on one line */
+th:has(.pnl-sort-toggle) {
+  white-space: nowrap;
 }
 
 /* Bulma Modal */
@@ -3439,14 +3575,14 @@ th.col-actions, td.col-actions {
 
 /* Risk Overview Specific Styles */
 .portfolio-selection-section {
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-xl);
 }
 
 .portfolio-subtitle {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-md);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -3454,22 +3590,23 @@ th.col-actions, td.col-actions {
 .portfolio-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .global-overview-section {
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-xl);
 }
 
 .gauge-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
-  padding: 1.5rem;
-  margin-bottom: 1rem;
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
 }
 
 .overview-chart-header {
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-md);
 }
 
 .overview-chart-title {
@@ -3491,29 +3628,16 @@ th.col-actions, td.col-actions {
    PORTFOLIO PILLS - RISK OVERVIEW PAGE
    ======================================== */
 
-.portfolio-selection-section {
-  margin-bottom: 2rem;
-}
-
-.portfolio-subtitle {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 .portfolio-pill {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
   background: var(--bg-tertiary);
   border: 2px solid transparent;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   font-weight: 500;
   color: var(--text-secondary);
   min-height: 44px;
@@ -3550,7 +3674,7 @@ th.col-actions, td.col-actions {
 .portfolio-pill-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xs);
 }
 
 .portfolio-pill-name {
@@ -3569,13 +3693,13 @@ th.col-actions, td.col-actions {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem;
+  padding: var(--space-xl);
   color: var(--text-tertiary);
 }
 
 .empty-state-icon {
   font-size: 3rem;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-md);
 }
 
 

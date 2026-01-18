@@ -712,7 +712,7 @@ def get_single_portfolio_data_api(portfolio_id):
         # to calculate values using consistent daily exchange rates via calculate_item_value()
         companies = query_db('''
             SELECT
-                c.id, c.name, c.identifier, c.sector, c.investment_type,
+                c.id, c.name, c.identifier, c.sector, c.thesis, c.investment_type,
                 c.total_invested, mp.country, c.override_country,
                 COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
                 cs.shares, cs.override_share,
@@ -798,6 +798,44 @@ def get_single_portfolio_data_api(portfolio_id):
 
         sectors_list.sort(key=lambda x: x['total_value'], reverse=True)
 
+        # Group by thesis (similar to sector grouping)
+        theses = {}
+        for company in companies:
+            thesis_name = (company.get('thesis') or '').strip() or 'Unassigned'
+            if thesis_name not in theses:
+                theses[thesis_name] = {
+                    'name': thesis_name,
+                    'companies': [],
+                    'total_value': 0,
+                    'total_invested': 0
+                }
+            theses[thesis_name]['companies'].append(company)
+            theses[thesis_name]['total_value'] += float(company['current_value'])
+            theses[thesis_name]['total_invested'] += float(company.get('total_invested', 0) or 0)
+
+        # Convert to list and calculate percentages for theses
+        theses_list = []
+        for thesis_data in theses.values():
+            thesis_data['percentage'] = (
+                (thesis_data['total_value'] / total_value * 100)
+                if total_value > 0 else 0
+            )
+
+            # Calculate thesis P&L
+            if thesis_data['total_invested'] > 0:
+                pnl_absolute = thesis_data['total_value'] - thesis_data['total_invested']
+                pnl_percentage = (pnl_absolute / thesis_data['total_invested']) * 100
+                thesis_data['pnl_absolute'] = pnl_absolute
+                thesis_data['pnl_percentage'] = pnl_percentage
+            else:
+                thesis_data['pnl_absolute'] = None
+                thesis_data['pnl_percentage'] = None
+
+            thesis_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
+            theses_list.append(thesis_data)
+
+        theses_list.sort(key=lambda x: x['total_value'], reverse=True)
+
         # Calculate total portfolio P&L
         total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
         if total_invested > 0:
@@ -818,10 +856,11 @@ def get_single_portfolio_data_api(portfolio_id):
             'num_holdings': len(companies),
             'last_updated': max((c['last_updated'] for c in companies if c['last_updated']), default=None),
             'companies': companies,
-            'sectors': sectors_list
+            'sectors': sectors_list,
+            'theses': theses_list
         }
 
-        logger.info(f"Returning {len(companies)} companies in {len(sectors_list)} sectors for portfolio {portfolio_id}")
+        logger.info(f"Returning {len(companies)} companies in {len(sectors_list)} sectors and {len(theses_list)} theses for portfolio {portfolio_id}")
         return jsonify(response_data)
 
     except ValidationError as e:
@@ -2443,6 +2482,7 @@ def simulator_portfolio_allocations():
                 c.name,
                 c.identifier,
                 c.sector,
+                c.thesis,
                 COALESCE(c.override_country, mp.country) as country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
                 mp.price_eur,
@@ -2472,6 +2512,7 @@ def simulator_portfolio_allocations():
                 'total_value': 0,
                 'countries': [],
                 'sectors': [],
+                'theses': [],
                 'positions': []
             })
 
@@ -2508,6 +2549,21 @@ def simulator_portfolio_allocations():
                 'percentage': round(percentage, 2)
             })
 
+        # Aggregate by thesis
+        thesis_totals = {}
+        for p in positions:
+            thesis = (p['thesis'] or '').strip() or 'Unassigned'
+            thesis_totals[thesis] = thesis_totals.get(thesis, 0) + float(p['value'] or 0)
+
+        theses = []
+        for thesis, value in sorted(thesis_totals.items(), key=lambda x: -x[1]):
+            percentage = (value / total_value * 100) if total_value > 0 else 0
+            theses.append({
+                'name': thesis,
+                'value': round(value, 2),
+                'percentage': round(percentage, 2)
+            })
+
         # Format positions for response
         positions_list = []
         for p in positions:
@@ -2517,10 +2573,11 @@ def simulator_portfolio_allocations():
                 'name': p['name'],
                 'country': p['country'] or 'Unknown',
                 'sector': p['sector'] or 'Unknown',
+                'thesis': (p['thesis'] or '').strip() or 'Unassigned',
                 'value': round(float(p['value'] or 0), 2)
             })
 
-        logger.info(f"Returning allocations: {len(countries)} countries, {len(sectors)} sectors, total={total_value:.2f}")
+        logger.info(f"Returning allocations: {len(countries)} countries, {len(sectors)} sectors, {len(theses)} theses, total={total_value:.2f}")
 
         # Include investment targets if Builder is configured
         investment_targets = None
@@ -2569,6 +2626,7 @@ def simulator_portfolio_allocations():
             'total_value': round(total_value, 2),
             'countries': countries,
             'sectors': sectors,
+            'theses': theses,
             'positions': positions_list,
             'investmentTargets': investment_targets
         })

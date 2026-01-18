@@ -30,6 +30,12 @@
                     </div>
                 </div>
 
+                <!-- No portfolios message (hidden initially) -->
+                <div id="noPortfoliosMessage" style="display: none;" class="notification is-info mt-4">
+                    <p><strong>No portfolios with holdings found.</strong></p>
+                    <p class="mt-2">To view performance data, import holdings via CSV upload on the <a href="{{ url_for('main.index') }}">Overview</a> page.</p>
+                </div>
+
                 <!-- Summary Statistics (hidden initially) -->
                 <div id="portfolioSummary" style="display: none;" class="mt-4">
                     <div class="columns is-mobile">
@@ -84,15 +90,21 @@
                     </div>
                 </div>
 
-                <!-- Right: Sector Allocation -->
+                <!-- Right: Sector/Thesis Allocation -->
                 <div class="column is-6">
                     <div class="box">
-                        <h3 class="subtitle is-5 mb-3">Sector Allocation</h3>
+                        <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+                            <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Sector Allocation</h3>
+                            <div class="toggle-group" id="allocationToggle">
+                                <button class="toggle-btn active" data-mode="sector">Sector</button>
+                                <button class="toggle-btn" data-mode="thesis">Thesis</button>
+                            </div>
+                        </div>
                         <div class="table-container">
                             <table class="table is-fullwidth is-striped is-hoverable" data-table-id="sectorTable">
                                 <thead>
                                     <tr>
-                                        <th class="is-sortable" data-sort="string">Sector</th>
+                                        <th class="is-sortable" data-sort="string" id="allocationColumnHeader">Sector</th>
                                         <th class="is-sortable" data-sort="number">% of Portfolio</th>
                                         <th class="is-sortable" data-sort="number">Current Value</th>
                                         <th>P&L <span class="pnl-sort-toggle" data-sort-type="pnl-eur" title="Sort by € value">€</span> / <span class="pnl-sort-toggle" data-sort-type="pnl-pct" title="Sort by % value">%</span></th>
@@ -185,6 +197,7 @@
             let selectedPortfolioIds = [];  // Needed by heatmap
             let currentPortfolioData = null;
             let expandedSectors = new Set();
+            let allocationMode = 'sector'; // 'sector' or 'thesis'
 
             // Make portfolioData available globally for heatmap
             window.portfolioData = [];
@@ -261,6 +274,7 @@
 
             // Format functions
             function formatCurrency(value) {
+                if (value == null || isNaN(value)) value = 0;
                 const formatted = '€' + value.toLocaleString('de-DE', {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 2
@@ -269,6 +283,7 @@
             }
 
             function formatPercentage(value) {
+                if (value == null || isNaN(value)) value = 0;
                 return value.toFixed(1) + '%';
             }
 
@@ -594,6 +609,10 @@
                     document.getElementById('loadingIndicator').style.display = 'none';
                     document.getElementById('analysisContent').style.display = 'block';
 
+                    // Initialize table sorting and allocation toggle
+                    initTableSorting();
+                    initAllocationToggle();
+
                     // Initialize concentration heatmap (always visible)
                     // Note: Will show empty until portfolio is selected
                     selectedPortfolioIds = [];  // Initialize as empty array
@@ -611,14 +630,23 @@
                 portfolios = await response.json();
 
                 const selector = document.getElementById('portfolioSelector');
-                selector.innerHTML = '<option value="">-- Select a portfolio --</option>';
+                const noPortfoliosMessage = document.getElementById('noPortfoliosMessage');
 
-                portfolios.forEach(portfolio => {
-                    const option = document.createElement('option');
-                    option.value = portfolio.id;
-                    option.textContent = portfolio.name;
-                    selector.appendChild(option);
-                });
+                // Check if there are any portfolios with holdings
+                if (!portfolios || portfolios.length === 0) {
+                    selector.innerHTML = '<option value="">-- No portfolios available --</option>';
+                    noPortfoliosMessage.style.display = 'block';
+                } else {
+                    selector.innerHTML = '<option value="">-- Select a portfolio --</option>';
+                    noPortfoliosMessage.style.display = 'none';
+
+                    portfolios.forEach(portfolio => {
+                        const option = document.createElement('option');
+                        option.value = portfolio.id;
+                        option.textContent = portfolio.name;
+                        selector.appendChild(option);
+                    });
+                }
 
                 selector.addEventListener('change', handlePortfolioChange);
             }
@@ -723,22 +751,35 @@
                 const tbody = document.getElementById('sectorTableBody');
                 tbody.innerHTML = '';
 
-                if (!currentPortfolioData.sectors || currentPortfolioData.sectors.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="has-text-centered">No categories</td></tr>';
+                // Get the data based on current allocation mode
+                const dataSource = allocationMode === 'thesis' ? currentPortfolioData.theses : currentPortfolioData.sectors;
+                const labelType = allocationMode === 'thesis' ? 'thesis' : 'sector';
+
+                // Update UI elements to reflect current mode
+                const titleEl = document.getElementById('allocationTableTitle');
+                const headerEl = document.getElementById('allocationColumnHeader');
+                if (titleEl) titleEl.textContent = allocationMode === 'thesis' ? 'Thesis Allocation' : 'Sector Allocation';
+                if (headerEl) headerEl.textContent = allocationMode === 'thesis' ? 'Thesis' : 'Sector';
+
+                if (!dataSource || dataSource.length === 0) {
+                    const emptyMessage = allocationMode === 'thesis'
+                        ? 'No thesis data. Add thesis in Enrich page.'
+                        : 'No categories';
+                    tbody.innerHTML = `<tr><td colspan="4" class="has-text-centered">${emptyMessage}</td></tr>`;
                     return;
                 }
 
-                currentPortfolioData.sectors.forEach(sector => {
+                dataSource.forEach(category => {
                     const isExpanded = expandedSectors.has(category.name);
                     const iconClass = isExpanded ? 'fa-minus-circle' : 'fa-plus-circle';
                     const catPnlEur = category.pnl_absolute !== null ? category.pnl_absolute : -Infinity;
                     const catPnlPct = category.pnl_percentage !== null ? category.pnl_percentage : -Infinity;
 
                     // Category row
-                    const sectorRow = document.createElement('tr');
-                    sectorRow.className = 'sector-row';
-                    sectorRow.dataset.sector = category.name;  // Add for sorting
-                    sectorRow.innerHTML = `
+                    const categoryRow = document.createElement('tr');
+                    categoryRow.className = 'sector-row';
+                    categoryRow.dataset.sector = category.name;  // Add for sorting
+                    categoryRow.innerHTML = `
                         <td>
                             <span class="icon-text">
                                 <span class="icon toggle-sector" data-sector="${escapeHtml(category.name)}" style="cursor: pointer;">
@@ -751,14 +792,13 @@
                         <td>${formatCurrency(category.total_value)}</td>
                         <td data-pnl-eur="${catPnlEur}" data-pnl-pct="${catPnlPct}">${formatPnL(category.pnl_absolute, category.pnl_percentage, category.total_invested)}</td>
                     `;
-                    tbody.appendChild(sectorRow);
+                    tbody.appendChild(categoryRow);
 
                     // Make entire row clickable, not just the icon
-                    sectorRow.style.cursor = 'pointer';
-                    sectorRow.addEventListener('click', (e) => {
+                    categoryRow.style.cursor = 'pointer';
+                    categoryRow.addEventListener('click', (e) => {
                         // Don't toggle if clicking on a link or button inside the row
                         if (e.target.closest('a, button')) return;
-                        console.log('DEBUG: Category row clicked:', category.name);
                         toggleSectorExpansion(category.name);
                     });
 
@@ -769,7 +809,9 @@
                         companyRow.dataset.parentSector = category.name;
                         companyRow.style.display = isExpanded ? '' : 'none';
 
-                        const catPercent = (company.current_value / category.total_value * 100).toFixed(1);
+                        const categoryPercent = category.total_value > 0
+                            ? ((company.current_value || company.currentValue) / category.total_value * 100).toFixed(1)
+                            : '0.0';
                         const compPnlEur = company.pnl_absolute !== null ? company.pnl_absolute : -Infinity;
                         const compPnlPct = company.pnl_percentage !== null ? company.pnl_percentage : -Infinity;
 
@@ -779,12 +821,12 @@
                             </td>
                             <td>
                                 <span class="is-size-7">
-                                    ${catPercent}%
-                                    <span class="has-text-grey-light">(${company.percentage.toFixed(1)}% of portfolio)</span>
+                                    ${categoryPercent}%
+                                    <span class="has-text-grey-light">(${(company.percentage || 0).toFixed(1)}% of portfolio)</span>
                                 </span>
                             </td>
-                            <td><span class="is-size-7">${formatCurrency(company.current_value)}</span></td>
-                            <td data-pnl-eur="${compPnlEur}" data-pnl-pct="${compPnlPct}"><span class="is-size-7">${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested)}</span></td>
+                            <td><span class="is-size-7">${formatCurrency(company.current_value || company.currentValue)}</span></td>
+                            <td data-pnl-eur="${compPnlEur}" data-pnl-pct="${compPnlPct}"><span class="is-size-7">${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested || company.totalInvested)}</span></td>
                         `;
                         tbody.appendChild(companyRow);
                     });
@@ -799,6 +841,29 @@
                 }
                 renderSectorTable();
                 initTableSorting();  // Reinitialize sorting after table rebuild
+            }
+
+            function initAllocationToggle() {
+                const toggleGroup = document.getElementById('allocationToggle');
+                if (!toggleGroup) return;
+
+                toggleGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.toggle-btn');
+                    if (!btn) return;
+
+                    const mode = btn.dataset.mode;
+                    if (mode === allocationMode) return; // No change
+
+                    // Update active state
+                    toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // Update mode and re-render
+                    allocationMode = mode;
+                    expandedSectors.clear(); // Reset expansions when switching modes
+                    renderSectorTable();
+                    initTableSorting();
+                });
             }
 
             async function savePortfolioSelection(portfolioId) {
@@ -870,155 +935,9 @@
             // END NEW INITIALIZATION LOGIC
             // ======================================================
 
-            // START NEW IMPLEMENTATION - Initialize with dropdown selector
+            // Initialize with dropdown selector
             console.log('Initializing Portfolio Analysis with dropdown selector...');
             initializePage();
-
-            // OLD IMPLEMENTATION BELOW - KEEPING FOR REFERENCE BUT NOT EXECUTING
-            // ======================================================================
-            /*
-            // Load data and initialize
-            console.log('Starting data loading process...');
-
-            // Add timeout to prevent infinite loading
-            const loadingTimeout = setTimeout(() => {
-                console.error('Loading timeout reached');
-                document.getElementById('loadingIndicator').innerHTML = `
-            <div class="has-text-centered">
-                <p class="has-text-danger mb-3">
-                    <i class="fas fa-clock mr-2"></i>
-                    Loading is taking longer than expected.
-                </p>
-                <p class="has-text-grey mb-3">
-                    This might indicate a server issue or authentication problem.
-                </p>
-                <button class="button is-info" onclick="location.reload()">
-                    <i class="fas fa-refresh mr-2"></i>Try Again
-                </button>
-            </div>
-        `;
-            }, 30000); // 30 second timeout
-
-            Promise.all([
-                fetchPortfolios(),
-                fetchPortfolioData(),
-                loadSortState() // Load saved sort preferences
-            ]).then(([portfoliosList, data]) => {
-                clearTimeout(loadingTimeout); // Clear the timeout since we got a response
-                console.log('Data loaded successfully, processing...');
-                console.log('Portfolios list:', portfoliosList);
-                console.log('Portfolio data:', data);
-
-                try {
-                    // Process the data
-                    processData(portfoliosList, data);
-
-                    // Update global portfolioData for components
-                    window.portfolioData = portfolioData;
-
-                    console.log('Data processed successfully, initializing UI...');
-
-                    // Initialize the UI
-                    initializeCharts();
-                    renderPortfolioSections();
-                    initializeExpandablePortfolios();
-
-                    // Hide loading indicator and show content
-                    document.getElementById('loadingIndicator').style.display = 'none';
-                    document.getElementById('analysisContent').style.display = 'block';
-
-                    // Initialize table sorting
-                    initTableSorting();
-
-                    // Setup resize handlers for charts
-                    if (typeof window.PortfolioCharts !== 'undefined' && window.PortfolioCharts.setupResizeHandlers) {
-                        window.PortfolioCharts.setupResizeHandlers();
-                    } else {
-                        console.warn('PortfolioCharts.setupResizeHandlers not found - charts may not resize properly');
-                    }
-
-                    // Initialize Risk Breakdown
-                    initializeRiskBreakdown();
-
-                    // Initialize expandable heatmap sections
-                    initializeHeatmapSectionToggle();
-
-                    // Ensure all sections start collapsed by default
-                    setTimeout(() => {
-                        console.log('Running collapse check...');
-                        const allSections = document.querySelectorAll('.portfolio-section');
-                        console.log(`Found ${allSections.length} portfolio sections to collapse`);
-
-                        allSections.forEach((section, index) => {
-                            const content = section.querySelector('.portfolio-content');
-                            const icon = section.querySelector('.toggle-portfolio i');
-
-                            console.log(`Section ${index}: content display = ${content ? content.style.display : 'no content'}, icon classes = ${icon ? icon.className : 'no icon'}`);
-
-                            if (content) {
-                                content.style.display = 'none';
-                                console.log(`Collapsed section ${index}`);
-                            }
-                            if (icon) {
-                                icon.classList.remove('fa-chevron-up');
-                                icon.classList.add('fa-chevron-down');
-                                console.log(`Updated icon for section ${index} to chevron-down`);
-                            }
-                        });
-                        console.log('All sections collapsed by default');
-                    }, 200);
-
-                    // Additional safety: programmatically trigger collapse all after everything is loaded
-                    setTimeout(() => {
-                        const collapseAllBtn = document.getElementById('collapseAllPortfolios');
-                        if (collapseAllBtn) {
-                            console.log('Programmatically triggering collapse all button...');
-                            collapseAllBtn.click();
-                        }
-                    }, 300);
-
-                    console.log('UI initialization completed successfully');
-                } catch (error) {
-                    console.error('Error during data processing or UI initialization:', error);
-                    document.getElementById('loadingIndicator').innerHTML = `
-                <p class="has-text-danger">Error processing data: ${error.message}</p>
-                <p class="has-text-grey">Check console for more details.</p>
-                <button class="button is-info mt-3" onclick="location.reload()">Try Again</button>
-            `;
-                }
-            }).catch(error => {
-                clearTimeout(loadingTimeout); // Clear the timeout since we got a response (even if error)
-                console.error('Error loading data:', error);
-                console.error('Error stack:', error.stack);
-
-                // Provide more detailed error information
-                let errorMessage = error.message;
-                if (error.name === 'TypeError' && errorMessage.includes('fetch')) {
-                    errorMessage = 'Unable to connect to the server. Please check your connection and try again.';
-                } else if (error.status === 401) {
-                    errorMessage = 'Authentication required. Please log in and try again.';
-                } else if (error.status === 404) {
-                    errorMessage = 'API endpoint not found. Please contact support.';
-                }
-
-                document.getElementById('loadingIndicator').innerHTML = `
-            <div class="has-text-centered">
-                <p class="has-text-danger mb-3">
-                    <i class="fas fa-exclamation-triangle mr-2"></i>
-                    Error loading data: ${errorMessage}
-                </p>
-                <p class="has-text-grey mb-3">
-                    If this problem persists, please check the browser console for more details.
-                </p>
-                <button class="button is-info" onclick="location.reload()">
-                    <i class="fas fa-refresh mr-2"></i>Try Again
-                </button>
-            </div>
-        `;
-            });
-            */
-            // END OLD IMPLEMENTATION - COMMENTED OUT
-            // ======================================================
 
             // Fetch list of portfolios with their IDs
             async function fetchPortfolios() {
@@ -1153,6 +1072,7 @@
                             id: item.id,
                             name: companyName,
                             sector: item.sector || 'Unassigned',
+                            thesis: item.thesis || '',
                             shares: shares,
                             priceEur: price,
                             price_eur: price, // Include both naming conventions
@@ -1194,9 +1114,10 @@
                     // Sort companies by value (descending)
                     portfolio.companies.sort((a, b) => b.currentValue - a.currentValue);
 
-                    // Group companies by category
+                    // Group companies by category (sector and thesis)
                     portfolio.sectors = groupCompaniesBySector(portfolio.companies, portfolio.totalValue);
-                    console.log(`Portfolio ${portfolio.name} has ${portfolio.sectors.length} categories`);
+                    portfolio.theses = groupCompaniesByThesis(portfolio.companies, portfolio.totalValue);
+                    console.log(`Portfolio ${portfolio.name} has ${portfolio.sectors.length} sectors, ${portfolio.theses.length} theses`);
                 });
 
                 console.log('Final portfolio data:', portfolioData);
@@ -1276,6 +1197,71 @@
                 return Object.values(sectors).sort((a, b) => b.currentValue - a.currentValue);
             }
 
+            /**
+             * Group companies by thesis and calculate various metrics
+             *
+             * @param {Array} companies - List of company objects
+             * @param {number} portfolioTotalValue - Total portfolio value for percentage calculations
+             * @returns {Array} Sorted array of thesis objects with nested company data
+             */
+            function groupCompaniesByThesis(companies, portfolioTotalValue) {
+                const theses = {};
+
+                // First pass: group companies and calculate thesis totals
+                companies.forEach(company => {
+                    // Default to "Unassigned" if no thesis is specified
+                    const thesisName = company.thesis && company.thesis.trim() ? company.thesis.trim() : "Unassigned";
+
+                    if (!theses[thesisName]) {
+                        theses[thesisName] = {
+                            name: thesisName,
+                            companies: [],
+                            total_value: 0,
+                            total_invested: 0,
+                            percentage: 0,
+                            pnl_absolute: 0,
+                            pnl_percentage: null
+                        };
+                    }
+
+                    theses[thesisName].companies.push(company);
+                    theses[thesisName].total_value += company.currentValue || 0;
+                    theses[thesisName].total_invested += company.totalInvested || 0;
+                });
+
+                // Second pass: calculate percentages and P&L
+                Object.values(theses).forEach(thesis => {
+                    // Calculate thesis percentage of portfolio
+                    thesis.percentage = portfolioTotalValue > 0 ?
+                        (thesis.total_value / portfolioTotalValue) * 100 : 0;
+
+                    // Calculate P&L
+                    thesis.pnl_absolute = thesis.total_value - thesis.total_invested;
+                    if (thesis.total_invested > 0) {
+                        thesis.pnl_percentage = (thesis.pnl_absolute / thesis.total_invested) * 100;
+                    } else {
+                        thesis.pnl_percentage = null;
+                    }
+
+                    // Calculate company percentages within thesis
+                    thesis.companies.forEach(company => {
+                        company.thesisPercentage = thesis.total_value > 0 ?
+                            (company.currentValue / thesis.total_value) * 100 : 0;
+
+                        // Ensure company has portfolio percentage available
+                        if (typeof company.percentage !== 'number') {
+                            company.percentage = portfolioTotalValue > 0 ?
+                                (company.currentValue / portfolioTotalValue) * 100 : 0;
+                        }
+                    });
+
+                    // Sort companies within thesis by value (descending)
+                    thesis.companies.sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
+                });
+
+                // Convert to array and sort by value (descending)
+                return Object.values(theses).sort((a, b) => b.total_value - a.total_value);
+            }
 
 
             // Initialize charts

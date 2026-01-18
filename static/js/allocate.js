@@ -920,17 +920,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 const realBuilderPositions = builderPositions.filter(pos => !pos.isPlaceholder);
                 const totalRealWeight = realBuilderPositions.reduce((sum, pos) => sum + (pos.weight || 0), 0);
 
-                const minPositions = portfolio.minPositions || 0;
+                // Use effectivePositions (user's desired count, or minPositions as fallback)
+                const effectivePositions = portfolio.effectivePositions || portfolio.minPositions || 0;
                 const currentPositionsCount = portfolio.sectors
                     .filter(sector => sector.name !== 'Missing Positions')
                     .reduce((sum, sector) => sum + (sector.positions ? sector.positions.length : 0), 0);
 
                 shouldShowMissingPositions = (
-                    currentPositionsCount < minPositions &&
+                    currentPositionsCount < effectivePositions &&
                     Math.round(totalRealWeight) < 100
                 );
 
-                console.log(`Portfolio ${portfolio.name}: shouldShowMissingPositions=${shouldShowMissingPositions}, currentPositions=${currentPositionsCount}, minPositions=${minPositions}, totalRealWeight=${totalRealWeight}%`);
+                console.log(`Portfolio ${portfolio.name}: shouldShowMissingPositions=${shouldShowMissingPositions}, currentPositions=${currentPositionsCount}, effectivePositions=${effectivePositions}, minPositions=${portfolio.minPositions || 0}, desiredPositions=${portfolio.desiredPositions}, totalRealWeight=${totalRealWeight}%`);
             }
 
             // Third pass: assign target allocations and calculate total for normalization

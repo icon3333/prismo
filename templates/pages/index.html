@@ -357,7 +357,7 @@
                     <p>
                         <span class="fw-semibold">{{ portfolio.missing_count }}</span>
                         position{{ 's' if portfolio.missing_count != 1 else '' }} missing
-                        ({{ portfolio.current_positions }}/{{ portfolio.min_positions }} filled)
+                        ({{ portfolio.current_positions }}/{{ portfolio.effective_positions }} filled)
                     </p>
                 </div>
                 <div class="warning-pill-icon">
@@ -520,6 +520,7 @@
 
 {% block scripts %}
 {% if session.account_id %}
+<script src="{{ url_for('static', filename='js/utils/value-calculator.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         initializeRiskOverview();
@@ -673,7 +674,7 @@
         function getViolationsForType(type, maxPercentage, portfolioData) {
             if (!portfolioData || portfolioData.length === 0) return [];
 
-            const totalValue = portfolioData.reduce((sum, item) => sum + ((item.price_eur || 0) * (item.effective_shares || 0)), 0);
+            const totalValue = portfolioData.reduce((sum, item) => sum + calculateItemValue(item), 0);
             if (totalValue === 0) return [];
 
             const violations = [];
@@ -690,20 +691,20 @@
                 const sectorAllocations = {};
                 portfolioData.forEach(item => {
                     const sector = item.sector || 'Unknown';
-                    const value = (item.price_eur || 0) * (item.effective_shares || 0);
+                    const value = calculateItemValue(item);
                     sectorAllocations[sector] = (sectorAllocations[sector] || 0) + value;
                 });
                 Object.entries(sectorAllocations).forEach(([category, value]) => {
                     const percentage = (value / totalValue) * 100;
                     if (percentage > maxPercentage) {
-                        violations.push({ name: sector, currentPercentage: percentage, maxPercentage: maxPercentage });
+                        violations.push({ name: category, currentPercentage: percentage, maxPercentage: maxPercentage });
                     }
                 });
             } else if (type === 'country') {
                 const countryAllocations = {};
                 portfolioData.forEach(item => {
                     const country = item.country || 'Unknown';
-                    const value = (item.price_eur || 0) * (item.effective_shares || 0);
+                    const value = calculateItemValue(item);
                     countryAllocations[country] = (countryAllocations[country] || 0) + value;
                 });
                 Object.entries(countryAllocations).forEach(([country, value]) => {
@@ -724,7 +725,7 @@
                 if (!companyMap[name]) {
                     companyMap[name] = { name: name, currentValue: 0, category: item.sector || 'Unknown', country: item.country || 'Unknown' };
                 }
-                companyMap[name].currentValue += (item.price_eur || 0) * (item.effective_shares || 0);
+                companyMap[name].currentValue += calculateItemValue(item);
             });
             return Object.values(companyMap).sort((a, b) => b.currentValue - a.currentValue);
         }
@@ -788,7 +789,7 @@
         function calculateAllocationViolations(portfolioData) {
             if (!portfolioData || portfolioData.length === 0) return [];
 
-            const totalValue = portfolioData.reduce((sum, item) => sum + ((item.price_eur || 0) * (item.effective_shares || 0)), 0);
+            const totalValue = portfolioData.reduce((sum, item) => sum + calculateItemValue(item), 0);
             if (totalValue === 0) return [];
 
             let violations = [];
@@ -807,13 +808,13 @@
                 const sectorAllocations = {};
                 portfolioData.forEach(item => {
                     const sector = item.sector || 'Unknown';
-                    const value = (item.price_eur || 0) * (item.effective_shares || 0);
+                    const value = calculateItemValue(item);
                     sectorAllocations[sector] = (sectorAllocations[sector] || 0) + value;
                 });
                 Object.entries(sectorAllocations).forEach(([category, value]) => {
                     const percentage = (value / totalValue) * 100;
                     if (percentage > allocationRules.maxPerSector) {
-                        violations.push({ type: 'Sector', name: sector, currentPercentage: percentage, maxPercentage: allocationRules.maxPerSector });
+                        violations.push({ type: 'Sector', name: category, currentPercentage: percentage, maxPercentage: allocationRules.maxPerSector });
                     }
                 });
             }
@@ -822,7 +823,7 @@
                 const countryAllocations = {};
                 portfolioData.forEach(item => {
                     const country = item.country || 'Unknown';
-                    const value = (item.price_eur || 0) * (item.effective_shares || 0);
+                    const value = calculateItemValue(item);
                     countryAllocations[country] = (countryAllocations[country] || 0) + value;
                 });
                 Object.entries(countryAllocations).forEach(([country, value]) => {

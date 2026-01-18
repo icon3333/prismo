@@ -2220,6 +2220,9 @@
 }
 
 .chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
@@ -3169,5 +3172,232 @@ tr.table-primary th {
 
   .simulator-input-form .btn {
     width: 100%;
+  }
+}
+
+/* ===================================================================
+   INVESTMENT PROGRESS SECTION
+   Shows "Remaining to Invest" from Builder configuration
+   =================================================================== */
+
+.investment-progress-section {
+  background: var(--surface-elevated);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.investment-progress-section .progress-loading {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-sm);
+}
+
+/* Progress Header */
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.progress-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.progress-title i {
+  color: var(--primary);
+  font-size: var(--font-size-base);
+}
+
+.progress-title .label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.progress-title .scope-badge {
+  background: var(--primary-light);
+  color: var(--primary);
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  border: 1px solid var(--primary-border-light);
+}
+
+.progress-values {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs);
+}
+
+.progress-values .current-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.progress-values .separator {
+  color: var(--text-muted);
+}
+
+.progress-values .target-value {
+  color: var(--text-muted);
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  margin-bottom: var(--space-xs);
+}
+
+.progress-track {
+  height: 10px;
+  background: var(--surface-base);
+  border-radius: var(--radius-xs);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: var(--radius-xs);
+  transition: width 400ms ease;
+}
+
+.progress-fill.complete {
+  background: var(--success);
+}
+
+.progress-fill.over-target {
+  background: var(--warning);
+}
+
+.progress-simulated {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--primary);
+  opacity: 0.4;
+  border-radius: var(--radius-xs);
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.6; }
+}
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+}
+
+.progress-labels .percent-complete {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.progress-labels .percent-complete.complete {
+  color: var(--success);
+}
+
+.progress-labels .percent-complete.over-target {
+  color: var(--warning);
+}
+
+.progress-labels .remaining-amount {
+  color: var(--text-muted);
+}
+
+/* Simulated Impact */
+.simulated-impact {
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.simulated-impact .simulated-label {
+  color: var(--text-muted);
+}
+
+.simulated-impact .simulated-value {
+  color: var(--primary);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.simulated-impact .simulated-percent {
+  color: var(--text-muted);
+}
+
+.simulated-impact .simulated-remaining {
+  color: var(--text-secondary);
+}
+
+.simulated-impact .simulated-over {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.simulated-impact.over-target .simulated-value {
+  color: var(--warning);
+}
+
+/* No Builder Config Message */
+.no-builder-config {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.no-builder-config i {
+  color: var(--primary);
+}
+
+.no-builder-config a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.no-builder-config a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 576px) {
+  .progress-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .progress-values {
+    margin-top: var(--space-xxs);
+  }
+
+  .simulated-impact {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

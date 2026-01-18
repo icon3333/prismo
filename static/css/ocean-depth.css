@@ -846,6 +846,57 @@ a:hover::after {
   align-items: center;
 }
 
+/* Toggle Button Group - Pill-style toggle for switching views */
+.toggle-group {
+  display: inline-flex;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  gap: 4px;
+}
+
+.toggle-btn {
+  padding: 4px 12px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.toggle-btn:hover:not(.active) {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.toggle-btn.active {
+  background: var(--aqua-500);
+  color: var(--white);
+}
+
+/* Dark mode toggle adjustments */
+[data-theme="dark"] .toggle-group {
+  background: transparent;
+}
+
+[data-theme="dark"] .toggle-btn {
+  color: var(--pearl-300);
+}
+
+[data-theme="dark"] .toggle-btn:hover:not(.active) {
+  color: var(--white);
+  background: var(--ocean-700);
+}
+
+[data-theme="dark"] .toggle-btn.active {
+  background: var(--aqua-500);
+  color: var(--ocean-950);
+}
+
 /* ========================================
    Tables - Plain Data Display
    ======================================== */
@@ -3661,12 +3712,44 @@ th:has(.pnl-sort-toggle) {
   margin-bottom: var(--space-xl);
 }
 
+/* Ensure equal height cards in risk overview grid */
+.global-overview-section .columns.is-multiline {
+  align-items: stretch;
+}
+
+.global-overview-section .column {
+  display: flex;
+}
+
 .gauge-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: var(--space-lg);
   margin-bottom: var(--space-md);
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.gauge-card .gauge-indicator {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.gauge-card .overview-chart-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.gauge-card .overview-chart-container > div {
+  width: 100%;
+  min-height: 300px;
 }
 
 .overview-chart-header {

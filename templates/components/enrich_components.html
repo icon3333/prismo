@@ -558,7 +558,7 @@
                                 <td class="col-input-medium">
                                     <div class="field has-addons">
                                         <div class="control is-expanded">
-                                            <input class="input is-small" :class="{
+                                            <input class="input is-small sensitive-value" :class="{
                                                        'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
                                                        'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
                                                    }" type="text" :value="formatNumber(getEditingValue(item, 'shares') ?? item.effective_shares)"

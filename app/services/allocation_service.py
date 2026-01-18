@@ -490,6 +490,7 @@ class AllocationService:
             # (Portfolio IDs in saved state can become stale; names are unique per account)
             portfolio_builder_data[portfolio_name] = {
                 'minPositions': portfolio.get('minPositions', 0),
+                'desiredPositions': portfolio.get('desiredPositions'),  # User's desired position count
                 'allocation': portfolio.get('allocation', 0),
                 'positions': portfolio.get('positions', []),
                 'name': portfolio_name
@@ -628,13 +629,20 @@ class AllocationService:
             # Get builder data - keyed by portfolio NAME for reliable matching
             builder_data = portfolio_builder_data.get(portfolio_name, {})
 
+            # Calculate effective positions (user's desired, falling back to calculated minimum)
+            desired_positions = builder_data.get('desiredPositions')
+            min_positions = builder_data.get('minPositions', 0)
+            effective_positions = desired_positions if desired_positions is not None else min_positions
+
             portfolio_entry = {
                 'name': portfolio_name,
                 'currentValue': pdata['currentValue'],
                 'targetWeight': portfolio_target_weight,
                 'color': '',
                 'sectors': [],
-                'minPositions': builder_data.get('minPositions', 0),
+                'minPositions': min_positions,
+                'desiredPositions': desired_positions,
+                'effectivePositions': effective_positions,
                 'builderPositions': builder_data.get('positions', []),
                 'builderAllocation': builder_data.get('allocation', 0)
             }
@@ -651,7 +659,6 @@ class AllocationService:
 
             # Add placeholder positions based on builder configuration
             builder_positions = builder_data.get('positions', [])
-            min_positions = builder_data.get('minPositions', 0)
 
             # Count current real positions
             current_positions_count = sum(
@@ -667,11 +674,14 @@ class AllocationService:
 
             logger.debug(
                 f"Portfolio {portfolio_name}: current_positions={current_positions_count}, "
-                f"min_positions={min_positions}, real_weight={total_real_weight}%")
+                f"effective_positions={effective_positions}, min_positions={min_positions}, "
+                f"desired_positions={desired_positions}, real_weight={total_real_weight}%")
 
-            if (placeholder_position and current_positions_count < min_positions
+            # Use effectivePositions (user's desired count, or minPositions as fallback)
+            # to determine if "Missing Positions" sector should be shown
+            if (placeholder_position and current_positions_count < effective_positions
                 and not real_positions_have_100_percent):
-                positions_remaining = min_positions - current_positions_count
+                positions_remaining = effective_positions - current_positions_count
 
                 # Create Missing Positions sector
                 missing_positions_sector = {

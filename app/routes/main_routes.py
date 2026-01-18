@@ -85,20 +85,20 @@ def calculate_missing_positions(account_id: int, portfolios) -> Dict[str, Any]:
                 )
                 
                 if missing_count > 0 and has_missing_with_allocation:
-                    # Count current positions (all categories except Missing Positions)
+                    # Count current positions (all sectors except Missing Positions)
                     current_positions = 0
-                    for cat in categories:
-                        if cat.get('name') != 'Missing Positions':
-                            current_positions += len(cat.get('positions', []))
-                    
-                    # Calculate min positions (current + missing)
-                    min_positions = current_positions + missing_count
-                    
+                    for sector in sectors:
+                        if sector.get('name') != 'Missing Positions':
+                            current_positions += len(sector.get('positions', []))
+
+                    # Calculate effective positions (current + missing = user's desired or calculated minimum)
+                    effective_positions = current_positions + missing_count
+
                     missing_data['portfolios_with_missing'].append({
                         'name': portfolio_name,
                         'missing_count': missing_count,
                         'current_positions': current_positions,
-                        'min_positions': min_positions
+                        'effective_positions': effective_positions
                     })
                     missing_data['total_missing'] += missing_count
         

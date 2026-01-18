@@ -200,7 +200,7 @@ class BuilderService:
         """
         cursor = self.db.execute(
             """
-            SELECT MAX(updated_at) as last_updated
+            SELECT MAX(last_updated) as last_updated
             FROM expanded_state
             WHERE account_id = ? AND page_name = 'build'
             """,

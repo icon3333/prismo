@@ -36,9 +36,12 @@ class AllocationSimulator {
     this.countryChart = null;
     this.sectorChart = null;
 
+    // Category mode for sector chart (sector or thesis)
+    this.categoryMode = 'sector';     // 'sector' or 'thesis'
+
     // Expanded chart bar state (one at a time per chart type)
     this.expandedCountryBar = null;   // Label of expanded country bar
-    this.expandedSectorBar = null;  // Label of expanded sector bar
+    this.expandedSectorBar = null;  // Label of expanded sector bar (also used for thesis)
 
     // Auto-expand tracking for newly added items
     this.pendingExpandSector = null;
@@ -50,7 +53,11 @@ class AllocationSimulator {
     // Initialize
     this.render();
     this.bindEvents();
-    this.initializeScope();
+    this.initialize();
+  }
+
+  async initialize() {
+    await this.initializeScope();
     this.loadSavedSimulations();
     this.loadPortfolioAllocations();
   }
@@ -65,10 +72,36 @@ class AllocationSimulator {
   }
 
   // ============================================================================
+  // State Persistence (localStorage)
+  // ============================================================================
+
+  saveState() {
+    const state = {
+      scope: this.scope,
+      portfolioId: this.portfolioId,
+      simulationId: this.currentSimulationId
+    };
+    localStorage.setItem('simulator_state', JSON.stringify(state));
+  }
+
+  loadState() {
+    try {
+      const saved = localStorage.getItem('simulator_state');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error('Failed to load simulator state:', e);
+      return null;
+    }
+  }
+
+  // ============================================================================
   // Initialization
   // ============================================================================
 
   async initializeScope() {
+    // Load saved state from localStorage
+    const savedState = this.loadState();
+
     // Load portfolios for dropdown (with IDs and values for display)
     try {
       const response = await fetch('/portfolio/api/portfolios?include_ids=true&include_values=true');
@@ -79,6 +112,18 @@ class AllocationSimulator {
       }
     } catch (error) {
       console.error('Failed to load portfolios:', error);
+    }
+
+    // Restore saved scope and portfolio selection
+    if (savedState) {
+      if (savedState.scope) {
+        this.scope = savedState.scope;
+      }
+      if (savedState.portfolioId) {
+        this.portfolioId = savedState.portfolioId;
+      }
+      // Update UI to reflect restored state
+      this.updateScopeUI();
     }
 
     // Bind scope toggle events
@@ -92,6 +137,7 @@ class AllocationSimulator {
     if (portfolioSelect) {
       portfolioSelect.addEventListener('change', () => {
         this.portfolioId = portfolioSelect.value ? parseInt(portfolioSelect.value) : null;
+        this.saveState();
         this.loadPortfolioAllocations();
       });
     }
@@ -105,9 +151,7 @@ class AllocationSimulator {
     this.portfolios.forEach(p => {
       const option = document.createElement('option');
       option.value = p.id;
-      // Show portfolio name with value if available
-      const valueStr = p.total_value ? ` (€${this.formatNumber(p.total_value)})` : '';
-      option.textContent = `${p.name}${valueStr}`;
+      option.textContent = p.name;
       select.appendChild(option);
     });
   }
@@ -139,6 +183,7 @@ class AllocationSimulator {
       this.portfolioId = null;
       this.loadPortfolioAllocations();
     }
+    this.saveState();
   }
 
   // ============================================================================
@@ -174,7 +219,7 @@ class AllocationSimulator {
         this.updateInvestmentProgress();
       } else {
         console.error('Failed to load portfolio allocations:', result.error);
-        this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
+        this.portfolioData = { countries: [], sectors: [], theses: [], positions: [], total_value: 0 };
         this.investmentTargets = null;
         this.hasBuilderConfig = false;
         this.recalculateAllPercentageItems();
@@ -184,7 +229,7 @@ class AllocationSimulator {
       }
     } catch (error) {
       console.error('Error loading portfolio allocations:', error);
-      this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
+      this.portfolioData = { countries: [], sectors: [], theses: [], positions: [], total_value: 0 };
       this.investmentTargets = null;
       this.hasBuilderConfig = false;
       this.recalculateAllPercentageItems();
@@ -206,6 +251,19 @@ class AllocationSimulator {
       if (result.success) {
         this.savedSimulations = result.data.simulations || [];
         this.populateSimulationsDropdown();
+
+        // Restore saved simulation from localStorage
+        const savedState = this.loadState();
+        if (savedState && savedState.simulationId) {
+          // Check if simulation still exists
+          const exists = this.savedSimulations.some(s => s.id === savedState.simulationId);
+          if (exists) {
+            // Update dropdown and load simulation (without showing toast)
+            const select = document.getElementById('simulator-load-select');
+            if (select) select.value = savedState.simulationId;
+            await this.loadSimulationSilent(savedState.simulationId);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load saved simulations:', error);
@@ -270,6 +328,7 @@ class AllocationSimulator {
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
         this.updateSaveButtonVisibility();
+        this.saveState();
 
         this.showToast(`Loaded "${simulation.name}"`, 'success');
       } else {
@@ -281,6 +340,33 @@ class AllocationSimulator {
     }
   }
 
+  // Silent version for auto-restore (no toast notifications)
+  // Note: Does NOT override scope/portfolioId - keeps user's current selection from localStorage
+  async loadSimulationSilent(simulationId) {
+    if (!simulationId) return;
+
+    try {
+      const response = await fetch(`/portfolio/api/simulator/simulations/${simulationId}`);
+      const result = await response.json();
+
+      if (result.success) {
+        const simulation = result.data.simulation;
+        this.currentSimulationId = simulation.id;
+        this.currentSimulationName = simulation.name;
+        // Don't override scope/portfolioId - keep user's current selection from localStorage
+        this.items = simulation.items || [];
+
+        // Render table and load allocations (scope UI already set by initializeScope)
+        this.renderTable();
+        this.loadPortfolioAllocations();
+        this.updateDeleteButtonVisibility();
+        this.updateSaveButtonVisibility();
+      }
+    } catch (error) {
+      console.error('Error loading simulation:', error);
+    }
+  }
+
   resetSimulation() {
     this.currentSimulationId = null;
     this.currentSimulationName = null;
@@ -289,6 +375,7 @@ class AllocationSimulator {
     this.updateCharts();
     this.updateDeleteButtonVisibility();
     this.updateSaveButtonVisibility();
+    this.saveState();
 
     // Reset load dropdown
     const select = document.getElementById('simulator-load-select');
@@ -309,7 +396,8 @@ class AllocationSimulator {
     if (this.scope === 'portfolio') {
       portfolioWrapper.style.display = 'block';
       if (portfolioSelect && this.portfolioId) {
-        portfolioSelect.value = this.portfolioId;
+        // Ensure string comparison for select value
+        portfolioSelect.value = String(this.portfolioId);
       }
     } else {
       portfolioWrapper.style.display = 'none';
@@ -524,22 +612,20 @@ class AllocationSimulator {
       <!-- Aggregation Charts -->
       <div class="simulator-charts">
         <div class="simulator-chart-panel">
-          <div class="chart-header">
-            <h4 class="chart-title">
-              <i class="fas fa-globe"></i>
-              Distribution by Country
-            </h4>
+          <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+            <h4 class="subtitle is-5 mb-0">Country Allocation</h4>
           </div>
           <div class="chart-content" id="simulator-country-chart">
             <div class="chart-empty">Loading portfolio data...</div>
           </div>
         </div>
         <div class="simulator-chart-panel">
-          <div class="chart-header">
-            <h4 class="chart-title">
-              <i class="fas fa-tags"></i>
-              Distribution by Sector
-            </h4>
+          <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+            <h4 class="subtitle is-5 mb-0" id="simulator-category-title">Sector Allocation</h4>
+            <div class="toggle-group" id="simulator-category-toggle">
+              <button class="toggle-btn active" data-mode="sector">Sector</button>
+              <button class="toggle-btn" data-mode="thesis">Thesis</button>
+            </div>
           </div>
           <div class="chart-content" id="simulator-sector-chart">
             <div class="chart-empty">Loading portfolio data...</div>
@@ -599,6 +685,33 @@ class AllocationSimulator {
     this.tableBody.addEventListener('keydown', (e) => this.handleTableKeydown(e));
     this.tableBody.addEventListener('input', (e) => this.handleTableInput(e));
     this.tableBody.addEventListener('change', (e) => this.handleTableChange(e));
+
+    // Category toggle (sector/thesis)
+    const categoryToggle = document.getElementById('simulator-category-toggle');
+    if (categoryToggle) {
+      categoryToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.toggle-btn');
+        if (!btn) return;
+
+        const mode = btn.dataset.mode;
+        if (mode === this.categoryMode) return; // No change
+
+        // Update active state
+        categoryToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Update title
+        const titleEl = document.getElementById('simulator-category-title');
+        if (titleEl) {
+          titleEl.textContent = mode === 'thesis' ? 'Thesis Allocation' : 'Sector Allocation';
+        }
+
+        // Update mode and re-render chart
+        this.categoryMode = mode;
+        this.expandedSectorBar = null; // Reset expanded bar when switching modes
+        this.updateCharts();
+      });
+    }
 
     // Save/Load simulation events
     const loadSelect = document.getElementById('simulator-load-select');
@@ -695,6 +808,7 @@ class AllocationSimulator {
           id: this.generateId(),
           ticker: data.ticker,
           sector: this.normalizeLabel(data.sector) || '—',
+          thesis: this.normalizeLabel(data.thesis) || '—',
           country: this.normalizeLabel(data.country) || '—',
           value: 0,
           valueMode: 'absolute', // Default to absolute mode
@@ -740,6 +854,7 @@ class AllocationSimulator {
       id: this.generateId(),
       ticker: '—',
       sector: normalizedSector,
+      thesis: '—',
       country: '—',
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
@@ -771,6 +886,7 @@ class AllocationSimulator {
       id: this.generateId(),
       ticker: '—',
       sector: '—',
+      thesis: '—',
       country: normalizedCountry,
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
@@ -872,7 +988,6 @@ class AllocationSimulator {
           </td>
           <td class="col-portfolio">
             <select class="editable-cell portfolio-select" data-field="portfolio_id">
-              <option value="">—</option>
               ${this.portfolios.map(p =>
                 `<option value="${p.id}" ${item.portfolio_id == p.id ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>`
               ).join('')}
@@ -1111,6 +1226,120 @@ class AllocationSimulator {
   }
 
   // ============================================================================
+  // Investment Progress Display (Remaining to Invest from Builder)
+  // ============================================================================
+
+  updateInvestmentProgress() {
+    const container = this.investmentProgressContainer;
+    if (!container) return;
+
+    if (!this.hasBuilderConfig || !this.investmentTargets) {
+      container.innerHTML = this.renderNoBuilderConfig();
+      return;
+    }
+
+    const data = this.investmentTargets;
+    const currentValue = this.portfolioData?.total_value || 0;
+    const targetAmount = data.targetAmount || 0;
+
+    // Calculate simulated total (only items matching current scope/portfolio)
+    let simulatedTotal = 0;
+    this.items.forEach(item => {
+      if (this.scope === 'portfolio' && this.portfolioId) {
+        if (item.portfolio_id !== this.portfolioId) return;
+      }
+      simulatedTotal += parseFloat(item.value) || 0;
+    });
+
+    const projectedValue = currentValue + simulatedTotal;
+    const percentComplete = targetAmount > 0 ? Math.min(100, (currentValue / targetAmount) * 100) : 0;
+    const projectedPercent = targetAmount > 0 ? (projectedValue / targetAmount) * 100 : 0;
+    const remaining = Math.max(0, targetAmount - currentValue);
+    const projectedRemaining = Math.max(0, targetAmount - projectedValue);
+    const isOverTarget = currentValue > targetAmount;
+    const projectedOverTarget = projectedValue > targetAmount;
+
+    // Determine scope label
+    let scopeLabel = 'Global';
+    let allocationInfo = '';
+    if (this.scope === 'portfolio' && data.portfolioName) {
+      scopeLabel = data.portfolioName;
+      if (data.allocationPercent) {
+        allocationInfo = ` (${data.allocationPercent}%)`;
+      }
+    }
+
+    // Status class
+    const statusClass = isOverTarget ? 'over-target' : percentComplete >= 100 ? 'complete' : '';
+
+    container.innerHTML = `
+      <div class="progress-header">
+        <div class="progress-title">
+          <i class="fas fa-bullseye"></i>
+          <span class="label">Investment Progress</span>
+          <span class="scope-badge">${scopeLabel}${allocationInfo}</span>
+        </div>
+        <div class="progress-values">
+          <span class="current-value">${this.formatCurrency(currentValue)}</span>
+          <span class="separator">/</span>
+          <span class="target-value">${this.formatCurrency(targetAmount)}</span>
+        </div>
+      </div>
+
+      <div class="progress-bar-container">
+        <div class="progress-track">
+          <div class="progress-fill ${statusClass}" style="width: ${percentComplete.toFixed(1)}%"></div>
+          ${simulatedTotal > 0 ? `
+            <div class="progress-simulated" style="left: ${Math.min(100, percentComplete).toFixed(1)}%; width: ${Math.min(100 - percentComplete, (simulatedTotal / targetAmount) * 100).toFixed(1)}%"></div>
+          ` : ''}
+        </div>
+        <div class="progress-labels">
+          <span class="percent-complete ${statusClass}">
+            ${isOverTarget
+              ? `${percentComplete.toFixed(1)}% — ${this.formatCurrency(currentValue - targetAmount)} over target`
+              : `${percentComplete.toFixed(1)}% complete`}
+          </span>
+          <span class="remaining-amount">
+            ${isOverTarget ? '' : `${this.formatCurrency(remaining)} remaining`}
+          </span>
+        </div>
+      </div>
+
+      ${simulatedTotal > 0 ? `
+        <div class="simulated-impact ${projectedOverTarget ? 'over-target' : ''}">
+          <span class="simulated-label">With simulated additions:</span>
+          <span class="simulated-value">${this.formatCurrency(projectedValue)}</span>
+          <span class="simulated-percent">(${projectedPercent.toFixed(1)}%)</span>
+          ${!projectedOverTarget && projectedRemaining > 0 ? `
+            <span class="simulated-remaining">— ${this.formatCurrency(projectedRemaining)} still needed</span>
+          ` : ''}
+          ${projectedOverTarget ? `
+            <span class="simulated-over">— exceeds target</span>
+          ` : ''}
+        </div>
+      ` : ''}
+    `;
+  }
+
+  renderNoBuilderConfig() {
+    return `
+      <div class="no-builder-config">
+        <i class="fas fa-info-circle"></i>
+        <span>Set up your investment targets in the <a href="/portfolio/build">Builder</a> to see your progress here.</span>
+      </div>
+    `;
+  }
+
+  formatCurrency(value) {
+    const num = parseFloat(value) || 0;
+    const formatted = '€' + num.toLocaleString('de-DE', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    });
+    return `<span class="sensitive-value">${formatted}</span>`;
+  }
+
+  // ============================================================================
   // Chart Rendering with Combined Allocations
   // ============================================================================
 
@@ -1120,10 +1349,17 @@ class AllocationSimulator {
     this.lastCombinedData = combined;
 
     this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
-    this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
+
+    // For the category chart, use sector or thesis based on categoryMode
+    const categoryData = this.categoryMode === 'thesis' ? combined.byThesis : combined.bySector;
+    const baselineData = this.categoryMode === 'thesis' ? combined.baselineByThesis : combined.baselineBySector;
+    this.renderBarChart(this.sectorChart, categoryData, combined.combinedTotal, baselineData, combined.baselineTotal, 'sector');
 
     // Handle pending auto-expand for newly added items
     this.handlePendingExpand();
+
+    // Update investment progress (simulated items impact remaining-to-invest)
+    this.updateInvestmentProgress();
   }
 
   /**
@@ -1135,7 +1371,9 @@ class AllocationSimulator {
       this.expandedSectorBar = this.pendingExpandSector;
       // Re-render the sector chart to show expanded state
       const combined = this.lastCombinedData || this.calculateCombinedAllocations();
-      this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
+      const categoryData = this.categoryMode === 'thesis' ? combined.byThesis : combined.bySector;
+      const baselineData = this.categoryMode === 'thesis' ? combined.baselineByThesis : combined.baselineBySector;
+      this.renderBarChart(this.sectorChart, categoryData, combined.combinedTotal, baselineData, combined.baselineTotal, 'sector');
       this.pendingExpandSector = null;
     }
 
@@ -1151,9 +1389,11 @@ class AllocationSimulator {
 
   calculateCombinedAllocations() {
     const byCountry = {};
-    const byCategory = {};
+    const bySector = {};
+    const byThesis = {};
     const baselineByCountry = {};
-    const baselineByCategory = {};
+    const baselineBySector = {};
+    const baselineByThesis = {};
 
     // Add portfolio baseline data
     const portfolioTotal = this.portfolioData?.total_value || 0;
@@ -1168,8 +1408,14 @@ class AllocationSimulator {
 
       (this.portfolioData.sectors || []).forEach(c => {
         const normalizedName = (c.name || 'unknown').toLowerCase().trim();
-        baselineByCategory[normalizedName] = (baselineByCategory[normalizedName] || 0) + c.value;
-        byCategory[normalizedName] = (byCategory[normalizedName] || 0) + c.value;
+        baselineBySector[normalizedName] = (baselineBySector[normalizedName] || 0) + c.value;
+        bySector[normalizedName] = (bySector[normalizedName] || 0) + c.value;
+      });
+
+      (this.portfolioData.theses || []).forEach(c => {
+        const normalizedName = (c.name || 'unassigned').toLowerCase().trim();
+        baselineByThesis[normalizedName] = (baselineByThesis[normalizedName] || 0) + c.value;
+        byThesis[normalizedName] = (byThesis[normalizedName] || 0) + c.value;
       });
     }
 
@@ -1192,16 +1438,26 @@ class AllocationSimulator {
 
       // Sector aggregation (normalize to lowercase)
       const sector = item.sector === '—' || !item.sector ? 'unknown' : item.sector.toLowerCase();
-      byCategory[sector] = (byCategory[sector] || 0) + value;
+      bySector[sector] = (bySector[sector] || 0) + value;
+
+      // Thesis aggregation (normalize to lowercase)
+      const thesis = item.thesis === '—' || !item.thesis ? 'unassigned' : item.thesis.toLowerCase();
+      byThesis[thesis] = (byThesis[thesis] || 0) + value;
     });
 
     const combinedTotal = portfolioTotal + simulatedTotal;
 
+    // Return data for both sector and thesis (the chart renderer will choose based on categoryMode)
     return {
       byCountry,
-      byCategory,
+      bySector,
+      byThesis,
+      // Legacy aliases for compatibility
+      byCategory: this.categoryMode === 'thesis' ? byThesis : bySector,
       baselineByCountry,
-      baselineByCategory,
+      baselineBySector,
+      baselineByThesis,
+      baselineByCategory: this.categoryMode === 'thesis' ? baselineByThesis : baselineBySector,
       combinedTotal,
       baselineTotal: portfolioTotal,
       simulatedTotal

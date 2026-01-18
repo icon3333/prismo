@@ -49,7 +49,7 @@
                                 </div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="portfolioAllocationsChart" style="min-height: 300px;"></div>
+                                <div id="portfolioAllocationsChart"></div>
                             </div>
                         </div>
                     </div>
@@ -64,7 +64,7 @@
                                 </div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="companyAllocationsChart" style="min-height: 300px;"></div>
+                                <div id="companyAllocationsChart"></div>
                             </div>
                         </div>
                     </div>
@@ -79,7 +79,7 @@
                                 </div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="countryDistributionChart" style="min-height: 300px;"></div>
+                                <div id="countryDistributionChart"></div>
                             </div>
                         </div>
                     </div>
@@ -93,7 +93,7 @@
                                 <div class="overview-chart-subtitle" id="sectorCountSubtitle">Sector breakdown</div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="sectorDistributionChart" style="min-height: 300px;"></div>
+                                <div id="sectorDistributionChart"></div>
                             </div>
                         </div>
                     </div>
@@ -107,7 +107,21 @@
                                 <div class="overview-chart-subtitle" id="investmentTypeSubtitle">Stock vs ETF breakdown</div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="investmentTypeChart" style="min-height: 300px;"></div>
+                                <div id="investmentTypeChart"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="column is-6">
+                    <div class="gauge-card">
+                        <div class="gauge-indicator">
+                            <div class="overview-chart-header">
+                                <div class="overview-chart-title">Investment Thesis</div>
+                                <div class="overview-chart-subtitle" id="thesisCountSubtitle">Thesis breakdown</div>
+                            </div>
+                            <div class="overview-chart-container">
+                                <div id="thesisDistributionChart"></div>
                             </div>
                         </div>
                     </div>
@@ -306,21 +320,8 @@
 
                 // Small delay to ensure DOM is fully rendered before creating charts
                 setTimeout(() => {
-                    // Set explicit dimensions on chart containers before creating charts
-                    const portfolioChartEl = document.getElementById('portfolioAllocationsChart');
-                    const companyChartEl = document.getElementById('companyAllocationsChart');
-
-                    if (portfolioChartEl) {
-                        portfolioChartEl.style.minHeight = '350px';
-                        portfolioChartEl.style.width = '100%';
-                    }
-
-                    if (companyChartEl) {
-                        companyChartEl.style.minHeight = '350px';
-                        companyChartEl.style.width = '100%';
-                    }
-
-                    // Now update charts after containers are properly sized
+                    // Charts will use CSS-controlled dimensions (height: 100%)
+                    // No explicit dimension setting needed - CSS handles sizing
                     updateCharts();
 
                     // Risk indicators removed - now only on main page
@@ -552,6 +553,7 @@
                         // Include risk analysis fields
                         country: item.effective_country || item.country || 'Unknown',
                         exchange: item.exchange || 'Unknown',
+                        thesis: item.thesis || '',
                         // Include custom value fields (required by centralized calculator)
                         is_custom_value: item.is_custom_value || false,
                         custom_total_value: item.custom_total_value || null,
@@ -670,6 +672,7 @@
             const companyCountEl = document.getElementById('companyCountSubtitle');
             const countryCountEl = document.getElementById('countryCountSubtitle');
             const sectorCountEl = document.getElementById('sectorCountSubtitle');
+            const thesisCountEl = document.getElementById('thesisCountSubtitle');
 
 
             if (filteredPortfolios.length === 0) {
@@ -677,6 +680,7 @@
                 companyCountEl.textContent = 'Select portfolios to view';
                 countryCountEl.textContent = '';
                 sectorCountEl.textContent = '';
+                if (thesisCountEl) thesisCountEl.textContent = '';
 
                 return;
             }
@@ -692,10 +696,19 @@
             // Calculate distribution counts
             const countries = new Set(allCompanies.map(c => c.country || 'Unknown'));
             const sectors = new Set(allCompanies.map(c => c.sector || 'Unknown'));
+            const theses = new Set(allCompanies.map(c => c.thesis || 'Unassigned').filter(t => t && t !== 'Unassigned'));
+            const unassignedThesisCount = allCompanies.filter(c => !c.thesis || c.thesis === '').length;
 
 
             countryCountEl.textContent = `${countries.size} countries`;
             sectorCountEl.textContent = `${sectors.size} sectors`;
+            if (thesisCountEl) {
+                if (theses.size === 0) {
+                    thesisCountEl.textContent = 'No thesis assigned';
+                } else {
+                    thesisCountEl.textContent = `${theses.size} thesis${theses.size > 1 ? 'es' : ''}${unassignedThesisCount > 0 ? `, ${unassignedThesisCount} unassigned` : ''}`;
+                }
+            }
 
         }
 
@@ -705,7 +718,8 @@
                 'companyAllocationsChart',
                 'countryDistributionChart',
                 'sectorDistributionChart',
-                'investmentTypeChart'
+                'investmentTypeChart',
+                'thesisDistributionChart'
             ];
 
             chartIds.forEach(chartId => {
@@ -761,9 +775,8 @@
                     return;
                 }
 
-                // Ensure the element is visible and has dimensions
+                // Ensure the element is visible - dimensions controlled by CSS
                 chartElement.style.display = 'block';
-                chartElement.style.minHeight = '350px';
 
                 if (typeof ChartConfig !== 'undefined' && ChartConfig.createStandardDoughnutChart) {
                     ChartConfig.createStandardDoughnutChart(
@@ -817,7 +830,7 @@
                     percentages: percentages,
                     total: totalValue,
                     formatPercentage: window.formatPercentage || (v => `${v.toFixed(1)}%`),
-                    height: 300
+                    height: 350
                 }
                 );
             } catch (error) {
@@ -947,7 +960,7 @@
                 }],
                 chart: {
                     type: 'bar',
-                    height: options.height || 300,
+                    height: options.height || 350,
                     toolbar: {
                         show: false
                     }
@@ -1066,6 +1079,7 @@
             updateDistributionChart('country', 'countryDistributionChart');
             updateDistributionChart('sector', 'sectorDistributionChart');
             updateInvestmentTypeChart();
+            updateThesisChart();
         }
 
         function updateDistributionChart(field, chartId) {
@@ -1131,7 +1145,7 @@
                     percentages: distributionPercentages,
                     total: distributionTotal,
                     formatPercentage: window.formatPercentage || (v => `${v.toFixed(1)}%`),
-                    height: 300,
+                    height: 350,
                     companyDetails: companyDetails // Pass company details for tooltips
                 });
             } catch (error) {
@@ -1212,11 +1226,77 @@
                         title: '',
                         colors: colors,
                         showTotal: true,
-                        height: 300
+                        height: 350
                     }
                 );
             } catch (error) {
                 console.error('Error creating investment type distribution chart:', error);
+                document.getElementById(chartId).innerHTML = '<p class="has-text-danger">Error creating chart</p>';
+            }
+        }
+
+        function updateThesisChart() {
+            const chartId = 'thesisDistributionChart';
+            const distributions = {};
+            const companyDetails = {}; // Track companies in each thesis
+
+            // Get all companies from selected portfolios
+            const allCompanies = getAllCompaniesFromSelectedPortfolios();
+
+            allCompanies.forEach(company => {
+                const value = company.currentValue || 0;
+                const thesis = company.thesis && company.thesis.trim() ? company.thesis.trim() : 'Unassigned';
+
+                distributions[thesis] = (distributions[thesis] || 0) + value;
+
+                // Track company details for tooltips
+                if (!companyDetails[thesis]) companyDetails[thesis] = [];
+                companyDetails[thesis].push({
+                    name: company.name,
+                    value: value,
+                    percentage: 0 // Will be calculated later
+                });
+            });
+
+            const distributionData = Object.entries(distributions)
+                .map(([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value);
+
+            // Clear existing chart
+            document.getElementById(chartId).innerHTML = '';
+
+            if (distributionData.length === 0) {
+                document.getElementById(chartId).innerHTML = '<p class="has-text-grey has-text-centered p-4">No data available</p>';
+                return;
+            }
+
+            // Calculate percentages
+            const distributionTotal = distributionData.reduce((sum, item) => sum + item.value, 0);
+            const distributionPercentages = distributionData.map(item => distributionTotal > 0 ? (item.value / distributionTotal) * 100 : 0);
+
+            // Calculate individual company percentages
+            for (const key in companyDetails) {
+                companyDetails[key].forEach(company => {
+                    company.percentage = distributionTotal > 0 ? (company.value / distributionTotal) * 100 : 0;
+                });
+                companyDetails[key].sort((a, b) => b.value - a.value);
+            }
+
+            try {
+                // Create bar chart with enhanced tooltips (same as sector chart)
+                createBarChart(chartId,
+                    distributionData.map(item => item.name),
+                    distributionData.map(item => item.value), {
+                    title: '',
+                    colors: ChartConfig.generateColors(distributionData.length),
+                    percentages: distributionPercentages,
+                    total: distributionTotal,
+                    formatPercentage: window.formatPercentage || (v => `${v.toFixed(1)}%`),
+                    height: 350,
+                    companyDetails: companyDetails // Pass company details for tooltips
+                });
+            } catch (error) {
+                console.error('Error creating thesis distribution chart:', error);
                 document.getElementById(chartId).innerHTML = '<p class="has-text-danger">Error creating chart</p>';
             }
         }

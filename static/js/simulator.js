@@ -158,23 +158,39 @@ class AllocationSimulator {
       if (result.success) {
         this.portfolioData = result.data;
 
+        // Extract investment targets from Builder (for "Remaining to Invest" display)
+        if (result.data.investmentTargets) {
+          this.investmentTargets = result.data.investmentTargets;
+          this.hasBuilderConfig = result.data.investmentTargets.hasBuilderConfig || false;
+        } else {
+          this.investmentTargets = null;
+          this.hasBuilderConfig = false;
+        }
+
         // Recalculate percentage-based items when baseline changes
         this.recalculateAllPercentageItems();
         this.renderTable();
         this.updateCharts();
+        this.updateInvestmentProgress();
       } else {
         console.error('Failed to load portfolio allocations:', result.error);
         this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
+        this.investmentTargets = null;
+        this.hasBuilderConfig = false;
         this.recalculateAllPercentageItems();
         this.renderTable();
         this.updateCharts();
+        this.updateInvestmentProgress();
       }
     } catch (error) {
       console.error('Error loading portfolio allocations:', error);
       this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
+      this.investmentTargets = null;
+      this.hasBuilderConfig = false;
       this.recalculateAllPercentageItems();
       this.renderTable();
       this.updateCharts();
+      this.updateInvestmentProgress();
     }
   }
 
@@ -500,6 +516,11 @@ class AllocationSimulator {
         </table>
       </div>
 
+      <!-- Investment Progress (Remaining to Invest from Builder) -->
+      <div class="investment-progress-section" id="simulator-investment-progress">
+        <div class="progress-loading">Loading investment targets...</div>
+      </div>
+
       <!-- Aggregation Charts -->
       <div class="simulator-charts">
         <div class="simulator-chart-panel">
@@ -531,6 +552,7 @@ class AllocationSimulator {
     this.tableBody = document.getElementById('simulator-table-body');
     this.countryChart = document.getElementById('simulator-country-chart');
     this.sectorChart = document.getElementById('simulator-sector-chart');
+    this.investmentProgressContainer = document.getElementById('simulator-investment-progress');
   }
 
   bindEvents() {

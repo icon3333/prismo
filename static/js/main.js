@@ -303,12 +303,13 @@ function showNotification(message, type = 'is-info', duration = 5000) {
  */
 function formatCurrency(amount, currency = '€') {
     if (typeof amount !== 'number') {
-        return `${currency}0`;
+        return `<span class="sensitive-value">${currency}0</span>`;
     }
-    
-    return amount >= 100
+
+    const formatted = amount >= 100
         ? `${currency}${amount.toLocaleString('en-US', {maximumFractionDigits: 0})}`
         : `${currency}${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    return `<span class="sensitive-value">${formatted}</span>`;
 }
 
 /**

@@ -43,7 +43,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
     """
     # Whitelist of allowed fields that can be updated via this function
     ALLOWED_FIELDS = {
-        'identifier', 'category', 'portfolio', 'investment_type',
+        'identifier', 'sector', 'thesis', 'portfolio', 'investment_type',
         'custom_total_value', 'custom_price_eur', 'is_custom_value_edit',
         'country', 'reset_country', 'is_country_user_edit', 'reset_identifier',
         'is_identifier_user_edit',
@@ -117,7 +117,8 @@ def _apply_company_update(cursor, company_id, data, account_id):
     # This prevents SQL injection by explicitly mapping user input keys to known safe column names
     ALLOWED_UPDATES = {
         'identifier': 'identifier = ?',
-        'category': 'category = ?',
+        'sector': 'sector = ?',
+        'thesis': 'thesis = ?',
         'portfolio': 'portfolio_id = ?',
     }
 
@@ -507,7 +508,7 @@ def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
             SELECT
                 p.id AS portfolio_id,
                 p.name AS portfolio_name,
-                c.category,
+                c.sector,
                 c.name AS company_name,
                 c.identifier,
                 c.investment_type,
@@ -533,7 +534,7 @@ def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
                 es_rules.page_name = 'build' AND
                 es_rules.variable_name = 'rules'
             WHERE p.account_id = ? AND p.name IS NOT NULL
-            ORDER BY p.name, c.category, c.name
+            ORDER BY p.name, c.sector, c.name
         ''', [account_id])
     except Exception as e:
         logger.error(f"Database error fetching combined portfolio data: {e}")
@@ -685,7 +686,7 @@ def get_single_portfolio_data_api(portfolio_id):
         - num_holdings: Number of companies
         - last_updated: Most recent price update timestamp
         - companies: List of company objects with percentages
-        - categories: List of category aggregations
+        - sectors: List of sector aggregations
 
     Errors:
         404: Portfolio not found or doesn't belong to user
@@ -711,7 +712,7 @@ def get_single_portfolio_data_api(portfolio_id):
         # to calculate values using consistent daily exchange rates via calculate_item_value()
         companies = query_db('''
             SELECT
-                c.id, c.name, c.identifier, c.category, c.investment_type,
+                c.id, c.name, c.identifier, c.sector, c.investment_type,
                 c.total_invested, mp.country, c.override_country,
                 COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
                 cs.shares, cs.override_share,
@@ -759,43 +760,43 @@ def get_single_portfolio_data_api(portfolio_id):
                 company['pnl_absolute'] = None
                 company['pnl_percentage'] = None
 
-        # Group by category
-        categories = {}
+        # Group by sector
+        sectors = {}
         for company in companies:
-            cat_name = company['category'] or 'Uncategorized'
-            if cat_name not in categories:
-                categories[cat_name] = {
-                    'name': cat_name,
+            sector_name = company['sector'] or 'Uncategorized'
+            if sector_name not in sectors:
+                sectors[sector_name] = {
+                    'name': sector_name,
                     'companies': [],
                     'total_value': 0,
                     'total_invested': 0
                 }
-            categories[cat_name]['companies'].append(company)
-            categories[cat_name]['total_value'] += float(company['current_value'])
-            categories[cat_name]['total_invested'] += float(company.get('total_invested', 0))
+            sectors[sector_name]['companies'].append(company)
+            sectors[sector_name]['total_value'] += float(company['current_value'])
+            sectors[sector_name]['total_invested'] += float(company.get('total_invested', 0))
 
         # Convert to list and calculate percentages
-        categories_list = []
-        for cat_data in categories.values():
-            cat_data['percentage'] = (
-                (cat_data['total_value'] / total_value * 100)
+        sectors_list = []
+        for sector_data in sectors.values():
+            sector_data['percentage'] = (
+                (sector_data['total_value'] / total_value * 100)
                 if total_value > 0 else 0
             )
 
-            # Calculate category P&L
-            if cat_data['total_invested'] > 0:
-                pnl_absolute = cat_data['total_value'] - cat_data['total_invested']
-                pnl_percentage = (pnl_absolute / cat_data['total_invested']) * 100
-                cat_data['pnl_absolute'] = pnl_absolute
-                cat_data['pnl_percentage'] = pnl_percentage
+            # Calculate sector P&L
+            if sector_data['total_invested'] > 0:
+                pnl_absolute = sector_data['total_value'] - sector_data['total_invested']
+                pnl_percentage = (pnl_absolute / sector_data['total_invested']) * 100
+                sector_data['pnl_absolute'] = pnl_absolute
+                sector_data['pnl_percentage'] = pnl_percentage
             else:
-                cat_data['pnl_absolute'] = None
-                cat_data['pnl_percentage'] = None
+                sector_data['pnl_absolute'] = None
+                sector_data['pnl_percentage'] = None
 
-            cat_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-            categories_list.append(cat_data)
+            sector_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
+            sectors_list.append(sector_data)
 
-        categories_list.sort(key=lambda x: x['total_value'], reverse=True)
+        sectors_list.sort(key=lambda x: x['total_value'], reverse=True)
 
         # Calculate total portfolio P&L
         total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
@@ -817,10 +818,10 @@ def get_single_portfolio_data_api(portfolio_id):
             'num_holdings': len(companies),
             'last_updated': max((c['last_updated'] for c in companies if c['last_updated']), default=None),
             'companies': companies,
-            'categories': categories_list
+            'sectors': sectors_list
         }
 
-        logger.info(f"Returning {len(companies)} companies in {len(categories_list)} categories for portfolio {portfolio_id}")
+        logger.info(f"Returning {len(companies)} companies in {len(sectors_list)} sectors for portfolio {portfolio_id}")
         return jsonify(response_data)
 
     except ValidationError as e:
@@ -836,11 +837,11 @@ def get_single_portfolio_data_api(portfolio_id):
 
 def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[str, Any]]:
     """
-    Shared helper to query position data grouped by any field (country, category, etc.)
+    Shared helper to query position data grouped by any field (country, sector, etc.)
 
     Args:
         account_id: User's account ID
-        field_sql: SQL expression for the grouping field (e.g., "COALESCE(c.category, 'Uncategorized')")
+        field_sql: SQL expression for the grouping field (e.g., "COALESCE(c.sector, 'Uncategorized')")
 
     Returns:
         List of position data dictionaries with field_value, company details, and values
@@ -851,9 +852,9 @@ def _get_position_data_by_field(account_id: int, field_sql: str) -> List[Dict[st
     # SECURITY: Whitelist of allowed SQL expressions to prevent SQL injection
     # Only predefined expressions are allowed - no user input should reach here
     ALLOWED_FIELD_EXPRESSIONS = {
-        "COALESCE(c.category, 'Uncategorized')",
+        "COALESCE(c.sector, 'Uncategorized')",
         "COALESCE(c.override_country, mp.country, 'Unknown')",
-        "c.category",
+        "c.sector",
         "c.override_country",
         "mp.country",
     }
@@ -984,12 +985,12 @@ def get_country_capacity_data():
 
 
 @require_auth
-def get_category_capacity_data():
-    """API endpoint to get category investment capacity data for the rebalancing feature"""
-    logger.info("API request for category investment capacity data")
+def get_sector_capacity_data():
+    """API endpoint to get sector investment capacity data for the rebalancing feature"""
+    logger.info("API request for sector investment capacity data")
 
     account_id = g.account_id
-    logger.info(f"Getting category capacity data for account_id: {account_id}")
+    logger.info(f"Getting sector capacity data for account_id: {account_id}")
 
     try:
         # Get budget settings from expanded_state (from build page)
@@ -1007,7 +1008,7 @@ def get_category_capacity_data():
 
         # Parse budget and rules data
         total_investable_capital = 0
-        max_per_category = 25  # Default value
+        max_per_sector = 25  # Default value
 
         if budget_data and isinstance(budget_data, dict):
             try:
@@ -1019,25 +1020,25 @@ def get_category_capacity_data():
         if rules_data and isinstance(rules_data, dict):
             try:
                 rules_json = json.loads(rules_data.get('variable_value', '{}'))
-                max_per_category = float(rules_json.get('maxPerCategory', 25))
+                max_per_sector = float(rules_json.get('maxPerSector', 25))
             except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to parse rules data: {e}")
 
-        logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Category: {max_per_category}%")
+        logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Sector: {max_per_sector}%")
 
-        # Get all user's positions with individual company details by category (using shared helper)
+        # Get all user's positions with individual company details by sector (using shared helper)
         position_data = _get_position_data_by_field(
             account_id,
-            "COALESCE(c.category, 'Uncategorized')"
+            "COALESCE(c.sector, 'Uncategorized')"
         )
 
-        # Group positions by category
-        category_positions = {}
+        # Group positions by sector
+        sector_positions = {}
         if position_data:
             for row in position_data:
-                category = row['field_value']  # Using generic field_value from helper
-                if category not in category_positions:
-                    category_positions[category] = {
+                sector = row['field_value']  # Using generic field_value from helper
+                if sector not in sector_positions:
+                    sector_positions[sector] = {
                         'positions': [],
                         'total_invested': 0
                     }
@@ -1050,44 +1051,44 @@ def get_category_capacity_data():
                     'value': float(row['position_value'])
                 }
 
-                category_positions[category]['positions'].append(position_info)
-                category_positions[category]['total_invested'] += position_info['value']
+                sector_positions[sector]['positions'].append(position_info)
+                sector_positions[sector]['total_invested'] += position_info['value']
 
-        # Calculate remaining capacity for each category
-        category_capacity = []
-        if category_positions and total_investable_capital > 0:
-            max_per_category_amount = total_investable_capital * (max_per_category / 100)
+        # Calculate remaining capacity for each sector
+        sector_capacity = []
+        if sector_positions and total_investable_capital > 0:
+            max_per_sector_amount = total_investable_capital * (max_per_sector / 100)
 
-            for category, data in category_positions.items():
+            for sector, data in sector_positions.items():
                 current_invested = data['total_invested']
-                # Allow negative values for over-allocated categories
-                remaining_capacity = max_per_category_amount - current_invested
+                # Allow negative values for over-allocated sectors
+                remaining_capacity = max_per_sector_amount - current_invested
 
-                category_capacity.append({
-                    'category': category,
+                sector_capacity.append({
+                    'sector': sector,
                     'current_invested': current_invested,
-                    'max_allowed': max_per_category_amount,
+                    'max_allowed': max_per_sector_amount,
                     'remaining_capacity': remaining_capacity,
                     'is_over_allocated': remaining_capacity < 0,
                     'positions': data['positions']  # Include individual positions for hover
                 })
 
-        # Sort by remaining capacity (ascending - over-allocated categories first, then least to most capacity)
-        category_capacity.sort(key=lambda x: x['remaining_capacity'])
+        # Sort by remaining capacity (ascending - over-allocated sectors first, then least to most capacity)
+        sector_capacity.sort(key=lambda x: x['remaining_capacity'])
 
-        logger.info(f"Returning category capacity data for {len(category_capacity)} categories")
+        logger.info(f"Returning sector capacity data for {len(sector_capacity)} sectors")
         return jsonify({
-            'categories': category_capacity,
+            'sectors': sector_capacity,
             'total_investable_capital': total_investable_capital,
-            'max_per_category_percent': max_per_category
+            'max_per_sector_percent': max_per_sector
         })
 
     except (DataIntegrityError, ValidationError) as e:
-        logger.error(f"Error getting category capacity data: {str(e)}")
+        logger.error(f"Error getting sector capacity data: {str(e)}")
         return error_response(str(e), 400 if isinstance(e, ValidationError) else 500)
     except Exception as e:
-        logger.exception(f"Unexpected error getting category capacity data")
-        return error_response('Failed to calculate category capacity', 500)
+        logger.exception(f"Unexpected error getting sector capacity data")
+        return error_response('Failed to calculate sector capacity', 500)
 
 
 @require_auth
@@ -1098,13 +1099,13 @@ def get_effective_capacity_data():
     Returns all data needed for the interactive two-panel slider simulator:
     - availableToInvest: Cash available to allocate (from Builder)
     - All countries with positions and current values
-    - All categories with current values
-    - Rules (maxPerCountry, maxPerCategory)
+    - All sectors with current values
+    - Rules (maxPerCountry, maxPerSector)
     - Position-level detail for proportional distribution
 
     This supports the Linked Dual-View Simulator where:
-    - User adjusts country sliders (primary) → category totals are derived
-    - Or user toggles to category-first mode
+    - User adjusts country sliders (primary) → sector totals are derived
+    - Or user toggles to sector-first mode
     - Warnings shown when constraints are exceeded (but not hard-stopped)
     """
     logger.info("API request for allocation simulator data")
@@ -1124,7 +1125,7 @@ def get_effective_capacity_data():
         total_investable_capital = 0
         available_to_invest = 0  # NEW: Cash available from Builder
         max_per_country = 10  # Default value
-        max_per_category = 25  # Default value
+        max_per_sector = 25  # Default value
 
         for row in state_data:
             var_name = row.get('variable_name')
@@ -1137,17 +1138,17 @@ def get_effective_capacity_data():
                     available_to_invest = float(parsed_json.get('availableToInvest', 0))
                 elif var_name == 'rules':
                     max_per_country = float(parsed_json.get('maxPerCountry', 10))
-                    max_per_category = float(parsed_json.get('maxPerCategory', 25))
+                    max_per_sector = float(parsed_json.get('maxPerSector', 25))
             except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to parse {var_name} data: {e}")
 
-        logger.info(f"Budget settings - Total: {total_investable_capital}, Max Country: {max_per_country}%, Max Category: {max_per_category}%")
+        logger.info(f"Budget settings - Total: {total_investable_capital}, Max Country: {max_per_country}%, Max Sector: {max_per_sector}%")
 
-        # Get all positions with BOTH country AND category data
+        # Get all positions with BOTH country AND sector data
         position_data = query_db('''
             SELECT
                 COALESCE(c.override_country, mp.country, 'Unknown') as country,
-                COALESCE(c.category, 'Uncategorized') as category,
+                COALESCE(c.sector, 'Uncategorized') as sector,
                 c.name as company_name,
                 p.name as portfolio_name,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
@@ -1168,21 +1169,21 @@ def get_effective_capacity_data():
 
         # Build position lookup structures
         positions_by_country = {}  # country -> list of positions
-        positions_by_category = {}  # category -> list of positions
-        category_totals = {}  # category -> total value
+        positions_by_sector = {}  # sector -> list of positions
+        sector_totals = {}  # sector -> total value
 
         if position_data:
             for row in position_data:
                 country = row['country']
-                category = row['category']
+                sector = row['sector']
                 position_value = float(row['position_value'])
 
                 position_info = {
                     'name': row['company_name'],  # Used by JS renderPositionsList
                     'company_name': row['company_name'],
                     'portfolio_name': row['portfolio_name'],
-                    'country': country,  # Needed for category-first mode position lists
-                    'category': category,
+                    'country': country,  # Needed for sector-first mode position lists
+                    'sector': sector,
                     'shares': float(row['shares']),
                     'price': float(row['price']),
                     'value': position_value
@@ -1193,62 +1194,62 @@ def get_effective_capacity_data():
                     positions_by_country[country] = []
                 positions_by_country[country].append(position_info)
 
-                # Group by category
-                if category not in positions_by_category:
-                    positions_by_category[category] = []
-                positions_by_category[category].append(position_info)
+                # Group by sector
+                if sector not in positions_by_sector:
+                    positions_by_sector[sector] = []
+                positions_by_sector[sector].append(position_info)
 
-                # Track category totals
-                category_totals[category] = category_totals.get(category, 0) + position_value
+                # Track sector totals
+                sector_totals[sector] = sector_totals.get(sector, 0) + position_value
 
         # Calculate effective capacity for each country
         country_capacity = []
         max_per_country_amount = total_investable_capital * (max_per_country / 100) if total_investable_capital > 0 else 0
-        max_per_category_amount = total_investable_capital * (max_per_category / 100) if total_investable_capital > 0 else 0
+        max_per_sector_amount = total_investable_capital * (max_per_sector / 100) if total_investable_capital > 0 else 0
 
         for country, positions in positions_by_country.items():
             country_current = sum(p['value'] for p in positions)
             country_remaining = max_per_country_amount - country_current
 
-            # Find the tightest category constraint for positions in this country
+            # Find the tightest sector constraint for positions in this country
             binding_constraint = None
             effective_remaining = country_remaining
 
-            # Get unique categories in this country
-            categories_in_country = set(p['category'] for p in positions)
+            # Get unique sectors in this country
+            sectors_in_country = set(p['sector'] for p in positions)
 
-            for category in categories_in_country:
-                category_current = category_totals.get(category, 0)
-                category_remaining = max_per_category_amount - category_current
+            for sector in sectors_in_country:
+                sector_current = sector_totals.get(sector, 0)
+                sector_remaining = max_per_sector_amount - sector_current
 
-                # If this category's remaining capacity is tighter than current effective
-                if category_remaining < effective_remaining:
-                    effective_remaining = category_remaining
-                    category_pct = (category_current / max_per_category_amount * 100) if max_per_category_amount > 0 else 0
-                    binding_constraint = f"{category} at {category_pct:.0f}%"
+                # If this sector's remaining capacity is tighter than current effective
+                if sector_remaining < effective_remaining:
+                    effective_remaining = sector_remaining
+                    sector_pct = (sector_current / max_per_sector_amount * 100) if max_per_sector_amount > 0 else 0
+                    binding_constraint = f"{sector} at {sector_pct:.0f}%"
 
-            # Calculate category impact preview (what happens if user invests max in this country)
-            category_impact = {}
+            # Calculate sector impact preview (what happens if user invests max in this country)
+            sector_impact = {}
             country_total_value = sum(p['value'] for p in positions)
 
             if country_total_value > 0 and effective_remaining > 0:
-                for category in categories_in_country:
-                    # Calculate how much of new investment would go to this category
+                for sector in sectors_in_country:
+                    # Calculate how much of new investment would go to this sector
                     # (proportional to existing distribution)
-                    category_value_in_country = sum(p['value'] for p in positions if p['category'] == category)
-                    proportion = category_value_in_country / country_total_value
+                    sector_value_in_country = sum(p['value'] for p in positions if p['sector'] == sector)
+                    proportion = sector_value_in_country / country_total_value
 
-                    additional_to_category = effective_remaining * proportion
-                    category_current = category_totals.get(category, 0)
-                    new_category_total = category_current + additional_to_category
+                    additional_to_sector = effective_remaining * proportion
+                    sector_current = sector_totals.get(sector, 0)
+                    new_sector_total = sector_current + additional_to_sector
 
-                    current_pct = (category_current / total_investable_capital * 100) if total_investable_capital > 0 else 0
-                    new_pct = (new_category_total / total_investable_capital * 100) if total_investable_capital > 0 else 0
+                    current_pct = (sector_current / total_investable_capital * 100) if total_investable_capital > 0 else 0
+                    new_pct = (new_sector_total / total_investable_capital * 100) if total_investable_capital > 0 else 0
 
-                    category_impact[category] = {
+                    sector_impact[sector] = {
                         'current': round(current_pct, 1),
                         'if_max_invest': round(new_pct, 1),
-                        'is_ok': new_pct <= max_per_category
+                        'is_ok': new_pct <= max_per_sector
                     }
 
             country_capacity.append({
@@ -1259,57 +1260,57 @@ def get_effective_capacity_data():
                 'effective_remaining': round(max(0, effective_remaining), 2),
                 'binding_constraint': binding_constraint,
                 'positions': positions,
-                'category_impact': category_impact
+                'sector_impact': sector_impact
             })
 
         # Sort by effective remaining capacity (ascending - blocked first, then least capacity)
         country_capacity.sort(key=lambda x: x['effective_remaining'])
 
-        # Build category data for the simulator
-        categories_list = []
-        max_per_category_amount = total_investable_capital * (max_per_category / 100) if total_investable_capital > 0 else 0
-        for category, total in category_totals.items():
-            category_remaining = max_per_category_amount - total
-            category_pct = (total / total_investable_capital * 100) if total_investable_capital > 0 else 0
-            categories_list.append({
-                'category': category,
+        # Build sector data for the simulator
+        sectors_list = []
+        max_per_sector_amount = total_investable_capital * (max_per_sector / 100) if total_investable_capital > 0 else 0
+        for sector, total in sector_totals.items():
+            sector_remaining = max_per_sector_amount - total
+            sector_pct = (total / total_investable_capital * 100) if total_investable_capital > 0 else 0
+            sectors_list.append({
+                'sector': sector,
                 'current_invested': round(total, 2),
-                'category_max': round(max_per_category_amount, 2),
-                'category_remaining': round(category_remaining, 2),
-                'current_percent': round(category_pct, 1),
-                'positions': positions_by_category.get(category, [])
+                'sector_max': round(max_per_sector_amount, 2),
+                'sector_remaining': round(sector_remaining, 2),
+                'current_percent': round(sector_pct, 1),
+                'positions': positions_by_sector.get(sector, [])
             })
 
-        # Sort categories by current invested (descending)
-        categories_list.sort(key=lambda x: x['current_invested'], reverse=True)
+        # Sort sectors by current invested (descending)
+        sectors_list.sort(key=lambda x: x['current_invested'], reverse=True)
 
         # Build summary
         blocked_countries = [c['country'] for c in country_capacity if c['effective_remaining'] <= 0]
-        constrained_by_category = [c['country'] for c in country_capacity if c['binding_constraint'] is not None and c['effective_remaining'] > 0]
+        constrained_by_sector = [c['country'] for c in country_capacity if c['binding_constraint'] is not None and c['effective_remaining'] > 0]
         total_effective_capacity = sum(max(0, c['effective_remaining']) for c in country_capacity)
 
         # Count constraint violations for warnings
         countries_over_limit = sum(1 for c in country_capacity
                                    if c['current_invested'] > c['country_max'])
-        categories_over_limit = sum(1 for c in categories_list
-                                    if c['current_invested'] > c['category_max'])
+        sectors_over_limit = sum(1 for c in sectors_list
+                                    if c['current_invested'] > c['sector_max'])
 
-        logger.info(f"Returning allocation simulator data: {len(country_capacity)} countries, {len(categories_list)} categories")
+        logger.info(f"Returning allocation simulator data: {len(country_capacity)} countries, {len(sectors_list)} sectors")
         return jsonify({
             'countries': country_capacity,
-            'categories': categories_list,  # NEW: For category panel
-            'available_to_invest': available_to_invest,  # NEW: Cash to allocate
+            'sectors': sectors_list,  # For sector panel
+            'available_to_invest': available_to_invest,  # Cash to allocate
             'total_investable_capital': total_investable_capital,
             'rules': {
                 'maxPerCountry': max_per_country,
-                'maxPerCategory': max_per_category
+                'maxPerSector': max_per_sector
             },
             'summary': {
                 'total_effective_capacity': round(total_effective_capacity, 2),
                 'blocked_countries': blocked_countries,
-                'constrained_by_category': constrained_by_category,
+                'constrained_by_sector': constrained_by_sector,
                 'countries_over_limit': countries_over_limit,
-                'categories_over_limit': categories_over_limit
+                'sectors_over_limit': sectors_over_limit
             }
         })
 
@@ -1821,8 +1822,8 @@ def update_portfolio_api():
                 # Always update these fields
                 update_fields.append('identifier = ?')
                 update_values.append(new_identifier)
-                update_fields.append('category = ?')
-                update_values.append(item.get('category', ''))
+                update_fields.append('sector = ?')
+                update_values.append(item.get('sector', ''))
                 update_fields.append('portfolio_id = ?')
                 update_values.append(portfolio_id)
 
@@ -2296,7 +2297,7 @@ def simulator_ticker_lookup():
 
     Returns:
         - ticker: The ticker symbol
-        - category: Sector/industry (e.g., "Technology")
+        - sector: Sector/industry (e.g., "Technology")
         - country: Country of origin (e.g., "United States")
         - name: Company name (e.g., "Apple Inc.")
         - existsInPortfolio: Boolean indicating if ticker exists in user's portfolio
@@ -2320,7 +2321,7 @@ def simulator_ticker_lookup():
                 c.id,
                 c.name,
                 c.identifier,
-                c.category,
+                c.sector,
                 COALESCE(c.override_country, mp.country) as country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
                 CASE
@@ -2349,8 +2350,8 @@ def simulator_ticker_lookup():
             return not_found_response(f"Ticker '{ticker}' not found or no data available")
 
         # Extract relevant fields
-        # Category: prefer sector, fall back to industry, then quoteType
-        category = info.get('sector') or info.get('industry') or info.get('quoteType', '—')
+        # Sector: prefer sector, fall back to industry, then quoteType
+        sector = info.get('sector') or info.get('industry') or info.get('quoteType', '—')
 
         # Country: direct field from yfinance
         country = info.get('country', '—')
@@ -2366,22 +2367,22 @@ def simulator_ticker_lookup():
             portfolio_data = {
                 'id': existing_position['id'],
                 'name': existing_position['name'],
-                'category': existing_position['category'] or category,
+                'sector': existing_position['sector'] or sector,
                 'country': existing_position['country'] or country,
                 'shares': float(existing_position['shares']) if existing_position['shares'] else 0,
                 'value': round(float(existing_position['value']), 2) if existing_position['value'] else 0
             }
-            # Use portfolio data for category/country if available
-            if existing_position['category']:
-                category = existing_position['category']
+            # Use portfolio data for sector/country if available
+            if existing_position['sector']:
+                sector = existing_position['sector']
             if existing_position['country']:
                 country = existing_position['country']
 
-        logger.info(f"Ticker lookup success: {ticker} -> {category}, {country}, exists={exists_in_portfolio}")
+        logger.info(f"Ticker lookup success: {ticker} -> {sector}, {country}, exists={exists_in_portfolio}")
 
         return success_response({
             'ticker': ticker,
-            'category': category if category else '—',
+            'sector': sector if sector else '—',
             'country': country if country else '—',
             'name': name,
             'existsInPortfolio': exists_in_portfolio,
@@ -2408,7 +2409,7 @@ def simulator_portfolio_allocations():
         - portfolio_name: Name of portfolio (if scope='portfolio')
         - total_value: Total portfolio value in EUR
         - countries: List of country allocations with value and percentage
-        - categories: List of category allocations with value and percentage
+        - sectors: List of sector allocations with value and percentage
         - positions: List of positions for ticker matching
     """
     try:
@@ -2441,7 +2442,7 @@ def simulator_portfolio_allocations():
                 c.id,
                 c.name,
                 c.identifier,
-                c.category,
+                c.sector,
                 COALESCE(c.override_country, mp.country) as country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
                 mp.price_eur,
@@ -2470,7 +2471,7 @@ def simulator_portfolio_allocations():
                 'portfolio_name': portfolio_name,
                 'total_value': 0,
                 'countries': [],
-                'categories': [],
+                'sectors': [],
                 'positions': []
             })
 
@@ -2492,17 +2493,17 @@ def simulator_portfolio_allocations():
                 'percentage': round(percentage, 2)
             })
 
-        # Aggregate by category
-        category_totals = {}
+        # Aggregate by sector
+        sector_totals = {}
         for p in positions:
-            category = p['category'] or 'Unknown'
-            category_totals[category] = category_totals.get(category, 0) + float(p['value'] or 0)
+            sector = p['sector'] or 'Unknown'
+            sector_totals[sector] = sector_totals.get(sector, 0) + float(p['value'] or 0)
 
-        categories = []
-        for category, value in sorted(category_totals.items(), key=lambda x: -x[1]):
+        sectors = []
+        for sector, value in sorted(sector_totals.items(), key=lambda x: -x[1]):
             percentage = (value / total_value * 100) if total_value > 0 else 0
-            categories.append({
-                'name': category,
+            sectors.append({
+                'name': sector,
                 'value': round(value, 2),
                 'percentage': round(percentage, 2)
             })
@@ -2515,19 +2516,61 @@ def simulator_portfolio_allocations():
                 'ticker': p['identifier'],
                 'name': p['name'],
                 'country': p['country'] or 'Unknown',
-                'category': p['category'] or 'Unknown',
+                'sector': p['sector'] or 'Unknown',
                 'value': round(float(p['value'] or 0), 2)
             })
 
-        logger.info(f"Returning allocations: {len(countries)} countries, {len(categories)} categories, total={total_value:.2f}")
+        logger.info(f"Returning allocations: {len(countries)} countries, {len(sectors)} sectors, total={total_value:.2f}")
+
+        # Include investment targets if Builder is configured
+        investment_targets = None
+        try:
+            from app.services.builder_service import BuilderService
+            builder_service = BuilderService(get_db())
+            targets = builder_service.get_investment_targets(account_id)
+
+            if targets:
+                if scope == 'global':
+                    target_amount = targets['totals']['totalTargetAmount']
+                    remaining = max(0, target_amount - total_value)
+                    percent_complete = (total_value / target_amount * 100) if target_amount > 0 else 0
+
+                    investment_targets = {
+                        'hasBuilderConfig': True,
+                        'targetAmount': round(target_amount, 2),
+                        'remainingToInvest': round(remaining, 2),
+                        'percentComplete': round(percent_complete, 1),
+                        'availableToInvest': round(targets['budget']['availableToInvest'], 2),
+                        'isOverTarget': total_value > target_amount
+                    }
+                else:
+                    # Portfolio-specific targets
+                    portfolio_target = builder_service.get_portfolio_target(account_id, portfolio_id)
+                    if portfolio_target:
+                        target_amount = portfolio_target['targetAmount']
+                        remaining = max(0, target_amount - total_value)
+                        percent_complete = (total_value / target_amount * 100) if target_amount > 0 else 0
+
+                        investment_targets = {
+                            'hasBuilderConfig': True,
+                            'portfolioName': portfolio_target['portfolioName'],
+                            'allocationPercent': portfolio_target['allocationPercent'],
+                            'targetAmount': round(target_amount, 2),
+                            'remainingToInvest': round(remaining, 2),
+                            'percentComplete': round(percent_complete, 1),
+                            'isOverTarget': total_value > target_amount
+                        }
+        except Exception as e:
+            logger.warning(f"Could not load investment targets: {e}")
 
         return success_response({
             'scope': scope,
             'portfolio_name': portfolio_name,
             'total_value': round(total_value, 2),
             'countries': countries,
-            'categories': categories,
-            'positions': positions_list
+            'sectors': sectors,
+            'positions': positions_list,
+            'investmentTargets': investment_targets
         })
 
     except Exception as e:
@@ -2760,3 +2803,56 @@ def simulator_simulation_delete(simulation_id: int):
     except Exception as e:
         logger.exception(f"Error deleting simulation {simulation_id}")
         return error_response('Failed to delete simulation', 500)
+
+
+@require_auth
+def builder_investment_targets():
+    """
+    Get Builder investment targets for cross-page integration.
+
+    GET /portfolio/api/builder/investment-targets
+
+    Returns:
+        JSON with budget data and portfolio targets from Builder configuration.
+        Used by Simulator to show "Remaining to Invest" progress.
+    """
+    try:
+        from app.services.builder_service import BuilderService
+
+        account_id = g.account_id
+        db = get_db()
+        service = BuilderService(db)
+
+        targets = service.get_investment_targets(account_id)
+
+        if not targets:
+            return jsonify({
+                'success': False,
+                'error': 'no_builder_data',
+                'message': 'No allocation targets configured. Please set up your budget in the Builder page.'
+            }), 404
+
+        # Validate completeness
+        missing_fields = []
+        if targets['budget']['totalNetWorth'] <= 0:
+            missing_fields.append('totalNetWorth')
+        if not targets['portfolioTargets']:
+            missing_fields.append('portfolioAllocations')
+        if targets['totals']['totalAllocationPercent'] < 100:
+            missing_fields.append('completeAllocation')
+
+        if missing_fields:
+            return jsonify({
+                'success': False,
+                'error': 'incomplete_builder_data',
+                'message': f'Builder configuration incomplete. Missing: {", ".join(missing_fields)}.',
+                'missingFields': missing_fields,
+                'partialData': targets  # Include partial data for UI flexibility
+            }), 400
+
+        logger.info(f"Returning investment targets for account {account_id}: {len(targets['portfolioTargets'])} portfolios")
+        return success_response(targets)
+
+    except Exception as e:
+        logger.exception("Error getting investment targets")
+        return error_response('Failed to get investment targets', 500)

@@ -1,8 +1,8 @@
 /**
- * Allocation Simulator - Combined View
+ * Allocation Simulator
  *
- * Shows combined portfolio allocation (existing + simulated additions)
- * with real-time percentage breakdowns by country and category.
+ * Shows portfolio allocation with simulated additions,
+ * real-time percentage breakdowns by country and sector.
  * Supports saving/loading simulations and scope toggling.
  */
 
@@ -21,6 +21,11 @@ class AllocationSimulator {
     this.savedSimulations = [];        // List of saved simulations
     this.currentSimulationId = null;   // Currently loaded simulation ID
     this.currentSimulationName = null; // Currently loaded simulation name
+    this.saveAsMode = false;           // true when "Save As" was clicked
+
+    // Investment targets from Builder (for "Remaining to Invest" display)
+    this.investmentTargets = null;     // Investment target data from Builder
+    this.hasBuilderConfig = false;     // Whether Builder has been configured
 
     // Settings
     this.scope = 'global';             // 'global' or 'portfolio'
@@ -29,14 +34,14 @@ class AllocationSimulator {
     // DOM references (will be set after render)
     this.tableBody = null;
     this.countryChart = null;
-    this.categoryChart = null;
+    this.sectorChart = null;
 
     // Expanded chart bar state (one at a time per chart type)
     this.expandedCountryBar = null;   // Label of expanded country bar
-    this.expandedCategoryBar = null;  // Label of expanded category bar
+    this.expandedSectorBar = null;  // Label of expanded sector bar
 
     // Auto-expand tracking for newly added items
-    this.pendingExpandCategory = null;
+    this.pendingExpandSector = null;
     this.pendingExpandCountry = null;
 
     // Debounced chart update for real-time feedback
@@ -113,7 +118,7 @@ class AllocationSimulator {
     return num.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
 
-  // Normalize category/country labels to lowercase for consistent matching
+  // Normalize sector/country labels to lowercase for consistent matching
   normalizeLabel(label) {
     if (!label || label === '—') return label;
     return label.toLowerCase().trim();
@@ -159,14 +164,14 @@ class AllocationSimulator {
         this.updateCharts();
       } else {
         console.error('Failed to load portfolio allocations:', result.error);
-        this.portfolioData = { countries: [], categories: [], positions: [], total_value: 0 };
+        this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
         this.recalculateAllPercentageItems();
         this.renderTable();
         this.updateCharts();
       }
     } catch (error) {
       console.error('Error loading portfolio allocations:', error);
-      this.portfolioData = { countries: [], categories: [], positions: [], total_value: 0 };
+      this.portfolioData = { countries: [], sectors: [], positions: [], total_value: 0 };
       this.recalculateAllPercentageItems();
       this.renderTable();
       this.updateCharts();
@@ -216,6 +221,14 @@ class AllocationSimulator {
     }
   }
 
+  updateSaveButtonVisibility() {
+    const saveBtn = document.getElementById('simulator-save-btn');
+    if (saveBtn) {
+      // Show Save button only when editing an existing simulation
+      saveBtn.style.display = this.currentSimulationId ? 'inline-flex' : 'none';
+    }
+  }
+
   async loadSimulation(simulationId) {
     if (!simulationId) {
       // "New Simulation" selected - reset
@@ -240,6 +253,7 @@ class AllocationSimulator {
         this.renderTable();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
+        this.updateSaveButtonVisibility();
 
         this.showToast(`Loaded "${simulation.name}"`, 'success');
       } else {
@@ -258,6 +272,7 @@ class AllocationSimulator {
     this.renderTable();
     this.updateCharts();
     this.updateDeleteButtonVisibility();
+    this.updateSaveButtonVisibility();
 
     // Reset load dropdown
     const select = document.getElementById('simulator-load-select');
@@ -285,19 +300,38 @@ class AllocationSimulator {
     }
   }
 
-  async saveSimulation() {
+  /**
+   * Save changes to the current simulation (only available when editing existing)
+   */
+  saveSimulation() {
+    if (!this.currentSimulationId) return;  // Safety check
+
+    this.saveAsMode = false;
     const modal = document.getElementById('save-simulation-modal');
     const nameInput = document.getElementById('simulation-name-input');
 
-    // Pre-fill with current name if editing
-    if (this.currentSimulationName) {
-      nameInput.value = this.currentSimulationName;
-    } else {
-      nameInput.value = '';
-    }
-
+    nameInput.value = this.currentSimulationName;
     modal.style.display = 'flex';
     nameInput.focus();
+  }
+
+  /**
+   * Save as a new simulation (creates a copy/fork)
+   */
+  saveAsSimulation() {
+    this.saveAsMode = true;
+    const modal = document.getElementById('save-simulation-modal');
+    const nameInput = document.getElementById('simulation-name-input');
+
+    // Suggest name based on current simulation
+    const suggestedName = this.currentSimulationName
+      ? `Copy of ${this.currentSimulationName}`
+      : '';
+
+    nameInput.value = suggestedName;
+    modal.style.display = 'flex';
+    nameInput.focus();
+    nameInput.select();
   }
 
   async confirmSaveSimulation() {
@@ -318,7 +352,8 @@ class AllocationSimulator {
 
     try {
       let response;
-      if (this.currentSimulationId) {
+      // If editing existing AND NOT in saveAs mode → update existing
+      if (this.currentSimulationId && !this.saveAsMode) {
         // Update existing simulation
         response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
           method: 'PUT',
@@ -352,6 +387,7 @@ class AllocationSimulator {
         if (select) select.value = simulation.id;
 
         this.updateDeleteButtonVisibility();
+        this.updateSaveButtonVisibility();
         this.showToast(`Saved "${name}"`, 'success');
       } else {
         this.showToast(result.error || 'Failed to save simulation', 'danger');
@@ -401,7 +437,7 @@ class AllocationSimulator {
           <div class="input-row">
             <input type="text" class="input" id="simulator-ticker-input"
                    placeholder="e.g., AAPL, MSFT">
-            <button class="btn btn-primary btn-sm" id="simulator-add-ticker-btn">
+            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-ticker-btn">
               <span class="btn-text">Add</span>
               <span class="btn-spinner" style="display: none;">
                 <i class="fas fa-spinner fa-spin"></i>
@@ -410,17 +446,17 @@ class AllocationSimulator {
           </div>
         </div>
         <div class="simulator-input-form">
-          <label class="label">Add Category</label>
+          <label class="label">Add Sector</label>
           <div class="input-row">
-            <div class="combobox-wrapper" id="simulator-category-combobox">
-              <input type="text" class="input combobox-input" id="simulator-category-input"
-                     placeholder="Select or type category..." autocomplete="off">
+            <div class="combobox-wrapper" id="simulator-sector-combobox">
+              <input type="text" class="input combobox-input" id="simulator-sector-input"
+                     placeholder="Select or type sector..." autocomplete="off">
               <button class="combobox-toggle" type="button" tabindex="-1">
                 <i class="fas fa-chevron-down"></i>
               </button>
-              <div class="combobox-dropdown" id="simulator-category-dropdown"></div>
+              <div class="combobox-dropdown" id="simulator-sector-dropdown"></div>
             </div>
-            <button class="btn btn-primary btn-sm" id="simulator-add-category-btn">Add</button>
+            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-sector-btn">Add</button>
           </div>
         </div>
         <div class="simulator-input-form">
@@ -434,7 +470,7 @@ class AllocationSimulator {
               </button>
               <div class="combobox-dropdown" id="simulator-country-dropdown"></div>
             </div>
-            <button class="btn btn-primary btn-sm" id="simulator-add-country-btn">Add</button>
+            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-country-btn">Add</button>
           </div>
         </div>
       </div>
@@ -447,7 +483,7 @@ class AllocationSimulator {
               <th class="col-ticker">Identifier</th>
               <th class="col-name">Name</th>
               <th class="col-portfolio">Portfolio</th>
-              <th class="col-category">Category</th>
+              <th class="col-sector">Sector</th>
               <th class="col-country">Country</th>
               <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
               <th class="col-delete"></th>
@@ -462,16 +498,6 @@ class AllocationSimulator {
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Combined View Header -->
-      <div class="combined-view-header" id="combined-view-header">
-        <div class="combined-view-title" id="combined-view-title">
-          Current Portfolio Allocation
-        </div>
-        <div class="combined-view-total" id="combined-view-total">
-          €0
-        </div>
       </div>
 
       <!-- Aggregation Charts -->
@@ -491,10 +517,10 @@ class AllocationSimulator {
           <div class="chart-header">
             <h4 class="chart-title">
               <i class="fas fa-tags"></i>
-              Distribution by Category
+              Distribution by Sector
             </h4>
           </div>
-          <div class="chart-content" id="simulator-category-chart">
+          <div class="chart-content" id="simulator-sector-chart">
             <div class="chart-empty">Loading portfolio data...</div>
           </div>
         </div>
@@ -504,7 +530,7 @@ class AllocationSimulator {
     // Store DOM references
     this.tableBody = document.getElementById('simulator-table-body');
     this.countryChart = document.getElementById('simulator-country-chart');
-    this.categoryChart = document.getElementById('simulator-category-chart');
+    this.sectorChart = document.getElementById('simulator-sector-chart');
   }
 
   bindEvents() {
@@ -519,17 +545,17 @@ class AllocationSimulator {
       });
     }
 
-    // Add Category with combobox
-    const categoryInput = document.getElementById('simulator-category-input');
-    const categoryBtn = document.getElementById('simulator-add-category-btn');
-    const categoryCombobox = document.getElementById('simulator-category-combobox');
+    // Add Sector with combobox
+    const sectorInput = document.getElementById('simulator-sector-input');
+    const sectorBtn = document.getElementById('simulator-add-sector-btn');
+    const sectorCombobox = document.getElementById('simulator-sector-combobox');
 
-    if (categoryBtn && categoryInput) {
-      categoryBtn.addEventListener('click', () => this.handleAddCategory());
-      categoryInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddCategory();
+    if (sectorBtn && sectorInput) {
+      sectorBtn.addEventListener('click', () => this.handleAddSector());
+      sectorInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleAddSector();
       });
-      this.initCombobox(categoryCombobox, categoryInput, 'category');
+      this.initCombobox(sectorCombobox, sectorInput, 'sector');
     }
 
     // Add Country with combobox
@@ -561,6 +587,11 @@ class AllocationSimulator {
     const saveBtn = document.getElementById('simulator-save-btn');
     if (saveBtn) {
       saveBtn.addEventListener('click', () => this.saveSimulation());
+    }
+
+    const saveAsBtn = document.getElementById('simulator-saveas-btn');
+    if (saveAsBtn) {
+      saveAsBtn.addEventListener('click', () => this.saveAsSimulation());
     }
 
     const deleteBtn = document.getElementById('simulator-delete-btn');
@@ -641,7 +672,7 @@ class AllocationSimulator {
         this.addItem({
           id: this.generateId(),
           ticker: data.ticker,
-          category: this.normalizeLabel(data.category) || '—',
+          sector: this.normalizeLabel(data.sector) || '—',
           country: this.normalizeLabel(data.country) || '—',
           value: 0,
           valueMode: 'absolute', // Default to absolute mode
@@ -669,34 +700,34 @@ class AllocationSimulator {
     }
   }
 
-  handleAddCategory() {
-    const input = document.getElementById('simulator-category-input');
-    const category = input.value.trim();
+  handleAddSector() {
+    const input = document.getElementById('simulator-sector-input');
+    const sector = input.value.trim();
 
-    if (!category) {
-      this.showToast('Please enter a category name', 'warning');
+    if (!sector) {
+      this.showToast('Please enter a sector name', 'warning');
       return;
     }
 
-    const normalizedCategory = this.normalizeLabel(category);
+    const normalizedSector = this.normalizeLabel(sector);
 
-    // Set pending expand so the chart auto-expands this category
-    this.pendingExpandCategory = normalizedCategory;
+    // Set pending expand so the chart auto-expands this sector
+    this.pendingExpandSector = normalizedSector;
 
     this.addItem({
       id: this.generateId(),
       ticker: '—',
-      category: normalizedCategory,
+      sector: normalizedSector,
       country: '—',
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
-      source: 'category',
+      source: 'sector',
       portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
     input.value = '';
 
     // Hide dropdown
-    const dropdown = document.getElementById('simulator-category-dropdown');
+    const dropdown = document.getElementById('simulator-sector-dropdown');
     if (dropdown) dropdown.classList.remove('show');
   }
 
@@ -717,7 +748,7 @@ class AllocationSimulator {
     this.addItem({
       id: this.generateId(),
       ticker: '—',
-      category: '—',
+      sector: '—',
       country: normalizedCountry,
       value: 0,
       valueMode: 'absolute', // Default to absolute mode
@@ -796,7 +827,7 @@ class AllocationSimulator {
 
       // Show calculated € value for percentage mode items
       const calculatedHint = isPercentMode && item.value > 0
-        ? `<span class="value-calculated-hint" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
+        ? `<span class="value-calculated-hint sensitive-value" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
         : '';
 
       // Warning if target is below current
@@ -825,9 +856,9 @@ class AllocationSimulator {
               ).join('')}
             </select>
           </td>
-          <td class="col-category">
-            <input type="text" class="editable-cell category-input" value="${this.escapeHtml(item.category === '—' ? item.category : (item.category || '').toLowerCase())}"
-                   data-field="category" placeholder="—">
+          <td class="col-sector">
+            <input type="text" class="editable-cell sector-input" value="${this.escapeHtml(item.sector === '—' ? item.sector : (item.sector || '').toLowerCase())}"
+                   data-field="sector" placeholder="—">
           </td>
           <td class="col-country">
             <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
@@ -839,7 +870,7 @@ class AllocationSimulator {
                       data-field="valueMode" title="Toggle between € amount and % target">
                 ${modeSymbol}
               </button>
-              <input type="text" class="editable-cell value-input ${isPercentMode ? 'percent-mode' : ''}"
+              <input type="text" class="editable-cell value-input sensitive-value ${isPercentMode ? 'percent-mode' : ''}"
                      value="${formattedValue}"
                      data-field="value" placeholder="0">
               ${calculatedHint}
@@ -944,8 +975,8 @@ class AllocationSimulator {
   }
 
   handleTableInput(e) {
-    // Convert category/country to lowercase as user types
-    if (e.target.classList.contains('category-input') || e.target.classList.contains('country-input')) {
+    // Convert sector/country to lowercase as user types
+    if (e.target.classList.contains('sector-input') || e.target.classList.contains('country-input')) {
       const cursorPos = e.target.selectionStart;
       e.target.value = e.target.value.toLowerCase();
       e.target.setSelectionRange(cursorPos, cursorPos);
@@ -1010,8 +1041,8 @@ class AllocationSimulator {
       // Parse portfolio_id as number or null
       value = value ? parseInt(value) : null;
       this.updateItem(id, field, value);
-    } else if (field === 'category' || field === 'country') {
-      // Normalize category/country to lowercase
+    } else if (field === 'sector' || field === 'country') {
+      // Normalize sector/country to lowercase
       if (value && value !== '—') {
         value = this.normalizeLabel(value);
         input.value = value;
@@ -1023,7 +1054,7 @@ class AllocationSimulator {
       }
       this.updateItem(id, field, value);
 
-      // If category or country changes, recalculate percentage items
+      // If sector or country changes, recalculate percentage items
       if (item && item.valueMode === 'percentage') {
         this.recalculatePercentageItem(item);
       }
@@ -1067,24 +1098,7 @@ class AllocationSimulator {
     this.lastCombinedData = combined;
 
     this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
-    this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
-
-    // Update header (use simulatedTotal from combined which respects portfolio filtering)
-    const titleEl = document.getElementById('combined-view-title');
-    const totalEl = document.getElementById('combined-view-total');
-
-    if (titleEl) {
-      titleEl.textContent = combined.simulatedTotal > 0
-        ? 'Combined Allocation (Portfolio + Simulated)'
-        : 'Current Portfolio Allocation';
-    }
-
-    if (totalEl) {
-      totalEl.innerHTML = `€${this.formatValue(combined.combinedTotal)}`;
-      if (combined.simulatedTotal > 0) {
-        totalEl.innerHTML += ` <span class="delta-indicator delta-positive">(+€${this.formatValue(combined.simulatedTotal)})</span>`;
-      }
-    }
+    this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
 
     // Handle pending auto-expand for newly added items
     this.handlePendingExpand();
@@ -1094,13 +1108,13 @@ class AllocationSimulator {
    * Auto-expand chart bars for newly added categories/countries
    */
   handlePendingExpand() {
-    if (this.pendingExpandCategory) {
-      // Set the expanded category bar
-      this.expandedCategoryBar = this.pendingExpandCategory;
-      // Re-render the category chart to show expanded state
+    if (this.pendingExpandSector) {
+      // Set the expanded sector bar
+      this.expandedSectorBar = this.pendingExpandSector;
+      // Re-render the sector chart to show expanded state
       const combined = this.lastCombinedData || this.calculateCombinedAllocations();
-      this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
-      this.pendingExpandCategory = null;
+      this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
+      this.pendingExpandSector = null;
     }
 
     if (this.pendingExpandCountry) {
@@ -1130,7 +1144,7 @@ class AllocationSimulator {
         byCountry[normalizedName] = (byCountry[normalizedName] || 0) + c.value;
       });
 
-      (this.portfolioData.categories || []).forEach(c => {
+      (this.portfolioData.sectors || []).forEach(c => {
         const normalizedName = (c.name || 'unknown').toLowerCase().trim();
         baselineByCategory[normalizedName] = (baselineByCategory[normalizedName] || 0) + c.value;
         byCategory[normalizedName] = (byCategory[normalizedName] || 0) + c.value;
@@ -1154,9 +1168,9 @@ class AllocationSimulator {
       const country = item.country === '—' || !item.country ? 'unknown' : item.country.toLowerCase();
       byCountry[country] = (byCountry[country] || 0) + value;
 
-      // Category aggregation (normalize to lowercase)
-      const category = item.category === '—' || !item.category ? 'unknown' : item.category.toLowerCase();
-      byCategory[category] = (byCategory[category] || 0) + value;
+      // Sector aggregation (normalize to lowercase)
+      const sector = item.sector === '—' || !item.sector ? 'unknown' : item.sector.toLowerCase();
+      byCategory[sector] = (byCategory[sector] || 0) + value;
     });
 
     const combinedTotal = portfolioTotal + simulatedTotal;
@@ -1183,7 +1197,7 @@ class AllocationSimulator {
       .sort((a, b) => b[1] - a[1]);
 
     // Determine which bar is currently expanded for this chart type
-    const expandedLabel = chartType === 'country' ? this.expandedCountryBar : this.expandedCategoryBar;
+    const expandedLabel = chartType === 'country' ? this.expandedCountryBar : this.expandedSectorBar;
 
     container.innerHTML = sorted.map(([label, value]) => {
       const percentage = (value / total * 100).toFixed(1);
@@ -1250,11 +1264,11 @@ class AllocationSimulator {
       } else {
         this.expandedCountryBar = label;
       }
-    } else if (chartType === 'category') {
-      if (this.expandedCategoryBar === label) {
-        this.expandedCategoryBar = null;
+    } else if (chartType === 'sector') {
+      if (this.expandedSectorBar === label) {
+        this.expandedSectorBar = null;
       } else {
-        this.expandedCategoryBar = label;
+        this.expandedSectorBar = label;
       }
     }
 
@@ -1263,7 +1277,7 @@ class AllocationSimulator {
     if (chartType === 'country') {
       this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
     } else {
-      this.renderBarChart(this.categoryChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'category');
+      this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
     }
   }
 
@@ -1325,7 +1339,7 @@ class AllocationSimulator {
           <div class="position-detail-row position-detail-row-2col ${simulatedClass}">
             <span class="position-detail-ticker">${tickerDisplay}</span>
             <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
-            <span class="position-detail-value">€${this.formatValue(pos.value)}</span>
+            <span class="position-detail-value sensitive-value">€${this.formatValue(pos.value)}</span>
             <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
             <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
           </div>
@@ -1336,7 +1350,7 @@ class AllocationSimulator {
           <div class="position-detail-row position-detail-row-3col ${simulatedClass}">
             <span class="position-detail-ticker">${tickerDisplay}</span>
             <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
-            <span class="position-detail-value">€${this.formatValue(pos.value)}</span>
+            <span class="position-detail-value sensitive-value">€${this.formatValue(pos.value)}</span>
             <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
             <span class="position-detail-percent position-detail-percent-port">${percentOfPortfolio}%</span>
             <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
@@ -1349,7 +1363,7 @@ class AllocationSimulator {
       <div class="position-details-panel">
         <div class="position-details-header">
           <span class="position-details-count">${positions.length} position${positions.length !== 1 ? 's' : ''}</span>
-          <span class="position-details-total">€${this.formatValue(segmentTotal)}</span>
+          <span class="position-details-total sensitive-value">€${this.formatValue(segmentTotal)}</span>
         </div>
         <div class="position-details-list">
           ${positionRows}
@@ -1365,7 +1379,7 @@ class AllocationSimulator {
     // Add portfolio positions
     if (this.portfolioData && this.portfolioData.positions) {
       this.portfolioData.positions.forEach(pos => {
-        const matchField = chartType === 'country' ? pos.country : pos.category;
+        const matchField = chartType === 'country' ? pos.country : pos.sector;
         const normalizedField = (matchField || 'unknown').toLowerCase().trim();
 
         if (normalizedField === normalizedLabel) {
@@ -1388,7 +1402,7 @@ class AllocationSimulator {
         }
       }
 
-      const matchField = chartType === 'country' ? item.country : item.category;
+      const matchField = chartType === 'country' ? item.country : item.sector;
       const normalizedField = (matchField === '—' || !matchField) ? 'unknown' : matchField.toLowerCase().trim();
 
       if (normalizedField === normalizedLabel) {
@@ -1487,8 +1501,8 @@ class AllocationSimulator {
       return;
     }
 
-    const sourceData = type === 'category'
-      ? this.portfolioData.categories || []
+    const sourceData = type === 'sector'
+      ? this.portfolioData.sectors || []
       : this.portfolioData.countries || [];
 
     const totalValue = this.portfolioData.total_value || 0;
@@ -1528,7 +1542,7 @@ class AllocationSimulator {
   // ============================================================================
 
   /**
-   * Get baseline value and total for an item based on its category/country
+   * Get baseline value and total for an item based on its sector/country
    * Used for percentage target calculations
    */
   getBaselineForItem(item) {
@@ -1536,11 +1550,11 @@ class AllocationSimulator {
     let baselineValue = 0;
 
     // Determine which baseline to use based on item source
-    if (item.source === 'category' && item.category && item.category !== '—') {
-      const normalizedCategory = item.category.toLowerCase();
-      const categoryData = (this.portfolioData?.categories || [])
-        .find(c => (c.name || '').toLowerCase() === normalizedCategory);
-      baselineValue = categoryData?.value || 0;
+    if (item.source === 'sector' && item.sector && item.sector !== '—') {
+      const normalizedSector = item.sector.toLowerCase();
+      const sectorData = (this.portfolioData?.sectors || [])
+        .find(c => (c.name || '').toLowerCase() === normalizedSector);
+      baselineValue = sectorData?.value || 0;
     } else if (item.source === 'country' && item.country && item.country !== '—') {
       const normalizedCountry = item.country.toLowerCase();
       const countryData = (this.portfolioData?.countries || [])

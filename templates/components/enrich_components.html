@@ -47,7 +47,7 @@
                         <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
 
                         <!-- Status message and controls -->
-                        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: 10px;">
+                        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
                             <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
                             <button id="cancel-upload-btn"
                                 class="button is-small is-danger is-outlined"
@@ -192,7 +192,7 @@
         <!-- Progress Indicator positioned outside Vue app but visually under buttons -->
         <div id="price-fetch-progress" style="display: none;" class="progress-bar-container">
             <progress id="progress-bar" class="progress is-primary" value="0" max="100" style="width: 100%; height: 8px;"></progress>
-            <p id="progress-text" class="has-text-centered has-text-weight-medium mt-2" style="font-size: 0.9rem;">0 / 0 companies updated</p>
+            <p id="progress-text" class="has-text-centered has-text-weight-medium mt-2" style="font-size: 0.875rem;">0 / 0 companies updated</p>
             <p id="progress-percentage" class="is-hidden">0%</p>
         </div>
 
@@ -270,7 +270,7 @@
                         <span class="metric-label">Total:</span>
                         <span class="metric-value" v-text="metrics.total"></span>
                         <span class="metric-label">Value:</span>
-                        <span class="metric-value" v-text="formatCurrency(metrics.totalValue)"></span>
+                        <span class="metric-value" v-html="formatCurrency(metrics.totalValue)"></span>
                         <span class="metric-label">Updated:</span>
                         <span class="metric-value" v-text="formatDateAgo(metrics.lastUpdate)"></span>
                     </div>
@@ -307,7 +307,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <input class="input" type="text" v-model="bulkCategory" placeholder="Category">
+                        <input class="input" type="text" v-model="bulkSector" placeholder="Sector">
                         <div class="select">
                             <select v-model="bulkCountry">
                                 <option value="">Select Country</option>
@@ -317,7 +317,7 @@
                             </select>
                         </div>
                         <button class="button is-primary" @click="applyBulkChanges"
-                            :disabled="(!bulkPortfolio && !bulkCategory && !bulkCountry) || isBulkProcessing"
+                            :disabled="(!bulkPortfolio && !bulkSector && !bulkCountry) || isBulkProcessing"
                             :class="{'is-loading': isBulkProcessing}">
                             Apply Changes
                         </button>
@@ -370,11 +370,19 @@
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
-                                <th @click="sortBy('category')" class="is-sortable col-input-small">
-                                    Category
-                                    <span class="column-health" :class="getHealthColorClass(categoryHealthPercentage)"
-                                        v-text="categoryHealthPercentage + '%'"></span>
-                                    <span class="icon is-small ml-1" v-if="sortColumn === 'category'">
+                                <th @click="sortBy('sector')" class="is-sortable col-input-small">
+                                    Sector
+                                    <span class="column-health" :class="getHealthColorClass(sectorHealthPercentage)"
+                                        v-text="sectorHealthPercentage + '%'"></span>
+                                    <span class="icon is-small ml-1" v-if="sortColumn === 'sector'">
+                                        <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
+                                    </span>
+                                </th>
+                                <th @click="sortBy('thesis')" class="is-sortable col-input-small">
+                                    Thesis
+                                    <span class="column-health" :class="getHealthColorClass(thesisHealthPercentage)"
+                                        v-text="thesisHealthPercentage + '%'"></span>
+                                    <span class="icon is-small ml-1" v-if="sortColumn === 'thesis'">
                                         <i :class="sortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down'"></i>
                                     </span>
                                 </th>
@@ -425,7 +433,7 @@
                                     </label>
                                 </td>
                                 <td class="col-identifier">
-                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                    <div class="field has-addons">
                                         <div class="control is-expanded">
                                             <input class="input is-small"
                                                    type="text"
@@ -456,10 +464,10 @@
                                     <!-- Show custom price in orange if set -->
                                     <span v-if="item.is_custom_value && item.custom_price_eur"
                                           class="user-edited"
-                                          v-text="formatCurrency(item.custom_price_eur)"
+                                          v-html="formatCurrency(item.custom_price_eur)"
                                           title="Custom price - calculated from custom total value"></span>
                                     <!-- Show market price if available -->
-                                    <span v-else-if="item.price_eur" v-text="formatCurrency(item.price_eur)"></span>
+                                    <span v-else-if="item.price_eur" v-html="formatCurrency(item.price_eur)"></span>
                                     <!-- Show 'No price' fallback -->
                                     <span v-else class="has-text-danger">No price</span>
                                 </td>
@@ -474,19 +482,37 @@
                                     </div>
                                 </td>
                                 <td class="col-input-small">
-                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                    <div class="field has-addons">
                                         <div class="control is-expanded">
                                             <input class="input is-small" type="text"
-                                                :value="getEditingValue(item, 'category')"
-                                                @input="setEditingValue(item, 'category', $event.target.value)"
-                                                @focus="trackOriginal(item, 'category')"
-                                                @blur="commitCategory(item)"
-                                                @keydown.enter="commitCategory(item); $event.target.blur()"
+                                                :value="getEditingValue(item, 'sector')"
+                                                @input="setEditingValue(item, 'sector', $event.target.value)"
+                                                @focus="trackOriginal(item, 'sector')"
+                                                @blur="commitSector(item)"
+                                                @keydown.enter="commitSector(item); $event.target.blur()"
                                                 @dblclick="$event.target.select()"
-                                                @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'category'))"
+                                                @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'sector'))"
                                                 @mouseleave="hideOverflowTooltip($event)">
                                         </div>
-                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].category">
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].sector">
+                                            <span class="tag is-small is-info">Saving...</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="col-input-small">
+                                    <div class="field has-addons">
+                                        <div class="control is-expanded">
+                                            <input class="input is-small" type="text"
+                                                :value="getEditingValue(item, 'thesis')"
+                                                @input="setEditingValue(item, 'thesis', $event.target.value)"
+                                                @focus="trackOriginal(item, 'thesis')"
+                                                @blur="commitThesis(item)"
+                                                @keydown.enter="commitThesis(item); $event.target.blur()"
+                                                @dblclick="$event.target.select()"
+                                                @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'thesis'))"
+                                                @mouseleave="hideOverflowTooltip($event)">
+                                        </div>
+                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].thesis">
                                             <span class="tag is-small is-info">Saving...</span>
                                         </div>
                                     </div>
@@ -530,7 +556,7 @@
                                     </div>
                                 </td>
                                 <td class="col-input-medium">
-                                    <div class="field has-addons" style="margin-bottom: 0;">
+                                    <div class="field has-addons">
                                         <div class="control is-expanded">
                                             <input class="input is-small" :class="{
                                                        'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
@@ -552,9 +578,9 @@
                                     <!-- Priority 1: If custom value set, show it in orange -->
                                     <div v-if="item.is_custom_value && item.custom_total_value" class="field has-addons" style="margin-bottom: 0;">
                                         <div class="control is-expanded">
-                                            <input class="input is-small user-edited"
+                                            <input class="input is-small user-edited sensitive-value"
                                                    type="text"
-                                                   :value="formatCurrency(item.custom_total_value)"
+                                                   :value="formatCurrencyRaw(item.custom_total_value)"
                                                    @focus="trackOriginalTotalValue(item)"
                                                    @blur="commitTotalValue(item, $event.target.value)"
                                                    @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
@@ -568,16 +594,16 @@
                                     <!-- Priority 2: If custom price exists (but not total), calculate using custom price -->
                                     <span v-else-if="item.is_custom_value && item.custom_price_eur && !item.custom_total_value"
                                           class="user-edited"
-                                          v-text="formatCurrency(item.custom_price_eur * item.effective_shares)"
+                                          v-html="formatCurrency(item.custom_price_eur * item.effective_shares)"
                                           title="Calculated from custom price"></span>
                                     <!-- Priority 3: If market price exists, show calculated value -->
-                                    <span v-else-if="item.price_eur" v-text="formatCurrency(item.price_eur * item.effective_shares)"></span>
+                                    <span v-else-if="item.price_eur" v-html="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                     <!-- Priority 4: No price available - editable input -->
                                     <div v-else class="field has-addons" style="margin-bottom: 0;">
                                         <div class="control is-expanded">
-                                            <input class="input is-small"
+                                            <input class="input is-small sensitive-value"
                                                    type="text"
-                                                   value="€0.00"
+                                                   value="€0,00"
                                                    @focus="trackOriginalTotalValue(item)"
                                                    @blur="commitTotalValue(item, $event.target.value)"
                                                    @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
@@ -591,7 +617,7 @@
                                     </div>
                                 </td>
                                 <td class="col-currency">
-                                    <span v-text="formatCurrency(item.total_invested)"></span>
+                                    <span v-html="formatCurrency(item.total_invested)"></span>
                                 </td>
                             </tr>
                         </tbody>

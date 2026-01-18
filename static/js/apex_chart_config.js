@@ -5,6 +5,34 @@
  * ApexCharts instances with consistent styling matching the Ocean Depth design.
  */
 const ChartConfig = {
+    /**
+     * Detects if dark theme is active
+     * @returns {boolean} True if dark theme is active
+     */
+    isDarkTheme() {
+        return document.documentElement.getAttribute('data-theme') === 'dark';
+    },
+
+    /**
+     * Gets theme-appropriate colors for chart elements
+     * @returns {Object} Object with text and background colors for current theme
+     */
+    getThemeColors() {
+        const isDark = this.isDarkTheme();
+        return {
+            // Text colors for chart labels
+            textPrimary: isDark ? '#F8FAFC' : '#0F172A',
+            textSecondary: isDark ? '#F1F5F9' : '#334155',
+            textTertiary: isDark ? '#94A3B8' : '#64748B',
+            textMuted: isDark ? '#64748B' : '#94A3B8',
+            // Background colors
+            bgPrimary: isDark ? '#020617' : '#F8FAFC',
+            bgSecondary: isDark ? '#0F172A' : '#FFFFFF',
+            // Tooltip theme
+            tooltipTheme: isDark ? 'dark' : 'light'
+        };
+    },
+
     // Ocean Depth color palette
     oceanDepthColors: {
         // Primary accent colors
@@ -143,13 +171,13 @@ const ChartConfig = {
         'BOSS ENERGY LTD.': '#10b981', // Emerald
         'Paladin Energy': '#22c55e',   // Green
 
-        // Categories (Ocean Depth theme)
+        // Sectors (Ocean Depth theme)
         'Blue Chip': '#3b82f6',  // Blue
         'L1': '#06b6d4',         // Aqua
         'Infra': '#8b5cf6',      // Purple
         'DeFi': '#f97316',       // Coral
         'Meme': '#f59e0b',       // Amber
-        'Uncategorized': '#64748b', // Slate
+        'Unassigned': '#64748b', // Slate
         'Gold': '#eab308',       // Yellow
         'Oil': '#1e293b',        // Slate 800
         'Shipping': '#0ea5e9',   // Sky
@@ -300,6 +328,9 @@ const ChartConfig = {
         const calculatedPercentages = cleanedValues.map(v => total > 0 ? (v / total) * 100 : 0);
         const finalPercentages = percentages || calculatedPercentages;
 
+        // Get theme-appropriate colors
+        const themeColors = this.getThemeColors();
+
         // Create standardized chart configuration
         const chartOptions = {
             series: cleanedValues,
@@ -330,17 +361,18 @@ const ChartConfig = {
                                 show: showLabels,
                                 fontSize: fontSize,
                                 fontWeight: fontWeight,
-                                color: '#666',
+                                color: themeColors.textTertiary,
                                 offsetY: -10
                             },
                             value: {
                                 show: showTotal,
                                 fontSize: '24px',
                                 fontWeight: 700,
-                                color: '#111',
+                                color: themeColors.textPrimary,
                                 offsetY: 10,
                                 formatter: function (val) {
-                                    return formatCurrency(parseFloat(val) || 0);
+                                    // Use raw format for SVG text (no HTML spans)
+                                    return `€${Math.round(parseFloat(val) || 0).toLocaleString()}`;
                                 }
                             },
                             total: {
@@ -349,10 +381,11 @@ const ChartConfig = {
                                 label: 'Total',
                                 fontSize: '16px',
                                 fontWeight: 600,
-                                color: '#373d3f',
+                                color: themeColors.textSecondary,
                                 formatter: function (w) {
                                     const total = w.globals.seriesTotals.reduce((a, b) => a + b, 0);
-                                    return formatCurrency(total);
+                                    // Use raw format for SVG text (no HTML spans)
+                                    return `€${Math.round(total).toLocaleString()}`;
                                 }
                             }
                         }
@@ -373,7 +406,7 @@ const ChartConfig = {
                 }
             },
             tooltip: {
-                theme: 'light',
+                theme: themeColors.tooltipTheme,
                 style: {
                     fontSize: fontSize
                 },
@@ -408,7 +441,7 @@ const ChartConfig = {
                 style: {
                     fontSize: '18px',
                     fontWeight: 600,
-                    color: '#333'
+                    color: themeColors.textPrimary
                 }
             };
         }
@@ -481,6 +514,9 @@ const ChartConfig = {
             return null;
         }
         element.innerHTML = ''; // Clear previous content
+
+        // Get theme-appropriate colors
+        const themeColors = this.getThemeColors();
 
         const {
             title = '',
@@ -645,7 +681,7 @@ const ChartConfig = {
                 style: {
                     fontSize: '18px',
                     fontWeight: 600,
-                    color: '#333'
+                    color: themeColors.textPrimary
                 }
             };
         }
@@ -703,6 +739,9 @@ const ChartConfig = {
             return null;
         }
         element.innerHTML = ''; // Clear previous content
+
+        // Get theme-appropriate colors
+        const themeColors = this.getThemeColors();
 
         // Validate input data
         if (!labels || !values || labels.length === 0 || values.length === 0) {
@@ -782,7 +821,7 @@ const ChartConfig = {
                     formatter: formatValue
                 }
             },
-            title: title ? { text: title, align: 'center', style: { fontSize: '18px', fontWeight: 600, color: '#333' } } : undefined,
+            title: title ? { text: title, align: 'center', style: { fontSize: '18px', fontWeight: 600, color: themeColors.textPrimary } } : undefined,
             legend: {
                 show: false
             }

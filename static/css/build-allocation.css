@@ -1,37 +1,46 @@
 /**
  * Portfolio Manager - Builder Page Styles
- * Extends the core design system with page-specific styles
+ * Extends the Ocean Depth design system with page-specific styles
+ *
+ * Design System Variables Used:
+ * - Backgrounds: --bg-primary, --bg-secondary, --bg-tertiary
+ * - Text: --text-primary, --text-secondary, --text-tertiary, --text-muted
+ * - Borders: --border-subtle, --border-default
+ * - Spacing: --space-xs, --space-sm, --space-md, --space-lg, --space-xl
+ * - Radius: --radius-sm, --radius-md, --radius-lg
+ * - Transitions: --transition-fast, --transition-base
+ * - Colors: --primary (aqua-500), --warning, --danger, --primary-light
  */
 
 /* ===== Build Allocation Page Extensions ===== */
 
 /* Budget Card Styles */
 .budget-card {
-  background-color: var(--card-bg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   margin-bottom: var(--space-xl);
   padding: var(--space-xl);
 }
 
 .budget-results {
-  background-color: var(--darker-bg);
+  background-color: var(--bg-tertiary);
   padding: var(--space-lg) var(--space-xl);
-  border-radius: var(--border-radius);
+  border-radius: var(--radius-md);
   margin-top: var(--space-lg);
 }
 
 .result-label {
   display: block;
-  font-size: 0.9rem;
-  color: var(--text-muted);
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
   margin-bottom: var(--space-xs);
 }
 
 .result-value {
   font-size: 1.25rem;
   font-weight: 500;
-  color: var(--text-color);
+  color: var(--text-primary);
 }
 
 /* Form field spacing and layout */
@@ -41,14 +50,14 @@
 
 .label {
   font-weight: 500;
-  color: var(--text-color);
+  color: var(--text-primary);
   margin-bottom: var(--space-xs);
-  font-size: 0.95rem;
+  font-size: 0.875rem;
 }
 
 .portfolio-list-container {
-  overflow-x: auto; /* Allow horizontal scrolling on smaller screens */
-  padding-bottom: 1rem; /* Make space for the scrollbar */
+  overflow-x: auto;
+  padding-bottom: var(--space-md);
 }
 
 /* Portfolio List - Aligned Two-Column Layout */
@@ -56,7 +65,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  width: 100%; /* Take full width of container */
+  width: 100%;
 }
 
 .portfolio-row {
@@ -64,7 +73,7 @@
   align-items: flex-start;
   gap: var(--space-sm);
   padding: var(--space-xs) 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .portfolio-row:last-child {
@@ -73,28 +82,27 @@
 
 /* Portfolio Name Column */
 .portfolio-name-column {
-  flex: 0 0 200px; /* Fixed width for consistent alignment */
+  flex: 0 0 200px;
   display: flex;
   align-items: center;
-  min-height: 60px; /* Match the height of the data column */
+  min-height: 60px;
 }
 
 .portfolio-name {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-color);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
   margin: 0;
 }
 
 /* Portfolio Data Column */
 .portfolio-data-column {
   flex: 1;
-  min-width: 900px; /* Ensure enough space for metrics and expanded content */
-  background-color: var(--card-bg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+  min-width: 900px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   padding: var(--space-md);
-  /* Add overflow hidden to contain child elements */
   overflow: hidden;
 }
 
@@ -105,7 +113,6 @@
   justify-content: flex-end;
   gap: var(--space-lg);
   width: 100%;
-  /* Add margin to prevent overlap */
   margin-bottom: var(--space-lg);
 }
 
@@ -113,43 +120,32 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  flex: 1; /* Allow metric groups to grow and fill space */
+  flex: 1;
   min-width: 100px;
 }
 
 .metric-group:first-child {
-  flex: 0 0 auto; /* Toggle button */
+  flex: 0 0 auto;
   min-width: auto;
-  margin-right: auto; /* Push to left, others to right */
+  margin-right: auto;
 }
 
 /* Specific width adjustments for better alignment */
-.metric-group:nth-child(2) { /* Allocation % */
-  min-width: 140px;
-}
-
-.metric-group:nth-child(3) { /* Amount */
-  min-width: 160px;
-}
-
-.metric-group:nth-child(4) { /* Min */
-  min-width: 120px;
-}
-
-.metric-group:nth-child(5) { /* Current */
-  min-width: 120px;
-}
+.metric-group:nth-child(2) { min-width: 140px; }
+.metric-group:nth-child(3) { min-width: 160px; }
+.metric-group:nth-child(4) { min-width: 120px; }
+.metric-group:nth-child(5) { min-width: 120px; }
 
 .metric-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   margin: 0;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
 }
 
-/* Unified Portfolio Allocation Input Styling - High Specificity to Override Other Rules */
+/* Unified Portfolio Allocation Input Styling */
 .portfolio-allocation-input,
 .unified-table .portfolio-allocation-input,
 .metric-group .portfolio-allocation-input,
@@ -157,17 +153,18 @@
 .col-currency .portfolio-allocation-input {
   width: 100% !important;
   padding: calc(var(--space-xs) + 2px) var(--space-sm) !important;
-  font-size: var(--font-size-base) !important;
-  border: 1px solid var(--border-color) !important;
-  background-color: var(--bg) !important;
-  border-radius: var(--border-radius) !important;
-  text-align: center !important; /* Center text for better alignment */
+  font-size: 0.875rem !important;
+  border: 1px solid var(--border-default) !important;
+  background-color: var(--bg-tertiary) !important;
+  border-radius: var(--radius-md) !important;
+  text-align: center !important;
   font-weight: 400 !important;
-  transition: var(--transition) !important;
+  transition: all var(--transition-fast) !important;
   max-width: 100% !important;
   display: block !important;
   margin: 0 !important;
   height: auto !important;
+  color: var(--text-primary) !important;
 }
 
 .portfolio-allocation-input:focus,
@@ -176,8 +173,8 @@
 .col-percentage .portfolio-allocation-input:focus,
 .col-currency .portfolio-allocation-input:focus {
   border-color: var(--primary) !important;
-  box-shadow: 0 0 0 2px var(--primary-light) !important;
   outline: none !important;
+  background-color: var(--bg-secondary) !important;
 }
 
 .portfolio-allocation-input[readonly],
@@ -185,8 +182,8 @@
 .metric-group .portfolio-allocation-input[readonly],
 .col-percentage .portfolio-allocation-input[readonly],
 .col-currency .portfolio-allocation-input[readonly] {
-  background-color: var(--darker-bg) !important;
-  color: var(--text-muted) !important;
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
   cursor: default !important;
 }
 
@@ -195,24 +192,16 @@
 .metric-group .portfolio-allocation-input:disabled,
 .col-percentage .portfolio-allocation-input:disabled,
 .col-currency .portfolio-allocation-input:disabled {
-  background-color: var(--darker-bg) !important;
-  color: var(--text-muted) !important;
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-tertiary) !important;
   cursor: not-allowed !important;
   opacity: 0.7 !important;
 }
 
 /* Warning border for values below minimum */
 .portfolio-allocation-input.warning-border {
-  border: 2px solid #f59e0b !important;
-  background-color: #fffbeb !important;
-}
-
-/* Dark theme warning border adjustments */
-@media (prefers-color-scheme: dark) {
-  .portfolio-allocation-input.warning-border {
-    background-color: rgba(245, 158, 11, 0.1) !important;
-    border-color: #f59e0b !important;
-  }
+  border: 2px solid var(--warning) !important;
+  background-color: var(--warning-light) !important;
 }
 
 /* Reset button styling */
@@ -220,10 +209,10 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px;
+  font-size: 1rem;
+  padding: var(--space-xs);
   opacity: 0.6;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: all var(--transition-fast);
   line-height: 1;
   flex-shrink: 0;
 }
@@ -246,11 +235,11 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 50%;
-  background-color: var(--darker-bg);
-  transition: all var(--transition-speed) var(--transition-func);
+  background-color: var(--bg-tertiary);
+  transition: all var(--transition-fast);
   border: 2px solid transparent;
-  margin-top: 1.5rem; /* Align with inputs */
-  align-self: flex-end; /* Align with the input fields */
+  margin-top: var(--space-lg);
+  align-self: flex-end;
 }
 
 .portfolio-toggle:hover {
@@ -268,7 +257,7 @@
 .portfolio-expanded-content {
   margin-top: var(--space-lg);
   padding-top: var(--space-lg);
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-subtle);
 }
 
 /* Unified Action Bar */
@@ -279,7 +268,6 @@
   gap: var(--space-lg);
   margin-bottom: var(--space-lg);
   padding: var(--space-md);
-  /* Removed background, border, and border-radius to remove visual box */
 }
 
 .action-group-left {
@@ -297,15 +285,15 @@
 }
 
 .help-text {
-  font-size: 0.8rem;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
   margin-top: var(--space-xs);
   font-style: italic;
 }
 
 /* Positions Table */
 .positions-table {
-  /* Removed border-radius, overflow, and border to remove visual box */
+  /* Minimalist - no border or shadow */
 }
 
 .positions-table .table {
@@ -314,24 +302,23 @@
 }
 
 .positions-table th {
-  background-color: transparent !important; /* Override global table header background */
-  color: var(--text-color);
+  background-color: transparent !important;
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 0.875rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 2px solid var(--border-default);
 }
 
-/* Also remove background from footer "Total" row */
 .positions-table tfoot th {
   background-color: transparent !important;
 }
 
 .positions-table td {
   padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
 }
 
@@ -342,12 +329,12 @@
 /* Open Positions Text */
 .open-positions-text {
   font-style: italic;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 
 .placeholder-position {
-  background-color: rgba(var(--primary-rgb), 0.1);
+  background-color: var(--primary-light);
 }
 
 .placeholder-position .open-positions-text {
@@ -356,9 +343,9 @@
 
 /* Global Allocation Rules Card */
 .card {
-  background-color: var(--card-bg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   margin-bottom: var(--space-xl);
   padding: var(--space-lg) var(--space-xl);
 }
@@ -375,7 +362,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-md) 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .rule-item:last-child {
@@ -390,13 +377,13 @@
 .rule-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text-color);
+  color: var(--text-primary);
   margin-bottom: var(--space-xs);
 }
 
 .rule-subtitle {
-  font-size: 0.9rem;
-  color: var(--text-muted);
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
   margin-bottom: 0;
   line-height: 1.4;
 }
@@ -421,44 +408,43 @@
     flex-direction: column;
     gap: var(--space-sm);
   }
-  
+
   .portfolio-name-column {
     flex: none;
     width: 100%;
     min-height: auto;
   }
-  
+
   .portfolio-metrics {
     flex-wrap: wrap;
     justify-content: flex-start;
     gap: var(--space-sm);
   }
-  
+
   .metric-group {
     flex: 1;
     min-width: 80px;
     max-width: none;
   }
-  
+
   .metric-group:first-child {
     flex: 0 0 auto;
     margin-right: var(--space-sm);
     margin-bottom: var(--space-sm);
   }
-  
-  /* Reset specific widths on mobile */
+
   .metric-group:nth-child(2),
   .metric-group:nth-child(3),
   .metric-group:nth-child(4),
   .metric-group:nth-child(5) {
-    min-width: 100px; /* Consistent mobile minimum width */
+    min-width: 100px;
   }
-  
+
   .action-bar {
     flex-direction: column;
     gap: var(--space-md);
   }
-  
+
   .action-group-left,
   .action-group-right {
     width: 100%;
@@ -469,9 +455,9 @@
 
 /* Add Position Section */
 .add-position-section {
-  background-color: var(--darker-bg);
+  background-color: var(--bg-tertiary);
   padding: var(--space-lg);
-  border-radius: var(--border-radius);
+  border-radius: var(--radius-md);
   margin-bottom: var(--space-lg);
   margin-top: var(--space-lg);
 }
@@ -481,13 +467,12 @@
   padding: 0;
   margin: 0;
   height: 2.5rem;
-  /* Match input/select height */
   display: flex;
   align-items: center;
   justify-content: center;
   width: fit-content;
   min-width: auto;
-  border-radius: var(--border-radius);
+  border-radius: var(--radius-md);
 }
 
 .add-position-section .notification.is-warning .has-text-weight-medium {
@@ -499,12 +484,12 @@
 .placeholder-position {
   background-color: var(--primary-light);
   font-style: italic;
-  border-radius: var(--border-radius);
+  border-radius: var(--radius-md);
 }
 
 .placeholder-position td:first-child {
   position: relative;
-  padding-left: 1.5rem;
+  padding-left: var(--space-lg);
 }
 
 .placeholder-position td:first-child::before {
@@ -515,8 +500,8 @@
   bottom: 0;
   width: 3px;
   background-color: var(--primary);
-  border-top-left-radius: var(--border-radius);
-  border-bottom-left-radius: var(--border-radius);
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
 }
 
 .remaining-positions-text {
@@ -526,8 +511,8 @@
 
 /* Table Styling Overrides for Build Page */
 .table tr {
-  background-color: var(--card-bg);
-  transition: background-color var(--transition-speed) var(--transition-func);
+  background-color: var(--bg-secondary);
+  transition: background-color var(--transition-fast);
 }
 
 .table tr:hover {
@@ -536,31 +521,12 @@
 
 .table th,
 .table td {
-  padding: 0.75rem 1rem;
+  padding: var(--space-sm) var(--space-md);
 }
 
 .table-active {
   background-color: var(--primary-light) !important;
-  border-radius: var(--border-radius);
-}
-
-/* Dark theme adjustments */
-@media (prefers-color-scheme: dark) {
-  .budget-results {
-    background-color: rgba(255, 255, 255, 0.03);
-  }
-
-  .add-position-section {
-    background-color: rgba(255, 255, 255, 0.03);
-  }
-
-  .table tr {
-    background-color: rgba(255, 255, 255, 0.02);
-  }
-
-  .table tr:hover {
-    background-color: rgba(255, 255, 255, 0.04);
-  }
+  border-radius: var(--radius-md);
 }
 
 /* Responsive Adjustments */
@@ -611,14 +577,14 @@
   color: var(--primary);
   cursor: pointer;
   font-weight: 500;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  transition: all var(--transition-fast);
   text-decoration: none;
   margin-left: var(--space-xs);
 }
 
 .portfolio-value-hint:hover {
-  color: var(--primary-dark);
+  color: var(--aqua-600);
   text-decoration: underline;
   transform: scale(1.02);
 }
@@ -629,12 +595,11 @@
 
 /* Red text for warnings on readonly inputs */
 .portfolio-allocation-input[readonly].has-text-danger {
-  color: hsl(348, 86%, 61%) !important; /* Bulma danger color */
+  color: var(--danger) !important;
   font-weight: bold;
 }
 
 /* Red text for warnings (e.g., current < min positions) */
 .has-text-danger {
-  color: hsl(348, 86%, 61%) !important; /* Bulma danger color */
-  background-color: rgba(255, 255, 255, 0.95) !important; /* Ensure visibility */
+  color: var(--danger) !important;
 }

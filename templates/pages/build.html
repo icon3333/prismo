@@ -19,7 +19,7 @@
           <div class="field">
             <label class="label">Total Net Worth</label>
             <div class="control">
-              <input class="input" type="text" id="totalNetWorth" placeholder="Enter total net worth"
+              <input class="input sensitive-value" type="text" id="totalNetWorth" placeholder="Enter total net worth"
                 :value="getInputDisplayValue('totalNetWorth')" @input="budgetData.totalNetWorth = $event.target.value"
                 @focus="handleInputFocus('totalNetWorth')" @blur="handleInputBlur('totalNetWorth')">
             </div>
@@ -31,11 +31,11 @@
               Already Invested
               <span v-if="portfolioMetrics.total_value > 0" class="portfolio-value-hint"
                 @click="populateAlreadyInvested()" title="Click to use current portfolio value">
-                (${ formatCurrency(portfolioMetrics.total_value) })
+                (<span class="sensitive-value">${ formatCurrencyRaw(portfolioMetrics.total_value) }</span>)
               </span>
             </label>
             <div class="control">
-              <input class="input" type="text" id="alreadyInvested" placeholder="Enter amount already invested"
+              <input class="input sensitive-value" type="text" id="alreadyInvested" placeholder="Enter amount already invested"
                 :value="getInputDisplayValue('alreadyInvested')"
                 @input="budgetData.alreadyInvested = $event.target.value" @focus="handleInputFocus('alreadyInvested')"
                 @blur="handleInputBlur('alreadyInvested')">
@@ -46,7 +46,7 @@
           <div class="field">
             <label class="label">Emergency Fund</label>
             <div class="control">
-              <input class="input" type="text" id="emergencyFund" placeholder="Enter emergency fund amount"
+              <input class="input sensitive-value" type="text" id="emergencyFund" placeholder="Enter emergency fund amount"
                 :value="getInputDisplayValue('emergencyFund')" @input="budgetData.emergencyFund = $event.target.value"
                 @focus="handleInputFocus('emergencyFund')" @blur="handleInputBlur('emergencyFund')">
             </div>
@@ -60,14 +60,14 @@
           <div class="column is-half">
             <div class="result-item">
               <span class="result-label">Total Investable Capital</span>
-              <div class="result-value">${ formatCurrency(budgetData.totalInvestableCapital) }</div>
+              <div class="result-value sensitive-value">${ formatCurrencyRaw(budgetData.totalInvestableCapital) }</div>
             </div>
           </div>
           <div class="column is-half">
             <div class="result-item">
               <span class="result-label">Available to Invest</span>
               <div class="result-value">
-                ${ formatCurrency(budgetData.availableToInvest) }
+                <span class="sensitive-value">${ formatCurrencyRaw(budgetData.availableToInvest) }</span>
                 <span class="tag is-light ml-2">${ availablePercentage }%</span>
               </div>
             </div>
@@ -112,17 +112,17 @@
           </div>
         </div>
 
-        <!-- Maximum % per Category -->
+        <!-- Maximum % per Sector -->
         <div class="rule-item">
           <div class="rule-description">
-            <h4 class="rule-title">Maximum % per Category</h4>
-            <p class="rule-subtitle">Limits the maximum percentage allocation for any single portfolio category</p>
+            <h4 class="rule-title">Maximum % per Sector</h4>
+            <p class="rule-subtitle">Limits the maximum percentage allocation for any single portfolio sector</p>
           </div>
           <div class="rule-input">
             <div class="field">
               <div class="control">
                 <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
-                  v-model.number="rules.maxPerCategory">
+                  v-model.number="rules.maxPerSector">
               </div>
             </div>
           </div>
@@ -188,7 +188,7 @@
             </div>
             <div class="metric-group">
               <label class="metric-label">Amount</label>
-              <input class="portfolio-allocation-input" type="text" :value="formatCurrency(calculateAllocationAmount(portfolio.allocation))"
+              <input class="portfolio-allocation-input sensitive-value" type="text" :value="formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation))"
                 readonly>
               <div class="help-text">&nbsp;</div>
             </div>
@@ -283,7 +283,7 @@
                         :disabled="portfolio.evenSplit">
                     </td>
                     <td class="col-currency">
-                      <input class="portfolio-allocation-input" type="text" :value="formatCurrency(calculatePositionAmount(index, pIndex))"
+                      <input class="portfolio-allocation-input sensitive-value" type="text" :value="formatCurrencyRaw(calculatePositionAmount(index, pIndex))"
                         readonly>
                     </td>
                     <td class="col-checkbox has-text-centered">
@@ -302,7 +302,7 @@
                   <tr>
                     <th>Total</th>
                     <th>${ calculateTotalWeight(index).toFixed(0) }%</th>
-                    <th>${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }</th>
+                    <th class="sensitive-value">${ formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation)) }</th>
                     <th></th>
                   </tr>
                 </tfoot>
@@ -365,8 +365,8 @@
                 ${ parseFloat(portfolio.allocation).toFixed(1) }%
               </td>
               <td class="has-text-weight-bold">100%</td>
-              <td class="has-text-weight-bold">
-                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation)) }
+              <td class="has-text-weight-bold sensitive-value">
+                ${ formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation)) }
               </td>
             </tr>
 
@@ -393,14 +393,14 @@
                   ${ parseFloat(group.weight).toFixed(1) }%
                 </span>
               </td>
-              <td v-if="group.isPlaceholder">
-                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation) * group.weight * group.count / 100) }
+              <td v-if="group.isPlaceholder" class="sensitive-value">
+                ${ formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation) * group.weight * group.count / 100) }
                 <br>
-                <small class="has-text-grey">(${ formatCurrency(calculateAllocationAmount(portfolio.allocation) *
-                  group.weight / 100) } each)</small>
+                <small class="has-text-grey">(<span class="sensitive-value">${ formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation) *
+                  group.weight / 100) }</span> each)</small>
               </td>
-              <td v-else>
-                ${ formatCurrency(calculateAllocationAmount(portfolio.allocation) * group.weight / 100) }
+              <td v-else class="sensitive-value">
+                ${ formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation) * group.weight / 100) }
               </td>
             </tr>
           </template>
@@ -414,7 +414,7 @@
             <th></th>
             <th>${ calculateTotalAllocation().toFixed(1) }%</th>
             <th>-</th>
-            <th>${ formatCurrency(calculateTotalAllocatedAmount()) }</th>
+            <th class="sensitive-value">${ formatCurrencyRaw(calculateTotalAllocatedAmount()) }</th>
           </tr>
         </tfoot>
       </table>

@@ -38,13 +38,13 @@ class PortfolioService:
     @staticmethod
     def calculate_asset_allocation(holdings: List[Dict]) -> Dict[str, Decimal]:
         """
-        Calculate asset allocation by category.
+        Calculate asset allocation by sector.
 
         Args:
-            holdings: List of holdings with category, shares, and price_eur
+            holdings: List of holdings with sector, shares, and price_eur
 
         Returns:
-            Dict of {category: percentage}
+            Dict of {sector: percentage}
         """
         total_value = PortfolioService.calculate_portfolio_value(holdings)
 
@@ -52,21 +52,21 @@ class PortfolioService:
         if not total_value or total_value == 0 or total_value == Decimal('0'):
             return {}
 
-        category_values = {}
+        sector_values = {}
 
         for holding in holdings:
-            category = holding.get('category', 'Unknown')
+            sector = holding.get('sector', 'Unknown')
             value = calculate_item_value(holding)
 
-            category_values[category] = category_values.get(category, Decimal('0')) + value
+            sector_values[sector] = sector_values.get(sector, Decimal('0')) + value
 
         # Convert to percentages
-        category_percentages = {
-            category: (value / total_value * 100)
-            for category, value in category_values.items()
+        sector_percentages = {
+            sector: (value / total_value * 100)
+            for sector, value in sector_values.items()
         }
 
-        return category_percentages
+        return sector_percentages
 
     @staticmethod
     def calculate_geographic_allocation(holdings: List[Dict]) -> Dict[str, Decimal]:
@@ -173,7 +173,7 @@ class PortfolioService:
 
         Args:
             holdings: List of holdings
-            field_name: Field to aggregate by (e.g., 'category', 'country')
+            field_name: Field to aggregate by (e.g., 'sector', 'country')
 
         Returns:
             Dict of {field_value: {'value': total_value, 'percentage': pct}}

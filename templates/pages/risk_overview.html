@@ -9,7 +9,7 @@
     .page-title.has-icon {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: var(--space-sm);
     }
 
     .page-title.has-icon i {
@@ -89,11 +89,11 @@
                     <div class="gauge-card">
                         <div class="gauge-indicator">
                             <div class="overview-chart-header">
-                                <div class="overview-chart-title">User Categories</div>
-                                <div class="overview-chart-subtitle" id="categoryCountSubtitle">Category breakdown</div>
+                                <div class="overview-chart-title">User Sectors</div>
+                                <div class="overview-chart-subtitle" id="sectorCountSubtitle">Sector breakdown</div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="categoryDistributionChart" style="min-height: 300px;"></div>
+                                <div id="sectorDistributionChart" style="min-height: 300px;"></div>
                             </div>
                         </div>
                     </div>
@@ -134,7 +134,7 @@
      * Features include:
      * - Portfolio allocation visualization
      * - Company allocation across all portfolios
-     * - Distribution breakdowns by country and category
+     * - Distribution breakdowns by country and sector
      */
     document.addEventListener('DOMContentLoaded', function () {
         console.log('DOM loaded, initializing Risk Overview...');
@@ -164,17 +164,18 @@
         let companyAllocationsChart = null;
         let allocationRules = {
             maxPerStock: null,
-            maxPerCategory: null,
+            maxPerSector: null,
             maxPerCountry: null
         };
 
         // Utility functions for formatting
         window.formatCurrency = function (value) {
-            if (typeof value !== 'number' || isNaN(value)) return '€0';
-            return '€' + value.toLocaleString('en-US', {
+            if (typeof value !== 'number' || isNaN(value)) return '<span class="sensitive-value">€0</span>';
+            const formatted = '€' + value.toLocaleString('en-US', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0
             });
+            return `<span class="sensitive-value">${formatted}</span>`;
         };
 
         window.formatPercentage = function (value) {
@@ -538,7 +539,7 @@
                     portfolioMap[portfolioName].companies.push({
                         id: item.id,
                         name: companyName,
-                        category: item.category || 'Uncategorized',
+                        sector: item.sector || 'Unassigned',
                         investment_type: item.investment_type || null,
                         shares: shares,
                         effective_shares: shares, // Required by centralized calculator
@@ -668,14 +669,14 @@
             const portfolioCountEl = document.getElementById('portfolioCountSubtitle');
             const companyCountEl = document.getElementById('companyCountSubtitle');
             const countryCountEl = document.getElementById('countryCountSubtitle');
-            const categoryCountEl = document.getElementById('categoryCountSubtitle');
+            const sectorCountEl = document.getElementById('sectorCountSubtitle');
 
 
             if (filteredPortfolios.length === 0) {
                 portfolioCountEl.textContent = 'No portfolios selected';
                 companyCountEl.textContent = 'Select portfolios to view';
                 countryCountEl.textContent = '';
-                categoryCountEl.textContent = '';
+                sectorCountEl.textContent = '';
 
                 return;
             }
@@ -690,11 +691,11 @@
 
             // Calculate distribution counts
             const countries = new Set(allCompanies.map(c => c.country || 'Unknown'));
-            const categories = new Set(allCompanies.map(c => c.category || 'Unknown'));
+            const sectors = new Set(allCompanies.map(c => c.sector || 'Unknown'));
 
 
             countryCountEl.textContent = `${countries.size} countries`;
-            categoryCountEl.textContent = `${categories.size} categories`;
+            sectorCountEl.textContent = `${sectors.size} sectors`;
 
         }
 
@@ -703,7 +704,7 @@
                 'portfolioAllocationsChart',
                 'companyAllocationsChart',
                 'countryDistributionChart',
-                'categoryDistributionChart',
+                'sectorDistributionChart',
                 'investmentTypeChart'
             ];
 
@@ -847,7 +848,7 @@
 
                 // Ensure metadata fields exist
                 company.country = company.country || 'Unknown';
-                company.category = company.category || 'Unknown';
+                company.sector = company.sector || 'Unknown';
                 company.investment_type = company.investment_type || null;
                 company.exchange = company.exchange || 'Unknown';
 
@@ -868,7 +869,7 @@
                         shares: 0,
                         totalInvested: 0,
                         // Preserve metadata from the first occurrence
-                        category: company.category || 'Unknown',
+                        sector: company.sector || 'Unknown',
                         country: company.country || 'Unknown',
                         investment_type: company.investment_type || null,
                         exchange: company.exchange || 'Unknown'
@@ -901,7 +902,7 @@
                 labels = top10.map(c => c.name);
                 values = top10.map(c => c.currentValue);
 
-                // Add "Others" category
+                // Add "Others" sector
                 const othersTotal = others.reduce((sum, c) => sum + c.currentValue, 0);
                 if (othersTotal > 0) {
                     labels.push('Others');
@@ -996,7 +997,7 @@
                             const label = w.globals.labels[dataPointIndex];
                             const value = series[seriesIndex][dataPointIndex];
 
-                            // Get company details for this category
+                            // Get company details for this sector
                             const companies = options.companyDetails?.[label] || [];
 
                             let companyList = '';
@@ -1014,7 +1015,7 @@
                                     companyList += `<div style="margin-top: 4px; font-style: italic; color: #888;">... and ${companies.length - displayCount} more</div>`;
                                 }
                             } else {
-                                companyList = '<div style="font-style: italic; color: #888;">No companies in this category</div>';
+                                companyList = '<div style="font-style: italic; color: #888;">No companies in this sector</div>';
                             }
 
                             return `<div style="padding: 12px; background: rgba(0,0,0,0.85); color: white; border-radius: 8px; font-size: 12px; max-width: 300px; overflow: hidden; box-sizing: border-box;">
@@ -1063,13 +1064,13 @@
 
         function updateDistributionCharts() {
             updateDistributionChart('country', 'countryDistributionChart');
-            updateDistributionChart('category', 'categoryDistributionChart');
+            updateDistributionChart('sector', 'sectorDistributionChart');
             updateInvestmentTypeChart();
         }
 
         function updateDistributionChart(field, chartId) {
             const distributions = {};
-            const companyDetails = {}; // Track companies in each category
+            const companyDetails = {}; // Track companies in each sector
 
             // Get all companies from selected portfolios
             const allCompanies = getAllCompaniesFromSelectedPortfolios();
@@ -1149,7 +1150,7 @@
 
             allCompanies.forEach(company => {
                 const value = company.currentValue || 0;
-                const type = company.investment_type || 'Uncategorized';
+                const type = company.investment_type || 'Unassigned';
 
                 distributions[type] = (distributions[type] || 0) + value;
 
@@ -1171,10 +1172,10 @@
             if (investmentTypeSubtitle) {
                 const stockCount = companyDetails['Stock'] ? companyDetails['Stock'].length : 0;
                 const etfCount = companyDetails['ETF'] ? companyDetails['ETF'].length : 0;
-                const uncategorizedCount = companyDetails['Uncategorized'] ? companyDetails['Uncategorized'].length : 0;
+                const unassignedCount = companyDetails['Unassigned'] ? companyDetails['Unassigned'].length : 0;
                 investmentTypeSubtitle.textContent = `${stockCount} Stocks, ${etfCount} ETFs`;
-                if (uncategorizedCount > 0) {
-                    investmentTypeSubtitle.textContent += `, ${uncategorizedCount} Uncategorized`;
+                if (unassignedCount > 0) {
+                    investmentTypeSubtitle.textContent += `, ${unassignedCount} Unassigned`;
                 }
             }
 
@@ -1198,13 +1199,8 @@
                 companyDetails[key].sort((a, b) => b.value - a.value);
             }
 
-            // Custom colors for investment types
-            const typeColors = {
-                'Stock': '#3b82f6',  // Blue
-                'ETF': '#10b981',    // Green
-                'Uncategorized': '#6b7280'  // Gray
-            };
-            const colors = distributionData.map(item => typeColors[item.name] || '#8b5cf6');
+            // Use consistent colors from ChartConfig for investment types
+            const colors = ChartConfig.getConsistentColors(distributionData.map(item => item.name));
 
             try {
                 // Create doughnut chart

@@ -30,6 +30,15 @@
         })();
     </script>
 
+    <!-- Set anonymous mode before any content renders -->
+    <script>
+        (function() {
+            if (sessionStorage.getItem('anonymousModeEnabled') === 'true') {
+                document.documentElement.classList.add('anonymous-mode');
+            }
+        })();
+    </script>
+
     <!-- Favicon -->
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}">
 
@@ -46,6 +55,9 @@
 
     <!-- Ocean Depth Design System -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/ocean-depth.css') }}">
+
+    <!-- Anonymous Mode -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/anonymous-mode.css') }}">
 
     <!-- Page-specific CSS -->
     {% block head_extras %}{% endblock %}
@@ -148,6 +160,9 @@
 
     <!-- Theme Toggle JS -->
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+
+    <!-- Anonymous Mode JS -->
+    <script src="{{ url_for('static', filename='js/anonymous-mode.js') }}"></script>
 
     <!-- Chart Configuration -->
     <script src="{{ url_for('static', filename='js/apex_chart_config.js') }}"></script>

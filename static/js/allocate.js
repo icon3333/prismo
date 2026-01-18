@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function () {
             this.portfolioData = null;
             this.investmentAmount = 0;
             this.rebalanceMode = 'existing-only'; // 'existing-only', 'new-only', 'new-with-sells'
-            this.categoriesExpanded = new Set(); // Track expanded categories
+            this.sectorsExpanded = new Set(); // Track expanded sectors
             this.selectedPortfolio = null; // Track selected portfolio
 
             // OPTIMIZATION: Create formatters once, reuse many times (15% faster)
@@ -171,14 +171,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const expandAllBtn = document.getElementById('expand-all-btn');
             if (expandAllBtn) {
                 expandAllBtn.addEventListener('click', () => {
-                    this.expandAllCategories();
+                    this.expandAllSectors();
                 });
             }
 
             const collapseAllBtn = document.getElementById('collapse-all-btn');
             if (collapseAllBtn) {
                 collapseAllBtn.addEventListener('click', () => {
-                    this.collapseAllCategories();
+                    this.collapseAllSectors();
                 });
             }
         }
@@ -316,9 +316,10 @@ document.addEventListener('DOMContentLoaded', function () {
         formatCurrency(value) {
             // Defensive check for invalid values
             if (value === undefined || value === null || isNaN(value)) {
-                return '€0.00';
+                return '<span class="sensitive-value">€0.00</span>';
             }
-            return this.currencyFormatter.format(value);
+            const formatted = this.currencyFormatter.format(value);
+            return `<span class="sensitive-value">${formatted}</span>`;
         }
 
         formatPercentage(value) {
@@ -327,10 +328,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Helper method to count current positions in a portfolio
         countCurrentPositions(portfolio) {
-            if (!portfolio.categories) return 0;
-            return portfolio.categories
-                .filter(cat => cat.name !== 'Missing Positions')
-                .reduce((sum, cat) => sum + (cat.positionCount || 0), 0);
+            if (!portfolio.sectors) return 0;
+            return portfolio.sectors
+                .filter(sector => sector.name !== 'Missing Positions')
+                .reduce((sum, sector) => sum + (sector.positionCount || 0), 0);
         }
 
         renderPortfolioTable() {
@@ -643,55 +644,55 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        toggleCategoryExpand(categoryId) {
-            console.log(`Toggling category: ${categoryId}`);
-            if (this.categoriesExpanded.has(categoryId)) {
-                this.categoriesExpanded.delete(categoryId);
-                console.log(`Collapsed: ${categoryId}`);
+        toggleSectorExpand(sectorId) {
+            console.log(`Toggling sector: ${sectorId}`);
+            if (this.sectorsExpanded.has(sectorId)) {
+                this.sectorsExpanded.delete(sectorId);
+                console.log(`Collapsed: ${sectorId}`);
             } else {
-                this.categoriesExpanded.add(categoryId);
-                console.log(`Expanded: ${categoryId}`);
+                this.sectorsExpanded.add(sectorId);
+                console.log(`Expanded: ${sectorId}`);
             }
             this.renderDetailedView();
         }
 
-        expandAllCategories() {
+        expandAllSectors() {
             if (!this.selectedPortfolio || !this.portfolioData) return;
 
             const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
-            if (!portfolio || !portfolio.categories) return;
+            if (!portfolio || !portfolio.sectors) return;
 
-            // Add all category IDs to the expanded set
-            portfolio.categories.forEach((category, categoryIndex) => {
-                if (category.positions && category.positions.length > 0) {
-                    const categoryId = category.name === 'Missing Positions'
+            // Add all sector IDs to the expanded set
+            portfolio.sectors.forEach((sector, sectorIndex) => {
+                if (sector.positions && sector.positions.length > 0) {
+                    const sectorId = sector.name === 'Missing Positions'
                         ? `${portfolio.name}-Missing-Positions`
-                        : `${portfolio.name}-${category.name}-${categoryIndex}`;
-                    this.categoriesExpanded.add(categoryId);
+                        : `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    this.sectorsExpanded.add(sectorId);
                 }
             });
 
-            console.log('Expanded all categories:', Array.from(this.categoriesExpanded));
+            console.log('Expanded all sectors:', Array.from(this.sectorsExpanded));
             this.renderDetailedView();
         }
 
-        collapseAllCategories() {
+        collapseAllSectors() {
             if (!this.selectedPortfolio || !this.portfolioData) return;
 
             const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
-            if (!portfolio || !portfolio.categories) return;
+            if (!portfolio || !portfolio.sectors) return;
 
-            // Remove all category IDs for this portfolio from the expanded set
-            portfolio.categories.forEach((category, categoryIndex) => {
-                if (category.positions && category.positions.length > 0) {
-                    const categoryId = category.name === 'Missing Positions'
+            // Remove all sector IDs for this portfolio from the expanded set
+            portfolio.sectors.forEach((sector, sectorIndex) => {
+                if (sector.positions && sector.positions.length > 0) {
+                    const sectorId = sector.name === 'Missing Positions'
                         ? `${portfolio.name}-Missing-Positions`
-                        : `${portfolio.name}-${category.name}-${categoryIndex}`;
-                    this.categoriesExpanded.delete(categoryId);
+                        : `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    this.sectorsExpanded.delete(sectorId);
                 }
             });
 
-            console.log('Collapsed all categories:', Array.from(this.categoriesExpanded));
+            console.log('Collapsed all sectors:', Array.from(this.sectorsExpanded));
             this.renderDetailedView();
         }
 
@@ -855,16 +856,16 @@ document.addEventListener('DOMContentLoaded', function () {
             let sumUserDefinedAllocations = 0;
 
             // First pass: gather position counts and target allocations
-            if (portfolio.categories && portfolio.categories.length > 0) {
-                portfolio.categories.forEach(category => {
-                    if (!category.positions || category.positions.length === 0) return;
-                    if (category.name === 'Missing Positions') {
-                        const placeholderPosition = category.positions.find(pos => pos.isPlaceholder);
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach(sector => {
+                    if (!sector.positions || sector.positions.length === 0) return;
+                    if (sector.name === 'Missing Positions') {
+                        const placeholderPosition = sector.positions.find(pos => pos.isPlaceholder);
                         if (placeholderPosition) {
                             totalPositionsCount += placeholderPosition.positionsRemaining || 0;
                         }
                     } else {
-                        category.positions.forEach(position => {
+                        sector.positions.forEach(position => {
                             totalPositionsCount++;
                             // Check if position has user-defined allocation
                             if (position.targetAllocation && position.targetAllocation > 0) {
@@ -909,20 +910,20 @@ document.addEventListener('DOMContentLoaded', function () {
             // Second pass: Check if we should show missing positions
             // This must be done BEFORE normalization
             let shouldShowMissingPositions = false;
-            const missingPositionsCategory = portfolio.categories && portfolio.categories.find(cat =>
-                cat.name === 'Missing Positions' ||
-                (cat.positions && cat.positions.some(pos => pos.isPlaceholder))
+            const missingPositionsSector = portfolio.sectors && portfolio.sectors.find(sector =>
+                sector.name === 'Missing Positions' ||
+                (sector.positions && sector.positions.some(pos => pos.isPlaceholder))
             );
 
-            if (missingPositionsCategory) {
+            if (missingPositionsSector) {
                 // Calculate total weight of real positions from builder
                 const realBuilderPositions = builderPositions.filter(pos => !pos.isPlaceholder);
                 const totalRealWeight = realBuilderPositions.reduce((sum, pos) => sum + (pos.weight || 0), 0);
 
                 const minPositions = portfolio.minPositions || 0;
-                const currentPositionsCount = portfolio.categories
-                    .filter(cat => cat.name !== 'Missing Positions')
-                    .reduce((sum, cat) => sum + (cat.positions ? cat.positions.length : 0), 0);
+                const currentPositionsCount = portfolio.sectors
+                    .filter(sector => sector.name !== 'Missing Positions')
+                    .reduce((sum, sector) => sum + (sector.positions ? sector.positions.length : 0), 0);
 
                 shouldShowMissingPositions = (
                     currentPositionsCount < minPositions &&
@@ -936,16 +937,16 @@ document.addEventListener('DOMContentLoaded', function () {
             let totalTargetAllocation = 0;
             let hasBackendConstrainedValues = false;
 
-            if (portfolio.categories && portfolio.categories.length > 0) {
-                portfolio.categories.forEach((category, categoryIndex) => {
-                    // Skip categories with no positions
-                    if (!category.positions || category.positions.length === 0) return;
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
 
                     // Skip missing positions if they shouldn't be shown
-                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
                     // Assign target allocations for each position
-                    category.positions.forEach(position => {
+                    sector.positions.forEach(position => {
                         // Check if backend provided constrained target value
                         if (position.targetValue !== undefined && position.targetValue !== null) {
                             hasBackendConstrainedValues = true;
@@ -977,21 +978,21 @@ document.addEventListener('DOMContentLoaded', function () {
             // Store normalized allocations in a separate map to avoid mutating originals
             const normalizedAllocations = new Map();
 
-            if (portfolio.categories && portfolio.categories.length > 0) {
-                portfolio.categories.forEach((category, categoryIndex) => {
-                    // Skip categories with no positions
-                    if (!category.positions || category.positions.length === 0) return;
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
 
                     // Skip missing positions if they shouldn't be shown
-                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
-                    // Calculate category metrics
-                    let categoryCurrentValue = 0;
-                    let categoryTargetAllocation = 0;
+                    // Calculate sector metrics
+                    let sectorCurrentValue = 0;
+                    let sectorTargetAllocation = 0;
 
-                    // Calculate values for each position in the category
-                    category.positions.forEach(position => {
-                        categoryCurrentValue += (position.currentValue || 0);
+                    // Calculate values for each position in the sector
+                    sector.positions.forEach(position => {
+                        sectorCurrentValue += (position.currentValue || 0);
 
                         // CRITICAL: Use backend's constrained target value if available
                         // Backend applies type constraints (maxPerStock, maxPerETF) with recursive redistribution
@@ -1004,14 +1005,14 @@ document.addEventListener('DOMContentLoaded', function () {
                                 ? (position.targetValue / portfolioTargetValue) * 100
                                 : 0;
                             normalizedAllocations.set(position, backendAllocation);
-                            categoryTargetAllocation += backendAllocation;
+                            sectorTargetAllocation += backendAllocation;
 
                             console.log(`Using backend constrained value for ${position.name}: ${position.targetValue.toFixed(2)} (${backendAllocation.toFixed(2)}%)`);
                         } else {
                             // Fallback to frontend normalization if backend didn't provide targetValue
                             const normalizedAllocation = position.targetAllocation * normalizationFactor;
                             normalizedAllocations.set(position, normalizedAllocation);
-                            categoryTargetAllocation += normalizedAllocation;
+                            sectorTargetAllocation += normalizedAllocation;
 
                             const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
                             position.calculatedTargetValue = targetValue;
@@ -1020,10 +1021,10 @@ document.addEventListener('DOMContentLoaded', function () {
                         }
                     });
 
-                    // Set category values
-                    category.currentValue = categoryCurrentValue;
-                    category.targetAllocation = categoryTargetAllocation;
-                    category.calculatedTargetValue = (categoryTargetAllocation / 100) * portfolioTargetValue;
+                    // Set sector values
+                    sector.currentValue = sectorCurrentValue;
+                    sector.targetAllocation = sectorTargetAllocation;
+                    sector.calculatedTargetValue = (sectorTargetAllocation / 100) * portfolioTargetValue;
                 });
             }
 
@@ -1032,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', function () {
              * All modes follow the same core principles:
              * 1. Calculate gap = target_value - current_value for each position
              * 2. Exclude positions with gap = 0 (already at target)
-             * 3. Exclude entire categories if category is at/above target
+             * 3. Exclude entire sectors if sector is at/above target
              * 4. Distribute capital proportionally based on gap sizes
              *
              * Mode differences:
@@ -1046,21 +1047,21 @@ document.addEventListener('DOMContentLoaded', function () {
             let totalPositiveGap = 0;
             let totalNegativeGap = 0;
 
-            if (portfolio.categories && portfolio.categories.length > 0) {
-                portfolio.categories.forEach((category, categoryIndex) => {
-                    // Skip categories with no positions
-                    if (!category.positions || category.positions.length === 0) return;
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
 
                     // Skip missing positions if they shouldn't be shown
-                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
-                    // Check if category is at or above target (for all modes)
-                    const categoryCurrentValue = category.currentValue || 0;
-                    const categoryTargetValue = category.calculatedTargetValue || 0;
-                    const categoryGap = categoryTargetValue - categoryCurrentValue;
+                    // Check if sector is at or above target (for all modes)
+                    const sectorCurrentValue = sector.currentValue || 0;
+                    const sectorTargetValue = sector.calculatedTargetValue || 0;
+                    const sectorGap = sectorTargetValue - sectorCurrentValue;
 
-                    // Process positions within this category
-                    category.positions.forEach(position => {
+                    // Process positions within this sector
+                    sector.positions.forEach(position => {
                         const positionCurrentValue = position.currentValue || 0;
                         const positionTargetValue = position.calculatedTargetValue || 0;
                         const positionGap = positionTargetValue - positionCurrentValue;
@@ -1074,10 +1075,10 @@ document.addEventListener('DOMContentLoaded', function () {
                             position.action = 0;
                             position.valueAfter = positionCurrentValue;
 
-                        } else if (categoryGap <= 0 && positionGap > 0) {
-                            // Category is at/above target but position is below
-                            // In this case, category constraint takes precedence
-                            position.excludedReason = 'category_above_target';
+                        } else if (sectorGap <= 0 && positionGap > 0) {
+                            // Sector is at/above target but position is below
+                            // In this case, sector constraint takes precedence
+                            position.excludedReason = 'sector_above_target';
                             position.action = 0;
                             position.valueAfter = positionCurrentValue;
 
@@ -1094,7 +1095,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 positiveGaps.push({
                                     position: position,
                                     gap: positionGap,
-                                    category: category.name
+                                    sector: sector.name
                                 });
                                 totalPositiveGap += positionGap;
                             } else {
@@ -1102,7 +1103,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 negativeGaps.push({
                                     position: position,
                                     gap: Math.abs(positionGap),
-                                    category: category.name
+                                    sector: sector.name
                                 });
                                 totalNegativeGap += Math.abs(positionGap);
                             }
@@ -1112,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             positiveGaps.push({
                                 position: position,
                                 gap: positionGap,
-                                category: category.name
+                                sector: sector.name
                             });
                             totalPositiveGap += positionGap;
                         }
@@ -1183,10 +1184,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Ensure all positions have action and valueAfter set
-            if (portfolio.categories) {
-                portfolio.categories.forEach(category => {
-                    if (category.positions) {
-                        category.positions.forEach(position => {
+            if (portfolio.sectors) {
+                portfolio.sectors.forEach(sector => {
+                    if (sector.positions) {
+                        sector.positions.forEach(position => {
                             if (position.action === undefined) {
                                 position.action = 0;
                                 position.valueAfter = position.currentValue || 0;
@@ -1196,88 +1197,88 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            // Sixth pass: render categories and positions
-            if (portfolio.categories && portfolio.categories.length > 0) {
-                portfolio.categories.forEach((category, categoryIndex) => {
-                    // Skip categories with no positions
-                    if (!category.positions || category.positions.length === 0) return;
+            // Sixth pass: render sectors and positions
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
 
                     // Skip missing positions if they shouldn't be shown
-                    if (category.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
 
-                    const categoryId = `${portfolio.name}-${category.name}-${categoryIndex}`;
-                    const isExpanded = this.categoriesExpanded.has(categoryId);
+                    const sectorId = `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    const isExpanded = this.sectorsExpanded.has(sectorId);
 
-                    // Calculate category metrics for rendering
-                    let categoryAction = 0;
-                    let categoryValueAfter = 0;
+                    // Calculate sector metrics for rendering
+                    let sectorAction = 0;
+                    let sectorValueAfter = 0;
 
-                    // Calculate category percentages
-                    const categoryCurrentAllocation = totalCurrentValue > 0
-                        ? (category.currentValue / totalCurrentValue) * 100
+                    // Calculate sector percentages
+                    const sectorCurrentAllocation = totalCurrentValue > 0
+                        ? (sector.currentValue / totalCurrentValue) * 100
                         : 0;
 
-                    // Use the already calculated position actions and aggregate for category
-                    category.positions.forEach(position => {
-                        categoryAction += position.action;
-                        categoryValueAfter += position.valueAfter;
+                    // Use the already calculated position actions and aggregate for sector
+                    sector.positions.forEach(position => {
+                        sectorAction += position.action;
+                        sectorValueAfter += position.valueAfter;
                     });
 
-                    // Determine action class and text for the category
-                    let categoryActionClass = "actions-neutral";
-                    let categoryActionText = "No action";
+                    // Determine action class and text for the sector
+                    let sectorActionClass = "actions-neutral";
+                    let sectorActionText = "No action";
 
-                    if (categoryAction > 0.01) {
-                        categoryActionClass = "actions-positive";
-                        categoryActionText = `Buy ${this.formatCurrency(categoryAction)}`;
-                    } else if (categoryAction < -0.01) {
-                        categoryActionClass = "actions-negative";
-                        categoryActionText = `Sell ${this.formatCurrency(Math.abs(categoryAction))}`;
+                    if (sectorAction > 0.01) {
+                        sectorActionClass = "actions-positive";
+                        sectorActionText = `Buy ${this.formatCurrency(sectorAction)}`;
+                    } else if (sectorAction < -0.01) {
+                        sectorActionClass = "actions-negative";
+                        sectorActionText = `Sell ${this.formatCurrency(Math.abs(sectorAction))}`;
                     }
 
-                    const categoryRow = document.createElement('tr');
+                    const sectorRow = document.createElement('tr');
                     // Add special styling for Missing Positions
-                    const isMissingPositions = category.name === 'Missing Positions';
-                    categoryRow.className = isMissingPositions
-                        ? 'table-warning category-row missing-positions-category'
-                        : 'table-secondary category-row';
-                    categoryRow.style.cursor = 'pointer';
+                    const isMissingPositions = sector.name === 'Missing Positions';
+                    sectorRow.className = isMissingPositions
+                        ? 'table-warning sector-row missing-positions-sector'
+                        : 'table-secondary sector-row';
+                    sectorRow.style.cursor = 'pointer';
 
-                    // Calculate allocation after action for category
-                    const categoryAllocationAfterAction = totalValueAfterAllActions > 0
-                        ? (categoryValueAfter / totalValueAfterAllActions) * 100
+                    // Calculate allocation after action for sector
+                    const sectorAllocationAfterAction = totalValueAfterAllActions > 0
+                        ? (sectorValueAfter / totalValueAfterAllActions) * 100
                         : 0;
 
-                    // Build category name display with special icon for missing positions
-                    const categoryNameHtml = isMissingPositions
-                        ? `<i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Missing Positions (${category.positions.length})</strong>`
-                        : `<strong>${category.name}</strong>`;
+                    // Build sector name display with special icon for missing positions
+                    const sectorNameHtml = isMissingPositions
+                        ? `<i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Missing Positions (${sector.positions.length})</strong>`
+                        : `<strong>${sector.name}</strong>`;
 
-                    categoryRow.innerHTML = `
+                    sectorRow.innerHTML = `
                         <td>
                             <i class="fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} me-2"></i>
-                            ${categoryNameHtml}
+                            ${sectorNameHtml}
                         </td>
                         <td></td>
-                        <td class="current-value">${this.formatCurrency(category.currentValue || 0)}</td>
-                        <td>${this.formatPercentage(categoryCurrentAllocation)}</td>
-                        <td>${this.formatPercentage(category.targetAllocation || 0)}</td>
-                        <td class="target-value">${this.formatCurrency(category.calculatedTargetValue || 0)}</td>
-                        <td class="${categoryActionClass}">${categoryActionText}</td>
-                        <td class="value-after">${this.formatCurrency(categoryValueAfter)}</td>
-                        <td class="allocation-after">${this.formatPercentage(categoryAllocationAfterAction)}</td>
+                        <td class="current-value">${this.formatCurrency(sector.currentValue || 0)}</td>
+                        <td>${this.formatPercentage(sectorCurrentAllocation)}</td>
+                        <td>${this.formatPercentage(sector.targetAllocation || 0)}</td>
+                        <td class="target-value">${this.formatCurrency(sector.calculatedTargetValue || 0)}</td>
+                        <td class="${sectorActionClass}">${sectorActionText}</td>
+                        <td class="value-after">${this.formatCurrency(sectorValueAfter)}</td>
+                        <td class="allocation-after">${this.formatPercentage(sectorAllocationAfterAction)}</td>
                     `;
 
-                    categoryRow.addEventListener('click', () => {
-                        this.toggleCategoryExpand(categoryId);
+                    sectorRow.addEventListener('click', () => {
+                        this.toggleSectorExpand(sectorId);
                     });
 
-                    tbody.appendChild(categoryRow);
+                    tbody.appendChild(sectorRow);
 
-                    // Add position rows if category is expanded
+                    // Add position rows if sector is expanded
                     if (isExpanded) {
-                        // Positions in this category
-                        category.positions.forEach(position => {
+                        // Positions in this sector
+                        sector.positions.forEach(position => {
                             // Calculate current allocation
                             const positionCurrentAllocation = totalCurrentValue > 0
                                 ? ((position.currentValue || 0) / totalCurrentValue) * 100
@@ -1366,9 +1367,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             totalValueAfter += position.valueAfter;
                         });
                     } else {
-                        // If category is collapsed, still add actions to totals
-                        totalAction += categoryAction;
-                        totalValueAfter += categoryValueAfter;
+                        // If sector is collapsed, still add actions to totals
+                        totalAction += sectorAction;
+                        totalValueAfter += sectorValueAfter;
                     }
                 });
             }
@@ -1430,31 +1431,31 @@ document.addEventListener('DOMContentLoaded', function () {
             detailedChartContainer.innerHTML = '';
 
             // Prepare data for the detailed chart
-            const allCategories = [];
+            const allSectors = [];
 
             filteredPortfolios.forEach((portfolio) => {
-                if (portfolio.categories && portfolio.categories.length > 0) {
-                    portfolio.categories.forEach(category => {
+                if (portfolio.sectors && portfolio.sectors.length > 0) {
+                    portfolio.sectors.forEach(sector => {
                         // Skip missing positions in chart
-                        if (category.name === 'Missing Positions') return;
+                        if (sector.name === 'Missing Positions') return;
 
-                        allCategories.push({
+                        allSectors.push({
                             portfolio: portfolio.name,
-                            category: category.name,
-                            value: category.currentValue || 0
+                            sector: sector.name,
+                            value: sector.currentValue || 0
                         });
                     });
                 }
             });
 
-            if (typeof ChartConfig !== 'undefined' && allCategories.length > 0) {
-                const labels = allCategories.map(c => `${c.portfolio} - ${c.category}`);
-                const values = allCategories.map(c => c.value);
+            if (typeof ChartConfig !== 'undefined' && allSectors.length > 0) {
+                const labels = allSectors.map(s => `${s.portfolio} - ${s.sector}`);
+                const values = allSectors.map(s => s.value);
                 ChartConfig.createStandardDoughnutChart('detailedChart', labels, values);
             } else {
                 detailedChartContainer.innerHTML = `
                     <div class="alert alert-info">
-                        No detailed category data available.
+                        No detailed sector data available.
                     </div>
                 `;
             }

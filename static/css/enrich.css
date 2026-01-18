@@ -591,6 +591,14 @@ td.col-checkbox {
   color: var(--danger) !important;
 }
 
+/* ===== Table Field Utilities ===== */
+
+/* Remove bottom margin from field elements inside table cells */
+.enrich-page .table td .field,
+.enrich-page .table td .field.has-addons {
+  margin-bottom: 0;
+}
+
 /* ===== Responsive Adjustments ===== */
 
 @media screen and (max-width: 768px) {

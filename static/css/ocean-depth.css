@@ -84,7 +84,27 @@
   --hover-bg: rgba(0, 0, 0, 0.02);
   --section-bg: var(--bg-secondary);
   --darker-bg: var(--bg-tertiary);
+  --primary-light-subtle: rgba(6, 182, 212, 0.05);  /* Aqua with 5% opacity - very subtle */
+  --primary-light-medium: rgba(6, 182, 212, 0.08);  /* Aqua with 8% opacity - medium */
   --primary-light: rgba(6, 182, 212, 0.1);  /* Aqua with 10% opacity */
+  --primary-border-light: rgba(6, 182, 212, 0.3);  /* Aqua border - 30% opacity */
+
+  /* Font sizes (type scale) */
+  --font-size-xs: 0.75rem;   /* 12px - small, meta */
+  --font-size-sm: 0.875rem;  /* 14px - body */
+  --font-size-md: 1rem;      /* 16px - card title */
+  --font-size-lg: 1.25rem;   /* 20px - section title */
+  --font-size-xl: 1.5rem;    /* 24px - page title */
+
+  /* State background variants (light opacity) */
+  --warning-light: rgba(249, 115, 22, 0.1);
+  --warning-border-light: rgba(249, 115, 22, 0.3);
+  --danger-light: rgba(239, 68, 68, 0.1);
+  --danger-border-light: rgba(239, 68, 68, 0.3);
+  --success-light: rgba(20, 184, 166, 0.1);
+  --success-border-light: rgba(20, 184, 166, 0.3);
+  --info-light: var(--primary-light);
+  --info-border-light: rgba(6, 182, 212, 0.3);
 
   /* Minimal shadows - subtle only */
   --shadow-xs: none;
@@ -212,7 +232,20 @@
   --hover-bg: var(--bg-tertiary);
   --section-bg: var(--bg-tertiary);
   --darker-bg: var(--ocean-800);
+  --primary-light-subtle: rgba(6, 182, 212, 0.05);  /* Aqua with 5% opacity - very subtle */
+  --primary-light-medium: rgba(6, 182, 212, 0.08);  /* Aqua with 8% opacity - medium */
   --primary-light: rgba(6, 182, 212, 0.15);  /* Aqua with 15% opacity for dark mode */
+  --primary-border-light: rgba(6, 182, 212, 0.4);  /* Aqua border - 40% opacity for dark */
+
+  /* State background variants for dark mode (slightly more opacity) */
+  --warning-light: rgba(249, 115, 22, 0.15);
+  --warning-border-light: rgba(249, 115, 22, 0.4);
+  --danger-light: rgba(239, 68, 68, 0.15);
+  --danger-border-light: rgba(239, 68, 68, 0.4);
+  --success-light: rgba(20, 184, 166, 0.15);
+  --success-border-light: rgba(20, 184, 166, 0.4);
+  --info-light: var(--primary-light);
+  --info-border-light: rgba(6, 182, 212, 0.4);
 
   /* Bootstrap overrides for dark mode */
   --bs-body-bg: var(--bg-secondary);  /* Fixes table cell fallback */
@@ -1291,6 +1324,37 @@ input[type="number"] {
 .alert-info {
   border-color: var(--info);
   color: var(--text-primary);
+}
+
+/* ========================================
+   State Boxes - Colored Containers
+   ======================================== */
+.box-info {
+  background: var(--info-light);
+  border: 1px solid var(--info-border-light);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.box-warning {
+  background: var(--warning-light);
+  border: 1px solid var(--warning-border-light);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.box-danger {
+  background: var(--danger-light);
+  border: 1px solid var(--danger-border-light);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.box-success {
+  background: var(--success-light);
+  border: 1px solid var(--success-border-light);
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 /* ========================================
@@ -2955,11 +3019,11 @@ th.col-actions, td.col-actions {
 .notification .delete::before { transform: translate(-50%, -50%) rotate(45deg); }
 .notification .delete::after { transform: translate(-50%, -50%) rotate(-45deg); }
 
-.notification.is-primary { border-color: var(--aqua-500); background: rgba(6, 182, 212, 0.1); }
-.notification.is-success { border-color: var(--success); background: rgba(20, 184, 166, 0.1); }
-.notification.is-warning { border-color: var(--coral-500); background: rgba(249, 115, 22, 0.1); }
-.notification.is-danger { border-color: var(--error); background: rgba(239, 68, 68, 0.1); }
-.notification.is-info { border-color: var(--info); background: rgba(6, 182, 212, 0.1); }
+.notification.is-primary { border-color: var(--aqua-500); background: var(--info-light); }
+.notification.is-success { border-color: var(--success); background: var(--success-light); }
+.notification.is-warning { border-color: var(--coral-500); background: var(--warning-light); }
+.notification.is-danger { border-color: var(--error); background: var(--danger-light); }
+.notification.is-info { border-color: var(--info); background: var(--info-light); }
 .notification.is-light { background: var(--bg-tertiary); border-color: var(--border-subtle); }
 
 /* Bulma Title and Subtitle */

@@ -38,7 +38,7 @@ class PortfolioRepository:
                 c.name,
                 c.identifier,
                 c.isin,
-                c.category,
+                c.sector,
                 c.country,
                 p.id as portfolio_id,
                 p.name as portfolio_name,
@@ -118,7 +118,7 @@ class PortfolioRepository:
         name: str,
         identifier: str,
         isin: Optional[str] = None,
-        category: Optional[str] = None,
+        sector: Optional[str] = None,
         country: Optional[str] = None
     ) -> int:
         """
@@ -130,7 +130,7 @@ class PortfolioRepository:
             name: Company name
             identifier: Ticker or ISIN
             isin: ISIN code (optional)
-            category: Asset category (optional)
+            sector: Asset sector (optional)
             country: Country code (optional)
 
         Returns:
@@ -138,9 +138,9 @@ class PortfolioRepository:
         """
         execute_db(
             '''INSERT INTO companies
-               (account_id, portfolio_id, name, identifier, isin, category, country)
+               (account_id, portfolio_id, name, identifier, isin, sector, country)
                VALUES (?, ?, ?, ?, ?, ?, ?)''',
-            [account_id, portfolio_id, name, identifier, isin, category, country]
+            [account_id, portfolio_id, name, identifier, isin, sector, country]
         )
 
         # Get inserted ID
@@ -164,7 +164,7 @@ class PortfolioRepository:
         Returns:
             True if successful
         """
-        allowed_fields = ['name', 'identifier', 'isin', 'category', 'country']
+        allowed_fields = ['name', 'identifier', 'isin', 'sector', 'country']
 
         updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
@@ -388,7 +388,7 @@ class PortfolioRepository:
                 c.name,
                 c.identifier,
                 c.isin,
-                c.category,
+                c.sector,
                 c.country,
                 p.id as portfolio_id,
                 p.name as portfolio_name,
@@ -445,7 +445,7 @@ class PortfolioRepository:
             SELECT
                 c.id,
                 c.name,
-                c.category,
+                c.sector,
                 c.country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
                 COALESCE(mp.price, 0) as price,
@@ -470,9 +470,9 @@ class PortfolioRepository:
             return {
                 'total_value': 0,
                 'num_holdings': 0,
-                'num_categories': 0,
+                'num_sectors': 0,
                 'num_countries': 0,
-                'category_allocation': {},
+                'sector_allocation': {},
                 'country_allocation': {}
             }
 
@@ -480,11 +480,11 @@ class PortfolioRepository:
         total_value = sum(h['value'] for h in holdings)
         num_holdings = len(holdings)
 
-        # Category allocation
-        category_allocation = {}
+        # Sector allocation
+        sector_allocation = {}
         for holding in holdings:
-            category = holding['category'] or 'Unknown'
-            category_allocation[category] = category_allocation.get(category, 0) + holding['value']
+            sector = holding['sector'] or 'Unknown'
+            sector_allocation[sector] = sector_allocation.get(sector, 0) + holding['value']
 
         # Country allocation
         country_allocation = {}
@@ -494,9 +494,9 @@ class PortfolioRepository:
 
         # Convert to percentages
         if total_value > 0:
-            category_allocation = {
+            sector_allocation = {
                 k: (v / total_value * 100)
-                for k, v in category_allocation.items()
+                for k, v in sector_allocation.items()
             }
             country_allocation = {
                 k: (v / total_value * 100)
@@ -506,9 +506,9 @@ class PortfolioRepository:
         return {
             'total_value': total_value,
             'num_holdings': num_holdings,
-            'num_categories': len(category_allocation),
+            'num_sectors': len(sector_allocation),
             'num_countries': len(country_allocation),
-            'category_allocation': category_allocation,
+            'sector_allocation': sector_allocation,
             'country_allocation': country_allocation
         }
 
@@ -689,7 +689,8 @@ class PortfolioRepository:
                 c.override_identifier,
                 c.identifier_manually_edited,
                 c.identifier_manual_edit_date,
-                c.category,
+                c.sector,
+                c.thesis,
                 c.investment_type,
                 c.total_invested,
                 c.override_country,
@@ -755,7 +756,8 @@ class PortfolioRepository:
                     'identifier_manually_edited': bool(row.get('identifier_manually_edited', False)),
                     'identifier_manual_edit_date': row.get('identifier_manual_edit_date'),
                     'portfolio': row.get('portfolio_name') or row.get('portfolio') or '',
-                    'category': row['category'],
+                    'sector': row['sector'],
+                    'thesis': row.get('thesis') or '',
                     'investment_type': row.get('investment_type'),
                     'shares': float(row['shares']) if row.get('shares') is not None else 0,
                     'override_share': float(row['override_share']) if row.get('override_share') is not None else None,

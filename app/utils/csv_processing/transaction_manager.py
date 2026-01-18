@@ -285,7 +285,7 @@ def _insert_new_company(
     """Insert a new company record."""
     cursor.execute(
         '''INSERT INTO companies
-           (name, identifier, category, portfolio_id, account_id, total_invested)
+           (name, identifier, sector, portfolio_id, account_id, total_invested)
            VALUES (?, ?, ?, ?, ?, ?)''',
         [company_name, position['identifier'], '', default_portfolio_id,
          account_id, position['total_invested']]

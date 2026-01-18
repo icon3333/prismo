@@ -104,8 +104,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 1rem;
-        background: rgba(249, 115, 22, 0.1);
-        border: 1px solid rgba(249, 115, 22, 0.3);
+        background: var(--warning-light);
+        border: 1px solid var(--warning-border-light);
         border-left: 4px solid var(--coral-500);
         min-width: 280px;
         flex: 1;
@@ -264,8 +264,8 @@
 
     /* Welcome info box */
     .welcome-info {
-        background: rgba(6, 182, 212, 0.1);
-        border: 1px solid rgba(6, 182, 212, 0.3);
+        background: var(--info-light);
+        border: 1px solid var(--info-border-light);
         padding: 2rem;
         text-align: center;
     }
@@ -322,7 +322,7 @@
             <!-- Metrics -->
             <div class="metrics-row">
                 <div class="metric-pill">
-                    <div class="metric-value">€ {{ '{:,.0f}'.format(total_value|float) }}</div>
+                    <div class="metric-value sensitive-value">€ {{ '{:,.0f}'.format(total_value|float) }}</div>
                     <div class="metric-label">Total Value</div>
                 </div>
                 <div class="metric-pill">
@@ -418,16 +418,16 @@
                 <div class="gauge-card">
                     <div class="gauge-indicator">
                         <div class="gauge-container">
-                            <div class="gauge-chart" id="categoryGauge"></div>
+                            <div class="gauge-chart" id="sectorGauge"></div>
                             <div class="gauge-label">
-                                <div class="gauge-title">Category Violations</div>
-                                <div class="gauge-count" id="categoryCount">0</div>
-                                <div class="gauge-subtitle" id="categorySubtitle">no rules set</div>
+                                <div class="gauge-title">Sector Violations</div>
+                                <div class="gauge-count" id="sectorCount">0</div>
+                                <div class="gauge-subtitle" id="sectorSubtitle">no rules set</div>
                             </div>
                         </div>
                     </div>
                     <div class="gauge-violations-container">
-                        <div class="gauge-violations" id="categoryViolations"></div>
+                        <div class="gauge-violations" id="sectorViolations"></div>
                     </div>
                 </div>
             </div>
@@ -538,16 +538,17 @@
 
         let allocationRules = {
             maxPerStock: null,
-            maxPerCategory: null,
+            maxPerSector: null,
             maxPerCountry: null
         };
 
         window.formatCurrency = function (value) {
-            if (typeof value !== 'number' || isNaN(value)) return '€0';
-            return '€' + value.toLocaleString('en-US', {
+            if (typeof value !== 'number' || isNaN(value)) return '<span class="sensitive-value">€0</span>';
+            const formatted = '€' + value.toLocaleString('en-US', {
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 0
             });
+            return `<span class="sensitive-value">${formatted}</span>`;
         };
 
         window.formatPercentage = function (value) {
@@ -611,7 +612,7 @@
                 return;
             }
 
-            if (!allocationRules || (!allocationRules.maxPerStock && !allocationRules.maxPerCategory && !allocationRules.maxPerCountry)) {
+            if (!allocationRules || (!allocationRules.maxPerStock && !allocationRules.maxPerSector && !allocationRules.maxPerCountry)) {
                 healthIcon.textContent = '🔧';
                 healthTitle.textContent = 'No Rules Configured';
                 healthSubtitle.textContent = 'Set allocation rules to monitor portfolio risk';
@@ -646,7 +647,7 @@
 
         function updateRuleGauges(portfolioData) {
             updateGauge('stock', 'stockGauge', 'stockCount', 'stockSubtitle', allocationRules.maxPerStock, portfolioData);
-            updateGauge('category', 'categoryGauge', 'categoryCount', 'categorySubtitle', allocationRules.maxPerCategory, portfolioData);
+            updateGauge('sector', 'sectorGauge', 'sectorCount', 'sectorSubtitle', allocationRules.maxPerSector, portfolioData);
             updateGauge('country', 'countryGauge', 'countryCount', 'countrySubtitle', allocationRules.maxPerCountry, portfolioData);
         }
 
@@ -685,17 +686,17 @@
                         violations.push({ name: stock.name, currentPercentage: percentage, maxPercentage: maxPercentage });
                     }
                 });
-            } else if (type === 'category') {
-                const categoryAllocations = {};
+            } else if (type === 'sector') {
+                const sectorAllocations = {};
                 portfolioData.forEach(item => {
-                    const category = item.category || 'Unknown';
+                    const sector = item.sector || 'Unknown';
                     const value = (item.price_eur || 0) * (item.effective_shares || 0);
-                    categoryAllocations[category] = (categoryAllocations[category] || 0) + value;
+                    sectorAllocations[sector] = (sectorAllocations[sector] || 0) + value;
                 });
-                Object.entries(categoryAllocations).forEach(([category, value]) => {
+                Object.entries(sectorAllocations).forEach(([category, value]) => {
                     const percentage = (value / totalValue) * 100;
                     if (percentage > maxPercentage) {
-                        violations.push({ name: category, currentPercentage: percentage, maxPercentage: maxPercentage });
+                        violations.push({ name: sector, currentPercentage: percentage, maxPercentage: maxPercentage });
                     }
                 });
             } else if (type === 'country') {
@@ -721,7 +722,7 @@
             portfolioData.forEach(item => {
                 const name = item.company || item.name || 'Unknown';
                 if (!companyMap[name]) {
-                    companyMap[name] = { name: name, currentValue: 0, category: item.category || 'Unknown', country: item.country || 'Unknown' };
+                    companyMap[name] = { name: name, currentValue: 0, category: item.sector || 'Unknown', country: item.country || 'Unknown' };
                 }
                 companyMap[name].currentValue += (item.price_eur || 0) * (item.effective_shares || 0);
             });
@@ -731,7 +732,7 @@
         function getTotalItemsForType(type, portfolioData) {
             if (!portfolioData || portfolioData.length === 0) return 0;
             if (type === 'stock') return new Set(portfolioData.map(item => item.company || item.name || 'Unknown')).size;
-            if (type === 'category') return new Set(portfolioData.map(item => item.category || 'Unknown')).size;
+            if (type === 'sector') return new Set(portfolioData.map(item => item.sector || 'Unknown')).size;
             if (type === 'country') return new Set(portfolioData.map(item => item.country || 'Unknown')).size;
             return 0;
         }
@@ -754,11 +755,11 @@
         function updateContextualViolations(portfolioData) {
             const violationsByType = {
                 'Stock': getViolationsForType('stock', allocationRules.maxPerStock, portfolioData),
-                'Category': getViolationsForType('category', allocationRules.maxPerCategory, portfolioData),
+                'Sector': getViolationsForType('sector', allocationRules.maxPerSector, portfolioData),
                 'Country': getViolationsForType('country', allocationRules.maxPerCountry, portfolioData)
             };
             updateGaugeViolations('stockViolations', violationsByType['Stock']);
-            updateGaugeViolations('categoryViolations', violationsByType['Category']);
+            updateGaugeViolations('sectorViolations', violationsByType['Sector']);
             updateGaugeViolations('countryViolations', violationsByType['Country']);
         }
 
@@ -802,17 +803,17 @@
                 });
             }
 
-            if (allocationRules.maxPerCategory && allocationRules.maxPerCategory > 0) {
-                const categoryAllocations = {};
+            if (allocationRules.maxPerSector && allocationRules.maxPerSector > 0) {
+                const sectorAllocations = {};
                 portfolioData.forEach(item => {
-                    const category = item.category || 'Unknown';
+                    const sector = item.sector || 'Unknown';
                     const value = (item.price_eur || 0) * (item.effective_shares || 0);
-                    categoryAllocations[category] = (categoryAllocations[category] || 0) + value;
+                    sectorAllocations[sector] = (sectorAllocations[sector] || 0) + value;
                 });
-                Object.entries(categoryAllocations).forEach(([category, value]) => {
+                Object.entries(sectorAllocations).forEach(([category, value]) => {
                     const percentage = (value / totalValue) * 100;
-                    if (percentage > allocationRules.maxPerCategory) {
-                        violations.push({ type: 'Category', name: category, currentPercentage: percentage, maxPercentage: allocationRules.maxPerCategory });
+                    if (percentage > allocationRules.maxPerSector) {
+                        violations.push({ type: 'Sector', name: sector, currentPercentage: percentage, maxPercentage: allocationRules.maxPerSector });
                     }
                 });
             }

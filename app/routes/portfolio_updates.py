@@ -376,7 +376,7 @@ def get_portfolio_companies(portfolio_id):
         if not portfolio_id:
             return error_response('No portfolio ID provided', 400)
         companies = query_db('''
-            SELECT c.id, c.name, c.identifier, c.category, 
+            SELECT c.id, c.name, c.identifier, c.sector,
                    cs.shares, cs.override_share,
                    COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
                    mp.price_eur
@@ -393,7 +393,7 @@ def get_portfolio_companies(portfolio_id):
                     'id': company['id'],
                     'name': company['name'],
                     'identifier': company['identifier'],
-                    'category': company['category'],
+                    'sector': company['sector'],
                     'shares': company['shares'],
                     'override_share': company['override_share'],
                     'effective_shares': company['effective_shares'],

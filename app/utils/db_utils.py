@@ -382,7 +382,7 @@ def load_portfolio_data(account_id=None, portfolio_id=None):
         params = []
         query = '''
             SELECT
-                c.id, c.name, c.identifier, c.category, c.total_invested,
+                c.id, c.name, c.identifier, c.sector, c.total_invested,
                 c.override_country, c.country_manually_edited, c.country_manual_edit_date,
                 cs.shares, cs.override_share, cs.manual_edit_date, cs.is_manually_edited, cs.csv_modified_after_edit,
                 p.name as portfolio_name, p.id as portfolio_id,

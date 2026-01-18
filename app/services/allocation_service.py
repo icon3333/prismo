@@ -179,7 +179,7 @@ class AllocationRule:
     """Rules for portfolio allocation limits"""
     max_stock_percentage: float = 5.0
     max_etf_percentage: float = 10.0
-    max_category_percentage: float = 25.0
+    max_sector_percentage: float = 25.0
     max_country_percentage: float = 10.0
 
 
@@ -527,7 +527,7 @@ class AllocationService:
                 portfolio_builder_data[portfolio_name]['use_placeholder_weight'] = True
                 portfolio_builder_data[portfolio_name]['placeholder_weight'] = placeholder_weight
 
-        # Group data by portfolio and category
+        # Group data by portfolio and sector
         portfolio_map = {}
 
         # NOTE: We no longer pre-initialize portfolio_map from target_allocations
@@ -543,13 +543,13 @@ class AllocationService:
 
                     # Ensure portfolio exists in map (may already be initialized above)
                     portfolio = portfolio_map.setdefault(
-                        pid, {'name': pname, 'categories': {}, 'currentValue': 0})
+                        pid, {'name': pname, 'sectors': {}, 'currentValue': 0})
 
                     if row['company_name']:
-                        # Use 'Uncategorized' as default category
-                        category_name = row['category'] if row['category'] else 'Uncategorized'
-                        cat = portfolio['categories'].setdefault(
-                            category_name, {'positions': [], 'currentValue': 0})
+                        # Use 'Uncategorized' as default sector
+                        sector_name = row['sector'] if row['sector'] else 'Uncategorized'
+                        cat = portfolio['sectors'].setdefault(
+                            sector_name, {'positions': [], 'currentValue': 0})
 
                         # Use centralized value calculator for consistency
                         pos_value = float(calculate_item_value(row))
@@ -633,21 +633,21 @@ class AllocationService:
                 'currentValue': pdata['currentValue'],
                 'targetWeight': portfolio_target_weight,
                 'color': '',
-                'categories': [],
+                'sectors': [],
                 'minPositions': builder_data.get('minPositions', 0),
                 'builderPositions': builder_data.get('positions', []),
                 'builderAllocation': builder_data.get('allocation', 0)
             }
 
-            # Add categories with positions
-            for cat_name, cat_data in pdata['categories'].items():
-                category_entry = {
-                    'name': cat_name,
-                    'positions': cat_data['positions'],
-                    'currentValue': cat_data['currentValue'],
-                    'positionCount': len(cat_data['positions'])
+            # Add sectors with positions
+            for sector_name, sector_data in pdata['sectors'].items():
+                sector_entry = {
+                    'name': sector_name,
+                    'positions': sector_data['positions'],
+                    'currentValue': sector_data['currentValue'],
+                    'positionCount': len(sector_data['positions'])
                 }
-                portfolio_entry['categories'].append(category_entry)
+                portfolio_entry['sectors'].append(sector_entry)
 
             # Add placeholder positions based on builder configuration
             builder_positions = builder_data.get('positions', [])
@@ -655,7 +655,7 @@ class AllocationService:
 
             # Count current real positions
             current_positions_count = sum(
-                len(cat_data['positions']) for cat_data in pdata['categories'].values())
+                len(sector_data['positions']) for sector_data in pdata['sectors'].values())
             placeholder_position = next(
                 (pos for pos in builder_positions if pos.get('isPlaceholder')), None)
 
@@ -673,8 +673,8 @@ class AllocationService:
                 and not real_positions_have_100_percent):
                 positions_remaining = min_positions - current_positions_count
 
-                # Create Missing Positions category
-                missing_positions_category = {
+                # Create Missing Positions sector
+                missing_positions_sector = {
                     'name': 'Missing Positions',
                     'positions': [{
                         'name': f'Position Slot {i+1} (Unfilled)',
@@ -688,23 +688,23 @@ class AllocationService:
                     'positionCount': positions_remaining,
                     'isPlaceholder': True
                 }
-                portfolio_entry['categories'].append(missing_positions_category)
+                portfolio_entry['sectors'].append(missing_positions_sector)
 
             # Calculate target values
             portfolio_target_value = (portfolio_target_weight / 100) * total_current_value
             portfolio_entry['targetValue'] = portfolio_target_value
 
             # Calculate position-level target values
-            for cat in portfolio_entry['categories']:
-                cat_target_value = 0
-                for pos in cat['positions']:
+            for sector in portfolio_entry['sectors']:
+                sector_target_value = 0
+                for pos in sector['positions']:
                     pos_target_value = (pos['targetAllocation'] / 100) * portfolio_target_value
                     pos['targetValue'] = pos_target_value
-                    cat_target_value += pos_target_value
+                    sector_target_value += pos_target_value
 
-                cat['targetValue'] = cat_target_value
-                cat['targetWeight'] = (
-                    cat_target_value / portfolio_target_value * 100
+                sector['targetValue'] = sector_target_value
+                sector['targetWeight'] = (
+                    sector_target_value / portfolio_target_value * 100
                 ) if portfolio_target_value > 0 else 0
 
             portfolio_entry['targetAllocation_portfolio'] = portfolio_target_value
@@ -764,10 +764,10 @@ class AllocationService:
 
             # Collect all positions (skip placeholders and NULL investment types)
             all_positions = []
-            for category in portfolio['categories']:
-                if category.get('isPlaceholder'):
+            for sector in portfolio['sectors']:
+                if sector.get('isPlaceholder'):
                     continue
-                for position in category['positions']:
+                for position in sector['positions']:
                     if not position.get('isPlaceholder'):
                         all_positions.append(position)
 
@@ -803,10 +803,10 @@ class AllocationService:
             # Update positions with capping metadata
             position_lookup = {pos['name']: pos for pos in all_positions_data}
 
-            for category in portfolio['categories']:
-                if category.get('isPlaceholder'):
+            for sector in portfolio['sectors']:
+                if sector.get('isPlaceholder'):
                     continue
-                for position in category['positions']:
+                for position in sector['positions']:
                     pos_name = position['name']
                     if pos_name in position_lookup:
                         augmented = position_lookup[pos_name]
@@ -816,13 +816,13 @@ class AllocationService:
                         position['applicable_rule'] = augmented.get('applicable_rule', None)
                         position['targetValue'] = augmented['constrained_target_value']
 
-            # Recalculate category target values based on constrained position values
-            for category in portfolio['categories']:
-                if not category.get('isPlaceholder'):
-                    cat_target_value = sum(pos.get('targetValue', 0) for pos in category['positions'])
-                    category['targetValue'] = cat_target_value
-                    category['targetWeight'] = (
-                        cat_target_value / portfolio_target_value * 100
+            # Recalculate sector target values based on constrained position values
+            for sector in portfolio['sectors']:
+                if not sector.get('isPlaceholder'):
+                    sector_target_value = sum(pos.get('targetValue', 0) for pos in sector['positions'])
+                    sector['targetValue'] = sector_target_value
+                    sector['targetWeight'] = (
+                        sector_target_value / portfolio_target_value * 100
                     ) if portfolio_target_value > 0 else 0
 
         logger.info(f"Calculated type-constrained targets for {len(portfolios)} portfolios")

@@ -1206,7 +1206,7 @@ class PortfolioTableApp {
                     // Bulk edit properties
                     selectedItemIds: [],
                     bulkPortfolio: '',
-                    bulkCategory: '',
+                    bulkSector: '',
                     bulkCountry: '',
                     isBulkProcessing: false,
                     isUpdatingSelected: false,
@@ -1322,10 +1322,17 @@ class PortfolioTableApp {
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 },
-                categoryHealthPercentage() {
+                sectorHealthPercentage() {
                     if (this.filteredPortfolioItems.length === 0) return 0;
                     const filledCount = this.filteredPortfolioItems.filter(item =>
-                        item.category && item.category.trim() !== ''
+                        item.sector && item.sector.trim() !== ''
+                    ).length;
+                    return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
+                },
+                thesisHealthPercentage() {
+                    if (this.filteredPortfolioItems.length === 0) return 0;
+                    const filledCount = this.filteredPortfolioItems.filter(item =>
+                        item.thesis && item.thesis.trim() !== ''
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 },
@@ -1484,7 +1491,7 @@ class PortfolioTableApp {
                         'Identifier',
                         'Company',
                         'Portfolio',
-                        'Category',
+                        'Sector',
                         'Shares',
                         'Price (€)',
                         'Total Value (€)',
@@ -1499,7 +1506,7 @@ class PortfolioTableApp {
                             this.escapeCSVField(item.identifier || ''),
                             this.escapeCSVField(item.company || ''),
                             this.escapeCSVField(item.portfolio || ''),
-                            this.escapeCSVField(item.category || ''),
+                            this.escapeCSVField(item.sector || ''),
                             this.escapeCSVField(formatGermanNumber(item.effective_shares || 0)),
                             this.escapeCSVField(formatGermanNumber(item.price_eur || 0)),
                             this.escapeCSVField(formatGermanNumber(calculateItemValue(item))),
@@ -1926,27 +1933,51 @@ class PortfolioTableApp {
                     }
                 },
 
-                // Commit category change (on blur or enter)
-                commitCategory(item) {
-                    const original = this.editingOriginals[item.id]?.category;
-                    const newValue = this.editingValues[item.id]?.category ?? item.category;
+                // Commit sector change (on blur or enter)
+                commitSector(item) {
+                    const original = this.editingOriginals[item.id]?.sector;
+                    const newValue = this.editingValues[item.id]?.sector ?? item.sector;
 
                     if (newValue !== original) {
                         // Sync local value to item (triggers one re-sort)
-                        item.category = newValue;
+                        item.sector = newValue;
                         // Show saving state and save
                         if (!this.savingStates[item.id]) {
                             this.$set(this.savingStates, item.id, {});
                         }
-                        this.$set(this.savingStates[item.id], 'category', true);
-                        this.saveCategoryChange(item);
+                        this.$set(this.savingStates[item.id], 'sector', true);
+                        this.saveSectorChange(item);
                     }
                     // Clean up
                     if (this.editingOriginals[item.id]) {
-                        delete this.editingOriginals[item.id].category;
+                        delete this.editingOriginals[item.id].sector;
                     }
                     if (this.editingValues[item.id]) {
-                        delete this.editingValues[item.id].category;
+                        delete this.editingValues[item.id].sector;
+                    }
+                },
+
+                // Commit thesis change (on blur or enter)
+                commitThesis(item) {
+                    const original = this.editingOriginals[item.id]?.thesis;
+                    const newValue = this.editingValues[item.id]?.thesis ?? item.thesis;
+
+                    if (newValue !== original) {
+                        // Sync local value to item (triggers one re-sort)
+                        item.thesis = newValue;
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'thesis', true);
+                        this.saveThesisChange(item);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].thesis;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].thesis;
                     }
                 },
 
@@ -2115,47 +2146,92 @@ class PortfolioTableApp {
                     }
                 },
 
-                async saveCategoryChange(item) {
-                    debugLog('saveCategoryChange called with item:', item);
+                async saveSectorChange(item) {
+                    debugLog('saveSectorChange called with item:', item);
                     if (!item || !item.id) {
-                        console.error('Invalid item for category change');
+                        console.error('Invalid item for sector change');
                         return;
                     }
 
                     try {
-                        debugLog('Sending category update request for item ID:', item.id, 'Category:', item.category);
+                        debugLog('Sending sector update request for item ID:', item.id, 'Sector:', item.sector);
                         const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
-                                category: item.category || ''
+                                sector: item.sector || ''
                             })
                         });
 
                         const result = await response.json();
-                        debugLog('Category update response:', result);
+                        debugLog('Sector update response:', result);
 
                         if (result.success) {
                             // Show success notification using the global function if available
                             if (typeof showNotification === 'function') {
-                                showNotification('Category updated successfully', 'is-success', 3000);
+                                showNotification('Sector updated successfully', 'is-success', 3000);
                             } else {
-                                debugLog('Category updated successfully');
+                                debugLog('Sector updated successfully');
                             }
                         } else {
                             // Show error notification
                             if (typeof showNotification === 'function') {
-                                showNotification(`Error updating category: ${result.error}`, 'is-danger');
+                                showNotification(`Error updating sector: ${result.error}`, 'is-danger');
                             } else {
-                                console.error(`Error updating category: ${result.error}`);
+                                console.error(`Error updating sector: ${result.error}`);
                             }
                         }
                     } catch (error) {
-                        console.error('Error updating category:', error);
+                        console.error('Error updating sector:', error);
                         if (typeof showNotification === 'function') {
-                            showNotification('Failed to update category', 'is-danger');
+                            showNotification('Failed to update sector', 'is-danger');
+                        }
+                    }
+                },
+
+                async saveThesisChange(item) {
+                    debugLog('saveThesisChange called with item:', item);
+                    if (!item || !item.id) {
+                        console.error('Invalid item for thesis change');
+                        return;
+                    }
+
+                    try {
+                        debugLog('Sending thesis update request for item ID:', item.id, 'Thesis:', item.thesis);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                thesis: item.thesis || ''
+                            })
+                        });
+
+                        const result = await response.json();
+                        debugLog('Thesis update response:', result);
+
+                        if (result.success) {
+                            // Show success notification using the global function if available
+                            if (typeof showNotification === 'function') {
+                                showNotification('Thesis updated successfully', 'is-success', 3000);
+                            } else {
+                                debugLog('Thesis updated successfully');
+                            }
+                        } else {
+                            // Show error notification
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Error updating thesis: ${result.error}`, 'is-danger');
+                            } else {
+                                console.error(`Error updating thesis: ${result.error}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error updating thesis:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update thesis', 'is-danger');
                         }
                     }
                 },
@@ -2347,7 +2423,14 @@ class PortfolioTableApp {
 
 
                 formatCurrency(value) {
-                    if (!value) return '€0.00';
+                    if (!value) return '<span class="sensitive-value">€0.00</span>';
+                    const formatted = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
+                    return `<span class="sensitive-value">${formatted}</span>`;
+                },
+
+                // Format currency without HTML wrapper (for input values)
+                formatCurrencyRaw(value) {
+                    if (!value) return '€0,00';
                     return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
                 },
 
@@ -2428,7 +2511,7 @@ class PortfolioTableApp {
                 clearSelection() {
                     this.selectedItemIds = [];
                     this.bulkPortfolio = '';
-                    this.bulkCategory = '';
+                    this.bulkSector = '';
                     this.bulkCountry = '';
                 },
 
@@ -2440,9 +2523,9 @@ class PortfolioTableApp {
                         return;
                     }
 
-                    if (!this.bulkPortfolio && !this.bulkCategory && !this.bulkCountry) {
+                    if (!this.bulkPortfolio && !this.bulkSector && !this.bulkCountry) {
                         if (typeof showNotification === 'function') {
-                            showNotification('Please select a portfolio, enter a category, or select a country', 'is-warning');
+                            showNotification('Please select a portfolio, enter a sector, or select a country', 'is-warning');
                         }
                         return;
                     }
@@ -2460,7 +2543,7 @@ class PortfolioTableApp {
                             id: item.id,
                             company: item.company,
                             portfolio: this.bulkPortfolio || item.portfolio,
-                            category: this.bulkCategory !== '' ? this.bulkCategory : item.category,
+                            sector: this.bulkSector !== '' ? this.bulkSector : item.sector,
                             country: this.bulkCountry !== '' ? this.bulkCountry : item.effective_country,
                             is_country_user_edit: this.bulkCountry !== '',
                             identifier: item.identifier
@@ -2483,7 +2566,7 @@ class PortfolioTableApp {
                             // Success notification
                             const changesText = [];
                             if (this.bulkPortfolio) changesText.push(`portfolio to "${this.bulkPortfolio}"`);
-                            if (this.bulkCategory !== '') changesText.push(`category to "${this.bulkCategory}"`);
+                            if (this.bulkSector !== '') changesText.push(`sector to "${this.bulkSector}"`);
                             if (this.bulkCountry !== '') changesText.push(`country to "${this.bulkCountry}"`);
 
                             if (typeof showNotification === 'function') {
@@ -2619,7 +2702,8 @@ class PortfolioTableApp {
                 };
 
                 // Wrap all save methods to auto-clear saving state
-                wrapSaveMethod('saveCategoryChange', 'category');
+                wrapSaveMethod('saveSectorChange', 'sector');
+                wrapSaveMethod('saveThesisChange', 'thesis');
                 wrapSaveMethod('saveIdentifierChange', 'identifier');
                 wrapSaveMethod('saveSharesChange', 'shares');
                 wrapSaveMethod('saveTotalValueChange', 'totalValue');

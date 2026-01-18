@@ -1,0 +1,121 @@
+/* =============================================================================
+   Anonymous Mode - Visual Privacy Feature
+   Blurs sensitive financial values for screen sharing
+   ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Blur Effect on Sensitive Values
+   ----------------------------------------------------------------------------- */
+
+.anonymous-mode .sensitive-value {
+    filter: blur(8px);
+    user-select: none;
+    cursor: default;
+    transition: filter 0.2s ease-in-out;
+}
+
+/* Prevent copy-paste of blurred values */
+.anonymous-mode .sensitive-value::selection {
+    background: transparent;
+}
+
+/* Special handling for input fields - still allow interaction */
+.anonymous-mode input.sensitive-value,
+.anonymous-mode .sensitive-value input {
+    filter: blur(8px);
+    pointer-events: auto;
+}
+
+/* Blur table cells containing sensitive values */
+.anonymous-mode td.sensitive-value,
+.anonymous-mode th.sensitive-value {
+    filter: blur(8px);
+    user-select: none;
+}
+
+/* Prevent tooltip display on blurred values */
+.anonymous-mode .sensitive-value[title]:hover::before,
+.anonymous-mode .sensitive-value[title]:hover::after {
+    display: none !important;
+}
+
+/* ApexCharts donut chart center labels */
+.anonymous-mode .apexcharts-datalabel-value,
+.anonymous-mode .apexcharts-datalabel-label {
+    filter: blur(8px);
+    pointer-events: none;
+    transition: filter 0.2s ease-in-out;
+}
+
+/* -----------------------------------------------------------------------------
+   Toggle Button Styles
+   ----------------------------------------------------------------------------- */
+
+.anonymous-mode-toggle {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s ease-in-out;
+    color: var(--text-secondary);
+}
+
+.anonymous-mode-toggle:hover {
+    border-color: var(--aqua-500, #06B6D4);
+    background: var(--bg-tertiary);
+    color: var(--aqua-500, #06B6D4);
+}
+
+.anonymous-mode-toggle:focus {
+    outline: 2px solid var(--aqua-500, #06B6D4);
+    outline-offset: 2px;
+}
+
+/* Active state when anonymous mode is ON */
+.anonymous-mode-toggle.active {
+    background: var(--aqua-500, #06B6D4);
+    border-color: var(--aqua-500, #06B6D4);
+    color: var(--bg-primary, #020617);
+}
+
+.anonymous-mode-toggle.active:hover {
+    background: var(--aqua-400, #22D3EE);
+    border-color: var(--aqua-400, #22D3EE);
+}
+
+/* Icon sizing */
+.anonymous-mode-toggle svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+    fill: none;
+    stroke: currentColor;
+}
+
+/* -----------------------------------------------------------------------------
+   Print Styles - Maintain blur in print/PDF
+   ----------------------------------------------------------------------------- */
+
+@media print {
+    .anonymous-mode .sensitive-value {
+        filter: blur(8px);
+        user-select: none;
+    }
+}
+
+/* -----------------------------------------------------------------------------
+   Responsive Adjustments
+   ----------------------------------------------------------------------------- */
+
+@media (max-width: 768px) {
+    .anonymous-mode-toggle {
+        width: 44px;
+        height: 44px;
+    }
+}

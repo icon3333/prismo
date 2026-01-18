@@ -75,11 +75,11 @@
             }
 
             /**
-             * Creates a chart for category breakdowns using nested donut charts.
+             * Creates a chart for sector breakdowns using nested donut charts.
              * Since Frappe Charts doesn't have sunburst, we'll create a custom visualization
              */
             function createSunburstChart(elementId, portfolio, formatCurrency, formatPercentage, generateColors) {
-                console.log(`Creating category chart for portfolio ${portfolio.id}`);
+                console.log(`Creating sector chart for portfolio ${portfolio.id}`);
 
                 // Check if we have the necessary functions globally
                 formatCurrency = formatCurrency || window.formatCurrency || (v => v);
@@ -103,22 +103,22 @@
                 chartContainer.innerHTML = '';
 
                 // Ensure categories exist
-                const categories = portfolio.categories || [];
-                if (categories.length === 0) {
+                const sectors = portfolio.sectors || [];
+                if (sectors.length === 0) {
                     console.warn(`No categories found for portfolio ${portfolio.id}`);
-                    chartContainer.innerHTML = '<div class="has-text-centered p-6">No category data available</div>';
+                    chartContainer.innerHTML = '<div class="has-text-centered p-6">No sector data available</div>';
                     return null;
                 }
 
-                console.log(`Portfolio ${portfolio.id} has ${categories.length} categories`);
+                console.log(`Portfolio ${portfolio.id} has ${sectors.length} categories`);
 
                 // For a sunburst-like visualization, we'll create a nested donut chart
                 // First, prepare the data for categories
-                const categoryLabels = categories.map(cat => `${cat.name} (${formatPercentage(cat.percentage)})`);
-                const categoryValues = categories.map(cat => cat.currentValue);
-                // Use consistent colors based on category names
-                const categoryNames = categories.map(cat => cat.name);
-                const categoryColors = ChartConfig.getConsistentColors(categoryNames);
+                const sectorLabels = sectors.map(cat => `${cat.name} (${formatPercentage(cat.percentage)})`);
+                const sectorValues = sectors.map(cat => cat.currentValue);
+                // Use consistent colors based on sector names
+                const sectorNames = sectors.map(cat => cat.name);
+                const sectorColors = ChartConfig.getConsistentColors(sectorNames);
 
                 // Create a container for the main chart and a details section
                 const mainContainer = document.createElement('div');
@@ -138,7 +138,7 @@
                 detailsDiv.style.overflowY = 'auto';
                 detailsDiv.style.padding = '10px';
                 detailsDiv.style.borderTop = '1px solid #e0e0e0';
-                detailsDiv.innerHTML = '<p class="has-text-centered has-text-grey">Click on a category to see details</p>';
+                detailsDiv.innerHTML = '<p class="has-text-centered has-text-grey">Click on a sector to see details</p>';
 
                 mainContainer.appendChild(chartDiv);
                 mainContainer.appendChild(detailsDiv);
@@ -146,17 +146,17 @@
 
                 // Create the doughnut chart using standardized configuration
                 const chart = ChartConfig.createStandardDoughnutChart(chartDiv.id,
-                    categories.map(cat => cat.name),
-                    categoryValues,
+                    sectors.map(cat => cat.name),
+                    sectorValues,
                     {
-                        title: 'Category Breakdown',
+                        title: 'Sector Breakdown',
                         showTotal: true,
                         height: 350
-                        // Colors will be automatically assigned consistently based on category names
+                        // Colors will be automatically assigned consistently based on sector names
                     }
                 );
 
-                // Add click handler to show category details
+                // Add click handler to show sector details
                 chartDiv.addEventListener('click', function (e) {
                     // Find which segment was clicked (this is a simplified approach)
                     // In practice, you might need to analyze the click coordinates
@@ -165,22 +165,22 @@
                     const y = e.clientY - rect.top;
 
                     // For now, we'll show all categories with their companies
-                    let detailsHTML = '<div class="category-details">';
+                    let detailsHTML = '<div class="sector-details">';
 
-                    categories.forEach((category, idx) => {
+                    sectors.forEach((sector, idx) => {
                         detailsHTML += `
                     <div class="mb-3">
-                        <h5 class="has-text-weight-bold" style="color: ${categoryColors[idx]}">
-                            ${category.name} - ${formatCurrency(category.currentValue)} (${formatPercentage(category.percentage)})
+                        <h5 class="has-text-weight-bold" style="color: ${sectorColors[idx]}">
+                            ${sector.name} - ${formatCurrency(sector.currentValue)} (${formatPercentage(sector.percentage)})
                         </h5>
                         <div class="ml-3">
                 `;
 
-                        category.companies.forEach(company => {
+                        sector.companies.forEach(company => {
                             detailsHTML += `
                         <div class="is-size-7">
                             ${company.name}: ${formatCurrency(company.currentValue)} 
-                            (${formatPercentage(company.categoryPercentage)} of category)
+                            (${formatPercentage(company.sectorPercentage)} of sector)
                         </div>
                     `;
                         });

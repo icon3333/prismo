@@ -366,12 +366,13 @@ document.addEventListener('DOMContentLoaded', function() {
  * Format number as currency
  */
 function formatCurrency(value) {
-  return new Intl.NumberFormat('en-US', {
+  const formatted = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value);
+  return `<span class="sensitive-value">${formatted}</span>`;
 }
 
 /**

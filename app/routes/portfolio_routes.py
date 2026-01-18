@@ -9,10 +9,13 @@ from app.decorators import require_auth
 from app.cache import cache
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, get_single_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, get_country_capacity_data, get_category_capacity_data,
+    get_allocate_portfolio_data, get_country_capacity_data, get_sector_capacity_data,
     get_effective_capacity_data, update_portfolio_api, upload_csv, manage_portfolios,
     csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution,
-    simulator_ticker_lookup
+    simulator_ticker_lookup, simulator_portfolio_allocations,
+    simulator_simulations_list, simulator_simulation_create, simulator_simulation_get,
+    simulator_simulation_update, simulator_simulation_delete,
+    builder_investment_targets
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -254,8 +257,8 @@ portfolio_bp.add_url_rule('/api/allocate/portfolio-data',
                           view_func=get_allocate_portfolio_data)
 portfolio_bp.add_url_rule('/api/allocate/country-capacity',
                           view_func=get_country_capacity_data)
-portfolio_bp.add_url_rule('/api/allocate/category-capacity',
-                          view_func=get_category_capacity_data)
+portfolio_bp.add_url_rule('/api/allocate/sector-capacity',
+                          view_func=get_sector_capacity_data)
 portfolio_bp.add_url_rule('/api/allocate/effective-capacity',
                           view_func=get_effective_capacity_data)
 portfolio_bp.add_url_rule('/api/portfolios', view_func=get_portfolios_api)
@@ -294,3 +297,19 @@ portfolio_bp.add_url_rule('/api/portfolio_data/<int:portfolio_id>',
 # Allocation Simulator API
 portfolio_bp.add_url_rule('/api/simulator/ticker-lookup',
                           view_func=simulator_ticker_lookup, methods=['POST'])
+portfolio_bp.add_url_rule('/api/simulator/portfolio-allocations',
+                          view_func=simulator_portfolio_allocations, methods=['GET'])
+# Saved Simulations CRUD
+portfolio_bp.add_url_rule('/api/simulator/simulations',
+                          view_func=simulator_simulations_list, methods=['GET'])
+portfolio_bp.add_url_rule('/api/simulator/simulations',
+                          view_func=simulator_simulation_create, methods=['POST'])
+portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
+                          view_func=simulator_simulation_get, methods=['GET'])
+portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
+                          view_func=simulator_simulation_update, methods=['PUT'])
+portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
+                          view_func=simulator_simulation_delete, methods=['DELETE'])
+# Builder API (for cross-page integration)
+portfolio_bp.add_url_rule('/api/builder/investment-targets',
+                          view_func=builder_investment_targets, methods=['GET'])

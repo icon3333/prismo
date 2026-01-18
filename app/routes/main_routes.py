@@ -65,18 +65,18 @@ def calculate_missing_positions(account_id: int, portfolios) -> Dict[str, Any]:
             portfolio_name = portfolio.get('name', 'Unknown')
             missing_data['total_portfolios_checked'] += 1
             
-            # Look for "Missing Positions" category
-            categories = portfolio.get('categories', [])
-            missing_positions_category = None
-            
-            for category in categories:
-                if category.get('name') == 'Missing Positions':
-                    missing_positions_category = category
+            # Look for "Missing Positions" sector
+            sectors = portfolio.get('sectors', [])
+            missing_positions_sector = None
+
+            for sector in sectors:
+                if sector.get('name') == 'Missing Positions':
+                    missing_positions_sector = sector
                     break
-            
-            if missing_positions_category:
-                # Count missing positions from the category
-                missing_positions = missing_positions_category.get('positions', [])
+
+            if missing_positions_sector:
+                # Count missing positions from the sector
+                missing_positions = missing_positions_sector.get('positions', [])
                 missing_count = len(missing_positions)
                 
                 # Only include if there are actual missing positions with target allocation > 0

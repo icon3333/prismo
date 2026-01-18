@@ -556,7 +556,7 @@ def process_csv_data(account_id, file_content):
                 positions_updated.append(company_name)
             else:
                 cursor.execute(
-                    'INSERT INTO companies (name, identifier, category, portfolio_id, account_id, total_invested) VALUES (?, ?, ?, ?, ?, ?)',
+                    'INSERT INTO companies (name, identifier, sector, portfolio_id, account_id, total_invested) VALUES (?, ?, ?, ?, ?, ?)',
                     [company_name, position['identifier'], '',
                         default_portfolio_id, account_id, total_invested],
                 )

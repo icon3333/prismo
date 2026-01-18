@@ -317,8 +317,8 @@ def save_consolidated_position(account_id: int, position_data: Dict[str, Any]) -
         else:
             # Insert new company
             execute_db(
-                """INSERT INTO companies 
-                   (name, identifier, category, portfolio_id, account_id, total_invested)
+                """INSERT INTO companies
+                   (name, identifier, sector, portfolio_id, account_id, total_invested)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (position_data['name'], position_data['identifier'], '',
                  portfolio_id, account_id, position_data['total_amount'])
@@ -427,8 +427,8 @@ def save_transaction_simple(account_id: int, transaction_data: Dict[str, Any]) -
         else:
             # Insert new company
             execute_db(
-                """INSERT INTO companies 
-                   (name, identifier, category, portfolio_id, account_id, total_invested)
+                """INSERT INTO companies
+                   (name, identifier, sector, portfolio_id, account_id, total_invested)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (transaction_data['name'], transaction_data['identifier'], '',
                  portfolio_id, account_id, transaction_data['shares'] * transaction_data['price'])

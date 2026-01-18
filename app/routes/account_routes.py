@@ -518,12 +518,12 @@ def import_data():
                     if new_portfolio_id:
                         old_company_id = company['id']
                         cursor = db.execute('''
-                            INSERT INTO companies (name, identifier, category, portfolio_id, account_id, 
-                                                 total_invested, override_country, country_manually_edited, 
+                            INSERT INTO companies (name, identifier, sector, portfolio_id, account_id,
+                                                 total_invested, override_country, country_manually_edited,
                                                  country_manual_edit_date)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', [
-                            company['name'], company['identifier'], company['category'],
+                            company['name'], company['identifier'], company['sector'],
                             new_portfolio_id, account_id, company.get('total_invested', 0),
                             company.get('override_country'), company.get('country_manually_edited', 0),
                             company.get('country_manual_edit_date')

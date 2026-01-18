@@ -277,7 +277,7 @@ def verify_schema(db):
     # Check companies table structure
     columns_check = cursor.execute("PRAGMA table_info(companies)").fetchall()
     col_names = [col[1] for col in columns_check]
-    required_columns = ['id', 'name', 'identifier', 'category', 'portfolio_id', 'account_id', 'total_invested', 'override_country', 'country_manually_edited', 'country_manual_edit_date']
+    required_columns = ['id', 'name', 'identifier', 'sector', 'portfolio_id', 'account_id', 'total_invested', 'override_country', 'country_manually_edited', 'country_manual_edit_date']
     missing_columns = [col for col in required_columns if col not in col_names]
     if missing_columns:
         logger.warning(f"Missing columns in 'companies' table: {missing_columns}")
@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 6
+    LATEST_VERSION = 9
 
     try:
         # Get current schema version
@@ -528,6 +528,58 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 6, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 6 completed: exchange_rates table created")
+
+        # Migration 7: Add simulations table for allocation simulator scenarios
+        if current_version < 7:
+            logger.info("Applying migration 7: Adding simulations table")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS simulations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    scope TEXT NOT NULL DEFAULT 'global',
+                    portfolio_id INTEGER,
+                    items TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (account_id) REFERENCES accounts(id),
+                    FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_simulations_account_id
+                ON simulations(account_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_simulations_name
+                ON simulations(account_id, name)
+            ''')
+            cursor.execute("UPDATE schema_version SET version = 7, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 7 completed: simulations table created")
+
+        # Migration 8: Add thesis column for investment thesis tracking
+        if current_version < 8:
+            logger.info("Applying migration 8: Adding thesis column to companies")
+            _safe_add_column(cursor, "companies", "thesis TEXT DEFAULT ''")
+            cursor.execute("UPDATE schema_version SET version = 8, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 8 completed: thesis column added")
+
+        # Migration 9: Rename category to sector
+        if current_version < 9:
+            logger.info("Applying migration 9: Renaming category to sector")
+            # Rename column using SQLite's ALTER TABLE RENAME COLUMN (SQLite 3.25+)
+            cursor.execute('ALTER TABLE companies RENAME COLUMN category TO sector')
+            # Drop old indexes
+            cursor.execute('DROP INDEX IF EXISTS idx_companies_category')
+            cursor.execute('DROP INDEX IF EXISTS idx_companies_portfolio_category')
+            # Create new indexes with sector naming
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
+            cursor.execute("UPDATE schema_version SET version = 9, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 9 completed: category renamed to sector")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

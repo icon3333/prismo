@@ -1089,9 +1089,19 @@ document.addEventListener('DOMContentLoaded', function () {
         return portfolio ? portfolio.name : 'Unknown Portfolio';
       },
 
-      // Format currency using utility function
+      // Format currency using utility function (returns HTML with sensitive-value span)
       formatCurrency(amount) {
         return portfolioManager.formatCurrency(amount);
+      },
+
+      // Format currency without HTML wrapper (for input values)
+      formatCurrencyRaw(amount) {
+        if (typeof amount !== 'number') {
+          return '€0';
+        }
+        return amount >= 100
+          ? `€${amount.toLocaleString('en-US', {maximumFractionDigits: 0})}`
+          : `€${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
       },
 
       // Format number with thousand separators

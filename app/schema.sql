@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS companies (
  id INTEGER PRIMARY KEY,
  name TEXT NOT NULL,
  identifier TEXT NOT NULL,
- category TEXT NOT NULL,
+ sector TEXT NOT NULL,
+ thesis TEXT DEFAULT '',
  portfolio_id INTEGER NOT NULL,
  account_id INTEGER NOT NULL,
  total_invested REAL DEFAULT 0,
@@ -101,6 +102,20 @@ CREATE TABLE IF NOT EXISTS exchange_rates (
  UNIQUE(from_currency, to_currency)
 );
 
+-- Create simulations table for saving allocation simulator scenarios
+CREATE TABLE IF NOT EXISTS simulations (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL,
+ name TEXT NOT NULL,
+ scope TEXT NOT NULL DEFAULT 'global',
+ portfolio_id INTEGER,
+ items TEXT NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (account_id) REFERENCES accounts(id),
+ FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
+);
+
 -- Create indexes for market_prices (only if they don't exist)
 CREATE INDEX IF NOT EXISTS idx_market_prices_last_updated ON market_prices(last_updated);
 CREATE INDEX IF NOT EXISTS idx_market_prices_identifier ON market_prices(identifier);
@@ -119,19 +134,23 @@ CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)
 CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier);
 CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type);
-CREATE INDEX IF NOT EXISTS idx_companies_category ON companies(category);
+CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector);
 CREATE INDEX IF NOT EXISTS idx_portfolios_account_id ON portfolios(account_id);
 
 -- PERFORMANCE OPTIMIZATION: Composite indexes for common query patterns
 -- Covers the most common access pattern: filtering by portfolio_id and account_id together
 CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id);
--- Optimizes category grouping within portfolios
-CREATE INDEX IF NOT EXISTS idx_companies_portfolio_category ON companies(portfolio_id, category);
+-- Optimizes sector grouping within portfolios
+CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector);
 -- Create indexes for background_jobs
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_created_at ON background_jobs(created_at);
 -- Create index for exchange_rates
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency ON exchange_rates(from_currency, to_currency);
+
+-- Create indexes for simulations
+CREATE INDEX IF NOT EXISTS idx_simulations_account_id ON simulations(account_id);
+CREATE INDEX IF NOT EXISTS idx_simulations_name ON simulations(account_id, name);
 
 -- Create trigger for expanded_state (only if it doesn't exist)
 CREATE TRIGGER IF NOT EXISTS update_state_timestamp

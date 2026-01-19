@@ -37,7 +37,7 @@ class AllocationSimulator {
     this.sectorChart = null;
 
     // Category mode for sector chart (sector or thesis)
-    this.categoryMode = 'sector';     // 'sector' or 'thesis'
+    this.categoryMode = 'thesis';     // 'sector' or 'thesis'
 
     // Expanded chart bar state (one at a time per chart type)
     this.expandedCountryBar = null;   // Label of expanded country bar
@@ -157,7 +157,9 @@ class AllocationSimulator {
         if (typeof PortfolioState !== 'undefined' && this.portfolioId) {
           await PortfolioState.setSelectedPortfolio(this.portfolioId);
         }
-        this.loadPortfolioAllocations();
+        // Refresh portfolios list with latest values, then load allocations
+        await this.refreshPortfolios();
+        await this.loadPortfolioAllocations();
       });
     }
   }
@@ -175,6 +177,26 @@ class AllocationSimulator {
     });
   }
 
+  async refreshPortfolios() {
+    try {
+      const response = await fetch('/portfolio/api/portfolios?include_ids=true&include_values=true');
+      const result = await response.json();
+      if (result && result.length > 0) {
+        this.portfolios = result;
+        // Preserve current selection
+        const currentValue = this.portfolioId;
+        this.populatePortfolioDropdown();
+        // Restore selection
+        const select = document.getElementById('simulator-portfolio-select');
+        if (select && currentValue) {
+          select.value = String(currentValue);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh portfolios:', error);
+    }
+  }
+
   formatNumber(value) {
     const num = parseFloat(value) || 0;
     // Format with thousands separator (German locale)
@@ -187,20 +209,20 @@ class AllocationSimulator {
     return label.toLowerCase().trim();
   }
 
-  handleScopeChange(scope) {
+  async handleScopeChange(scope) {
     this.scope = scope;
     const portfolioWrapper = document.getElementById('simulator-portfolio-select-wrapper');
 
     if (scope === 'portfolio') {
       portfolioWrapper.style.display = 'block';
-      // Don't load until portfolio is selected
       if (this.portfolioId) {
-        this.loadPortfolioAllocations();
+        await this.refreshPortfolios();
+        await this.loadPortfolioAllocations();
       }
     } else {
       portfolioWrapper.style.display = 'none';
-      this.portfolioId = null;
-      this.loadPortfolioAllocations();
+      await this.refreshPortfolios();
+      await this.loadPortfolioAllocations();
     }
     this.saveState();
   }
@@ -560,7 +582,7 @@ class AllocationSimulator {
           <div class="input-row">
             <input type="text" class="input" id="simulator-ticker-input"
                    placeholder="e.g., AAPL, MSFT">
-            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-ticker-btn">
+            <button class="button is-small" id="simulator-add-ticker-btn">
               <span class="btn-text">Add</span>
               <span class="btn-spinner" style="display: none;">
                 <i class="fas fa-spinner fa-spin"></i>
@@ -579,7 +601,21 @@ class AllocationSimulator {
               </button>
               <div class="combobox-dropdown" id="simulator-sector-dropdown"></div>
             </div>
-            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-sector-btn">Add</button>
+            <button class="button is-small" id="simulator-add-sector-btn">Add</button>
+          </div>
+        </div>
+        <div class="simulator-input-form">
+          <label class="label">Add Thesis</label>
+          <div class="input-row">
+            <div class="combobox-wrapper" id="simulator-thesis-combobox">
+              <input type="text" class="input combobox-input" id="simulator-thesis-input"
+                     placeholder="Select or type thesis..." autocomplete="off">
+              <button class="combobox-toggle" type="button" tabindex="-1">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+              <div class="combobox-dropdown" id="simulator-thesis-dropdown"></div>
+            </div>
+            <button class="button is-small" id="simulator-add-thesis-btn">Add</button>
           </div>
         </div>
         <div class="simulator-input-form">
@@ -593,7 +629,7 @@ class AllocationSimulator {
               </button>
               <div class="combobox-dropdown" id="simulator-country-dropdown"></div>
             </div>
-            <button class="btn btn-sm simulator-btn-secondary" id="simulator-add-country-btn">Add</button>
+            <button class="button is-small" id="simulator-add-country-btn">Add</button>
           </div>
         </div>
       </div>
@@ -607,6 +643,7 @@ class AllocationSimulator {
               <th class="col-name">Name</th>
               <th class="col-portfolio">Portfolio</th>
               <th class="col-sector">Sector</th>
+              <th class="col-thesis">Thesis</th>
               <th class="col-country">Country</th>
               <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
               <th class="col-delete"></th>
@@ -614,7 +651,7 @@ class AllocationSimulator {
           </thead>
           <tbody id="simulator-table-body">
             <tr class="empty-state-row">
-              <td colspan="7" class="empty-state">
+              <td colspan="8" class="empty-state">
                 <i class="fas fa-chart-pie"></i>
                 <span>No items added yet. Use the forms above to add positions.</span>
               </td>
@@ -631,19 +668,19 @@ class AllocationSimulator {
       <!-- Aggregation Charts -->
       <div class="simulator-charts">
         <div class="simulator-chart-panel">
-          <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-            <h4 class="subtitle is-5 mb-0">Country Allocation</h4>
+          <div class="simulator-chart-header">
+            <h5 class="simulator-chart-label">Country Allocation</h5>
           </div>
           <div class="chart-content" id="simulator-country-chart">
             <div class="chart-empty">Loading portfolio data...</div>
           </div>
         </div>
         <div class="simulator-chart-panel">
-          <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-            <h4 class="subtitle is-5 mb-0" id="simulator-category-title">Sector Allocation</h4>
+          <div class="simulator-chart-header">
+            <h5 class="simulator-chart-label" id="simulator-category-title">Thesis Allocation</h5>
             <div class="toggle-group" id="simulator-category-toggle">
-              <button class="toggle-btn active" data-mode="sector">Sector</button>
-              <button class="toggle-btn" data-mode="thesis">Thesis</button>
+              <button class="toggle-btn" data-mode="sector">Sector</button>
+              <button class="toggle-btn active" data-mode="thesis">Thesis</button>
             </div>
           </div>
           <div class="chart-content" id="simulator-sector-chart">
@@ -683,6 +720,19 @@ class AllocationSimulator {
         if (e.key === 'Enter') this.handleAddSector();
       });
       this.initCombobox(sectorCombobox, sectorInput, 'sector');
+    }
+
+    // Add Thesis with combobox
+    const thesisInput = document.getElementById('simulator-thesis-input');
+    const thesisBtn = document.getElementById('simulator-add-thesis-btn');
+    const thesisCombobox = document.getElementById('simulator-thesis-combobox');
+
+    if (thesisBtn && thesisInput) {
+      thesisBtn.addEventListener('click', () => this.handleAddThesis());
+      thesisInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.handleAddThesis();
+      });
+      this.initCombobox(thesisCombobox, thesisInput, 'thesis');
     }
 
     // Add Country with combobox
@@ -887,6 +937,40 @@ class AllocationSimulator {
     if (dropdown) dropdown.classList.remove('show');
   }
 
+  handleAddThesis() {
+    const input = document.getElementById('simulator-thesis-input');
+    const thesis = input.value.trim();
+
+    if (!thesis) {
+      this.showToast('Please enter a thesis name', 'warning');
+      return;
+    }
+
+    const normalizedThesis = this.normalizeLabel(thesis);
+
+    // Set pending expand so the chart auto-expands this thesis (when in thesis mode)
+    if (this.categoryMode === 'thesis') {
+      this.pendingExpandSector = normalizedThesis;
+    }
+
+    this.addItem({
+      id: this.generateId(),
+      ticker: '—',
+      sector: '—',
+      thesis: normalizedThesis,
+      country: '—',
+      value: 0,
+      valueMode: 'absolute', // Default to absolute mode
+      source: 'thesis',
+      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
+    });
+    input.value = '';
+
+    // Hide dropdown
+    const dropdown = document.getElementById('simulator-thesis-dropdown');
+    if (dropdown) dropdown.classList.remove('show');
+  }
+
   handleAddCountry() {
     const input = document.getElementById('simulator-country-input');
     const country = input.value.trim();
@@ -964,7 +1048,7 @@ class AllocationSimulator {
     if (this.items.length === 0) {
       this.tableBody.innerHTML = `
         <tr class="empty-state-row">
-          <td colspan="7" class="empty-state">
+          <td colspan="8" class="empty-state">
             <i class="fas fa-chart-pie"></i>
             <span>No items added yet. Use the forms above to add positions.</span>
           </td>
@@ -1015,6 +1099,10 @@ class AllocationSimulator {
           <td class="col-sector">
             <input type="text" class="editable-cell sector-input" value="${this.escapeHtml(item.sector === '—' ? item.sector : (item.sector || '').toLowerCase())}"
                    data-field="sector" placeholder="—">
+          </td>
+          <td class="col-thesis">
+            <input type="text" class="editable-cell thesis-input" value="${this.escapeHtml(item.thesis === '—' ? item.thesis : (item.thesis || '').toLowerCase())}"
+                   data-field="thesis" placeholder="—">
           </td>
           <td class="col-country">
             <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
@@ -1131,8 +1219,10 @@ class AllocationSimulator {
   }
 
   handleTableInput(e) {
-    // Convert sector/country to lowercase as user types
-    if (e.target.classList.contains('sector-input') || e.target.classList.contains('country-input')) {
+    // Convert sector/thesis/country to lowercase as user types
+    if (e.target.classList.contains('sector-input') ||
+        e.target.classList.contains('thesis-input') ||
+        e.target.classList.contains('country-input')) {
       const cursorPos = e.target.selectionStart;
       e.target.value = e.target.value.toLowerCase();
       e.target.setSelectionRange(cursorPos, cursorPos);
@@ -1197,8 +1287,8 @@ class AllocationSimulator {
       // Parse portfolio_id as number or null
       value = value ? parseInt(value) : null;
       this.updateItem(id, field, value);
-    } else if (field === 'sector' || field === 'country') {
-      // Normalize sector/country to lowercase
+    } else if (field === 'sector' || field === 'thesis' || field === 'country') {
+      // Normalize sector/thesis/country to lowercase
       if (value && value !== '—') {
         value = this.normalizeLabel(value);
         input.value = value;
@@ -1210,7 +1300,7 @@ class AllocationSimulator {
       }
       this.updateItem(id, field, value);
 
-      // If sector or country changes, recalculate percentage items
+      // If sector, thesis, or country changes, recalculate percentage items
       if (item && item.valueMode === 'percentage') {
         this.recalculatePercentageItem(item);
       }
@@ -1415,7 +1505,8 @@ class AllocationSimulator {
     const baselineByThesis = {};
 
     // Add portfolio baseline data
-    const portfolioTotal = this.portfolioData?.total_value || 0;
+    // Use portfolio_total (includes cash) if available, fallback to total_value for backwards compatibility
+    const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
 
     if (this.portfolioData) {
       // Store baseline for delta calculations (normalize labels to lowercase)
@@ -1673,11 +1764,32 @@ class AllocationSimulator {
     const positions = [];
     const normalizedLabel = label.toLowerCase().trim();
 
+    // Determine which field to match based on chart type and category mode
+    // For 'sector' chart type, use thesis or sector depending on categoryMode
+    const getMatchField = (pos) => {
+      if (chartType === 'country') {
+        return pos.country;
+      } else {
+        // 'sector' chart type - can show sector or thesis data
+        return this.categoryMode === 'thesis' ? pos.thesis : pos.sector;
+      }
+    };
+
+    // Default value for unassigned items
+    const getDefaultValue = () => {
+      if (chartType === 'country') {
+        return 'unknown';
+      } else {
+        return this.categoryMode === 'thesis' ? 'unassigned' : 'unknown';
+      }
+    };
+
     // Add portfolio positions
     if (this.portfolioData && this.portfolioData.positions) {
       this.portfolioData.positions.forEach(pos => {
-        const matchField = chartType === 'country' ? pos.country : pos.sector;
-        const normalizedField = (matchField || 'unknown').toLowerCase().trim();
+        const matchField = getMatchField(pos);
+        const defaultVal = getDefaultValue();
+        const normalizedField = (matchField || defaultVal).toLowerCase().trim();
 
         if (normalizedField === normalizedLabel) {
           positions.push({
@@ -1699,8 +1811,9 @@ class AllocationSimulator {
         }
       }
 
-      const matchField = chartType === 'country' ? item.country : item.sector;
-      const normalizedField = (matchField === '—' || !matchField) ? 'unknown' : matchField.toLowerCase().trim();
+      const matchField = getMatchField(item);
+      const defaultVal = getDefaultValue();
+      const normalizedField = (matchField === '—' || !matchField) ? defaultVal : matchField.toLowerCase().trim();
 
       if (normalizedField === normalizedLabel) {
         positions.push({
@@ -1798,11 +1911,17 @@ class AllocationSimulator {
       return;
     }
 
-    const sourceData = type === 'sector'
-      ? this.portfolioData.sectors || []
-      : this.portfolioData.countries || [];
+    let sourceData;
+    if (type === 'sector') {
+      sourceData = this.portfolioData.sectors || [];
+    } else if (type === 'thesis') {
+      sourceData = this.portfolioData.theses || [];
+    } else {
+      sourceData = this.portfolioData.countries || [];
+    }
 
-    const totalValue = this.portfolioData.total_value || 0;
+    // Use portfolio_total (includes cash) for percentage calculations
+    const totalValue = this.portfolioData.portfolio_total || this.portfolioData.total_value || 0;
     const filterLower = filter.toLowerCase().trim();
 
     // Sort by value (largest first) and filter
@@ -1843,7 +1962,8 @@ class AllocationSimulator {
    * Used for percentage target calculations
    */
   getBaselineForItem(item) {
-    const portfolioTotal = this.portfolioData?.total_value || 0;
+    // Use portfolio_total (includes cash) for percentage calculations
+    const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
     let baselineValue = 0;
 
     // Determine which baseline to use based on item source
@@ -1852,6 +1972,11 @@ class AllocationSimulator {
       const sectorData = (this.portfolioData?.sectors || [])
         .find(c => (c.name || '').toLowerCase() === normalizedSector);
       baselineValue = sectorData?.value || 0;
+    } else if (item.source === 'thesis' && item.thesis && item.thesis !== '—') {
+      const normalizedThesis = item.thesis.toLowerCase();
+      const thesisData = (this.portfolioData?.theses || [])
+        .find(c => (c.name || '').toLowerCase() === normalizedThesis);
+      baselineValue = thesisData?.value || 0;
     } else if (item.source === 'country' && item.country && item.country !== '—') {
       const normalizedCountry = item.country.toLowerCase();
       const countryData = (this.portfolioData?.countries || [])

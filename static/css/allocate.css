@@ -135,41 +135,6 @@
   box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
 }
 
-/* Expand/Collapse Buttons */
-.btn-outline-primary {
-  border: 1px solid var(--primary);
-  color: var(--primary);
-  background: transparent;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: all var(--transition-base);
-  cursor: pointer;
-}
-
-.btn-outline-primary:hover {
-  background: var(--primary);
-  color: white;
-}
-
-.btn-outline-secondary {
-  border: 1px solid var(--text-muted);
-  color: var(--text-muted);
-  background: transparent;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: all var(--transition-base);
-  cursor: pointer;
-}
-
-.btn-outline-secondary:hover {
-  background: var(--text-muted);
-  color: var(--bg);
-}
-
 /* Column styling for portfolio table */
 .col-company {
   text-align: left;
@@ -261,6 +226,9 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-xs);
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .summary-row:last-child {
@@ -720,7 +688,7 @@
   position: relative;
   height: 8px;
   background: var(--darker-bg);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: visible;
 }
 
@@ -729,7 +697,7 @@
   left: 0;
   top: 0;
   height: 100%;
-  border-radius: 4px;
+  border-radius: 0;
   transition: width 0.3s ease;
 }
 
@@ -747,7 +715,7 @@
   width: 3px;
   height: 16px;
   background: var(--warning);
-  border-radius: 2px;
+  border-radius: 0;
   z-index: 1;
 }
 
@@ -893,7 +861,7 @@
   font-size: 0.75rem;
   padding: 2px var(--space-xs);
   background: var(--darker-bg);
-  border-radius: 4px;
+  border-radius: 0;
   margin: 0 var(--space-sm);
 }
 
@@ -1181,7 +1149,7 @@
   appearance: none;
   width: 100%;
   height: 8px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg-secondary);
   outline: none;
   cursor: pointer;
@@ -1225,7 +1193,7 @@
   top: 8px;
   left: 0;
   height: 8px;
-  border-radius: 4px;
+  border-radius: 0;
   background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
   pointer-events: none;
   z-index: 1;
@@ -1235,14 +1203,14 @@
 .progress-bar-bg {
   width: 100%;
   height: 8px;
-  border-radius: 4px;
+  border-radius: 0;
   background: var(--bg-secondary);
   overflow: hidden;
 }
 
 .progress-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 0;
   background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
   transition: width 0.3s ease;
 }
@@ -1488,7 +1456,7 @@
   font-size: 0.7rem;
   padding: 2px 6px;
   background: rgba(6, 182, 212, 0.1);
-  border-radius: 4px;
+  border-radius: 0;
 }
 
 .position-value {
@@ -1987,50 +1955,9 @@
   min-width: 0;
 }
 
-.simulator-input-form .btn {
+.simulator-input-form .button {
   white-space: nowrap;
   min-width: 60px;
-}
-
-.simulator-input-form .btn-spinner {
-  width: 16px;
-  height: 16px;
-}
-
-/* Simulator Button Hierarchy */
-.simulator-btn-primary {
-  background: var(--primary);
-  color: white;
-  border: 1px solid var(--primary);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.simulator-btn-primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-}
-
-.simulator-btn-secondary {
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-default);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.simulator-btn-secondary:hover {
-  background: var(--bg-tertiary);
-  color: var(--primary);
-  border-color: var(--primary);
 }
 
 /* Simulator Table */
@@ -2072,8 +1999,9 @@
 .simulator-table .col-ticker { width: 100px; }
 .simulator-table .col-name { width: auto; min-width: 180px; }
 .simulator-table .col-portfolio { width: 140px; }
-.simulator-table .col-sector { width: auto; min-width: 140px; }
-.simulator-table .col-country { width: auto; min-width: 120px; }
+.simulator-table .col-sector { width: auto; min-width: 120px; }
+.simulator-table .col-thesis { width: auto; min-width: 120px; }
+.simulator-table .col-country { width: auto; min-width: 100px; }
 .simulator-table .col-value { width: 130px; }
 .simulator-table .col-delete { width: 50px; text-align: center; }
 
@@ -2217,6 +2145,20 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.simulator-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+}
+
+.simulator-chart-label {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .chart-header {
@@ -2369,6 +2311,7 @@
 @media (max-width: 992px) {
   .simulator-table .col-ticker,
   .simulator-table .col-sector,
+  .simulator-table .col-thesis,
   .simulator-table .col-country {
     min-width: auto;
   }
@@ -2908,17 +2851,6 @@ tr.table-primary th {
   padding-right: 32px;
 }
 
-/* Outline Button Variants */
-.btn-outline-danger {
-  background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-
-.btn-outline-danger:hover {
-  background: var(--danger-light);
-}
-
 /* ===================================================================
    COMBOBOX STYLES
    Searchable dropdown for sector/country selection
@@ -3181,11 +3113,12 @@ tr.table-primary th {
    =================================================================== */
 
 .investment-progress-section {
-  background: var(--surface-elevated);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
+  /* Remove box styling - keep content only */
+  background: transparent;
+  border-radius: 0;
+  padding: var(--space-md) 0;
   margin-bottom: var(--space-md);
-  border: 1px solid var(--border-subtle);
+  border: none;
 }
 
 .investment-progress-section .progress-loading {
@@ -3324,7 +3257,7 @@ tr.table-primary th {
 /* Simulated Impact */
 .simulated-impact {
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--border-subtle);
+  border-top: none;
   margin-top: var(--space-sm);
   font-size: var(--font-size-sm);
   display: flex;

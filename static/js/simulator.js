@@ -122,7 +122,22 @@ class AllocationSimulator {
       if (savedState.portfolioId) {
         this.portfolioId = savedState.portfolioId;
       }
-      // Update UI to reflect restored state
+    }
+
+    // For portfolio scope, also check global state (cross-page persistence)
+    if (this.scope === 'portfolio' && typeof PortfolioState !== 'undefined') {
+      const globalPortfolioId = await PortfolioState.getSelectedPortfolio();
+      if (globalPortfolioId) {
+        // Convert to number if the dropdown uses numeric IDs
+        const numericId = parseInt(globalPortfolioId);
+        if (!isNaN(numericId)) {
+          this.portfolioId = numericId;
+        }
+      }
+    }
+
+    // Update UI to reflect restored state
+    if (savedState || this.portfolioId) {
       this.updateScopeUI();
     }
 
@@ -135,9 +150,13 @@ class AllocationSimulator {
     // Bind portfolio select event
     const portfolioSelect = document.getElementById('simulator-portfolio-select');
     if (portfolioSelect) {
-      portfolioSelect.addEventListener('change', () => {
+      portfolioSelect.addEventListener('change', async () => {
         this.portfolioId = portfolioSelect.value ? parseInt(portfolioSelect.value) : null;
         this.saveState();
+        // Save to global state for cross-page persistence
+        if (typeof PortfolioState !== 'undefined' && this.portfolioId) {
+          await PortfolioState.setSelectedPortfolio(this.portfolioId);
+        }
         this.loadPortfolioAllocations();
       });
     }

@@ -640,6 +640,14 @@
                     selector.innerHTML = '<option value="">-- Select a portfolio --</option>';
                     noPortfoliosMessage.style.display = 'none';
 
+                    // Add "All Portfolios" option first (only if there are 2+ portfolios)
+                    if (portfolios.length >= 2) {
+                        const allOption = document.createElement('option');
+                        allOption.value = 'all';
+                        allOption.textContent = 'All Portfolios';
+                        selector.appendChild(allOption);
+                    }
+
                     portfolios.forEach(portfolio => {
                         const option = document.createElement('option');
                         option.value = portfolio.id;
@@ -867,29 +875,13 @@
             }
 
             async function savePortfolioSelection(portfolioId) {
-                try {
-                    await fetch('/portfolio/api/state', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            page: 'analyse',
-                            selectedPortfolioId: String(portfolioId)
-                        })
-                    });
-                } catch (error) {
-                    console.warn('Failed to save selection:', error);
-                }
+                // Save to global state for cross-page persistence
+                await PortfolioState.setSelectedPortfolio(portfolioId);
             }
 
             async function loadSavedPortfolioSelection() {
-                try {
-                    const response = await fetch('/portfolio/api/state?page=analyse');
-                    if (!response.ok) return null;
-                    const state = await response.json();
-                    return state.selectedPortfolioId || null;
-                } catch (error) {
-                    return null;
-                }
+                // Load from global state for cross-page persistence
+                return await PortfolioState.getSelectedPortfolio();
             }
 
             function hidePortfolioDisplay() {

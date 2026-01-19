@@ -118,13 +118,27 @@ document.addEventListener('DOMContentLoaded', function () {
             this.init();
         }
 
-        init() {
+        async init() {
             this.hideExpandCollapseButtons(); // Hide buttons initially
-            this.fetchPortfolioData();
+            await this.fetchPortfolioData();
             this.setupEventListeners();
+            await this.restoreGlobalPortfolioSelection();
 
             // Initialize tab view
             switchTab('global');
+        }
+
+        async restoreGlobalPortfolioSelection() {
+            // Restore global portfolio selection (cross-page persistence)
+            if (typeof PortfolioState !== 'undefined') {
+                const savedId = await PortfolioState.getSelectedPortfolio();
+                const portfolioSelect = document.getElementById('portfolio-select');
+                if (savedId && portfolioSelect && portfolioSelect.querySelector(`option[value="${savedId}"]`)) {
+                    portfolioSelect.value = savedId;
+                    this.selectedPortfolio = savedId;
+                    this.renderDetailedView();
+                }
+            }
         }
 
         setupEventListeners() {
@@ -161,8 +175,12 @@ document.addEventListener('DOMContentLoaded', function () {
             // Add portfolio selection change listener
             const portfolioSelect = document.getElementById('portfolio-select');
             if (portfolioSelect) {
-                portfolioSelect.addEventListener('change', (e) => {
+                portfolioSelect.addEventListener('change', async (e) => {
                     this.selectedPortfolio = e.target.value;
+                    // Save to global state for cross-page persistence
+                    if (typeof PortfolioState !== 'undefined' && e.target.value) {
+                        await PortfolioState.setSelectedPortfolio(e.target.value);
+                    }
                     this.renderDetailedView();
                 });
             }

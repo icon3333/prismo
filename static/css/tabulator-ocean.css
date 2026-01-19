@@ -1,0 +1,344 @@
+/* ========================================
+   Tabulator Ocean Depth Theme
+   Overrides for tabulator_midnight.min.css
+   ======================================== */
+
+/* Base table styling */
+.tabulator {
+  background-color: var(--bg-secondary) !important;
+  border: none;
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+
+/* Header styling */
+.tabulator .tabulator-header {
+  background-color: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tabulator .tabulator-header .tabulator-col {
+  background-color: transparent;
+  border-right: none;
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: var(--space-3) var(--space-4);
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-title {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+  background-color: var(--hover-bg);
+}
+
+/* Sort arrow styling */
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="none"] .tabulator-col-sorter .tabulator-arrow {
+  border-bottom-color: var(--text-muted);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="ascending"] .tabulator-col-sorter .tabulator-arrow {
+  border-bottom-color: var(--aqua-500);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable[aria-sort="descending"] .tabulator-col-sorter .tabulator-arrow {
+  border-top-color: var(--aqua-500);
+}
+
+/* Row styling - use explicit colors to override midnight theme */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row {
+  background-color: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-row-even {
+  background-color: var(--bg-secondary) !important;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-row-odd {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Cell styling */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell {
+  padding: var(--space-3) var(--space-4);
+  border-right: none;
+  color: var(--text-primary);
+}
+
+/* Tree structure styling */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: var(--space-2);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control:hover {
+  background: var(--primary-light);
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-collapse,
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-expand {
+  display: inline-block;
+  width: 0;
+  height: 0;
+}
+
+/* Clear midnight theme's plus/minus pseudo-elements */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-collapse::after,
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-expand::after {
+  display: none !important;
+  background: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Also clear the main element styling from midnight theme */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-collapse,
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-expand {
+  background: none !important;
+}
+
+/* Expand arrow (right-pointing) */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-expand {
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--aqua-500);
+  border-right: none;
+}
+
+/* Collapse arrow (down-pointing) */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-collapse {
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--aqua-500);
+  border-bottom: none;
+}
+
+/* Child row indentation and styling */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1:hover {
+  background-color: rgba(6, 182, 212, 0.15) !important; /* aqua 15% per design system */
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1 .tabulator-cell {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+/* Parent row (expandable) styling */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-0 {
+  cursor: pointer;
+  background-color: var(--bg-secondary) !important;
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-0:hover {
+  background-color: var(--hover-bg) !important;
+}
+
+/* Footer/pagination styling (if used) */
+.tabulator .tabulator-footer {
+  background-color: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* Placeholder when no data */
+.tabulator .tabulator-tableholder .tabulator-placeholder {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tabulator .tabulator-tableholder .tabulator-placeholder span {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Selected row styling - override midnight theme's yellow selection */
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected {
+  background-color: rgba(6, 182, 212, 0.15) !important; /* aqua 15% */
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover {
+  background-color: rgba(6, 182, 212, 0.2) !important; /* aqua 20% */
+}
+
+.tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover {
+  background-color: rgba(6, 182, 212, 0.1) !important; /* aqua 10% */
+}
+
+/* ========================================
+   Dark Mode Overrides
+   ======================================== */
+[data-theme="dark"] .tabulator {
+  background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .tabulator .tabulator-header {
+  background-color: var(--bg-tertiary) !important;
+  border-bottom-color: var(--border-subtle);
+}
+
+[data-theme="dark"] .tabulator .tabulator-header .tabulator-col {
+  background-color: transparent;
+}
+
+[data-theme="dark"] .tabulator .tabulator-header .tabulator-col .tabulator-col-title {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+  background-color: var(--ocean-700);
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row {
+  background-color: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row:hover {
+  background-color: rgba(6, 182, 212, 0.1) !important; /* aqua 10% per design system */
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1 {
+  background-color: var(--ocean-800) !important;
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1:hover {
+  background-color: rgba(6, 182, 212, 0.15) !important; /* aqua 15% per design system */
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-tree-level-1 .tabulator-cell {
+  color: var(--pearl-200);
+}
+
+/* Tree control in dark mode */
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control:hover {
+  background: var(--primary-light);
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-expand {
+  border-left-color: var(--aqua-400);
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row .tabulator-cell .tabulator-data-tree-control .tabulator-data-tree-control-collapse {
+  border-top-color: var(--aqua-400);
+}
+
+[data-theme="dark"] .tabulator .tabulator-footer {
+  background-color: var(--bg-tertiary);
+  border-top-color: var(--border-subtle);
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-placeholder span {
+  color: var(--text-muted);
+}
+
+/* Dark mode selected row styling */
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected {
+  background-color: rgba(6, 182, 212, 0.15) !important; /* aqua 15% */
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selected:hover {
+  background-color: rgba(6, 182, 212, 0.2) !important; /* aqua 20% */
+}
+
+[data-theme="dark"] .tabulator .tabulator-tableholder .tabulator-table .tabulator-row.tabulator-selectable:hover {
+  background-color: rgba(6, 182, 212, 0.1) !important; /* aqua 10% */
+}
+
+/* ========================================
+   P&L Value Colors
+   ======================================== */
+.tabulator .tabulator-cell .pnl-positive {
+  color: var(--success);
+}
+
+.tabulator .tabulator-cell .pnl-negative {
+  color: var(--error);
+}
+
+.tabulator .tabulator-cell .pnl-neutral {
+  color: var(--text-muted);
+}
+
+/* Sensitive value blur (for anonymous mode) */
+.tabulator .tabulator-cell .sensitive-value {
+  /* Will be handled by anonymous-mode.css */
+}
+
+/* ========================================
+   P&L Sort Toggle in Tabulator Header
+   ======================================== */
+.tabulator-pnl-toggle {
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tabulator-pnl-toggle:hover {
+  background: var(--primary-light);
+  color: var(--aqua-500);
+}
+
+.tabulator-pnl-toggle.pnl-sort-active {
+  background: var(--aqua-500);
+  color: var(--white);
+}
+
+/* Sort direction indicators */
+.tabulator-pnl-toggle.pnl-sort-asc::after {
+  content: " ↑";
+  font-size: 0.7em;
+}
+
+.tabulator-pnl-toggle.pnl-sort-desc::after {
+  content: " ↓";
+  font-size: 0.7em;
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .tabulator-pnl-toggle {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .tabulator-pnl-toggle:hover {
+  background: rgba(6, 182, 212, 0.2);
+  color: var(--aqua-400);
+}
+
+[data-theme="dark"] .tabulator-pnl-toggle.pnl-sort-active {
+  background: var(--aqua-500);
+  color: var(--ocean-950);
+}

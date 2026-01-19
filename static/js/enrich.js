@@ -1216,7 +1216,14 @@ class PortfolioTableApp {
                     // Track original values for commit-on-blur editing
                     editingOriginals: {},
                     // Track local editing values (prevents re-sorting while typing)
-                    editingValues: {}
+                    editingValues: {},
+                    // Cash balance for portfolio totals
+                    cashBalance: 0,
+                    originalCashBalance: 0,
+                    isSavingCash: false,
+                    // Builder KPI data
+                    builderData: null,
+                    builderDataLoaded: false
                     // Country options now server-rendered like portfolios
                 };
             },
@@ -1227,6 +1234,10 @@ class PortfolioTableApp {
                     if (health >= 90) return 'is-success';
                     if (health >= 70) return 'is-warning';
                     return 'is-danger';
+                },
+                // Total portfolio value including cash
+                portfolioTotal() {
+                    return (this.metrics.totalValue || 0) + (this.cashBalance || 0);
                 },
                 filteredPortfolioItems() {
                     debugLog(`Computing filtered items with portfolio=${this.selectedPortfolio}, companySearch=${this.companySearchQuery}`);
@@ -1474,6 +1485,167 @@ class PortfolioTableApp {
                     UpdateSelectedHandler.run(this.selectedItemIds);
                 },
 
+                // Cash balance tracking and saving
+                trackOriginalCash() {
+                    this.originalCashBalance = this.cashBalance;
+                    debugLog('Tracked original cash balance:', this.originalCashBalance);
+                },
+
+                async commitCash(event) {
+                    const inputValue = event.target.value;
+                    const newCash = parseGermanNumber(inputValue);
+
+                    // Validate the new value
+                    if (isNaN(newCash) || newCash < 0) {
+                        debugLog('Invalid cash value, reverting to original');
+                        event.target.value = formatCurrencyRaw(this.cashBalance);
+                        return;
+                    }
+
+                    // Check if value actually changed
+                    if (Math.abs(newCash - this.originalCashBalance) < 0.01) {
+                        debugLog('Cash value unchanged, skipping save');
+                        return;
+                    }
+
+                    debugLog('Saving new cash balance:', newCash);
+                    this.isSavingCash = true;
+
+                    try {
+                        const response = await fetch('/portfolio/api/account/cash', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ cash: newCash })
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            this.cashBalance = result.cash;
+                            this.originalCashBalance = result.cash;
+                            debugLog('Cash balance saved successfully:', result.cash);
+
+                            if (typeof showNotification === 'function') {
+                                showNotification('Cash balance updated', 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Failed to save cash balance');
+                        }
+                    } catch (error) {
+                        console.error('Error saving cash balance:', error);
+                        // Revert to original value
+                        this.cashBalance = this.originalCashBalance;
+                        event.target.value = formatCurrencyRaw(this.cashBalance);
+
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to save cash balance', 'is-danger');
+                        }
+                    } finally {
+                        this.isSavingCash = false;
+                    }
+                },
+
+                async loadCashBalance() {
+                    try {
+                        const response = await fetch('/portfolio/api/account/cash', {
+                            credentials: 'include'
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.success) {
+                                this.cashBalance = result.cash || 0;
+                                this.originalCashBalance = this.cashBalance;
+                                debugLog('Loaded cash balance:', this.cashBalance);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error loading cash balance:', error);
+                    }
+                },
+
+                // Builder KPI methods
+                async loadBuilderData() {
+                    try {
+                        const response = await fetch('/portfolio/api/builder/investment-targets', {
+                            credentials: 'include'
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            debugLog('Builder API response:', result);
+
+                            // Response is wrapped: { success: true, data: { budget: { availableToInvest: ... } } }
+                            const data = result.data || result;
+                            if (data.budget && data.budget.availableToInvest !== undefined) {
+                                this.builderData = {
+                                    availableToInvest: data.budget.availableToInvest
+                                };
+                                debugLog('Loaded builder data:', this.builderData);
+                            } else {
+                                // Builder data exists but no budget configured
+                                this.builderData = null;
+                                debugLog('Builder data exists but no budget.availableToInvest');
+                            }
+                        } else if (response.status === 404 || response.status === 400) {
+                            // Builder not configured or incomplete
+                            this.builderData = null;
+                            debugLog('Builder not configured or incomplete:', response.status);
+                        } else {
+                            this.builderData = null;
+                            debugLog('Builder API error:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('Error loading builder data:', error);
+                        this.builderData = null;
+                    } finally {
+                        this.builderDataLoaded = true;
+                    }
+                },
+
+                async useBuilderAsCash() {
+                    if (!this.builderData || this.builderData.availableToInvest === undefined) {
+                        return;
+                    }
+
+                    const newCash = this.builderData.availableToInvest;
+                    debugLog('Using builder available to invest as cash:', newCash);
+
+                    this.isSavingCash = true;
+
+                    try {
+                        const response = await fetch('/portfolio/api/account/cash', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ cash: newCash })
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            this.cashBalance = result.cash;
+                            this.originalCashBalance = result.cash;
+                            debugLog('Cash balance updated from builder:', result.cash);
+
+                            if (typeof showNotification === 'function') {
+                                showNotification('Cash updated from Builder', 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Failed to update cash balance');
+                        }
+                    } catch (error) {
+                        console.error('Error updating cash from builder:', error);
+
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update cash from Builder', 'is-danger');
+                        }
+                    } finally {
+                        this.isSavingCash = false;
+                    }
+                },
+
                 downloadCSV() {
                     // Use the current filtered items for CSV export
                     const dataToExport = this.filteredPortfolioItems;
@@ -1666,6 +1838,12 @@ class PortfolioTableApp {
                         } else {
                             this.updateMetrics();
                         }
+
+                        // Load cash balance for portfolio totals
+                        await this.loadCashBalance();
+
+                        // Load builder data for Available to Invest KPI
+                        await this.loadBuilderData();
                     } catch (error) {
                         console.error('❌ Error loading portfolio data:', error);
 

@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS accounts (
  id INTEGER PRIMARY KEY,
  username TEXT UNIQUE NOT NULL,
  created_at TEXT NOT NULL,
- last_price_update DATETIME
+ last_price_update DATETIME,
+ cash REAL DEFAULT 0
 );
 -- Create portfolios table
 CREATE TABLE IF NOT EXISTS portfolios (
@@ -32,6 +33,9 @@ CREATE TABLE IF NOT EXISTS companies (
  is_custom_value BOOLEAN DEFAULT 0,
  custom_value_date DATETIME,
  investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+ override_identifier TEXT,
+ identifier_manually_edited BOOLEAN DEFAULT 0,
+ identifier_manual_edit_date DATETIME,
  FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
  FOREIGN KEY (account_id) REFERENCES accounts (id),
  UNIQUE (account_id, name)

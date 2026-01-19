@@ -454,25 +454,27 @@ The signature layout for the Allocation Simulator.
 
 ### 7.9 Buttons
 
-#### Outlined Secondary
-```css
-.btn-outline-secondary {
-  border: 1px solid var(--text-muted);
-  color: var(--text-muted);
-  background: transparent;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
-}
+The application uses a unified button system based on `.button.is-*` classes. See Section 17 for the complete reference.
 
-.btn-outline-secondary:hover {
-  background: var(--text-muted);
-  color: var(--bg-primary);
-}
+#### Quick Usage
+```html
+<!-- Primary CTA -->
+<button class="button is-primary">Save Changes</button>
+
+<!-- Secondary/Neutral -->
+<button class="button">Cancel</button>
+
+<!-- Danger -->
+<button class="button is-danger">Delete</button>
+
+<!-- Outlined variant -->
+<button class="button is-primary is-outlined">Edit</button>
+
+<!-- Small size -->
+<button class="button is-primary is-small">Compact</button>
 ```
 
-#### Sort/Filter Pills
+#### Sort/Filter Pills (Specialized)
 ```css
 .sort-btn {
   padding: 4px 10px;
@@ -1368,83 +1370,193 @@ setTimeout(() => {
 
 ---
 
-## 17. BUTTONS (Extended)
+## 17. BUTTONS (Unified System)
 
-### 17.1 Primary Button
+The application uses a single, unified button system based on `.button.is-*` classes.
+All buttons use `border-radius: var(--radius-md)` (8px) to match other components.
+
+### 17.1 Base Button
 
 ```css
-.button.is-primary,
-.btn-primary {
-  background: var(--primary);
-  color: white;
-  border: none;
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-md);
+  font-size: 0.875rem;
   font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all var(--transition-fast);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
-.button.is-primary:hover {
-  background: var(--primary-hover);
+.button:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--text-primary);
 }
 ```
 
-### 17.2 Button Sizes
+### 17.2 Semantic Variants
 
 ```css
-/* Compact (for tables) */
+/* Primary - Aqua CTA */
+.button.is-primary {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+/* Danger - Red destructive */
+.button.is-danger {
+  background: transparent;
+  color: var(--error);
+  border-color: var(--error);
+}
+
+/* Success - Teal positive */
+.button.is-success {
+  background: var(--teal-500);
+  color: var(--white);
+  border-color: var(--teal-500);
+}
+
+/* Warning - Coral caution */
+.button.is-warning {
+  background: var(--coral-500);
+  color: var(--white);
+  border-color: var(--coral-500);
+}
+
+/* Info - Aqua informational */
+.button.is-info {
+  background: var(--aqua-500);
+  color: var(--white);
+  border-color: var(--aqua-500);
+}
+
+/* Light - Neutral subtle */
+.button.is-light {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+/* Ghost - Text-like minimal */
+.button.is-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+```
+
+### 17.3 Sizes
+
+```css
+/* Small - Compact for tables and tight spaces */
 .button.is-small {
-  padding: var(--space-xs) var(--space-sm);
+  padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
 }
 
-/* Standard */
-.button {
-  padding: var(--space-sm) var(--space-md);
-  font-size: 0.875rem;
-}
-
-/* Large */
-.button.is-large {
-  padding: var(--space-md) var(--space-lg);
+/* Medium - Emphasized */
+.button.is-medium {
+  padding: 0.75rem 1.25rem;
   font-size: 1rem;
 }
+
+/* Large - Hero/prominent */
+.button.is-large {
+  padding: 1rem 1.5rem;
+  font-size: 1.125rem;
+}
 ```
 
-### 17.3 Button Variants
+### 17.4 Modifiers
 
 ```css
-/* Outlined */
+/* Outlined - Transparent background with border */
 .button.is-outlined {
   background: transparent;
-  border: 1px solid var(--primary);
-  color: var(--primary);
 }
 
-.button.is-outlined:hover {
-  background: var(--primary);
-  color: white;
-}
-
-/* Ghost/Text */
-.button.is-ghost {
+.button.is-outlined.is-primary {
+  color: var(--aqua-500);
+  border-color: var(--aqua-500);
   background: transparent;
-  border: none;
-  color: var(--text-muted);
 }
 
-.button.is-ghost:hover {
-  color: var(--primary);
-  background: var(--primary-light);
+.button.is-outlined.is-primary:hover {
+  background: var(--aqua-500);
+  color: var(--white);
 }
 
-/* Danger */
-.button.is-danger {
-  background: var(--danger);
-  color: white;
+/* Full width */
+.button.is-fullwidth {
+  width: 100%;
+}
+
+/* Rounded/Pill shape */
+.button.is-rounded {
+  border-radius: 9999px;
+}
+
+/* Loading state */
+.button.is-loading {
+  color: transparent !important;
+  pointer-events: none;
 }
 ```
+
+### 17.5 Usage Examples
+
+```html
+<!-- Primary CTA -->
+<button class="button is-primary">Save Changes</button>
+
+<!-- Secondary/Cancel -->
+<button class="button">Cancel</button>
+
+<!-- Danger action -->
+<button class="button is-danger">Delete</button>
+
+<!-- Outlined primary -->
+<button class="button is-primary is-outlined">Edit</button>
+
+<!-- Small button in table -->
+<button class="button is-primary is-small">View</button>
+
+<!-- Full-width button -->
+<button class="button is-primary is-fullwidth">Submit</button>
+
+<!-- Button group -->
+<div class="buttons">
+  <button class="button is-primary">Save</button>
+  <button class="button">Cancel</button>
+</div>
+```
+
+### 17.6 Migration Notes
+
+The following legacy classes have been removed and should be replaced:
+
+| Old Class | New Class |
+|-----------|-----------|
+| `btn btn-primary` | `button is-primary` |
+| `btn btn-accent` | `button is-primary` |
+| `btn btn-secondary` | `button` or `button is-light` |
+| `btn btn-danger` | `button is-danger` |
+| `btn btn-outline-primary` | `button is-primary is-outlined` |
+| `btn btn-outline-secondary` | `button is-light` |
+| `btn-sm` / `btn-compact` | `is-small` |
+| `simulator-btn-primary` | `button is-primary` |
+| `simulator-btn-secondary` | `button` |
 
 ---
 
@@ -1549,4 +1661,87 @@ When applying this design to new components:
 
 ---
 
-*Document Version: 1.0 | Generated from Portfolio Rebalancing Flask - Ocean Depth Design System*
+## 21. ANONYMOUS MODE (BLUR)
+
+### 21.1 Overview
+
+Anonymous Mode blurs sensitive financial values for privacy during screen sharing or recordings. When enabled, a CSS class `anonymous-mode` is added to `<html>`, and all elements with the `sensitive-value` class are blurred.
+
+### 21.2 Usage
+
+Add the `sensitive-value` class to any element containing sensitive financial data:
+
+```html
+<!-- Spans with currency values -->
+<span class="summary-value sensitive-value">€10,000</span>
+
+<!-- Input fields with values -->
+<input class="input cash-input sensitive-value" value="5000">
+
+<!-- Table cells -->
+<td class="col-currency sensitive-value">€2,500</td>
+```
+
+### 21.3 What to Mark as Sensitive
+
+| Element Type | Should Have `sensitive-value` |
+|--------------|-------------------------------|
+| Portfolio totals | ✅ Yes |
+| Position values | ✅ Yes |
+| Cash balances | ✅ Yes |
+| P&L amounts | ✅ Yes |
+| Investment progress | ✅ Yes |
+| Share counts | ⚠️ Optional |
+| Percentages | ❌ No (relative, not absolute) |
+| Company names | ❌ No |
+| Sector/Country | ❌ No |
+
+### 21.4 CSS Implementation
+
+```css
+/* Base blur effect */
+.anonymous-mode .sensitive-value {
+    filter: blur(8px);
+    user-select: none;
+    cursor: default;
+    transition: filter 0.2s ease-in-out;
+}
+
+/* Input fields remain interactive */
+.anonymous-mode input.sensitive-value,
+.anonymous-mode .sensitive-value input {
+    filter: blur(8px);
+    pointer-events: auto;
+}
+
+/* Table cells */
+.anonymous-mode td.sensitive-value,
+.anonymous-mode th.sensitive-value {
+    filter: blur(8px);
+    user-select: none;
+}
+```
+
+### 21.5 Toggle Button
+
+The toggle button is placed in the navbar and uses the `anonymous-mode-toggle` class:
+
+```html
+<button id="anonymous-mode-toggle" class="anonymous-mode-toggle" title="Toggle Anonymous Mode">
+  <!-- Eye icon SVG -->
+</button>
+```
+
+### 21.6 Implementation Checklist
+
+When adding new financial displays:
+
+- [ ] Add `sensitive-value` class to all monetary amounts (€, $, etc.)
+- [ ] Add `sensitive-value` class to input fields showing financial data
+- [ ] Test blur effect with anonymous mode enabled
+- [ ] Ensure blurred inputs remain functional (pointer-events: auto)
+- [ ] Verify print styles maintain blur
+
+---
+
+*Document Version: 1.1 | Generated from Portfolio Rebalancing Flask - Ocean Depth Design System*

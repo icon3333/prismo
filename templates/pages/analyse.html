@@ -94,27 +94,13 @@
                 <div class="column is-6">
                     <div class="box">
                         <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-                            <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Sector Allocation</h3>
+                            <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Thesis Allocation</h3>
                             <div class="toggle-group" id="allocationToggle">
-                                <button class="toggle-btn active" data-mode="sector">Sector</button>
-                                <button class="toggle-btn" data-mode="thesis">Thesis</button>
+                                <button class="toggle-btn" data-mode="sector">Sector</button>
+                                <button class="toggle-btn active" data-mode="thesis">Thesis</button>
                             </div>
                         </div>
-                        <div class="table-container">
-                            <table class="table is-fullwidth is-striped is-hoverable" data-table-id="sectorTable">
-                                <thead>
-                                    <tr>
-                                        <th class="is-sortable" data-sort="string" id="allocationColumnHeader">Sector</th>
-                                        <th class="is-sortable" data-sort="number">% of Portfolio</th>
-                                        <th class="is-sortable" data-sort="number">Current Value</th>
-                                        <th>P&L <span class="pnl-sort-toggle" data-sort-type="pnl-eur" title="Sort by € value">€</span> / <span class="pnl-sort-toggle" data-sort-type="pnl-pct" title="Sort by % value">%</span></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="sectorTableBody">
-                                    <!-- Populated dynamically -->
-                                </tbody>
-                            </table>
-                        </div>
+                        <div id="sectorAllocationTable"></div>
                     </div>
                 </div>
             </div>
@@ -126,7 +112,13 @@
 
             <!-- Sector vs Country Heatmap - Outside collapsible (always visible) -->
             <div class="mb-4">
-                <h4 class="subtitle is-5 mb-3">Sector vs Country Heatmap</h4>
+                <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+                    <h4 class="subtitle is-5 mb-0" id="heatmapTitle">Sector vs Country</h4>
+                    <div class="toggle-group" id="heatmapToggle">
+                        <button class="toggle-btn active" data-mode="sector">Sector</button>
+                        <button class="toggle-btn" data-mode="thesis">Thesis</button>
+                    </div>
+                </div>
                 <div class="columns">
                     <div class="column is-full">
                         <div class="chart-large-container">
@@ -196,8 +188,8 @@
             let selectedPortfolioId = null;
             let selectedPortfolioIds = [];  // Needed by heatmap
             let currentPortfolioData = null;
-            let expandedSectors = new Set();
-            let allocationMode = 'sector'; // 'sector' or 'thesis'
+            let allocationMode = 'thesis'; // 'sector' or 'thesis'
+            let heatmapMode = 'sector'; // 'sector' or 'thesis'
 
             // Make portfolioData available globally for heatmap
             window.portfolioData = [];
@@ -609,14 +601,17 @@
                     document.getElementById('loadingIndicator').style.display = 'none';
                     document.getElementById('analysisContent').style.display = 'block';
 
-                    // Initialize table sorting and allocation toggle
+                    // Initialize table sorting and toggles
                     initTableSorting();
                     initAllocationToggle();
+                    initHeatmapToggle();
+                    setupThemeChangeHandler();
 
-                    // Initialize concentration heatmap (always visible)
-                    // Note: Will show empty until portfolio is selected
-                    selectedPortfolioIds = [];  // Initialize as empty array
-                    initializeRiskBreakdown();
+                    // Initialize concentration heatmap if no portfolio was already loaded
+                    // (loadPortfolioData already calls initializeRiskBreakdown with valid data)
+                    if (selectedPortfolioIds.length === 0) {
+                        initializeRiskBreakdown();
+                    }
                 } catch (error) {
                     console.error('Error initializing page:', error);
                     showError('Failed to load portfolio data. Please try again.');
@@ -755,100 +750,172 @@
                 });
             }
 
-            function renderSectorTable() {
-                const tbody = document.getElementById('sectorTableBody');
-                tbody.innerHTML = '';
+            // Tabulator instance for sector/thesis allocation table
+            let sectorTable = null;
 
+            function renderSectorTable() {
                 // Get the data based on current allocation mode
                 const dataSource = allocationMode === 'thesis' ? currentPortfolioData.theses : currentPortfolioData.sectors;
-                const labelType = allocationMode === 'thesis' ? 'thesis' : 'sector';
 
                 // Update UI elements to reflect current mode
                 const titleEl = document.getElementById('allocationTableTitle');
-                const headerEl = document.getElementById('allocationColumnHeader');
                 if (titleEl) titleEl.textContent = allocationMode === 'thesis' ? 'Thesis Allocation' : 'Sector Allocation';
-                if (headerEl) headerEl.textContent = allocationMode === 'thesis' ? 'Thesis' : 'Sector';
 
-                if (!dataSource || dataSource.length === 0) {
-                    const emptyMessage = allocationMode === 'thesis'
-                        ? 'No thesis data. Add thesis in Enrich page.'
-                        : 'No categories';
-                    tbody.innerHTML = `<tr><td colspan="4" class="has-text-centered">${emptyMessage}</td></tr>`;
+                // Transform data for Tabulator tree structure
+                const treeData = (dataSource || []).map(category => {
+                    // Calculate category-level values
+                    const categoryValue = category.total_value || 0;
+
+                    return {
+                        name: category.name,
+                        percentage: category.percentage,
+                        total_value: categoryValue,
+                        pnl_absolute: category.pnl_absolute,
+                        pnl_percentage: category.pnl_percentage,
+                        total_invested: category.total_invested,
+                        _children: category.companies.map(c => {
+                            const companyValue = c.current_value || c.currentValue || 0;
+                            const categoryPercent = categoryValue > 0
+                                ? (companyValue / categoryValue * 100)
+                                : 0;
+
+                            return {
+                                name: c.name,
+                                percentage: c.percentage || 0,
+                                category_percentage: categoryPercent,
+                                total_value: companyValue,
+                                pnl_absolute: c.pnl_absolute,
+                                pnl_percentage: c.pnl_percentage,
+                                total_invested: c.total_invested || c.totalInvested
+                            };
+                        })
+                    };
+                });
+
+                // If table exists, just update data
+                if (sectorTable) {
+                    sectorTable.setData(treeData);
                     return;
                 }
 
-                dataSource.forEach(category => {
-                    const isExpanded = expandedSectors.has(category.name);
-                    const iconClass = isExpanded ? 'fa-minus-circle' : 'fa-plus-circle';
-                    const catPnlEur = category.pnl_absolute !== null ? category.pnl_absolute : -Infinity;
-                    const catPnlPct = category.pnl_percentage !== null ? category.pnl_percentage : -Infinity;
+                // Check if Tabulator is available
+                if (typeof Tabulator === 'undefined') {
+                    console.error('Tabulator is not loaded');
+                    document.getElementById('sectorAllocationTable').innerHTML = '<p class="has-text-danger">Table library not loaded</p>';
+                    return;
+                }
 
-                    // Category row
-                    const categoryRow = document.createElement('tr');
-                    categoryRow.className = 'sector-row';
-                    categoryRow.dataset.sector = category.name;  // Add for sorting
-                    categoryRow.innerHTML = `
-                        <td>
-                            <span class="icon-text">
-                                <span class="icon toggle-sector" data-sector="${escapeHtml(category.name)}" style="cursor: pointer;">
-                                    <i class="fas ${iconClass}"></i>
-                                </span>
-                                <span>${escapeHtml(category.name)}</span>
-                            </span>
-                        </td>
-                        <td>${formatPercentage(category.percentage)}</td>
-                        <td>${formatCurrency(category.total_value)}</td>
-                        <td data-pnl-eur="${catPnlEur}" data-pnl-pct="${catPnlPct}">${formatPnL(category.pnl_absolute, category.pnl_percentage, category.total_invested)}</td>
-                    `;
-                    tbody.appendChild(categoryRow);
+                // Empty state message
+                const emptyMessage = allocationMode === 'thesis'
+                    ? 'No thesis data. Add thesis in Enrich page.'
+                    : 'No categories';
 
-                    // Make entire row clickable, not just the icon
-                    categoryRow.style.cursor = 'pointer';
-                    categoryRow.addEventListener('click', (e) => {
-                        // Don't toggle if clicking on a link or button inside the row
-                        if (e.target.closest('a, button')) return;
-                        toggleSectorExpansion(category.name);
-                    });
+                // Create Tabulator instance
+                sectorTable = new Tabulator("#sectorAllocationTable", {
+                    data: treeData,
+                    layout: "fitColumns",
+                    dataTree: true,
+                    dataTreeStartExpanded: false,
+                    dataTreeChildField: "_children",
+                    dataTreeChildIndent: 15,
+                    placeholder: emptyMessage,
+                    columns: [
+                        {
+                            title: allocationMode === 'thesis' ? "Thesis" : "Sector",
+                            field: "name",
+                            widthGrow: 2,
+                            formatter: function(cell) {
+                                return escapeHtml(cell.getValue() || '');
+                            }
+                        },
+                        {
+                            title: "% of Portfolio",
+                            field: "percentage",
+                            hozAlign: "right",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                const row = cell.getRow();
+                                const data = row.getData();
+                                const isChild = row.getTreeParent();
 
-                    // Company rows (expandable)
-                    category.companies.forEach(company => {
-                        const companyRow = document.createElement('tr');
-                        companyRow.className = 'sector-company';
-                        companyRow.dataset.parentSector = category.name;
-                        companyRow.style.display = isExpanded ? '' : 'none';
-
-                        const categoryPercent = category.total_value > 0
-                            ? ((company.current_value || company.currentValue) / category.total_value * 100).toFixed(1)
-                            : '0.0';
-                        const compPnlEur = company.pnl_absolute !== null ? company.pnl_absolute : -Infinity;
-                        const compPnlPct = company.pnl_percentage !== null ? company.pnl_percentage : -Infinity;
-
-                        companyRow.innerHTML = `
-                            <td class="pl-5">
-                                <span class="is-size-7">${escapeHtml(company.name)}</span>
-                            </td>
-                            <td>
-                                <span class="is-size-7">
-                                    ${categoryPercent}%
-                                    <span class="has-text-grey-light">(${(company.percentage || 0).toFixed(1)}% of portfolio)</span>
-                                </span>
-                            </td>
-                            <td><span class="is-size-7">${formatCurrency(company.current_value || company.currentValue)}</span></td>
-                            <td data-pnl-eur="${compPnlEur}" data-pnl-pct="${compPnlPct}"><span class="is-size-7">${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested || company.totalInvested)}</span></td>
-                        `;
-                        tbody.appendChild(companyRow);
-                    });
+                                if (isChild) {
+                                    // Child row: show category % and portfolio %
+                                    const catPct = (data.category_percentage || 0).toFixed(1);
+                                    const portfolioPct = (data.percentage || 0).toFixed(1);
+                                    return `${catPct}% <span class="has-text-grey-light">(${portfolioPct}% of portfolio)</span>`;
+                                }
+                                return formatPercentage(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "Value",
+                            field: "total_value",
+                            hozAlign: "right",
+                            widthGrow: 1,
+                            minWidth: 100,
+                            formatter: function(cell) {
+                                return formatCurrency(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "P&L <span class='tabulator-pnl-toggle' data-sort-type='pnl-eur' title='Sort by € value'>€</span> / <span class='tabulator-pnl-toggle' data-sort-type='pnl-pct' title='Sort by % value'>%</span>",
+                            field: "pnl_absolute",
+                            hozAlign: "right",
+                            headerSort: false,
+                            widthGrow: 1.5,
+                            minWidth: 140,
+                            formatter: function(cell) {
+                                const data = cell.getRow().getData();
+                                return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
+                            }
+                        }
+                    ]
                 });
+
+                // Initialize P&L sort toggles in Tabulator header
+                initTabulatorPnLSorting();
             }
 
-            function toggleSectorExpansion(sectorName) {
-                if (expandedSectors.has(sectorName)) {
-                    expandedSectors.delete(sectorName);
-                } else {
-                    expandedSectors.add(sectorName);
-                }
-                renderSectorTable();
-                initTableSorting();  // Reinitialize sorting after table rebuild
+            // Track current sort state for Tabulator P&L column
+            let tabulatorPnLSortState = { type: null, direction: 'none' };
+
+            function initTabulatorPnLSorting() {
+                // Wait a tick for Tabulator to render the header
+                setTimeout(() => {
+                    document.querySelectorAll('#sectorAllocationTable .tabulator-pnl-toggle').forEach(toggle => {
+                        // Skip if already initialized
+                        if (toggle.dataset.initialized === 'true') return;
+                        toggle.dataset.initialized = 'true';
+
+                        toggle.addEventListener('click', function(e) {
+                            e.stopPropagation(); // Prevent Tabulator's default header behavior
+
+                            const sortType = this.dataset.sortType; // 'pnl-eur' or 'pnl-pct'
+                            const field = sortType === 'pnl-eur' ? 'pnl_absolute' : 'pnl_percentage';
+
+                            // Determine new direction
+                            let newDirection = 'desc'; // Default to descending (highest first)
+                            if (tabulatorPnLSortState.type === sortType) {
+                                newDirection = tabulatorPnLSortState.direction === 'asc' ? 'desc' : 'asc';
+                            }
+
+                            // Update state
+                            tabulatorPnLSortState = { type: sortType, direction: newDirection };
+
+                            // Update visual indicators
+                            document.querySelectorAll('#sectorAllocationTable .tabulator-pnl-toggle').forEach(t => {
+                                t.classList.remove('pnl-sort-active', 'pnl-sort-asc', 'pnl-sort-desc');
+                            });
+                            this.classList.add('pnl-sort-active');
+                            this.classList.add(newDirection === 'asc' ? 'pnl-sort-asc' : 'pnl-sort-desc');
+
+                            // Sort Tabulator
+                            if (sectorTable) {
+                                sectorTable.setSort(field, newDirection);
+                            }
+                        });
+                    });
+                }, 50);
             }
 
             function initAllocationToggle() {
@@ -858,6 +925,7 @@
                 toggleGroup.addEventListener('click', (e) => {
                     const btn = e.target.closest('.toggle-btn');
                     if (!btn) return;
+                    btn.blur(); // Remove focus to prevent scroll jump from :focus-visible outline
 
                     const mode = btn.dataset.mode;
                     if (mode === allocationMode) return; // No change
@@ -866,12 +934,59 @@
                     toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
 
-                    // Update mode and re-render
+                    // Update mode
                     allocationMode = mode;
-                    expandedSectors.clear(); // Reset expansions when switching modes
+
+                    // Update column title in place (avoid full table rebuild)
+                    if (sectorTable) {
+                        const newTitle = mode === 'thesis' ? 'Thesis' : 'Sector';
+                        sectorTable.updateColumnDefinition("name", { title: newTitle });
+                    }
                     renderSectorTable();
-                    initTableSorting();
                 });
+            }
+
+            function initHeatmapToggle() {
+                const toggleGroup = document.getElementById('heatmapToggle');
+                if (!toggleGroup) return;
+
+                toggleGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.toggle-btn');
+                    if (!btn) return;
+                    btn.blur(); // Remove focus to prevent scroll jump from :focus-visible outline
+
+                    const mode = btn.dataset.mode;
+                    if (mode === heatmapMode) return; // No change
+
+                    // Update active state
+                    toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // Update mode, title, and re-render heatmap
+                    heatmapMode = mode;
+                    document.getElementById('heatmapTitle').textContent =
+                        mode === 'sector' ? 'Sector vs Country' : 'Thesis vs Country';
+
+                    const heatmapData = calculateExposureData(selectedPortfolioIds, mode);
+                    renderHeatmap(heatmapData, mode, 'sectorHeatmap');
+                });
+            }
+
+            // Re-render heatmap when theme changes to update colors
+            function setupThemeChangeHandler() {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.attributeName === 'data-theme') {
+                            // Re-render heatmap with new theme colors
+                            if (selectedPortfolioIds.length > 0) {
+                                const heatmapData = calculateExposureData(selectedPortfolioIds, heatmapMode);
+                                renderHeatmap(heatmapData, heatmapMode, 'sectorHeatmap');
+                            }
+                        }
+                    });
+                });
+
+                observer.observe(document.documentElement, { attributes: true });
             }
 
             async function savePortfolioSelection(portfolioId) {
@@ -888,6 +1003,12 @@
                 document.getElementById('portfolioSummary').style.display = 'none';
                 document.getElementById('portfolioTables').style.display = 'none';
                 currentPortfolioData = null;
+
+                // Clean up Tabulator table
+                if (sectorTable) {
+                    sectorTable.destroy();
+                    sectorTable = null;
+                }
             }
 
             function showLoadingState() {
@@ -2281,20 +2402,20 @@
                 try {
                     console.log('Initializing Risk Breakdown with selectedPortfolioIds:', selectedPortfolioIds);
 
-                    // Calculate data only for sector heatmap
-                    const sectorHeatmapData = calculateExposureData(selectedPortfolioIds, 'sector');
+                    // Calculate data for current heatmap mode
+                    const heatmapData = calculateExposureData(selectedPortfolioIds, heatmapMode);
 
-                    // Get sector heatmap container
-                    const sectorContainer = document.querySelector('#sectorHeatmap');
+                    // Get heatmap container
+                    const heatmapContainer = document.querySelector('#sectorHeatmap');
 
-                    // Render sector heatmap with a slight delay to ensure container is fully visible
+                    // Render heatmap with a slight delay to ensure container is fully visible
                     setTimeout(() => {
                         try {
-                            console.log('Rendering sector heatmap...');
-                            renderHeatmap(sectorHeatmapData, 'sector', 'sectorHeatmap');
-                            console.log('Category heatmap rendered successfully');
+                            console.log('Rendering ' + heatmapMode + ' heatmap...');
+                            renderHeatmap(heatmapData, heatmapMode, 'sectorHeatmap');
+                            console.log('Heatmap rendered successfully');
                         } catch (heatmapError) {
-                            console.error('Error rendering sector heatmap:', heatmapError);
+                            console.error('Error rendering heatmap:', heatmapError);
                         }
                     }, 50);
 
@@ -2339,12 +2460,20 @@
                     console.error(`Heatmap element with ID '${elementId}' not found.`);
                     return;
                 }
+                // Destroy existing chart instance if any
+                if (chartElement._apexChart) {
+                    chartElement._apexChart.destroy();
+                    chartElement._apexChart = null;
+                }
                 chartElement.innerHTML = ''; // Clear existing content
 
                 if (!data || !data.z || data.z.length === 0 || !data.dims || data.dims.length === 0 || !data.countries || data.countries.length === 0) {
                     chartElement.innerHTML = '<div class="has-text-centered p-4">No data to display for this heatmap.</div>';
                     return;
                 }
+
+                // Detect dark mode for theme-aware colors
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
                 const series = data.countries.map((country, index) => ({
                     name: country,
@@ -2356,14 +2485,42 @@
                     chart: {
                         height: 450,
                         type: 'heatmap',
+                        background: isDark ? '#0F172A' : '#ffffff', // Ocean 900 vs white
                         toolbar: {
                             show: true
                         },
+                        animations: {
+                            enabled: false
+                        }
                     },
                     dataLabels: {
                         enabled: false
                     },
-                    colors: ["#008FFB"],
+                    stroke: {
+                        width: 1,
+                        colors: [isDark ? '#0F172A' : '#ffffff']  // Match background for seamless grid
+                    },
+                    colors: [isDark ? '#06B6D4' : '#008FFB'], // Aqua for dark mode, blue for light
+                    plotOptions: {
+                        heatmap: {
+                            shadeIntensity: isDark ? 0.9 : 0.5,  // Higher intensity for dark mode visibility
+                            colorScale: {
+                                ranges: isDark ? [
+                                    { from: 0, to: 0, name: 'Empty', color: '#0F172A' },     // Ocean-900 (matches background)
+                                    { from: 0.01, to: 5, name: 'Low', color: '#155E75' },    // Darker cyan
+                                    { from: 5, to: 15, name: 'Medium', color: '#0891B2' },   // Mid cyan
+                                    { from: 15, to: 30, name: 'High', color: '#06B6D4' },    // Aqua-500
+                                    { from: 30, to: 100, name: 'Very High', color: '#22D3EE' } // Lighter aqua for max
+                                ] : [
+                                    { from: 0, to: 0, name: 'Empty', color: '#ffffff' },     // White (matches background)
+                                    { from: 0.01, to: 5, name: 'Low', color: '#BFDBFE' },    // Light blue
+                                    { from: 5, to: 15, name: 'Medium', color: '#60A5FA' },   // Mid blue
+                                    { from: 15, to: 30, name: 'High', color: '#3B82F6' },    // Blue-500
+                                    { from: 30, to: 100, name: 'Very High', color: '#1D4ED8' } // Darker blue for max
+                                ]
+                            }
+                        }
+                    },
                     xaxis: {
                         type: 'sector',
                         categories: data.dims,
@@ -2372,7 +2529,15 @@
                             rotateAlways: true,
                             trim: true,
                             style: {
-                                fontSize: '10px'
+                                fontSize: '10px',
+                                colors: isDark ? '#94A3B8' : '#333333' // Slate 400 for dark, dark gray for light
+                            }
+                        }
+                    },
+                    yaxis: {
+                        labels: {
+                            style: {
+                                colors: isDark ? '#94A3B8' : '#333333' // Slate 400 for dark, dark gray for light
                             }
                         }
                     },
@@ -2427,6 +2592,7 @@
                 try {
                     const chart = new ApexCharts(chartElement, options);
                     chart.render();
+                    chartElement._apexChart = chart; // Store reference for cleanup
                     console.log(`Heatmap ${elementId} rendered successfully.`);
                 } catch (e) {
                     console.error(`Error rendering heatmap ${elementId}:`, e);
@@ -2615,30 +2781,13 @@
                     sectorRow.classList.remove('is-selected');
                 }
 
-                // Toggle company rows with animation
+                // Toggle company rows
                 const companyRows = document.querySelectorAll(
                     `.sector-companies[data-parent-sector="${sectorName}"][data-portfolio-id="${portfolioId}"]`
                 );
 
                 companyRows.forEach(row => {
-                    if (isExpanding) {
-                        row.classList.remove('is-hidden');
-                        row.style.maxHeight = '0';
-                        row.style.opacity = '0';
-                        void row.offsetHeight; // Force reflow
-                        row.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
-                        row.style.maxHeight = '100px';
-                        row.style.opacity = '1';
-                    } else {
-                        row.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
-                        row.style.maxHeight = '0';
-                        row.style.opacity = '0';
-                        setTimeout(() => {
-                            row.classList.add('is-hidden');
-                            row.style.maxHeight = '';
-                            row.style.opacity = '';
-                        }, 300);
-                    }
+                    row.classList.toggle('is-hidden', !isExpanding);
                 });
             });
         });

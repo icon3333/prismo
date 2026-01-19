@@ -15,7 +15,8 @@ from app.routes.portfolio_api import (
     simulator_ticker_lookup, simulator_portfolio_allocations,
     simulator_simulations_list, simulator_simulation_create, simulator_simulation_get,
     simulator_simulation_update, simulator_simulation_delete,
-    builder_investment_targets
+    builder_investment_targets,
+    get_account_cash, set_account_cash
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -292,7 +293,7 @@ portfolio_bp.add_url_rule('/api/portfolio_metrics',
                           view_func=get_portfolio_metrics, methods=['GET'])
 portfolio_bp.add_url_rule('/api/investment_type_distribution',
                           view_func=get_investment_type_distribution, methods=['GET'])
-portfolio_bp.add_url_rule('/api/portfolio_data/<int:portfolio_id>',
+portfolio_bp.add_url_rule('/api/portfolio_data/<portfolio_id>',
                           view_func=get_single_portfolio_data_api, methods=['GET'])
 # Allocation Simulator API
 portfolio_bp.add_url_rule('/api/simulator/ticker-lookup',
@@ -313,3 +314,8 @@ portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
 # Builder API (for cross-page integration)
 portfolio_bp.add_url_rule('/api/builder/investment-targets',
                           view_func=builder_investment_targets, methods=['GET'])
+# Account Cash API
+portfolio_bp.add_url_rule('/api/account/cash',
+                          view_func=get_account_cash, methods=['GET'])
+portfolio_bp.add_url_rule('/api/account/cash',
+                          view_func=set_account_cash, methods=['POST'])

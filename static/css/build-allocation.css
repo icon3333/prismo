@@ -98,7 +98,7 @@
 /* Portfolio Data Column */
 .portfolio-data-column {
   flex: 1;
-  min-width: 900px;
+  min-width: 0;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -124,17 +124,17 @@
   min-width: 100px;
 }
 
-.metric-group:first-child {
+/* Explicit metric group sizing - no nth-child selectors */
+.metric-group.metric-toggle {
   flex: 0 0 auto;
   min-width: auto;
   margin-right: auto;
 }
 
-/* Specific width adjustments for better alignment */
-.metric-group:nth-child(2) { min-width: 140px; }
-.metric-group:nth-child(3) { min-width: 160px; }
-.metric-group:nth-child(4) { min-width: 120px; }
-.metric-group:nth-child(5) { min-width: 120px; }
+.metric-group.metric-allocation { min-width: 140px; }
+.metric-group.metric-amount { min-width: 160px; }
+.metric-group.metric-desired { min-width: 120px; }
+.metric-group.metric-current { min-width: 120px; }
 
 .metric-label {
   font-size: 0.875rem;
@@ -145,63 +145,47 @@
   letter-spacing: 0.05em;
 }
 
-/* Unified Portfolio Allocation Input Styling */
-.portfolio-allocation-input,
-.unified-table .portfolio-allocation-input,
-.metric-group .portfolio-allocation-input,
-.col-percentage .portfolio-allocation-input,
-.col-currency .portfolio-allocation-input {
-  width: 100% !important;
-  padding: calc(var(--space-xs) + 2px) var(--space-sm) !important;
-  font-size: 0.875rem !important;
-  border: 1px solid var(--border-default) !important;
-  background-color: var(--bg-tertiary) !important;
-  border-radius: var(--radius-md) !important;
-  text-align: center !important;
-  font-weight: 400 !important;
-  transition: all var(--transition-fast) !important;
-  max-width: 100% !important;
-  display: block !important;
-  margin: 0 !important;
-  height: auto !important;
-  color: var(--text-primary) !important;
+/* Unified Portfolio Allocation Input Styling - scoped to .build-page to avoid CSS specificity wars */
+.build-page .portfolio-allocation-input {
+  width: 100%;
+  padding: calc(var(--space-xs) + 2px) var(--space-sm);
+  font-size: 0.875rem;
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-weight: 400;
+  transition: all var(--transition-fast);
+  max-width: 100%;
+  display: block;
+  margin: 0;
+  height: auto;
+  color: var(--text-primary);
 }
 
-.portfolio-allocation-input:focus,
-.unified-table .portfolio-allocation-input:focus,
-.metric-group .portfolio-allocation-input:focus,
-.col-percentage .portfolio-allocation-input:focus,
-.col-currency .portfolio-allocation-input:focus {
-  border-color: var(--primary) !important;
-  outline: none !important;
-  background-color: var(--bg-secondary) !important;
+.build-page .portfolio-allocation-input:focus {
+  border-color: var(--primary);
+  outline: none;
+  background-color: var(--bg-secondary);
 }
 
-.portfolio-allocation-input[readonly],
-.unified-table .portfolio-allocation-input[readonly],
-.metric-group .portfolio-allocation-input[readonly],
-.col-percentage .portfolio-allocation-input[readonly],
-.col-currency .portfolio-allocation-input[readonly] {
-  background-color: var(--bg-tertiary) !important;
-  color: var(--text-tertiary) !important;
-  cursor: default !important;
+.build-page .portfolio-allocation-input[readonly] {
+  background-color: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: default;
 }
 
-.portfolio-allocation-input:disabled,
-.unified-table .portfolio-allocation-input:disabled,
-.metric-group .portfolio-allocation-input:disabled,
-.col-percentage .portfolio-allocation-input:disabled,
-.col-currency .portfolio-allocation-input:disabled {
-  background-color: var(--bg-tertiary) !important;
-  color: var(--text-tertiary) !important;
-  cursor: not-allowed !important;
-  opacity: 0.7 !important;
+.build-page .portfolio-allocation-input:disabled {
+  background-color: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 /* Warning border for values below minimum */
-.portfolio-allocation-input.warning-border {
-  border: 2px solid var(--warning) !important;
-  background-color: var(--warning-light) !important;
+.build-page .portfolio-allocation-input.warning-border {
+  border: 2px solid var(--warning);
+  background-color: var(--warning-light);
 }
 
 /* Reset button styling */
@@ -301,8 +285,8 @@
   background-color: transparent;
 }
 
-.positions-table th {
-  background-color: transparent !important;
+.build-page .positions-table th {
+  background-color: transparent;
   color: var(--text-primary);
   font-weight: 600;
   font-size: 0.875rem;
@@ -312,8 +296,8 @@
   border-bottom: 2px solid var(--border-default);
 }
 
-.positions-table tfoot th {
-  background-color: transparent !important;
+.build-page .positions-table tfoot th {
+  background-color: transparent;
 }
 
 .positions-table td {
@@ -331,14 +315,6 @@
   font-style: italic;
   color: var(--text-tertiary);
   font-weight: 500;
-}
-
-.placeholder-position {
-  background-color: var(--primary-light);
-}
-
-.placeholder-position .open-positions-text {
-  color: var(--primary);
 }
 
 /* Global Allocation Rules Card */
@@ -427,16 +403,16 @@
     max-width: none;
   }
 
-  .metric-group:first-child {
+  .metric-group.metric-toggle {
     flex: 0 0 auto;
     margin-right: var(--space-sm);
     margin-bottom: var(--space-sm);
   }
 
-  .metric-group:nth-child(2),
-  .metric-group:nth-child(3),
-  .metric-group:nth-child(4),
-  .metric-group:nth-child(5) {
+  .metric-group.metric-allocation,
+  .metric-group.metric-amount,
+  .metric-group.metric-desired,
+  .metric-group.metric-current {
     min-width: 100px;
   }
 
@@ -487,6 +463,10 @@
   border-radius: var(--radius-md);
 }
 
+.placeholder-position .open-positions-text {
+  color: var(--primary);
+}
+
 .placeholder-position td:first-child {
   position: relative;
   padding-left: var(--space-lg);
@@ -524,8 +504,8 @@
   padding: var(--space-sm) var(--space-md);
 }
 
-.table-active {
-  background-color: var(--primary-light) !important;
+.build-page .table-active {
+  background-color: var(--primary-light);
   border-radius: var(--radius-md);
 }
 
@@ -594,12 +574,24 @@
 }
 
 /* Red text for warnings on readonly inputs */
-.portfolio-allocation-input[readonly].has-text-danger {
-  color: var(--danger) !important;
+.build-page .portfolio-allocation-input[readonly].has-text-danger {
+  color: var(--danger);
   font-weight: bold;
 }
 
 /* Red text for warnings (e.g., current < min positions) */
-.has-text-danger {
-  color: var(--danger) !important;
+.build-page .has-text-danger {
+  color: var(--danger);
+}
+
+/* Ensure button groups stay horizontal */
+.build-page .field.is-grouped {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: 0;
+}
+
+.build-page .field.is-grouped > .control {
+  margin-bottom: 0;
 }

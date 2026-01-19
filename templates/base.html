@@ -59,6 +59,13 @@
     <!-- Anonymous Mode -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/anonymous-mode.css') }}">
 
+    <!-- Floating Controls -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/floating-controls.css') }}">
+
+    <!-- Tabulator (data tables) -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.0/dist/css/tabulator_midnight.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tabulator-ocean.css') }}">
+
     <!-- Page-specific CSS -->
     {% block head_extras %}{% endblock %}
 
@@ -152,6 +159,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
     <!-- External Libraries -->
+    <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
@@ -174,5 +182,8 @@
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
     {% block scripts %}{% endblock %}
+
+    <!-- Floating Controls Component -->
+    {% include 'components/floating_controls.html' %}
 </body>
 </html>

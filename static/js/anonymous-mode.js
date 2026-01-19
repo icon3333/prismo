@@ -33,7 +33,8 @@ class AnonymousModeManager {
     }
 
     setupToggleButton() {
-        this.toggleButton = document.getElementById('anonymous-mode-toggle');
+        // Use floating control button
+        this.toggleButton = document.getElementById('floating-blur-toggle');
         if (this.toggleButton) {
             this.toggleButton.addEventListener('click', () => this.toggle());
             this.updateToggleButton();
@@ -86,25 +87,11 @@ class AnonymousModeManager {
     updateIcon() {
         if (!this.toggleButton) return;
 
-        // SVG icons - eye-off when values visible, incognito when hidden
-        const eyeOffIcon = `
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1" y1="1" x2="23" y2="23" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
-
-        // Incognito/spy icon - hat and glasses silhouette
-        const incognitoIcon = `
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C6.48 2 2 6 2 6s2 2 4 2.5V10c0 1 .5 2 2 2.5V14c-2 0-3 1-3 2v2c0 1 1 2 2 2h2c1 0 2-1 2-2v-1h2v1c0 1 1 2 2 2h2c1 0 2-1 2-2v-2c0-1-1-2-3-2v-1.5c1.5-.5 2-1.5 2-2.5V8.5c2-.5 4-2.5 4-2.5s-4.48-4-10-4z" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="8" cy="14" r="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="16" cy="14" r="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M10 14h4" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-        `;
-
-        this.toggleButton.innerHTML = this.isEnabled ? incognitoIcon : eyeOffIcon;
+        // Update emoji icon - eye when values visible, see-no-evil monkey when hidden
+        const icon = this.toggleButton.querySelector('.icon-blur');
+        if (icon) {
+            icon.textContent = this.isEnabled ? '🙈' : '👁️';
+        }
     }
 }
 

@@ -9,7 +9,7 @@
 
 {% block content %}
 <div class="container">
-  <div id="allocation-builder" v-cloak>
+  <div id="allocation-builder" class="build-page" v-cloak>
     <!-- Budget Management Section -->
     <h2 class="section-title">Budget Management</h2>
     <div class="budget-card">
@@ -174,25 +174,25 @@
         <!-- Portfolio Data Column -->
         <div class="portfolio-data-column">
           <div class="portfolio-metrics">
-            <div class="metric-group">
+            <div class="metric-group metric-toggle">
               <span class="portfolio-toggle" @click="togglePortfolioExpand(index)" :aria-expanded="isPortfolioExpanded(index)">
                 <i class="fas" :class="isPortfolioExpanded(index) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
               </span>
             </div>
-            <div class="metric-group">
+            <div class="metric-group metric-allocation">
               <label class="metric-label">Allocation %</label>
               <input class="portfolio-allocation-input" type="text" :value="parseFloat(portfolio.allocation).toFixed(0)"
                 @change="$event.target.value && $event.target.value.length > 0 ? portfolio.allocation = parseFloat($event.target.value) : null; updateAllocations()"
                 @focus="$event.target.select()">
               <div class="help-text">&nbsp;</div>
             </div>
-            <div class="metric-group">
+            <div class="metric-group metric-amount">
               <label class="metric-label">Amount</label>
               <input class="portfolio-allocation-input sensitive-value" type="text" :value="formatCurrencyRaw(calculateAllocationAmount(portfolio.allocation))"
                 readonly>
               <div class="help-text">&nbsp;</div>
             </div>
-            <div class="metric-group">
+            <div class="metric-group metric-desired">
               <label class="metric-label">Desired Positions</label>
               <input
                 class="portfolio-allocation-input"
@@ -207,7 +207,7 @@
               >
               <div class="help-text">(min ${ portfolio.minPositions })</div>
             </div>
-            <div class="metric-group">
+            <div class="metric-group metric-current">
               <label class="metric-label">Current Positions</label>
               <input class="portfolio-allocation-input" type="text" :value="portfolio.currentPositions || 0"
                      :class="{'has-text-danger': portfolio.currentPositions < getEffectivePositions(portfolio)}" readonly>

@@ -1345,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', function () {
             primary: [33, 37, 41],      // Dark gray
             secondary: [108, 117, 125], // Medium gray
             light: [248, 249, 250],     // Light gray
-            accent: [0, 123, 255]       // Blue accent
+            accent: [6, 182, 212]       // Ocean Depth aqua
           };
 
           // Header section with clean styling

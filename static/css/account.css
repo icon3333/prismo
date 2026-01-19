@@ -1,0 +1,393 @@
+/**
+ * Portfolio Manager - Account Page Styles
+ * Extends the Ocean Depth design system with page-specific styles
+ *
+ * Design Principles:
+ * - Uses semantic color variables (--primary, --warning, --danger)
+ * - Uses design token spacing (--space-xs, --space-sm, --space-md, --space-lg)
+ * - No shadows (follows Ocean Depth flat design - depth through layered backgrounds)
+ * - Left-border accent pattern for semantic meaning
+ *
+ * Design System Variables Used:
+ * - Backgrounds: --bg-primary, --bg-secondary, --bg-tertiary
+ * - Text: --text-primary, --text-secondary, --text-muted
+ * - Borders: --border-subtle, --border-default
+ * - Spacing: --space-xs, --space-sm, --space-md, --space-lg
+ * - Colors: --primary, --warning, --danger
+ */
+
+/* ===== Page Layout - CSS Grid ===== */
+
+.account-page .account-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--space-lg);
+}
+
+@media (max-width: 992px) {
+  .account-page .account-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Left Panel - Read-only Info Card ===== */
+
+.account-page .info-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  height: fit-content;
+}
+
+.account-page .info-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-lg) 0;
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.account-page .info-card-title i {
+  color: var(--primary);
+}
+
+/* ===== Right Panel - Action Sections ===== */
+
+.account-page .action-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  overflow: hidden;
+}
+
+/* Semantic left-border accents */
+.account-page .action-section.is-info {
+  border-left: 4px solid var(--primary);
+}
+
+.account-page .action-section.is-warning {
+  border-left: 4px solid var(--warning);
+}
+
+.account-page .action-section.is-danger {
+  border-left: 4px solid var(--danger);
+}
+
+/* Action section header */
+.account-page .action-header {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+}
+
+.account-page .action-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+/* Action section body */
+.account-page .action-body {
+  padding: var(--space-lg);
+}
+
+/* ===== Tab Navigation (Design System Section 7.8) ===== */
+
+.account-page .account-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border: 1px solid var(--border-subtle);
+  border-bottom: none;
+  padding: var(--space-xs) var(--space-sm) 0;
+}
+
+.account-page .account-tabs .nav-link {
+  padding: var(--space-sm) var(--space-lg);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  transition: all var(--transition-base);
+}
+
+.account-page .account-tabs .nav-link:hover:not(.active) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.account-page .account-tabs .nav-link.active {
+  color: var(--primary);
+  background: var(--bg-secondary);
+}
+
+.account-page .account-tabs .nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+/* Tab content container */
+.account-page .tab-content-wrapper {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  padding: var(--space-lg);
+}
+
+/* ===== Alert Boxes (Design System Section 16) ===== */
+
+.account-page .alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  border-left: 4px solid;
+  margin-bottom: var(--space-md);
+}
+
+.account-page .alert i {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.account-page .alert-content {
+  flex: 1;
+}
+
+.account-page .alert-content p {
+  margin: 0;
+}
+
+.account-page .alert-content p + p {
+  margin-top: var(--space-xs);
+}
+
+.account-page .alert-content ul {
+  margin: var(--space-xs) 0;
+  padding-left: var(--space-lg);
+}
+
+.account-page .alert-content li {
+  margin-bottom: var(--space-xs);
+}
+
+.account-page .alert-info {
+  background: rgba(6, 182, 212, 0.1);
+  border-left-color: var(--primary);
+  color: var(--text-primary);
+}
+
+.account-page .alert-info i {
+  color: var(--primary);
+}
+
+.account-page .alert-warning {
+  background: rgba(249, 115, 22, 0.1);
+  border-left-color: var(--warning);
+  color: var(--text-primary);
+}
+
+.account-page .alert-warning i {
+  color: var(--warning);
+}
+
+.account-page .alert-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-left-color: var(--danger);
+  color: var(--text-primary);
+}
+
+.account-page .alert-danger i {
+  color: var(--danger);
+}
+
+/* ===== Form Elements ===== */
+
+.account-page .form-group {
+  margin-bottom: var(--space-md);
+}
+
+.account-page .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.account-page .form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.account-page .form-control {
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: border-color var(--transition-base);
+}
+
+.account-page .form-control:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.account-page .form-control:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.account-page .form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.account-page .form-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+/* Input group styling */
+.account-page .input-group {
+  display: flex;
+}
+
+.account-page .input-group-text {
+  display: flex;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-right: none;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  color: var(--text-muted);
+}
+
+.account-page .input-group .form-control {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* File input styling */
+.account-page input[type="file"].form-control {
+  padding: var(--space-sm);
+}
+
+.account-page input[type="file"].form-control::file-selector-button {
+  padding: var(--space-xs) var(--space-md);
+  margin-right: var(--space-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-base);
+}
+
+.account-page input[type="file"].form-control::file-selector-button:hover {
+  background: var(--bg-primary);
+}
+
+/* ===== Button Grid ===== */
+
+.account-page .button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+@media (max-width: 576px) {
+  .account-page .button-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Bootstrap Modal Overrides ===== */
+
+.account-page .modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+
+.account-page .modal-header {
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.account-page .modal-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.account-page .modal-body {
+  padding: var(--space-lg);
+}
+
+.account-page .modal-footer {
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-subtle);
+  padding: var(--space-md) var(--space-lg);
+  gap: var(--space-sm);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* Dark mode close button */
+[data-theme="dark"] .account-page .btn-close {
+  filter: invert(1);
+}
+
+/* ===== Utility Classes ===== */
+
+.account-page .mb-0 {
+  margin-bottom: 0;
+}
+
+.account-page .mb-md {
+  margin-bottom: var(--space-md);
+}
+
+.account-page .text-warning {
+  color: var(--warning);
+}
+
+.account-page .text-danger {
+  color: var(--danger);
+}
+
+.account-page .text-primary {
+  color: var(--primary);
+}

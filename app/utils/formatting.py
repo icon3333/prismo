@@ -125,11 +125,6 @@ def format_percentage_with_sign(value: Any) -> str:
         return "+0.0%"
 
 
-def format_budget_number(value: Any) -> str:
-    """Format budget numbers with thousand separators."""
-    return format_number(value, as_integer=True)
-
-
 def parse_number(value: Any) -> Optional[float]:
     """
     Central parsing function for converting formatted strings to numbers.
@@ -192,30 +187,3 @@ def parse_percentage_input(value: str, as_decimal: bool = False) -> Union[int, f
     return int(round(result))
 
 
-def color_negative_red(value: float) -> str:
-    """
-    Generate color style for positive/negative values.
-
-    Args:
-        value: Number to check
-
-    Returns:
-        CSS color style string
-    """
-    if pd.isna(value):
-        return ''
-    return 'color: red' if value < 0 else 'color: green' if value > 0 else ''
-
-
-def format_info_text(text: str) -> str:
-    """
-    Format informational text with consistent styling.
-    Uses Material Design Blue (#2196F3) for a professional look.
-
-    Args:
-        text: Text to format
-
-    Returns:
-        HTML-formatted string with consistent styling
-    """
-    return f'<p style="color: #2196F3; font-style: italic; margin: 0; padding: 0;">{text}</p>'

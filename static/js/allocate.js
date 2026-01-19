@@ -564,8 +564,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 // Check for position deficits
                 const currentPositions = this.countCurrentPositions(portfolio);
-                const minPositions = portfolio.minPositions || 0;
-                const positionDeficit = Math.max(0, minPositions - currentPositions);
+                // Use desiredPositions if set, otherwise fall back to minPositions
+                const targetPositions = portfolio.desiredPositions ?? portfolio.minPositions ?? 0;
+                const positionDeficit = Math.max(0, targetPositions - currentPositions);
 
                 let portfolioNameDisplay = portfolio.name;
 
@@ -573,7 +574,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (portfolio.currentValue === 0 || !portfolio.currentValue) {
                     portfolioNameDisplay = `${portfolio.name}<br><span class="badge bg-info" style="font-size: 0.75em; padding: 0.25em 0.5em;">Empty - Needs Positions</span>`;
                 } else if (positionDeficit > 0) {
-                    // Show warning for portfolios that need more positions
+                    // Show warning for portfolios that need more positions (only if desired > current)
                     portfolioNameDisplay = `${portfolio.name} <span class="text-warning" title="Needs ${positionDeficit} more positions">⚠️</span>`;
                 }
 

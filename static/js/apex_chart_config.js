@@ -33,38 +33,31 @@ const ChartConfig = {
         };
     },
 
-    // Ocean Depth color palette
+    // Ocean Depth color palette - Muted with warm/cool alternation for good differentiation
     oceanDepthColors: {
-        // Primary accent colors
-        aqua: '#06b6d4',
+        // Primary accent colors (muted)
+        aqua: '#0891b2',      // Cyan 600 (slightly darker, more muted)
         aquaLight: '#22d3ee',
-        aquaDark: '#0891b2',
-        coral: '#f97316',
+        aquaDark: '#0e7490',
+        coral: '#ea580c',     // Orange 600 (less neon)
         coralLight: '#fb923c',
-        coralDark: '#ea580c',
+        coralDark: '#c2410c',
+        purple: '#7c3aed',    // Violet 600
+        emerald: '#059669',   // Emerald 600
+        amber: '#ca8a04',     // Yellow 600
 
-        // Chart palette - vibrant, ocean-inspired
+        // Chart palette - monochromatic cyan with coral accent
         palette: [
-            '#06b6d4', // Aqua (primary)
-            '#f97316', // Coral (accent)
-            '#8b5cf6', // Purple
-            '#10b981', // Emerald
-            '#f59e0b', // Amber
-            '#ec4899', // Pink
-            '#3b82f6', // Blue
-            '#14b8a6', // Teal
-            '#6366f1', // Indigo
-            '#84cc16', // Lime
-            '#f43f5e', // Rose
-            '#a855f7', // Violet
-            '#0ea5e9', // Sky
-            '#22c55e', // Green
-            '#eab308', // Yellow
-            '#d946ef', // Fuchsia
-            '#06b6d4', // Cyan
-            '#64748b', // Slate
-            '#78716c', // Stone
-            '#71717a'  // Zinc
+            '#0891b2', // Cyan 600 (primary)
+            '#ea580c', // Coral (accent contrast)
+            '#0e7490', // Cyan 700 (darker)
+            '#0d9488', // Teal 600
+            '#06b6d4', // Cyan 500 (lighter)
+            '#0f766e', // Teal 700
+            '#64748b', // Slate 500 (neutral)
+            '#0284c7', // Sky 600
+            '#155e75', // Cyan 800 (darkest)
+            '#fb923c', // Coral light (accent variation)
         ],
 
         // Text colors (will be dynamically set based on theme)
@@ -202,12 +195,10 @@ const ChartConfig = {
         'GME': '#f43f5e',     // Rose
         'value': '#3b82f6',   // Blue
 
-        // Fallback colors - Ocean Depth palette
+        // Fallback colors - monochromatic cyan with coral accent
         fallback: [
-            '#06b6d4', '#f97316', '#8b5cf6', '#10b981', '#f59e0b',
-            '#ec4899', '#3b82f6', '#14b8a6', '#6366f1', '#84cc16',
-            '#f43f5e', '#a855f7', '#0ea5e9', '#22c55e', '#eab308',
-            '#d946ef', '#64748b', '#78716c', '#71717a', '#06b6d4'
+            '#0891b2', '#ea580c', '#0e7490', '#0d9488', '#06b6d4',
+            '#0f766e', '#64748b', '#0284c7', '#155e75', '#fb923c'
         ]
     },
 
@@ -521,7 +512,7 @@ const ChartConfig = {
         const {
             title = '',
             height = 400,
-            colors = ['#ebedf0', '#c0ddf9', '#73b3f3', '#3886e1', '#17459e']
+            colors = ['#1e293b', '#164e63', '#0891b2', '#06b6d4', '#22d3ee']
         } = options;
 
         // Validate input data
@@ -591,7 +582,10 @@ const ChartConfig = {
                 zoom: {
                     enabled: false
                 },
-                background: '#ffffff'
+                background: '#ffffff',
+                animations: {
+                    enabled: false
+                }
             },
             plotOptions: {
                 heatmap: {

@@ -198,6 +198,60 @@
 
         <!-- Vue.js component will be mounted here -->
         <div id="portfolio-table-app" v-cloak>
+            <!-- Portfolio Summary Card with Cash -->
+            <div v-if="!loading && filteredPortfolioItems.length > 0" class="portfolio-summary-card mb-4">
+                <div class="summary-item">
+                    <span class="summary-label">Holdings</span>
+                    <span class="summary-value" v-html="formatCurrency(metrics.totalValue)"></span>
+                </div>
+                <div class="summary-operator">+</div>
+                <div class="summary-item summary-item-editable">
+                    <span class="summary-label">Cash</span>
+                    <div class="cash-input-wrapper">
+                        <input
+                            type="text"
+                            class="input is-small cash-input sensitive-value"
+                            :value="formatCurrencyRaw(cashBalance)"
+                            @focus="trackOriginalCash"
+                            @blur="commitCash($event)"
+                            @keydown.enter="commitCash($event); $event.target.blur()"
+                            @dblclick="$event.target.select()"
+                            placeholder="€0,00">
+                        <span v-if="isSavingCash" class="icon is-small saving-indicator">
+                            <i class="fas fa-spinner fa-pulse"></i>
+                        </span>
+                    </div>
+                </div>
+                <!-- Builder KPI Section (before equals sign) -->
+                <div class="summary-divider" v-if="builderData !== null || (builderDataLoaded && builderData === null)"></div>
+                <div class="summary-item summary-item-builder" v-if="builderData !== null">
+                    <span class="summary-label">
+                        <a href="/portfolio/build" class="builder-link" title="Open Builder">
+                            <i class="fas fa-hammer"></i>Available to Invest
+                        </a>
+                    </span>
+                    <div class="builder-value-wrapper">
+                        <span class="summary-value builder-value" v-html="formatCurrency(builderData.availableToInvest)"></span>
+                        <button class="button is-small is-primary is-outlined use-as-cash-btn"
+                                @click="useBuilderAsCash" :disabled="isSavingCash">
+                            <span class="icon is-small"><i class="fas fa-arrow-left"></i></span>
+                            <span>Use</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="summary-item summary-item-builder" v-else-if="builderDataLoaded && builderData === null">
+                    <span class="summary-label">
+                        <a href="/portfolio/build" class="builder-link-configure" title="Configure Builder">
+                            <i class="fas fa-hammer"></i>Configure Builder
+                        </a>
+                    </span>
+                </div>
+                <div class="summary-operator">=</div>
+                <div class="summary-item summary-item-total">
+                    <span class="summary-label">Total</span>
+                    <span class="summary-value" v-html="formatCurrency(portfolioTotal)"></span>
+                </div>
+            </div>
             <div class="portfolio-controls-container mb-4">
                 <div class="enrich-main-controls">
                     <!-- Left side controls with unified styling -->

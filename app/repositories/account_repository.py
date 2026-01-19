@@ -52,24 +52,6 @@ class AccountRepository:
         )
 
     @staticmethod
-    def get_by_email(email: str) -> Optional[Dict[str, Any]]:
-        """
-        Get account by email.
-
-        Args:
-            email: Account email
-
-        Returns:
-            Account dict or None if not found
-        """
-        logger.debug(f"Fetching account by email: {email}")
-        return query_db(
-            'SELECT * FROM accounts WHERE email = ?',
-            [email],
-            one=True
-        )
-
-    @staticmethod
     def get_all() -> List[Dict[str, Any]]:
         """
         Get all accounts.
@@ -298,70 +280,53 @@ class AccountRepository:
         return result is not None
 
     @staticmethod
-    def email_exists(email: str, exclude_account_id: Optional[int] = None) -> bool:
+    def get_cash(account_id: int) -> float:
         """
-        Check if an email is already registered.
-
-        Args:
-            email: Email to check
-            exclude_account_id: Optional account ID to exclude (for updates)
-
-        Returns:
-            True if email exists, False otherwise
-        """
-        if exclude_account_id:
-            result = query_db(
-                'SELECT 1 FROM accounts WHERE email = ? AND id != ?',
-                [email, exclude_account_id],
-                one=True
-            )
-        else:
-            result = query_db(
-                'SELECT 1 FROM accounts WHERE email = ?',
-                [email],
-                one=True
-            )
-
-        return result is not None
-
-    @staticmethod
-    def get_account_stats(account_id: int) -> Dict[str, int]:
-        """
-        Get statistics for an account.
+        Get cash balance for an account.
 
         Args:
             account_id: Account ID
 
         Returns:
-            Dict with counts of portfolios, companies, total shares
+            Cash balance (default 0 if not set)
         """
-        logger.debug(f"Fetching statistics for account {account_id}")
-
-        portfolios_count = query_db(
-            'SELECT COUNT(*) as count FROM portfolios WHERE account_id = ?',
+        result = query_db(
+            'SELECT cash FROM accounts WHERE id = ?',
             [account_id],
             one=True
         )
+        if result and result.get('cash') is not None:
+            return float(result['cash'])
+        return 0.0
 
-        companies_count = query_db(
-            'SELECT COUNT(*) as count FROM companies WHERE account_id = ?',
-            [account_id],
-            one=True
+    @staticmethod
+    def set_cash(account_id: int, amount: float) -> bool:
+        """
+        Update cash balance for an account.
+
+        Args:
+            account_id: Account ID
+            amount: New cash balance (must be >= 0)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if amount < 0:
+            logger.warning(f"Attempted to set negative cash balance for account {account_id}")
+            return False
+
+        logger.info(f"Setting cash balance for account {account_id} to: {amount}")
+
+        result = execute_db(
+            'UPDATE accounts SET cash = ? WHERE id = ?',
+            [amount, account_id]
         )
 
-        shares_sum = query_db(
-            '''
-            SELECT COALESCE(SUM(cs.shares), 0) as total
-            FROM company_shares cs
-            JOIN companies c ON cs.company_id = c.id
-            WHERE c.account_id = ?
-            ''',
-            [account_id],
-            one=True
-        )
+        success = result is not None
+        if success:
+            logger.info(f"Successfully updated cash balance for account {account_id}")
+        else:
+            logger.warning(f"Failed to update cash balance for account {account_id}")
 
-        return {
-            'portfolios': portfolios_count['count'] if portfolios_count else 0,
-            'companies': companies_count['count'] if companies_count else 0,
-            'total_shares': shares_sum['total'] if shares_sum else 0
-        }
+        return success
+

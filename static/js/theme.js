@@ -406,18 +406,21 @@ function debounce(func, wait) {
  */
 function toggleTheme() {
   const html = document.documentElement;
-  const themeIcon = document.getElementById('theme-icon');
+  const floatingBtn = document.getElementById('floating-theme-toggle');
+  const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
   const currentTheme = html.getAttribute('data-theme');
 
   if (currentTheme === 'dark') {
     html.setAttribute('data-theme', 'light');
     html.style.backgroundColor = '#F8FAFC';
-    themeIcon.textContent = '🌙';
+    if (themeIcon) themeIcon.textContent = '🌙';
+    if (floatingBtn) floatingBtn.title = 'Switch to dark theme';
     localStorage.setItem('theme', 'light');
   } else {
     html.setAttribute('data-theme', 'dark');
     html.style.backgroundColor = '#020617';
-    themeIcon.textContent = '☀️';
+    if (themeIcon) themeIcon.textContent = '☀️';
+    if (floatingBtn) floatingBtn.title = 'Switch to light theme';
     localStorage.setItem('theme', 'dark');
   }
 }
@@ -428,17 +431,27 @@ function toggleTheme() {
 function initializeTheme() {
   const savedTheme = localStorage.getItem('theme');
   const html = document.documentElement;
-  const themeIcon = document.getElementById('theme-icon');
+  const floatingBtn = document.getElementById('floating-theme-toggle');
+  const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
 
+  // Determine current theme
+  let theme;
   if (savedTheme) {
-    // Use saved theme (already set by inline script)
-    themeIcon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    theme = savedTheme;
   } else {
-    // Check system preference (already set by inline script)
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = prefersDark ? 'dark' : 'light';
-    themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    theme = prefersDark ? 'dark' : 'light';
     localStorage.setItem('theme', theme);
+  }
+
+  // Update icon and button state
+  if (themeIcon) {
+    themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+  if (floatingBtn) {
+    floatingBtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    // Attach click handler
+    floatingBtn.addEventListener('click', toggleTheme);
   }
 }
 
@@ -453,7 +466,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e)
     const html = document.documentElement;
     html.setAttribute('data-theme', theme);
     html.style.backgroundColor = theme === 'dark' ? '#020617' : '#F8FAFC';
-    document.getElementById('theme-icon').textContent = theme === 'dark' ? '☀️' : '🌙';
+
+    const floatingBtn = document.getElementById('floating-theme-toggle');
+    const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
+    if (themeIcon) {
+      themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    if (floatingBtn) {
+      floatingBtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    }
   }
 });
 

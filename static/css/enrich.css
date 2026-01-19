@@ -640,3 +640,181 @@ td.col-checkbox {
     font-size: 0.875rem;
   }
 }
+
+/* ===== Portfolio Summary Card (with Cash) ===== */
+
+.portfolio-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.portfolio-summary-card .summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 120px;
+}
+
+.portfolio-summary-card .summary-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.portfolio-summary-card .summary-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.portfolio-summary-card .summary-operator {
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: var(--text-muted);
+}
+
+.portfolio-summary-card .summary-item-total .summary-value {
+  color: var(--primary);
+}
+
+.portfolio-summary-card .summary-item-editable {
+  min-width: 140px;
+}
+
+.portfolio-summary-card .cash-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.portfolio-summary-card .cash-input,
+.portfolio-summary-card .cash-input.is-small,
+.portfolio-summary-card input.cash-input.is-small,
+.portfolio-summary-card input.input.is-small.cash-input,
+.portfolio-summary-card input.input.is-small.cash-input.sensitive-value {
+  width: 110px;
+  text-align: center;
+  font-size: 1.25rem !important;  /* Match summary-value size, override Bulma is-small */
+  font-weight: 600;
+  border-color: var(--primary);
+  background-color: var(--bg-tertiary);
+  height: auto;
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.portfolio-summary-card .cash-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+.portfolio-summary-card .saving-indicator {
+  color: var(--primary);
+}
+
+/* Builder KPI Section */
+.portfolio-summary-card .summary-divider {
+  width: 1px;
+  height: 40px;
+  background-color: var(--border-default);
+  margin: 0 var(--space-sm);
+}
+
+.portfolio-summary-card .summary-item-builder {
+  min-width: 160px;
+}
+
+.portfolio-summary-card .summary-item-builder .summary-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.portfolio-summary-card .builder-link,
+.portfolio-summary-card .builder-link-configure {
+  color: var(--aqua-500);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  transition: color var(--transition-base);
+}
+
+.portfolio-summary-card .builder-link:hover,
+.portfolio-summary-card .builder-link-configure:hover {
+  color: var(--aqua-400);
+}
+
+.portfolio-summary-card .builder-link-configure {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.portfolio-summary-card .builder-value-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.portfolio-summary-card .builder-value {
+  color: var(--aqua-500);
+  font-size: 1.25rem;  /* Match summary-value size */
+}
+
+.portfolio-summary-card .use-as-cash-btn {
+  padding: 0 var(--space-sm);
+  height: 1.75em;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-summary-card .use-as-cash-btn .icon {
+  margin-right: var(--space-xs);
+}
+
+/* Responsive adjustments for summary card */
+@media screen and (max-width: 768px) {
+  .portfolio-summary-card {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .portfolio-summary-card .summary-item {
+    min-width: auto;
+    flex: 1;
+  }
+
+  .portfolio-summary-card .summary-operator {
+    font-size: 1rem;
+  }
+
+  .portfolio-summary-card .summary-value {
+    font-size: 1rem;
+  }
+
+  .portfolio-summary-card .cash-input {
+    width: 90px;
+    font-size: 0.875rem;
+  }
+
+  .portfolio-summary-card .summary-divider {
+    display: none;
+  }
+
+  .portfolio-summary-card .summary-item-builder {
+    min-width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-subtle);
+  }
+}

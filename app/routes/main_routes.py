@@ -2,6 +2,7 @@ from app.utils.portfolio_utils import get_portfolio_data
 from app.db_manager import query_db
 from flask import Blueprint, render_template, redirect, url_for, session, request, flash, jsonify
 from app.exceptions import ValidationError, DataIntegrityError
+from app.decorators.auth import require_auth
 import logging
 import json
 import math
@@ -232,6 +233,7 @@ def clear_account():
 
 
 @main_bp.route('/api/accounts')
+@require_auth
 def get_accounts():
     """API endpoint to get all accounts"""
     accounts = query_db(

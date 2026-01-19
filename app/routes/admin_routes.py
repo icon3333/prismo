@@ -12,6 +12,7 @@ from ..utils.identifier_normalization import (
     cleanup_crypto_duplicates,
     run_test_cases
 )
+from ..decorators.auth import require_auth
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,12 +21,14 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
 
 @admin_bp.route('/identifier-normalization')
+@require_auth
 def identifier_normalization():
     """Display the identifier normalization management page."""
     return render_template('admin/identifier_normalization.html')
 
 
 @admin_bp.route('/api/test-normalization', methods=['POST'])
+@require_auth
 def test_normalization():
     """Test identifier normalization with provided identifier."""
     try:
@@ -56,6 +59,7 @@ def test_normalization():
 
 
 @admin_bp.route('/api/run-test-cases', methods=['POST'])
+@require_auth
 def api_run_test_cases():
     """Run the comprehensive test cases."""
     try:
@@ -74,6 +78,7 @@ def api_run_test_cases():
 
 
 @admin_bp.route('/api/cleanup-duplicates', methods=['POST'])
+@require_auth
 def api_cleanup_duplicates():
     """Run the crypto duplicates cleanup function."""
     try:
@@ -104,6 +109,7 @@ def api_cleanup_duplicates():
 
 
 @admin_bp.route('/api/normalize-identifier', methods=['POST'])
+@require_auth
 def api_normalize_identifier():
     """Normalize a single identifier via API."""
     try:

@@ -342,7 +342,7 @@
     <div class="risk-section">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Stocks Missing</h2>
-            <a href="{{ url_for('portfolio.build') }}" class="btn btn-primary">
+            <a href="{{ url_for('portfolio.build') }}" class="button is-primary">
                 <i class="fas fa-hammer me-2"></i>
                 Go to Builder
             </a>
@@ -373,7 +373,7 @@
     <div class="risk-section">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Risk Overview</h2>
-            <a href="{{ url_for('portfolio.risk_overview') }}" class="btn btn-primary">
+            <a href="{{ url_for('portfolio.risk_overview') }}" class="button is-primary">
                 <i class="fas fa-chart-line me-2"></i>
                 View Details
             </a>
@@ -468,7 +468,7 @@
                 <h2 class="h4 mb-0" style="color: var(--text-primary);">
                     <i class="fas fa-users me-2"></i> Your Accounts
                 </h2>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#create-account-modal">
+                <button class="button is-primary" data-bs-toggle="modal" data-bs-target="#create-account-modal">
                     <i class="fas fa-plus me-2"></i>
                     Create Account
                 </button>
@@ -486,7 +486,7 @@
                             <p class="account-card-subtitle">
                                 Created: {{ account.created_at.split(' ')[0] if account.created_at else 'N/A' }}
                             </p>
-                            <a href="{{ url_for('main.select_account', account_id=account.id) }}" class="btn btn-accent">
+                            <a href="{{ url_for('main.select_account', account_id=account.id) }}" class="button is-primary">
                                 <i class="fas fa-sign-in-alt me-2"></i>
                                 Access Portfolio
                             </a>
@@ -506,7 +506,7 @@
                     Welcome to Portfolio Rebalancer!
                 </h3>
                 <p>Create your first account to start tracking and optimizing your investments.</p>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#create-account-modal">
+                <button class="button is-primary" data-bs-toggle="modal" data-bs-target="#create-account-modal">
                     <i class="fas fa-user-plus me-2"></i>
                     Create Your First Account
                 </button>

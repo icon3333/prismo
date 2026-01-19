@@ -15,6 +15,52 @@
     .page-title.has-icon i {
         color: var(--aqua-500);
     }
+
+    /* Cash Toggle Styling */
+    .cash-toggle-container {
+        margin-top: var(--space-md);
+        padding-top: var(--space-md);
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .cash-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        cursor: pointer;
+        padding: var(--space-xs) var(--space-sm);
+        border-radius: var(--radius-sm);
+        transition: background-color var(--transition-base);
+    }
+
+    .cash-toggle:hover {
+        background-color: var(--hover-bg);
+    }
+
+    .cash-toggle input[type="checkbox"] {
+        margin-right: var(--space-xs);
+    }
+
+    .cash-toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-xs);
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .cash-toggle-label i {
+        color: var(--aqua-500);
+    }
+
+    .cash-balance-tag {
+        font-size: 0.75rem;
+        display: none;
+    }
+
+    .cash-balance-tag.is-visible {
+        display: inline-flex;
+    }
 </style>
 {% endblock %}
 
@@ -32,6 +78,17 @@
 
             <div class="portfolio-pills" id="portfolioPills">
                 <!-- Dynamic portfolio pills will be added here -->
+            </div>
+
+            <!-- Cash Toggle -->
+            <div class="cash-toggle-container">
+                <label class="checkbox cash-toggle">
+                    <input type="checkbox" id="includeCashToggle">
+                    <span class="cash-toggle-label">
+                        <i class="fas fa-coins"></i>Include Cash
+                    </span>
+                    <span id="cashBalanceDisplay" class="tag is-info is-light cash-balance-tag sensitive-value"></span>
+                </label>
             </div>
         </div>
 
@@ -89,11 +146,11 @@
                     <div class="gauge-card">
                         <div class="gauge-indicator">
                             <div class="overview-chart-header">
-                                <div class="overview-chart-title">User Sectors</div>
-                                <div class="overview-chart-subtitle" id="sectorCountSubtitle">Sector breakdown</div>
+                                <div class="overview-chart-title">Investment Thesis</div>
+                                <div class="overview-chart-subtitle" id="thesisCountSubtitle">Thesis breakdown</div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="sectorDistributionChart"></div>
+                                <div id="thesisDistributionChart"></div>
                             </div>
                         </div>
                     </div>
@@ -117,11 +174,11 @@
                     <div class="gauge-card">
                         <div class="gauge-indicator">
                             <div class="overview-chart-header">
-                                <div class="overview-chart-title">Investment Thesis</div>
-                                <div class="overview-chart-subtitle" id="thesisCountSubtitle">Thesis breakdown</div>
+                                <div class="overview-chart-title">User Sectors</div>
+                                <div class="overview-chart-subtitle" id="sectorCountSubtitle">Sector breakdown</div>
                             </div>
                             <div class="overview-chart-container">
-                                <div id="thesisDistributionChart"></div>
+                                <div id="sectorDistributionChart"></div>
                             </div>
                         </div>
                     </div>
@@ -181,6 +238,9 @@
             maxPerSector: null,
             maxPerCountry: null
         };
+        // Cash state
+        let cashBalance = 0;
+        let includeCash = false;
 
         // Utility functions for formatting
         window.formatCurrency = function (value) {
@@ -264,6 +324,74 @@
             }
         }
 
+        // Fetch saved state for risk_overview page (portfolio selection persistence)
+        async function fetchSavedState() {
+            console.log('Fetching saved state for risk_overview...');
+            try {
+                const response = await fetch('/portfolio/api/state?page=risk_overview');
+                if (!response.ok) {
+                    console.log('No saved state found (this is normal on first visit)');
+                    return null;
+                }
+                const data = await response.json();
+                console.log('Saved state received:', data);
+                return data;
+            } catch (error) {
+                console.log('Error fetching saved state:', error);
+                return null;
+            }
+        }
+
+        // Fetch cash balance from account
+        async function fetchCashBalance() {
+            console.log('Fetching cash balance...');
+            try {
+                const response = await fetch('/portfolio/api/account/cash');
+                if (!response.ok) {
+                    console.log('No cash balance found');
+                    return 0;
+                }
+                const data = await response.json();
+                console.log('Cash balance received:', data);
+                return data.cash || 0;
+            } catch (error) {
+                console.log('Error fetching cash balance:', error);
+                return 0;
+            }
+        }
+
+        // Save portfolio selection state (debounced)
+        let saveTimeout = null;
+        function savePortfolioSelection() {
+            // Clear any pending save
+            if (saveTimeout) {
+                clearTimeout(saveTimeout);
+            }
+            // Debounce: wait 500ms before saving
+            saveTimeout = setTimeout(async () => {
+                try {
+                    const stateData = {
+                        page: 'risk_overview',
+                        selectedPortfolios: JSON.stringify(Array.from(selectedPortfolios)),
+                        includeCash: includeCash.toString()
+                    };
+                    console.log('Saving portfolio selection:', stateData);
+                    const response = await fetch('/portfolio/api/state', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(stateData)
+                    });
+                    if (response.ok) {
+                        console.log('Portfolio selection saved successfully');
+                    } else {
+                        console.warn('Failed to save portfolio selection:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Error saving portfolio selection:', error);
+                }
+            }, 500);
+        }
+
         // Add timeout to prevent infinite loading
         const loadingTimeout = setTimeout(() => {
             console.error('Loading timeout reached');
@@ -286,8 +414,10 @@
         Promise.all([
             fetchPortfolios(),
             fetchPortfolioData(),
-            fetchAllocationRules()
-        ]).then(([portfoliosList, data, rules]) => {
+            fetchAllocationRules(),
+            fetchSavedState(),
+            fetchCashBalance()
+        ]).then(([portfoliosList, data, rules, savedState, cash]) => {
             clearTimeout(loadingTimeout); // Clear the timeout since we got a response
             console.log('Data loaded successfully, processing...');
             console.log('Portfolios list:', portfoliosList);
@@ -303,16 +433,45 @@
                     console.log('Allocation rules loaded:', allocationRules);
                 }
 
+                // Store cash balance and update display
+                cashBalance = cash || 0;
+                console.log('Cash balance loaded:', cashBalance);
+                updateCashDisplay();
+
                 console.log('Data processed successfully, initializing UI...');
 
-                // Initialize with all portfolios selected by default
+                // Initialize portfolio selection: restore from saved state or default to all
                 const portfolios = portfolioData.map(p => p.name);
-                selectedPortfolios = new Set(portfolios);
+                if (savedState && savedState.selectedPortfolios) {
+                    try {
+                        const savedSelection = JSON.parse(savedState.selectedPortfolios);
+                        // Only restore portfolios that still exist
+                        const validSelection = savedSelection.filter(name => portfolios.includes(name));
+                        selectedPortfolios = new Set(validSelection.length > 0 ? validSelection : portfolios);
+                        console.log('Restored portfolio selection from saved state:', Array.from(selectedPortfolios));
+                    } catch (e) {
+                        console.error('Error parsing saved selection, defaulting to all:', e);
+                        selectedPortfolios = new Set(portfolios);
+                    }
+                } else {
+                    selectedPortfolios = new Set(portfolios);
+                }
+
+                // Restore includeCash state
+                if (savedState && savedState.includeCash !== undefined) {
+                    includeCash = savedState.includeCash === 'true' || savedState.includeCash === true;
+                    const toggle = document.getElementById('includeCashToggle');
+                    if (toggle) {
+                        toggle.checked = includeCash;
+                    }
+                    console.log('Restored includeCash state:', includeCash);
+                }
 
                 console.log('Portfolios found:', portfolios);
                 console.log('selectedPortfolios initialized:', selectedPortfolios);
 
                 createPortfolioFilters(portfolios);
+                initializeCashToggle();
 
                 // Hide loading, show content BEFORE creating charts
                 document.getElementById('loadingIndicator').style.display = 'none';
@@ -596,6 +755,7 @@
                 });
                 updatePillStates();
                 updateCharts();
+                savePortfolioSelection();
             });
 
             pillsContainer.appendChild(allPill);
@@ -619,6 +779,7 @@
                         pill.classList.add('selected');
                     }
                     updateCharts();
+                    savePortfolioSelection();
                 });
 
                 pillsContainer.appendChild(pill);
@@ -637,7 +798,46 @@
             });
         }
 
+        // Update cash display in the toggle
+        function updateCashDisplay() {
+            const cashDisplay = document.getElementById('cashBalanceDisplay');
+            if (cashDisplay) {
+                if (cashBalance > 0) {
+                    cashDisplay.textContent = formatCurrency(cashBalance).replace(/<[^>]*>/g, '');
+                    cashDisplay.classList.add('is-visible');
+                } else {
+                    cashDisplay.classList.remove('is-visible');
+                }
+            }
+        }
 
+        // Initialize cash toggle event listener
+        function initializeCashToggle() {
+            const toggle = document.getElementById('includeCashToggle');
+            if (toggle) {
+                toggle.addEventListener('change', function() {
+                    includeCash = this.checked;
+                    console.log('Include cash toggled:', includeCash);
+                    updateCharts();
+                    savePortfolioSelection();
+                });
+            }
+        }
+
+        // Create virtual cash position for charts
+        function createCashPosition() {
+            if (!includeCash || cashBalance <= 0) return null;
+            return {
+                id: 'cash-virtual',
+                name: 'Cash',
+                company: 'Cash',
+                currentValue: cashBalance,
+                sector: 'Cash',
+                investment_type: 'Cash',
+                country: 'Cash',
+                thesis: 'Cash'
+            };
+        }
 
         function updateCharts() {
             console.log('updateCharts called');
@@ -754,6 +954,14 @@
                 }
             }
 
+            // Add cash as separate entry when toggle is enabled
+            if (includeCash && cashBalance > 0) {
+                cleanedData.push({
+                    label: 'Cash',
+                    value: cashBalance
+                });
+            }
+
             console.log('Portfolio chart cleaned data:', cleanedData);
 
             if (cleanedData.length === 0) {
@@ -853,7 +1061,7 @@
                 .flatMap(p => p.companies);
 
             // Ensure companies have calculated currentValue and metadata fields
-            return companies.map(company => {
+            const result = companies.map(company => {
                 // Calculate currentValue using centralized utility (handles custom values)
                 if (typeof company.currentValue === 'undefined') {
                     company.currentValue = calculateItemValue(company);
@@ -867,6 +1075,14 @@
 
                 return company;
             });
+
+            // Append virtual cash position if toggle is enabled
+            const cashPosition = createCashPosition();
+            if (cashPosition) {
+                result.push(cashPosition);
+            }
+
+            return result;
         }
 
         // Group companies by name and sum values

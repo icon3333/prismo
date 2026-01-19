@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 9
+    LATEST_VERSION = 10
 
     try:
         # Get current schema version
@@ -580,6 +580,14 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 9, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 9 completed: category renamed to sector")
+
+        # Migration 10: Add cash balance column to accounts
+        if current_version < 10:
+            logger.info("Applying migration 10: Adding cash column to accounts")
+            _safe_add_column(cursor, "accounts", "cash REAL DEFAULT 0")
+            cursor.execute("UPDATE schema_version SET version = 10, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 10 completed: cash column added to accounts")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

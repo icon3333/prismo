@@ -21,23 +21,6 @@ logger = logging.getLogger(__name__)
 # For single-user homeserver, small batches are faster with synchronous processing
 ASYNC_THRESHOLD = 20
 
-# This list is just a reference. Actual ISINs will come from the database or user input
-ISIN_LIST = [
-    'US88579Y1010',  # MMM
-    'US36467W1099',  # GME
-    'DE000BAY0017',  # Bayer
-    'US0231351067',  # Amazon
-    'US88160R1014',  # Tesla
-    # (ISIN list shortened for clarity)
-]
-
-
-def init_db():
-    """Initialize database with required table - now handled by main database schema."""
-    # This function is no longer needed as background_jobs table 
-    # is now part of the main database schema
-    pass
-
 
 def _extract_price_data(result: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -169,6 +152,13 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str):
                 logger.info(f"Background CSV processing completed successfully for account_id: {account_id}")
                 # Mark job as completed in database
                 _update_csv_job_final(job_id, 100, "CSV processing completed successfully")
+                # Invalidate portfolio cache after successful CSV import
+                try:
+                    from app.routes.portfolio_api import invalidate_portfolio_cache
+                    invalidate_portfolio_cache(account_id)
+                    logger.debug(f"Cache invalidated after CSV processing for account_id: {account_id}")
+                except Exception as cache_error:
+                    logger.warning(f"Failed to invalidate cache after CSV processing: {cache_error}")
             else:
                 logger.error(f"Background CSV processing failed for account_id: {account_id}: {message}")
                 # Mark job as failed in database

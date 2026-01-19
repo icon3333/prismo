@@ -193,38 +193,6 @@ class PriceRepository:
             raise
 
     @staticmethod
-    def get_price_history(
-        identifier: str,
-        limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """
-        Get price history for an identifier.
-
-        Args:
-            identifier: ISIN or ticker symbol
-            limit: Maximum number of records to return (default 100)
-
-        Returns:
-            List of price records ordered by date descending
-        """
-        logger.debug(f"Fetching price history for {identifier}, limit {limit}")
-
-        return query_db(
-            '''
-            SELECT
-                identifier,
-                price_eur,
-                currency,
-                last_updated
-            FROM market_prices
-            WHERE identifier = ?
-            ORDER BY last_updated DESC
-            LIMIT ?
-            ''',
-            [identifier, limit]
-        ) or []
-
-    @staticmethod
     def get_stale_prices(hours: int = 24) -> List[Dict[str, Any]]:
         """
         Get prices that haven't been updated in the specified hours.
@@ -255,51 +223,6 @@ class PriceRepository:
             ''',
             [hours]
         ) or []
-
-    @staticmethod
-    def delete_old_prices(days: int = 90) -> int:
-        """
-        Delete price records older than specified days.
-
-        Keeps the most recent price for each identifier.
-
-        Args:
-            days: Delete prices older than this many days
-
-        Returns:
-            Number of records deleted
-        """
-        logger.info(f"Deleting price records older than {days} days")
-
-        db = get_db()
-        cursor = db.cursor()
-
-        try:
-            # Delete old records but keep at least one per identifier
-            cursor.execute(
-                '''
-                DELETE FROM market_prices
-                WHERE rowid NOT IN (
-                    -- Keep the most recent record for each identifier
-                    SELECT MAX(rowid)
-                    FROM market_prices
-                    GROUP BY identifier
-                )
-                AND datetime(last_updated) < datetime('now', '-' || ? || ' days')
-                ''',
-                [days]
-            )
-
-            deleted = cursor.rowcount
-            db.commit()
-
-            logger.info(f"Deleted {deleted} old price records")
-            return deleted
-
-        except Exception as e:
-            logger.error(f"Error deleting old prices: {e}")
-            db.rollback()
-            return 0
 
     @staticmethod
     def get_price_count() -> int:
@@ -359,36 +282,3 @@ class PriceRepository:
             one=True
         )
         return result is not None
-
-    @staticmethod
-    def get_prices_by_currency(currency: str) -> List[Dict[str, Any]]:
-        """
-        Get all latest prices for a specific currency.
-
-        Args:
-            currency: Currency code (e.g., 'EUR', 'USD')
-
-        Returns:
-            List of price records for that currency
-        """
-        logger.debug(f"Fetching prices for currency: {currency}")
-
-        return query_db(
-            '''
-            SELECT
-                mp.identifier,
-                mp.price_eur,
-                mp.currency,
-                mp.last_updated
-            FROM market_prices mp
-            INNER JOIN (
-                SELECT identifier, MAX(last_updated) as max_updated
-                FROM market_prices
-                WHERE currency = ?
-                GROUP BY identifier
-            ) latest ON mp.identifier = latest.identifier
-                     AND mp.last_updated = latest.max_updated
-            WHERE mp.currency = ?
-            ''',
-            [currency, currency]
-        ) or []

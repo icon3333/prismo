@@ -8,7 +8,7 @@ const DEBUG = false;
 
 // Helper function for conditional debug logging
 function debugLog(...args) {
-    if (DEBUG) debugLog(...args);
+    if (DEBUG) console.log(...args);
 }
 
 // Centralized Progress Manager - handles all progress tracking
@@ -1207,6 +1207,7 @@ class PortfolioTableApp {
                     selectedItemIds: [],
                     bulkPortfolio: '',
                     bulkSector: '',
+                    bulkThesis: '',
                     bulkCountry: '',
                     isBulkProcessing: false,
                     isUpdatingSelected: false,
@@ -2512,6 +2513,7 @@ class PortfolioTableApp {
                     this.selectedItemIds = [];
                     this.bulkPortfolio = '';
                     this.bulkSector = '';
+                    this.bulkThesis = '';
                     this.bulkCountry = '';
                 },
 
@@ -2523,9 +2525,9 @@ class PortfolioTableApp {
                         return;
                     }
 
-                    if (!this.bulkPortfolio && !this.bulkSector && !this.bulkCountry) {
+                    if (!this.bulkPortfolio && !this.bulkSector && !this.bulkThesis && !this.bulkCountry) {
                         if (typeof showNotification === 'function') {
-                            showNotification('Please select a portfolio, enter a sector, or select a country', 'is-warning');
+                            showNotification('Please select a value to apply', 'is-warning');
                         }
                         return;
                     }
@@ -2544,6 +2546,7 @@ class PortfolioTableApp {
                             company: item.company,
                             portfolio: this.bulkPortfolio || item.portfolio,
                             sector: this.bulkSector !== '' ? this.bulkSector : item.sector,
+                            thesis: this.bulkThesis !== '' ? this.bulkThesis : item.thesis,
                             country: this.bulkCountry !== '' ? this.bulkCountry : item.effective_country,
                             is_country_user_edit: this.bulkCountry !== '',
                             identifier: item.identifier
@@ -2567,6 +2570,7 @@ class PortfolioTableApp {
                             const changesText = [];
                             if (this.bulkPortfolio) changesText.push(`portfolio to "${this.bulkPortfolio}"`);
                             if (this.bulkSector !== '') changesText.push(`sector to "${this.bulkSector}"`);
+                            if (this.bulkThesis !== '') changesText.push(`thesis to "${this.bulkThesis}"`);
                             if (this.bulkCountry !== '') changesText.push(`country to "${this.bulkCountry}"`);
 
                             if (typeof showNotification === 'function') {

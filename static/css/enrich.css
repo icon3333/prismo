@@ -462,7 +462,8 @@ td.col-checkbox {
 
 /* Standardize control widths in bulk action bar */
 .bulk-action-controls .select,
-.bulk-action-controls .select select {
+.bulk-action-controls .select select,
+.bulk-action-controls .input {
     min-width: 140px;
     max-width: 180px;
 }
@@ -472,11 +473,6 @@ td.col-checkbox {
     font-size: 0.875rem;
     height: 2.25em;
     border-radius: var(--radius-sm);
-}
-
-.bulk-action-controls .input {
-    min-width: 120px;
-    max-width: 140px;
 }
 
 .bulk-action-controls .button {

@@ -307,7 +307,8 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <input class="input" type="text" v-model="bulkSector" placeholder="Sector">
+                        <input class="input" type="text" v-model="bulkSector" placeholder="Enter Sector">
+                        <input class="input" type="text" v-model="bulkThesis" placeholder="Enter Thesis">
                         <div class="select">
                             <select v-model="bulkCountry">
                                 <option value="">Select Country</option>
@@ -317,7 +318,7 @@
                             </select>
                         </div>
                         <button class="button is-primary" @click="applyBulkChanges"
-                            :disabled="(!bulkPortfolio && !bulkSector && !bulkCountry) || isBulkProcessing"
+                            :disabled="(!bulkPortfolio && !bulkSector && !bulkThesis && !bulkCountry) || isBulkProcessing"
                             :class="{'is-loading': isBulkProcessing}">
                             Apply Changes
                         </button>

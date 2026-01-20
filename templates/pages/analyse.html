@@ -64,43 +64,22 @@
             </div>
         </section>
 
-        <!-- Portfolio Tables (hidden initially) -->
+        <!-- Portfolio Allocation Table (hidden initially) -->
         <section id="portfolioTables" class="mb-6" style="display: none;">
-            <div class="columns">
-                <!-- Left: Stock Allocation -->
-                <div class="column is-6">
-                    <div class="box">
-                        <h3 class="subtitle is-5 mb-3">Stock Allocation</h3>
-                        <div class="table-container">
-                            <table class="table is-fullwidth is-striped is-hoverable" data-table-id="stockTable">
-                                <thead>
-                                    <tr>
-                                        <th class="is-sortable" data-sort="string">Company</th>
-                                        <th class="is-sortable" data-sort="string">Sector</th>
-                                        <th class="is-sortable" data-sort="number">%</th>
-                                        <th class="is-sortable" data-sort="number">Current Value</th>
-                                        <th>P&L <span class="pnl-sort-toggle" data-sort-type="pnl-eur" title="Sort by € value">€</span> / <span class="pnl-sort-toggle" data-sort-type="pnl-pct" title="Sort by % value">%</span></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="stockTableBody">
-                                    <!-- Populated dynamically -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Sector/Thesis Allocation -->
-                <div class="column is-6">
-                    <div class="box">
+            <div class="columns is-centered">
+                <!-- Unified Allocation Table -->
+                <div class="column is-10">
+                    <div class="box" style="max-width: 900px; margin: 0 auto;">
                         <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
                             <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Thesis Allocation</h3>
                             <div class="toggle-group" id="allocationToggle">
-                                <button class="toggle-btn" data-mode="sector">Sector</button>
                                 <button class="toggle-btn active" data-mode="thesis">Thesis</button>
+                                <button class="toggle-btn" data-mode="sector">Sector</button>
+                                <button class="toggle-btn" data-mode="stocks">Stocks</button>
                             </div>
                         </div>
-                        <div id="sectorAllocationTable"></div>
+                        <!-- Unified Tabulator table for all modes -->
+                        <div id="allocationTable"></div>
                     </div>
                 </div>
             </div>
@@ -188,7 +167,7 @@
             let selectedPortfolioId = null;
             let selectedPortfolioIds = [];  // Needed by heatmap
             let currentPortfolioData = null;
-            let allocationMode = 'thesis'; // 'sector' or 'thesis'
+            let allocationMode = 'thesis'; // 'thesis', 'sector', or 'stocks'
             let heatmapMode = 'sector'; // 'sector' or 'thesis'
 
             // Make portfolioData available globally for heatmap
@@ -696,8 +675,7 @@
                 if (!currentPortfolioData) return;
 
                 updateSummaryBox();
-                renderStockTable();
-                renderSectorTable();
+                renderAllocationTable();  // Use unified render based on current mode
 
                 document.getElementById('portfolioSummary').style.display = 'block';
                 document.getElementById('portfolioTables').style.display = 'block';
@@ -726,104 +704,121 @@
                 document.getElementById('summaryLastUpdated').textContent = lastUpdated;
             }
 
-            function renderStockTable() {
-                const tbody = document.getElementById('stockTableBody');
-                tbody.innerHTML = '';
+            // Tabulator instance for unified allocation table
+            let allocationTable = null;
 
-                if (!currentPortfolioData.companies || currentPortfolioData.companies.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="has-text-centered">No holdings</td></tr>';
-                    return;
-                }
-
-                currentPortfolioData.companies.forEach(company => {
-                    const row = document.createElement('tr');
-                    const pnlEur = company.pnl_absolute !== null ? company.pnl_absolute : -Infinity;
-                    const pnlPct = company.pnl_percentage !== null ? company.pnl_percentage : -Infinity;
-                    row.innerHTML = `
-                        <td>${escapeHtml(company.name)}</td>
-                        <td>${escapeHtml(company.sector || 'Unassigned')}</td>
-                        <td>${formatPercentage(company.percentage)}</td>
-                        <td>${formatCurrency(company.current_value)}</td>
-                        <td data-pnl-eur="${pnlEur}" data-pnl-pct="${pnlPct}">${formatPnL(company.pnl_absolute, company.pnl_percentage, company.total_invested)}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-            }
-
-            // Tabulator instance for sector/thesis allocation table
-            let sectorTable = null;
-
-            function renderSectorTable() {
-                // Get the data based on current allocation mode
-                const dataSource = allocationMode === 'thesis' ? currentPortfolioData.theses : currentPortfolioData.sectors;
-
-                // Update UI elements to reflect current mode
-                const titleEl = document.getElementById('allocationTableTitle');
-                if (titleEl) titleEl.textContent = allocationMode === 'thesis' ? 'Thesis Allocation' : 'Sector Allocation';
-
-                // Transform data for Tabulator tree structure
-                const treeData = (dataSource || []).map(category => {
-                    // Calculate category-level values
-                    const categoryValue = category.total_value || 0;
-
-                    return {
-                        name: category.name,
-                        percentage: category.percentage,
-                        total_value: categoryValue,
-                        pnl_absolute: category.pnl_absolute,
-                        pnl_percentage: category.pnl_percentage,
-                        total_invested: category.total_invested,
-                        _children: category.companies.map(c => {
-                            const companyValue = c.current_value || c.currentValue || 0;
-                            const categoryPercent = categoryValue > 0
-                                ? (companyValue / categoryValue * 100)
-                                : 0;
-
-                            return {
-                                name: c.name,
-                                percentage: c.percentage || 0,
-                                category_percentage: categoryPercent,
-                                total_value: companyValue,
-                                pnl_absolute: c.pnl_absolute,
-                                pnl_percentage: c.pnl_percentage,
-                                total_invested: c.total_invested || c.totalInvested
-                            };
-                        })
-                    };
-                });
-
-                // If table exists, just update data
-                if (sectorTable) {
-                    sectorTable.setData(treeData);
-                    return;
-                }
-
+            function renderUnifiedTable() {
                 // Check if Tabulator is available
                 if (typeof Tabulator === 'undefined') {
                     console.error('Tabulator is not loaded');
-                    document.getElementById('sectorAllocationTable').innerHTML = '<p class="has-text-danger">Table library not loaded</p>';
+                    document.getElementById('allocationTable').innerHTML = '<p class="has-text-danger">Table library not loaded</p>';
                     return;
                 }
 
-                // Empty state message
-                const emptyMessage = allocationMode === 'thesis'
-                    ? 'No thesis data. Add thesis in Enrich page.'
-                    : 'No categories';
+                let tableData, columns, emptyMessage;
+                const isStocksMode = allocationMode === 'stocks';
 
-                // Create Tabulator instance
-                sectorTable = new Tabulator("#sectorAllocationTable", {
-                    data: treeData,
-                    layout: "fitColumns",
-                    dataTree: true,
-                    dataTreeStartExpanded: false,
-                    dataTreeChildField: "_children",
-                    dataTreeChildIndent: 15,
-                    placeholder: emptyMessage,
-                    columns: [
+                if (isStocksMode) {
+                    // Stocks mode: flat list of companies
+                    tableData = (currentPortfolioData.companies || []).map(c => ({
+                        name: c.name,
+                        sector: c.sector || 'Unassigned',
+                        percentage: c.percentage || 0,
+                        total_value: c.current_value || 0,
+                        pnl_absolute: c.pnl_absolute,
+                        pnl_percentage: c.pnl_percentage,
+                        total_invested: c.total_invested
+                    }));
+                    emptyMessage = 'No holdings';
+                    columns = [
+                        {
+                            title: "Company",
+                            field: "name",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                return escapeHtml(cell.getValue() || '');
+                            }
+                        },
+                        {
+                            title: "Sector",
+                            field: "sector",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                return escapeHtml(cell.getValue() || '');
+                            }
+                        },
+                        {
+                            title: "%",
+                            field: "percentage",
+                            hozAlign: "right",
+                            widthGrow: 0.4,
+                            formatter: function(cell) {
+                                return formatPercentage(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "Value",
+                            field: "total_value",
+                            hozAlign: "right",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                return formatCurrency(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "P&L <span class='tabulator-pnl-toggle' data-sort-type='pnl-eur' title='Sort by € value'>€</span> / <span class='tabulator-pnl-toggle' data-sort-type='pnl-pct' title='Sort by % value'>%</span>",
+                            field: "pnl_absolute",
+                            hozAlign: "right",
+                            headerSort: false,
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                const data = cell.getRow().getData();
+                                return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
+                            }
+                        }
+                    ];
+                } else {
+                    // Thesis/Sector mode: tree structure with expandable rows
+                    const dataSource = allocationMode === 'thesis' ? currentPortfolioData.theses : currentPortfolioData.sectors;
+
+                    tableData = (dataSource || []).map(category => {
+                        const categoryValue = category.total_value || 0;
+
+                        return {
+                            name: category.name,
+                            percentage: category.percentage,
+                            total_value: categoryValue,
+                            pnl_absolute: category.pnl_absolute,
+                            pnl_percentage: category.pnl_percentage,
+                            total_invested: category.total_invested,
+                            _children: category.companies.map(c => {
+                                const companyValue = c.current_value || c.currentValue || 0;
+                                const categoryPercent = categoryValue > 0
+                                    ? (companyValue / categoryValue * 100)
+                                    : 0;
+
+                                return {
+                                    name: c.name,
+                                    percentage: c.percentage || 0,
+                                    category_percentage: categoryPercent,
+                                    total_value: companyValue,
+                                    pnl_absolute: c.pnl_absolute,
+                                    pnl_percentage: c.pnl_percentage,
+                                    total_invested: c.total_invested || c.totalInvested
+                                };
+                            })
+                        };
+                    });
+
+                    emptyMessage = allocationMode === 'thesis'
+                        ? 'No thesis data. Add thesis in Enrich page.'
+                        : 'No categories';
+
+                    columns = [
                         {
                             title: allocationMode === 'thesis' ? "Thesis" : "Sector",
                             field: "name",
-                            widthGrow: 2,
+                            widthGrow: 1,
                             formatter: function(cell) {
                                 return escapeHtml(cell.getValue() || '');
                             }
@@ -852,7 +847,6 @@
                             field: "total_value",
                             hozAlign: "right",
                             widthGrow: 1,
-                            minWidth: 100,
                             formatter: function(cell) {
                                 return formatCurrency(cell.getValue());
                             }
@@ -862,15 +856,45 @@
                             field: "pnl_absolute",
                             hozAlign: "right",
                             headerSort: false,
-                            widthGrow: 1.5,
-                            minWidth: 140,
+                            widthGrow: 1,
                             formatter: function(cell) {
                                 const data = cell.getRow().getData();
                                 return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
                             }
                         }
-                    ]
-                });
+                    ];
+                }
+
+                // If table exists and same mode, just update data
+                if (allocationTable && allocationTable._lastMode === allocationMode) {
+                    allocationTable.setData(tableData);
+                    return;
+                }
+
+                // Destroy existing table if it exists
+                if (allocationTable) {
+                    allocationTable.destroy();
+                    allocationTable = null;
+                }
+
+                // Create Tabulator instance with appropriate config
+                const config = {
+                    data: tableData,
+                    layout: "fitColumns",
+                    placeholder: emptyMessage,
+                    columns: columns
+                };
+
+                // Add tree config only for thesis/sector modes
+                if (!isStocksMode) {
+                    config.dataTree = true;
+                    config.dataTreeStartExpanded = false;
+                    config.dataTreeChildField = "_children";
+                    config.dataTreeChildIndent = 15;
+                }
+
+                allocationTable = new Tabulator("#allocationTable", config);
+                allocationTable._lastMode = allocationMode; // Track mode for optimization
 
                 // Initialize P&L sort toggles in Tabulator header
                 initTabulatorPnLSorting();
@@ -882,7 +906,7 @@
             function initTabulatorPnLSorting() {
                 // Wait a tick for Tabulator to render the header
                 setTimeout(() => {
-                    document.querySelectorAll('#sectorAllocationTable .tabulator-pnl-toggle').forEach(toggle => {
+                    document.querySelectorAll('#allocationTable .tabulator-pnl-toggle').forEach(toggle => {
                         // Skip if already initialized
                         if (toggle.dataset.initialized === 'true') return;
                         toggle.dataset.initialized = 'true';
@@ -903,15 +927,15 @@
                             tabulatorPnLSortState = { type: sortType, direction: newDirection };
 
                             // Update visual indicators
-                            document.querySelectorAll('#sectorAllocationTable .tabulator-pnl-toggle').forEach(t => {
+                            document.querySelectorAll('#allocationTable .tabulator-pnl-toggle').forEach(t => {
                                 t.classList.remove('pnl-sort-active', 'pnl-sort-asc', 'pnl-sort-desc');
                             });
                             this.classList.add('pnl-sort-active');
                             this.classList.add(newDirection === 'asc' ? 'pnl-sort-asc' : 'pnl-sort-desc');
 
                             // Sort Tabulator
-                            if (sectorTable) {
-                                sectorTable.setSort(field, newDirection);
+                            if (allocationTable) {
+                                allocationTable.setSort(field, newDirection);
                             }
                         });
                     });
@@ -937,13 +961,32 @@
                     // Update mode
                     allocationMode = mode;
 
-                    // Update column title in place (avoid full table rebuild)
-                    if (sectorTable) {
-                        const newTitle = mode === 'thesis' ? 'Thesis' : 'Sector';
-                        sectorTable.updateColumnDefinition("name", { title: newTitle });
-                    }
-                    renderSectorTable();
+                    // Render the appropriate table
+                    renderAllocationTable();
                 });
+            }
+
+            // Unified allocation table rendering based on mode
+            function renderAllocationTable() {
+                const titleEl = document.getElementById('allocationTableTitle');
+
+                // Update title based on mode
+                if (allocationMode === 'stocks') {
+                    titleEl.textContent = 'Stock Allocation';
+                } else if (allocationMode === 'thesis') {
+                    titleEl.textContent = 'Thesis Allocation';
+                } else {
+                    titleEl.textContent = 'Sector Allocation';
+                }
+
+                // Destroy existing table if mode changed (columns are different)
+                if (allocationTable && allocationTable._lastMode !== allocationMode) {
+                    allocationTable.destroy();
+                    allocationTable = null;
+                }
+
+                // Render with unified Tabulator
+                renderUnifiedTable();
             }
 
             function initHeatmapToggle() {
@@ -1005,9 +1048,9 @@
                 currentPortfolioData = null;
 
                 // Clean up Tabulator table
-                if (sectorTable) {
-                    sectorTable.destroy();
-                    sectorTable = null;
+                if (allocationTable) {
+                    allocationTable.destroy();
+                    allocationTable = null;
                 }
             }
 

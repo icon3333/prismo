@@ -818,3 +818,91 @@ td.col-checkbox {
     border-top: 1px solid var(--border-subtle);
   }
 }
+
+/* ===== Manual Stock Badge ===== */
+.manual-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: var(--bg-primary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.manual-badge:hover {
+  opacity: 0.9;
+}
+
+/* ===== Identifier & Company Cell Wrappers ===== */
+.identifier-cell-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.identifier-cell-wrapper .manual-badge {
+  flex-shrink: 0;
+}
+
+.identifier-cell-wrapper .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.company-edit-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.company-edit-wrapper .input {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;  /* Align with span text */
+}
+
+/* Value edit wrapper - for editable total value fields */
+.value-edit-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.value-edit-wrapper .input {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;  /* Align with span text */
+  text-align: right;  /* Currency values right-aligned */
+}
+
+/* ===== Add Stock Modal ===== */
+.modal-card {
+  max-width: 600px;
+  width: 90%;
+}
+
+.modal-card-head,
+.modal-card-foot {
+  background: var(--bg-secondary);
+  border-color: var(--border-subtle);
+}
+
+.modal-card-body {
+  background: var(--bg-primary);
+}
+
+.modal-card-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.modal-card-foot {
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}

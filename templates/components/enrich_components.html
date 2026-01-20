@@ -261,11 +261,9 @@
                             <!-- Portfolio Filter -->
                             <div class="control">
                                 <div class="select">
-                                    <select id="filter-portfolio">
+                                    <select id="filter-portfolio" v-model="selectedPortfolio" @change="updateFilteredMetrics()">
                                         <option value="">All Portfolios</option>
-                                        {% for portfolio in portfolios %}
-                                        <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                        {% endfor %}
+                                        <option v-for="portfolio in portfolioOptions" :key="portfolio" :value="portfolio" v-text="portfolio"></option>
                                     </select>
                                 </div>
                             </div>
@@ -297,7 +295,7 @@
                                 </span>
                                 <span>Update all data</span>
                             </button>
-                            <button class="button is-warning" @click="updateSelected" 
+                            <button class="button is-warning" @click="updateSelected"
                                 :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
                                 :class="{'is-loading': isUpdatingSelected}">
                                 <span class="icon is-small">
@@ -310,6 +308,12 @@
                                     <i class="fas fa-download"></i>
                                 </span>
                                 <span>Download as CSV</span>
+                            </button>
+                            <button class="button is-success" @click="openAddStockModal">
+                                <span class="icon is-small">
+                                    <i class="fas fa-plus"></i>
+                                </span>
+                                <span>Add Stock</span>
                             </button>
                         </div>
 
@@ -375,6 +379,15 @@
                             :disabled="(!bulkPortfolio && !bulkSector && !bulkThesis && !bulkCountry) || isBulkProcessing"
                             :class="{'is-loading': isBulkProcessing}">
                             Apply Changes
+                        </button>
+                        <button class="button is-danger" @click="deleteManualStocks"
+                            v-if="selectedManualCount > 0"
+                            :disabled="isDeletingStocks"
+                            :class="{'is-loading': isDeletingStocks}">
+                            <span class="icon is-small">
+                                <i class="fas fa-trash"></i>
+                            </span>
+                            <span>Delete ({% raw %}{{ selectedManualCount }}{% endraw %})</span>
                         </button>
                         <button class="button" @click="clearSelection">
                             Clear Selection
@@ -488,30 +501,44 @@
                                     </label>
                                 </td>
                                 <td class="col-identifier">
-                                    <div class="field has-addons">
-                                        <div class="control is-expanded">
-                                            <input class="input is-small"
-                                                   type="text"
-                                                   :value="getEditingValue(item, 'identifier')"
-                                                   @input="setEditingValue(item, 'identifier', $event.target.value)"
-                                                   :class="{ 'user-edited': item.identifier_manually_edited }"
-                                                   :title="item.identifier_manually_edited
-                                                           ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
-                                                           : ''"
-                                                   @focus="trackOriginal(item, 'identifier')"
-                                                   @blur="commitIdentifier(item)"
-                                                   @keydown.enter="commitIdentifier(item); $event.target.blur()"
-                                                   @dblclick="$event.target.select()"
-                                                   @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'identifier'))"
-                                                   @mouseleave="hideOverflowTooltip($event)">
-                                        </div>
-                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].identifier">
-                                            <span class="tag is-small is-info">Saving...</span>
-                                        </div>
+                                    <div class="identifier-cell-wrapper">
+                                        <!-- Show "M" badge for manual stocks -->
+                                        <span v-if="item.source === 'manual'" class="manual-badge" title="Manually added">M</span>
+                                        <!-- Editable identifier for all stocks -->
+                                        <input class="input is-small"
+                                               type="text"
+                                               :value="getEditingValue(item, 'identifier')"
+                                               @input="setEditingValue(item, 'identifier', $event.target.value)"
+                                               :class="{ 'user-edited': item.identifier_manually_edited }"
+                                               :title="item.identifier_manually_edited
+                                                       ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
+                                                       : ''"
+                                               @focus="trackOriginal(item, 'identifier')"
+                                               @blur="commitIdentifier(item)"
+                                               @keydown.enter="commitIdentifier(item); $event.target.blur()"
+                                               @dblclick="$event.target.select()"
+                                               @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'identifier'))"
+                                               @mouseleave="hideOverflowTooltip($event)">
+                                        <span v-if="savingStates[item.id] && savingStates[item.id].identifier" class="tag is-small is-info">Saving...</span>
                                     </div>
                                 </td>
                                 <td class="col-company">
-                                    <span class="truncate" v-text="item.company"
+                                    <!-- Editable for manual stocks only -->
+                                    <div v-if="item.source === 'manual'" class="company-edit-wrapper">
+                                        <input class="input is-small"
+                                               type="text"
+                                               :value="getEditingValue(item, 'company')"
+                                               @input="setEditingValue(item, 'company', $event.target.value)"
+                                               @focus="trackOriginal(item, 'company')"
+                                               @blur="commitCompany(item)"
+                                               @keydown.enter="commitCompany(item); $event.target.blur()"
+                                               @dblclick="$event.target.select()"
+                                               @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'company'))"
+                                               @mouseleave="hideOverflowTooltip($event)">
+                                        <span v-if="savingStates[item.id] && savingStates[item.id].company" class="tag is-small is-info">Saving...</span>
+                                    </div>
+                                    <!-- Read-only for CSV-imported stocks -->
+                                    <span v-else class="truncate" v-text="item.company"
                                           @mouseenter="showOverflowTooltip($event, item.company)"
                                           @mouseleave="hideOverflowTooltip($event)"></span>
                                 </td>
@@ -631,20 +658,16 @@
                                 </td>
                                 <td class="col-currency">
                                     <!-- Priority 1: If custom value set, show it in orange -->
-                                    <div v-if="item.is_custom_value && item.custom_total_value" class="field has-addons" style="margin-bottom: 0;">
-                                        <div class="control is-expanded">
-                                            <input class="input is-small user-edited sensitive-value"
-                                                   type="text"
-                                                   :value="formatCurrencyRaw(item.custom_total_value)"
-                                                   @focus="trackOriginalTotalValue(item)"
-                                                   @blur="commitTotalValue(item, $event.target.value)"
-                                                   @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
-                                                   @dblclick="$event.target.select()"
-                                                   title="Custom total value - manually entered">
-                                        </div>
-                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].totalValue">
-                                            <span class="tag is-small is-info">Saving...</span>
-                                        </div>
+                                    <div v-if="item.is_custom_value && item.custom_total_value" class="value-edit-wrapper">
+                                        <input class="input is-small user-edited sensitive-value"
+                                               type="text"
+                                               :value="formatCurrencyRaw(item.custom_total_value)"
+                                               @focus="trackOriginalTotalValue(item)"
+                                               @blur="commitTotalValue(item, $event.target.value)"
+                                               @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
+                                               @dblclick="$event.target.select()"
+                                               title="Custom total value - manually entered">
+                                        <span v-if="savingStates[item.id] && savingStates[item.id].totalValue" class="tag is-small is-info">Saving...</span>
                                     </div>
                                     <!-- Priority 2: If custom price exists (but not total), calculate using custom price -->
                                     <span v-else-if="item.is_custom_value && item.custom_price_eur && !item.custom_total_value"
@@ -654,21 +677,17 @@
                                     <!-- Priority 3: If market price exists, show calculated value -->
                                     <span v-else-if="item.price_eur" v-html="formatCurrency(item.price_eur * item.effective_shares)"></span>
                                     <!-- Priority 4: No price available - editable input -->
-                                    <div v-else class="field has-addons" style="margin-bottom: 0;">
-                                        <div class="control is-expanded">
-                                            <input class="input is-small sensitive-value"
-                                                   type="text"
-                                                   value="€0,00"
-                                                   @focus="trackOriginalTotalValue(item)"
-                                                   @blur="commitTotalValue(item, $event.target.value)"
-                                                   @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
-                                                   @dblclick="$event.target.select()"
-                                                   placeholder="Enter value"
-                                                   title="No price available - enter total value manually">
-                                        </div>
-                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].totalValue">
-                                            <span class="tag is-small is-info">Saving...</span>
-                                        </div>
+                                    <div v-else class="value-edit-wrapper">
+                                        <input class="input is-small sensitive-value"
+                                               type="text"
+                                               value="€0,00"
+                                               @focus="trackOriginalTotalValue(item)"
+                                               @blur="commitTotalValue(item, $event.target.value)"
+                                               @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
+                                               @dblclick="$event.target.select()"
+                                               placeholder="Enter value"
+                                               title="No price available - enter total value manually">
+                                        <span v-if="savingStates[item.id] && savingStates[item.id].totalValue" class="tag is-small is-info">Saving...</span>
                                     </div>
                                 </td>
                                 <td class="col-currency">
@@ -677,6 +696,174 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Add Stock Modal -->
+            <div class="modal" :class="{ 'is-active': showAddStockModal }">
+                <div class="modal-background" @click="closeAddStockModal"></div>
+                <div class="modal-card">
+                    <header class="modal-card-head">
+                        <p class="modal-card-title">Add Stock</p>
+                        <button class="delete" aria-label="close" @click="closeAddStockModal"></button>
+                    </header>
+                    <section class="modal-card-body">
+                        <!-- Identifier Field (Optional) -->
+                        <div class="field">
+                            <label class="label">Identifier (optional)</label>
+                            <div class="control has-icons-right">
+                                <input class="input" type="text"
+                                       v-model="addStockForm.identifier"
+                                       @blur="validateIdentifier"
+                                       placeholder="e.g., AAPL, MSFT, BTC-USD"
+                                       :class="{
+                                           'is-success': identifierValidation.status === 'valid',
+                                           'is-warning': identifierValidation.status === 'invalid'
+                                       }">
+                                <span class="icon is-small is-right" v-if="identifierValidation.loading">
+                                    <i class="fas fa-spinner fa-pulse"></i>
+                                </span>
+                                <span class="icon is-small is-right" v-else-if="identifierValidation.status === 'valid'">
+                                    <i class="fas fa-check has-text-success"></i>
+                                </span>
+                                <span class="icon is-small is-right" v-else-if="identifierValidation.status === 'invalid'">
+                                    <i class="fas fa-exclamation-triangle has-text-warning"></i>
+                                </span>
+                            </div>
+                            <p class="help">Leave blank for private holdings or manually-valued securities</p>
+                            <!-- Price Preview -->
+                            <div v-if="identifierValidation.status === 'valid' && identifierValidation.priceData" class="notification is-success is-light mt-2 py-2 px-3">
+                                <span class="has-text-weight-semibold">Price found:</span>
+                                {% raw %}{{ formatCurrency(identifierValidation.priceData.price_eur) }}{% endraw %}
+                                <span v-if="identifierValidation.priceData.country" class="ml-2">
+                                    ({% raw %}{{ identifierValidation.priceData.country }}{% endraw %})
+                                </span>
+                            </div>
+                            <div v-if="identifierValidation.status === 'invalid'" class="notification is-warning is-light mt-2 py-2 px-3">
+                                <span>Identifier not found. You can still add with a custom value.</span>
+                            </div>
+                        </div>
+
+                        <!-- Company Name -->
+                        <div class="field">
+                            <label class="label">Company Name *</label>
+                            <div class="control">
+                                <input class="input" type="text"
+                                       v-model="addStockForm.name"
+                                       placeholder="e.g., Apple Inc."
+                                       :class="{ 'is-danger': addStockErrors.name }">
+                            </div>
+                            <p class="help is-danger" v-if="addStockErrors.name">{% raw %}{{ addStockErrors.name }}{% endraw %}</p>
+                        </div>
+
+                        <!-- Portfolio and Sector Row -->
+                        <div class="columns">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Portfolio</label>
+                                    <div class="control">
+                                        <div class="select is-fullwidth">
+                                            <select v-model="addStockForm.portfolio_id">
+                                                <option :value="null">Unassigned</option>
+                                                <option v-for="p in addStockPortfolios" :key="p.id" :value="p.id">
+                                                    {% raw %}{{ p.name }}{% endraw %}
+                                                </option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Sector *</label>
+                                    <div class="control">
+                                        <input class="input" type="text"
+                                               v-model="addStockForm.sector"
+                                               placeholder="e.g., Technology"
+                                               :class="{ 'is-danger': addStockErrors.sector }">
+                                    </div>
+                                    <p class="help is-danger" v-if="addStockErrors.sector">{% raw %}{{ addStockErrors.sector }}{% endraw %}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Type and Country Row -->
+                        <div class="columns">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Type</label>
+                                    <div class="control">
+                                        <div class="select is-fullwidth">
+                                            <select v-model="addStockForm.investment_type">
+                                                <option :value="null">-</option>
+                                                <option value="Stock">Stock</option>
+                                                <option value="ETF">ETF</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Country</label>
+                                    <div class="control">
+                                        <div class="select is-fullwidth">
+                                            <select v-model="addStockForm.country">
+                                                <option value="">Select Country</option>
+                                                {% for country in countries %}
+                                                <option value="{{ country }}">{{ country }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shares and Total Value Row -->
+                        <div class="columns">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Shares *</label>
+                                    <div class="control">
+                                        <input class="input" type="text"
+                                               v-model="addStockForm.shares"
+                                               placeholder="e.g., 10"
+                                               :class="{ 'is-danger': addStockErrors.shares }">
+                                    </div>
+                                    <p class="help is-danger" v-if="addStockErrors.shares">{% raw %}{{ addStockErrors.shares }}{% endraw %}</p>
+                                </div>
+                            </div>
+                            <div class="column" v-if="showTotalValueField">
+                                <div class="field">
+                                    <label class="label">Total Value (EUR) *</label>
+                                    <div class="control">
+                                        <input class="input" type="text"
+                                               v-model="addStockForm.total_value"
+                                               placeholder="e.g., 1500.00"
+                                               :class="{ 'is-danger': addStockErrors.total_value }">
+                                    </div>
+                                    <p class="help is-danger" v-if="addStockErrors.total_value">{% raw %}{{ addStockErrors.total_value }}{% endraw %}</p>
+                                    <p class="help">Required when identifier is not provided or not found</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Error Message -->
+                        <div v-if="addStockError" class="notification is-danger is-light">
+                            <button class="delete" @click="addStockError = null"></button>
+                            {% raw %}{{ addStockError }}{% endraw %}
+                        </div>
+                    </section>
+                    <footer class="modal-card-foot">
+                        <button class="button" @click="closeAddStockModal">Cancel</button>
+                        <button class="button is-success"
+                                @click="submitAddStock"
+                                :class="{ 'is-loading': isAddingStock }"
+                                :disabled="isAddingStock">
+                            Add Stock
+                        </button>
+                    </footer>
                 </div>
             </div>
         </div>

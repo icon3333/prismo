@@ -771,6 +771,17 @@
                             hozAlign: "right",
                             headerSort: false,
                             widthGrow: 1,
+                            sorter: function(a, b, aRow, bRow, column, dir, sorterParams) {
+                                const aData = aRow.getData();
+                                const bData = bRow.getData();
+                                const sortByPct = tabulatorPnLSortState.type === 'pnl-pct';
+                                const aVal = sortByPct ? aData.pnl_percentage : aData.pnl_absolute;
+                                const bVal = sortByPct ? bData.pnl_percentage : bData.pnl_absolute;
+                                // Handle null/undefined - treat as -Infinity (sort to bottom in desc)
+                                const aSafe = (aVal === null || aVal === undefined) ? -Infinity : aVal;
+                                const bSafe = (bVal === null || bVal === undefined) ? -Infinity : bVal;
+                                return aSafe - bSafe;
+                            },
                             formatter: function(cell) {
                                 const data = cell.getRow().getData();
                                 return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
@@ -857,6 +868,17 @@
                             hozAlign: "right",
                             headerSort: false,
                             widthGrow: 1,
+                            sorter: function(a, b, aRow, bRow, column, dir, sorterParams) {
+                                const aData = aRow.getData();
+                                const bData = bRow.getData();
+                                const sortByPct = tabulatorPnLSortState.type === 'pnl-pct';
+                                const aVal = sortByPct ? aData.pnl_percentage : aData.pnl_absolute;
+                                const bVal = sortByPct ? bData.pnl_percentage : bData.pnl_absolute;
+                                // Handle null/undefined - treat as -Infinity (sort to bottom in desc)
+                                const aSafe = (aVal === null || aVal === undefined) ? -Infinity : aVal;
+                                const bSafe = (bVal === null || bVal === undefined) ? -Infinity : bVal;
+                                return aSafe - bSafe;
+                            },
                             formatter: function(cell) {
                                 const data = cell.getRow().getData();
                                 return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
@@ -915,7 +937,8 @@
                             e.stopPropagation(); // Prevent Tabulator's default header behavior
 
                             const sortType = this.dataset.sortType; // 'pnl-eur' or 'pnl-pct'
-                            const field = sortType === 'pnl-eur' ? 'pnl_absolute' : 'pnl_percentage';
+                            // Always use pnl_absolute as the field - custom sorter reads tabulatorPnLSortState.type
+                            const field = 'pnl_absolute';
 
                             // Determine new direction
                             let newDirection = 'desc'; // Default to descending (highest first)

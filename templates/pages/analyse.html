@@ -73,6 +73,7 @@
                         <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
                             <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Thesis Allocation</h3>
                             <div class="toggle-group" id="allocationToggle">
+                                <button class="toggle-btn" data-mode="portfolios" id="portfoliosToggle" style="display: none;">Portfolios</button>
                                 <button class="toggle-btn active" data-mode="thesis">Thesis</button>
                                 <button class="toggle-btn" data-mode="sector">Sector</button>
                                 <button class="toggle-btn" data-mode="stocks">Stocks</button>
@@ -167,7 +168,7 @@
             let selectedPortfolioId = null;
             let selectedPortfolioIds = [];  // Needed by heatmap
             let currentPortfolioData = null;
-            let allocationMode = 'thesis'; // 'thesis', 'sector', or 'stocks'
+            let allocationMode = 'thesis'; // 'portfolios', 'thesis', 'sector', or 'stocks'
             let heatmapMode = 'sector'; // 'sector' or 'thesis'
 
             // Make portfolioData available globally for heatmap
@@ -675,6 +676,7 @@
                 if (!currentPortfolioData) return;
 
                 updateSummaryBox();
+                updatePortfoliosToggleVisibility();  // Show/hide Portfolios tab based on selection
                 renderAllocationTable();  // Use unified render based on current mode
 
                 document.getElementById('portfolioSummary').style.display = 'block';
@@ -702,6 +704,34 @@
                     ? new Date(currentPortfolioData.last_updated).toLocaleDateString()
                     : 'Never';
                 document.getElementById('summaryLastUpdated').textContent = lastUpdated;
+            }
+
+            /**
+             * Show/hide the Portfolios toggle based on whether "All Portfolios" is selected.
+             * Only makes sense to show portfolio breakdown when viewing all portfolios.
+             */
+            function updatePortfoliosToggleVisibility() {
+                const portfoliosToggle = document.getElementById('portfoliosToggle');
+                if (!portfoliosToggle) return;
+
+                const isAllPortfolios = currentPortfolioData && currentPortfolioData.portfolio_id === 'all';
+
+                if (isAllPortfolios) {
+                    portfoliosToggle.style.display = '';  // Show
+                } else {
+                    portfoliosToggle.style.display = 'none';  // Hide
+                    // If portfolios mode was active, switch to thesis
+                    if (allocationMode === 'portfolios') {
+                        allocationMode = 'thesis';
+                        // Update active state on toggle buttons
+                        const toggleGroup = document.getElementById('allocationToggle');
+                        if (toggleGroup) {
+                            toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                            const thesisBtn = toggleGroup.querySelector('[data-mode="thesis"]');
+                            if (thesisBtn) thesisBtn.classList.add('active');
+                        }
+                    }
+                }
             }
 
             // Tabulator instance for unified allocation table
@@ -778,6 +808,95 @@
                                 const aVal = sortByPct ? aData.pnl_percentage : aData.pnl_absolute;
                                 const bVal = sortByPct ? bData.pnl_percentage : bData.pnl_absolute;
                                 // Handle null/undefined - treat as -Infinity (sort to bottom in desc)
+                                const aSafe = (aVal === null || aVal === undefined) ? -Infinity : aVal;
+                                const bSafe = (bVal === null || bVal === undefined) ? -Infinity : bVal;
+                                return aSafe - bSafe;
+                            },
+                            formatter: function(cell) {
+                                const data = cell.getRow().getData();
+                                return formatPnL(data.pnl_absolute, data.pnl_percentage, data.total_invested);
+                            }
+                        }
+                    ];
+                } else if (allocationMode === 'portfolios') {
+                    // Portfolios mode: tree structure with portfolios as parents, companies as children
+                    const dataSource = currentPortfolioData.portfolios || [];
+
+                    tableData = dataSource.map(portfolio => {
+                        const portfolioValue = portfolio.total_value || 0;
+
+                        return {
+                            name: portfolio.name,
+                            percentage: portfolio.percentage,
+                            total_value: portfolioValue,
+                            pnl_absolute: portfolio.pnl_absolute,
+                            pnl_percentage: portfolio.pnl_percentage,
+                            total_invested: portfolio.total_invested,
+                            _children: portfolio.companies.map(c => {
+                                const companyValue = c.current_value || 0;
+                                // percentage is already calculated as % within portfolio
+                                return {
+                                    name: c.name,
+                                    percentage: c.percentage || 0,
+                                    total_value: companyValue,
+                                    pnl_absolute: c.pnl_absolute,
+                                    pnl_percentage: c.pnl_percentage,
+                                    total_invested: c.total_invested
+                                };
+                            })
+                        };
+                    });
+
+                    emptyMessage = 'No portfolios';
+
+                    columns = [
+                        {
+                            title: "Portfolio",
+                            field: "name",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                return escapeHtml(cell.getValue() || '');
+                            }
+                        },
+                        {
+                            title: "% of Total",
+                            field: "percentage",
+                            hozAlign: "right",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                const row = cell.getRow();
+                                const data = row.getData();
+                                const isChild = row.getTreeParent();
+
+                                if (isChild) {
+                                    // Child row: show % within portfolio (gray text)
+                                    const pct = (data.percentage || 0).toFixed(1);
+                                    return `<span class="has-text-grey">${pct}%</span>`;
+                                }
+                                return formatPercentage(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "Value",
+                            field: "total_value",
+                            hozAlign: "right",
+                            widthGrow: 1,
+                            formatter: function(cell) {
+                                return formatCurrency(cell.getValue());
+                            }
+                        },
+                        {
+                            title: "P&L <span class='tabulator-pnl-toggle' data-sort-type='pnl-eur' title='Sort by € value'>€</span> / <span class='tabulator-pnl-toggle' data-sort-type='pnl-pct' title='Sort by % value'>%</span>",
+                            field: "pnl_absolute",
+                            hozAlign: "right",
+                            headerSort: false,
+                            widthGrow: 1,
+                            sorter: function(a, b, aRow, bRow, column, dir, sorterParams) {
+                                const aData = aRow.getData();
+                                const bData = bRow.getData();
+                                const sortByPct = tabulatorPnLSortState.type === 'pnl-pct';
+                                const aVal = sortByPct ? aData.pnl_percentage : aData.pnl_absolute;
+                                const bVal = sortByPct ? bData.pnl_percentage : bData.pnl_absolute;
                                 const aSafe = (aVal === null || aVal === undefined) ? -Infinity : aVal;
                                 const bSafe = (bVal === null || bVal === undefined) ? -Infinity : bVal;
                                 return aSafe - bSafe;
@@ -907,7 +1026,7 @@
                     columns: columns
                 };
 
-                // Add tree config only for thesis/sector modes
+                // Add tree config for portfolios/thesis/sector modes (not stocks)
                 if (!isStocksMode) {
                     config.dataTree = true;
                     config.dataTreeStartExpanded = false;
@@ -996,6 +1115,8 @@
                 // Update title based on mode
                 if (allocationMode === 'stocks') {
                     titleEl.textContent = 'Stock Allocation';
+                } else if (allocationMode === 'portfolios') {
+                    titleEl.textContent = 'Portfolio Allocation';
                 } else if (allocationMode === 'thesis') {
                     titleEl.textContent = 'Thesis Allocation';
                 } else {

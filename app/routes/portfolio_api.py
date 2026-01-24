@@ -44,11 +44,12 @@ def _apply_company_update(cursor, company_id, data, account_id):
     """
     # Whitelist of allowed fields that can be updated via this function
     ALLOWED_FIELDS = {
-        'identifier', 'sector', 'thesis', 'portfolio', 'investment_type',
+        'identifier', 'name', 'sector', 'thesis', 'portfolio', 'investment_type',
         'custom_total_value', 'custom_price_eur', 'is_custom_value_edit',
         'country', 'reset_country', 'is_country_user_edit', 'reset_identifier',
         'is_identifier_user_edit',
-        'shares', 'override_share', 'is_user_edit'
+        'shares', 'override_share', 'is_user_edit',
+        'reset_shares', 'reset_custom_value'
     }
 
     # Validate that all keys in data are whitelisted
@@ -118,6 +119,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
     # This prevents SQL injection by explicitly mapping user input keys to known safe column names
     ALLOWED_UPDATES = {
         'identifier': 'identifier = ?',
+        'name': 'name = ?',
         'sector': 'sector = ?',
         'thesis': 'thesis = ?',
         'portfolio': 'portfolio_id = ?',
@@ -346,6 +348,30 @@ def _apply_company_update(cursor, company_id, data, account_id):
                     [company_id, shares, override]
                 )
 
+    # Handle shares reset
+    if data.get('reset_shares', False):
+        cursor.execute('''
+            UPDATE company_shares
+            SET override_share = NULL,
+                is_manually_edited = 0,
+                manual_edit_date = NULL,
+                csv_modified_after_edit = 0
+            WHERE company_id = ?
+        ''', [company_id])
+        logger.info(f"Reset shares override for company {company_id}")
+
+    # Handle custom value reset
+    if data.get('reset_custom_value', False):
+        cursor.execute('''
+            UPDATE companies
+            SET custom_total_value = NULL,
+                custom_price_eur = NULL,
+                is_custom_value = 0,
+                custom_value_date = NULL
+            WHERE id = ?
+        ''', [company_id])
+        logger.info(f"Reset custom value for company {company_id}")
+
 # API endpoint to get and save state data
 
 @require_auth
@@ -475,8 +501,8 @@ def invalidate_portfolio_cache(account_id: int) -> None:
         cache.delete_memoized(_get_allocate_portfolio_data_internal, account_id)
         logger.debug(f"Cache invalidated for account_id: {account_id}")
     except Exception as e:
-        # Cache invalidation failure is not critical - log and continue
-        logger.warning(f"Failed to invalidate cache for account_id {account_id}: {e}")
+        # Cache invalidation failure is not critical - log full traceback and continue
+        logger.exception(f"Failed to invalidate cache for account_id {account_id}")
 
 
 @cache.memoize(timeout=60)
@@ -712,8 +738,37 @@ def _get_all_portfolios_data(account_id: int) -> dict:
             'last_updated': None,
             'companies': [],
             'sectors': [],
-            'theses': []
+            'theses': [],
+            'portfolios': []
         }
+
+    # Group by portfolio BEFORE deduplication (for Portfolios tab)
+    portfolios_raw = {}
+    for company in companies_raw:
+        portfolio_name = company.get('portfolio_name') or 'Unknown'
+        current_value = float(calculate_item_value(company))
+        total_invested = float(company.get('total_invested', 0) or 0)
+
+        if portfolio_name not in portfolios_raw:
+            portfolios_raw[portfolio_name] = {
+                'name': portfolio_name,
+                'companies': [],
+                'total_value': 0,
+                'total_invested': 0
+            }
+
+        # Create company entry for this portfolio (non-deduplicated)
+        company_entry = {
+            'name': company['name'],
+            'identifier': company['identifier'],
+            'sector': company.get('sector'),
+            'current_value': current_value,
+            'total_invested': total_invested
+        }
+
+        portfolios_raw[portfolio_name]['companies'].append(company_entry)
+        portfolios_raw[portfolio_name]['total_value'] += current_value
+        portfolios_raw[portfolio_name]['total_invested'] += total_invested
 
     # Deduplicate by identifier - group by identifier and aggregate
     deduped = {}
@@ -854,6 +909,44 @@ def _get_all_portfolios_data(account_id: int) -> dict:
 
     theses_list.sort(key=lambda x: x['total_value'], reverse=True)
 
+    # Convert portfolios_raw to list and calculate percentages (using portfolio_total which includes cash)
+    portfolios_list = []
+    for portfolio_data in portfolios_raw.values():
+        portfolio_data['percentage'] = (
+            (portfolio_data['total_value'] / portfolio_total * 100)
+            if portfolio_total > 0 else 0
+        )
+
+        # Calculate portfolio P&L
+        if portfolio_data['total_invested'] > 0:
+            pnl_absolute = portfolio_data['total_value'] - portfolio_data['total_invested']
+            pnl_percentage = (pnl_absolute / portfolio_data['total_invested']) * 100
+            portfolio_data['pnl_absolute'] = pnl_absolute
+            portfolio_data['pnl_percentage'] = pnl_percentage
+        else:
+            portfolio_data['pnl_absolute'] = None
+            portfolio_data['pnl_percentage'] = None
+
+        # Calculate per-company percentages within portfolio
+        for company in portfolio_data['companies']:
+            company['percentage'] = (
+                (company['current_value'] / portfolio_data['total_value'] * 100)
+                if portfolio_data['total_value'] > 0 else 0
+            )
+            # P&L for each company
+            ti = float(company.get('total_invested', 0) or 0)
+            if ti > 0:
+                company['pnl_absolute'] = company['current_value'] - ti
+                company['pnl_percentage'] = (company['pnl_absolute'] / ti) * 100
+            else:
+                company['pnl_absolute'] = None
+                company['pnl_percentage'] = None
+
+        portfolio_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
+        portfolios_list.append(portfolio_data)
+
+    portfolios_list.sort(key=lambda x: x['total_value'], reverse=True)
+
     # Calculate total portfolio P&L
     total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
     if total_invested > 0:
@@ -866,7 +959,7 @@ def _get_all_portfolios_data(account_id: int) -> dict:
     # Get the most recent last_updated across all companies
     last_updated = max((c['last_updated'] for c in companies if c['last_updated']), default=None)
 
-    logger.info(f"Returning {len(companies)} unique companies from all portfolios ({len(sectors_list)} sectors, {len(theses_list)} theses)")
+    logger.info(f"Returning {len(companies)} unique companies from all portfolios ({len(sectors_list)} sectors, {len(theses_list)} theses, {len(portfolios_list)} portfolios)")
 
     return {
         'portfolio_id': 'all',
@@ -881,7 +974,8 @@ def _get_all_portfolios_data(account_id: int) -> dict:
         'last_updated': last_updated,
         'companies': companies,
         'sectors': sectors_list,
-        'theses': theses_list
+        'theses': theses_list,
+        'portfolios': portfolios_list
     }
 
 
@@ -920,14 +1014,21 @@ def get_single_portfolio_data_api(portfolio_id):
             response_data = _get_all_portfolios_data(account_id)
             return jsonify(response_data)
 
-        logger.info(f"Fetching data for portfolio {portfolio_id}, account {account_id}")
+        # Validate portfolio_id is a valid integer
+        try:
+            portfolio_id_int = int(portfolio_id)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid portfolio_id format: {portfolio_id}")
+            return not_found_response(f'Portfolio {portfolio_id} not found')
+
+        logger.info(f"Fetching data for portfolio {portfolio_id_int}, account {account_id}")
 
         # Verify portfolio belongs to account
         portfolio = query_db('''
             SELECT id, name
             FROM portfolios
             WHERE id = ? AND account_id = ?
-        ''', [portfolio_id, account_id], one=True)
+        ''', [portfolio_id_int, account_id], one=True)
 
         if not portfolio:
             logger.warning(f"Portfolio {portfolio_id} not found for account {account_id}")
@@ -1687,9 +1788,12 @@ def get_portfolios_api():
                         VALUES (?, '-')
                     ''', [account_id])
 
-                    portfolios.append({'id': portfolio_id, 'name': '-'})
-                    logger.info(
-                        "Created and added '-' portfolio to the response")
+                    if portfolio_id:
+                        portfolios.append({'id': portfolio_id, 'name': '-'})
+                        logger.info(
+                            "Created and added '-' portfolio to the response")
+                    else:
+                        logger.error("Failed to create '-' portfolio - execute_db returned None")
 
             # Add portfolio values if requested
             if include_values and portfolios:
@@ -1789,7 +1893,7 @@ def upload_csv():
     This endpoint validates the file and starts background processing,
     returning immediately to enable real-time progress tracking.
     """
-    logger.info(f"CSV upload request - session content: {dict(session)}")
+    logger.info(f"CSV upload request - account_id: {session.get('account_id')}")
 
     # Determine if this is an AJAX request
     accept_header = request.headers.get('Accept', '')
@@ -2028,10 +2132,7 @@ def update_portfolio_api():
 
         if not is_valid:
             logger.warning(f"Batch update validation failed: {error_msg}")
-            return validation_error_response(
-                error_msg,
-                details=validation_data
-            )
+            return validation_error_response('batch_update', error_msg)
 
         # Extract validated data
         company_map = validation_data['company_map']
@@ -2579,11 +2680,11 @@ def simulator_ticker_lookup():
     try:
         data = request.get_json()
         if not data:
-            return validation_error_response('Request body is required')
+            return validation_error_response('request', 'Request body is required')
 
         ticker = data.get('ticker', '').strip().upper()
         if not ticker:
-            return validation_error_response('Ticker symbol is required')
+            return validation_error_response('ticker', 'Ticker symbol is required')
 
         account_id = g.account_id
         logger.info(f"Simulator ticker lookup for: {ticker}")
@@ -3210,19 +3311,19 @@ def set_account_cash():
         data = request.get_json()
 
         if not data:
-            return validation_error_response('Request body is required')
+            return validation_error_response('request', 'Request body is required')
 
         cash_value = data.get('cash')
         if cash_value is None:
-            return validation_error_response('Cash value is required')
+            return validation_error_response('cash', 'Cash value is required')
 
         try:
             cash = float(cash_value)
         except (TypeError, ValueError):
-            return validation_error_response('Cash must be a valid number')
+            return validation_error_response('cash', 'Cash must be a valid number')
 
         if cash < 0:
-            return validation_error_response('Cash cannot be negative')
+            return validation_error_response('cash', 'Cash cannot be negative')
 
         success = AccountRepository.set_cash(account_id, cash)
 
@@ -3238,3 +3339,148 @@ def set_account_cash():
     except Exception as e:
         logger.exception("Error setting account cash balance")
         return error_response('Failed to update cash balance', 500)
+
+
+# =============================================================================
+# Manual Stock Management API
+# =============================================================================
+
+@require_auth
+def add_company():
+    """
+    Manually add a company/security to the portfolio.
+
+    POST /portfolio/api/add_company
+    Body: {
+        "name": "Apple Inc.",
+        "identifier": "AAPL",  // Optional - leave blank for private holdings
+        "portfolio_id": 1,     // Optional - null for unassigned
+        "sector": "Technology",
+        "investment_type": "Stock",  // Optional: Stock, ETF, or null
+        "country": "US",       // Optional
+        "shares": 10.5,
+        "total_value": 1623.00  // Required if no identifier or price lookup fails
+    }
+
+    Returns:
+        - success: boolean
+        - company_id: ID of created company (if success)
+        - message: Success message
+        - error: Error type/message (if failed)
+        - existing: Existing company info (if duplicate)
+    """
+    try:
+        from app.services.company_service import CompanyService
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return validation_error_response('request', 'Request body is required')
+
+        result = CompanyService.add_company_manual(account_id, data)
+
+        if result.get('success'):
+            return jsonify(result), 201
+        elif result.get('error') == 'duplicate':
+            return jsonify(result), 409  # Conflict
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.exception("Error adding company manually")
+        return error_response('Failed to add company', 500)
+
+
+@require_auth
+def validate_identifier():
+    """
+    Validate an identifier by checking if price data is available.
+
+    GET /portfolio/api/validate_identifier?identifier=AAPL
+
+    Returns:
+        - success: boolean
+        - price_data: { price, currency, price_eur, country } if found
+        - error: Error message if not found
+    """
+    try:
+        from app.services.company_service import CompanyService
+
+        identifier = request.args.get('identifier', '').strip()
+
+        if not identifier:
+            return validation_error_response('identifier', 'Identifier is required')
+
+        result = CompanyService.validate_identifier(identifier)
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.exception("Error validating identifier")
+        return error_response('Failed to validate identifier', 500)
+
+
+@require_auth
+def delete_manual_companies():
+    """
+    Delete manually-added companies.
+
+    POST /portfolio/api/delete_companies
+    Body: { "company_ids": [1, 2, 3] }
+
+    Only companies with source='manual' can be deleted.
+    CSV-imported companies will be skipped.
+
+    Returns:
+        - success: boolean
+        - deleted_count: Number of companies deleted
+        - skipped_count: Number of companies skipped (not manual)
+    """
+    try:
+        from app.services.company_service import CompanyService
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return validation_error_response('request', 'Request body is required')
+
+        company_ids = data.get('company_ids', [])
+
+        if not company_ids or not isinstance(company_ids, list):
+            return validation_error_response('company_ids', 'company_ids must be a non-empty list')
+
+        result = CompanyService.delete_manual_companies(account_id, company_ids)
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.exception("Error deleting companies")
+        return error_response('Failed to delete companies', 500)
+
+
+@require_auth
+def get_portfolios_for_dropdown():
+    """
+    Get list of portfolios for dropdown selection.
+
+    GET /portfolio/api/portfolios_dropdown
+
+    Returns:
+        - portfolios: List of { id, name } objects
+    """
+    try:
+        from app.repositories.portfolio_repository import PortfolioRepository
+
+        account_id = g.account_id
+        portfolios = PortfolioRepository.get_portfolios_list(account_id)
+
+        return jsonify({
+            'success': True,
+            'portfolios': portfolios
+        })
+
+    except Exception as e:
+        logger.exception("Error getting portfolios for dropdown")
+        return error_response('Failed to get portfolios', 500)

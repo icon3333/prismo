@@ -74,39 +74,47 @@ def get_existing_overrides(account_id: int) -> dict:
     return override_map
 
 
-def get_user_edit_data(account_id: int) -> dict:
+def get_user_edit_data(account_id: int) -> tuple:
     """
     Get user edit data to handle transactions after manual edits.
 
     This allows the system to apply only newer transactions on top of
     manual edits, preserving user intent.
 
+    Returns two maps: one keyed by company name (primary), and one keyed
+    by identifier (fallback for when Parqet renames companies between exports).
+
     Args:
         account_id: Account ID
 
     Returns:
-        Dict[str, Dict]: company_name -> edit data mapping
+        Tuple[Dict[str, Dict], Dict[str, Dict]]:
+            (name_map, identifier_map) for manual edit protection
     """
     user_edit_data = query_db(
         '''SELECT cs.company_id, cs.shares, cs.override_share, cs.manual_edit_date,
-                  cs.is_manually_edited, cs.csv_modified_after_edit, c.name
+                  cs.is_manually_edited, cs.csv_modified_after_edit, c.name, c.identifier
            FROM company_shares cs
            JOIN companies c ON cs.company_id = c.id
            WHERE c.account_id = ? AND cs.is_manually_edited = 1''',
         [account_id]
     )
 
-    user_edit_map = {}
+    user_edit_map = {}           # keyed by name
+    identifier_edit_map = {}     # keyed by identifier (fallback)
     for row in user_edit_data:
-        user_edit_map[row['name']] = {
+        edit_data = {
             'company_id': row['company_id'],
             'original_shares': row['shares'],  # Original CSV shares
             'manual_shares': row['override_share'],  # User-edited shares
             'manual_edit_date': row['manual_edit_date'],
             'csv_modified_after_edit': row['csv_modified_after_edit']
         }
+        user_edit_map[row['name']] = edit_data
+        if row['identifier']:
+            identifier_edit_map[row['identifier']] = edit_data
 
     if user_edit_map:
         logger.info(f"Found {len(user_edit_map)} companies with manual edits")
 
-    return user_edit_map
+    return user_edit_map, identifier_edit_map

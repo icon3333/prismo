@@ -17,7 +17,8 @@ SHARE_EPSILON = 1e-6
 def calculate_share_changes(
     df: pd.DataFrame,
     company_positions: Dict[str, Dict],
-    user_edit_map: Dict[str, Dict]
+    user_edit_map: Dict[str, Dict],
+    identifier_edit_map: Dict[str, Dict] = None
 ) -> Dict[str, Dict]:
     """
     Calculate share changes for each company, respecting user manual edits.
@@ -30,6 +31,8 @@ def calculate_share_changes(
         df: DataFrame with parsed transactions (must have 'parsed_date' column)
         company_positions: Dict of company_name -> position data (from process_companies)
         user_edit_map: Dict of company_name -> user edit data (from portfolio_handler)
+        identifier_edit_map: Optional Dict of identifier -> user edit data (fallback
+            for when Parqet renames companies between exports)
 
     Returns:
         Dict[str, Dict]: company_name -> calculated share data
@@ -47,8 +50,19 @@ def calculate_share_changes(
 
         # Check if user has manually edited this company FIRST
         # (need to process manual edits even for zero-share companies to update overrides)
+        # Try name-based lookup first, then fall back to identifier-based lookup
+        user_edit_info = None
         if company_name in user_edit_map:
             user_edit_info = user_edit_map[company_name]
+        elif identifier_edit_map and position.get('identifier') in identifier_edit_map:
+            # Fallback: company name changed but identifier matches
+            user_edit_info = identifier_edit_map[position['identifier']]
+            logger.warning(
+                f"Company '{company_name}' not found by name in manual edits, "
+                f"but matched by identifier '{position['identifier']}' - preserving override"
+            )
+
+        if user_edit_info is not None:
             manual_edit_date = user_edit_info['manual_edit_date']
             manual_shares = user_edit_info['manual_shares']
 
@@ -139,19 +153,23 @@ def calculate_share_changes(
                         }
                 except Exception as e:
                     logger.error(f"Error parsing manual edit date for {company_name}: {e}")
-                    # Fallback to normal CSV processing
+                    # SAFE FALLBACK: preserve the user's manual override even if date is unparseable
                     share_calculations[company_name] = {
                         'csv_shares': current_shares,
-                        'override_shares': None,
-                        'has_manual_edit': False,
+                        'override_shares': manual_shares,
+                        'has_manual_edit': True,
                         'csv_modified_after_edit': False
                     }
             else:
-                # No manual edit date - fallback to normal processing
+                # No manual edit date but user DID manually edit - preserve their override
+                logger.warning(
+                    f"Manual edit for {company_name} has no edit date - "
+                    f"preserving override: {manual_shares}"
+                )
                 share_calculations[company_name] = {
                     'csv_shares': current_shares,
-                    'override_shares': None,
-                    'has_manual_edit': False,
+                    'override_shares': manual_shares,
+                    'has_manual_edit': True,
                     'csv_modified_after_edit': False
                 }
         else:

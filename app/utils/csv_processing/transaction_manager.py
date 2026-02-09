@@ -52,15 +52,17 @@ def apply_share_changes(
     total_companies = len(share_calculations)
     processed_companies = 0
 
-    # Pre-fetch all company data (identifier edits + shares) in a single query to avoid N+1
+    # Pre-fetch all company data (identifier edits + shares + source) in a single query to avoid N+1
     # This combines what used to be two separate queries into one efficient JOIN
     identifier_edit_map = {}
     shares_exist_map = {}
+    manual_company_ids = set()  # Track manually-added companies for protection
     company_data_rows = query_db(
         '''SELECT
             c.id,
             c.identifier_manually_edited,
             c.override_identifier,
+            c.source,
             cs.shares,
             cs.override_share,
             cs.is_manually_edited,
@@ -82,6 +84,9 @@ def apply_share_changes(
         # Build shares existence map
         if row['shares'] is not None:
             shares_exist_map[company_id] = True
+        # Track manual companies for protection during removal
+        if row.get('source') == 'manual':
+            manual_company_ids.add(company_id)
 
     # Process company updates and additions
     for company_name, share_data in share_calculations.items():
@@ -144,19 +149,29 @@ def apply_share_changes(
                 WHERE identifier IN ({placeholders}) AND account_id != ?''',
             list(identifiers_to_check) + [account_id]
         )
-        shared_identifiers = {row['identifier'] for row in shared_rows}
-        logger.debug(f"Found {len(shared_identifiers)} identifiers shared with other accounts")
+        # Guard against None result from query_db
+        if shared_rows:
+            shared_identifiers = {row['identifier'] for row in shared_rows}
+            logger.debug(f"Found {len(shared_identifiers)} identifiers shared with other accounts")
 
-    # Remove companies not in CSV or with zero shares
+    # Remove companies not in CSV or with zero shares (but protect manual companies)
+    manual_protected_count = 0
     for company_name in companies_to_remove:
-        if _remove_company(company_name, existing_company_map, account_id, cursor, shared_identifiers):
+        result = _remove_company(
+            company_name, existing_company_map, account_id, cursor,
+            shared_identifiers, manual_company_ids
+        )
+        if result == 'removed':
             positions_removed.append(company_name)
+        elif result == 'protected':
+            manual_protected_count += 1
 
     return {
         'added': positions_added,
         'updated': positions_updated,
         'removed': positions_removed,
-        'protected_identifiers_count': protected_identifiers_count
+        'protected_identifiers_count': protected_identifiers_count,
+        'manual_protected_count': manual_protected_count
     }
 
 
@@ -240,8 +255,8 @@ def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor, s
         else:
             cursor.execute(
                 '''INSERT INTO company_shares
-                   (company_id, shares, override_share, is_manually_edited, csv_modified_after_edit)
-                   VALUES (?, ?, ?, 1, 1)''',
+                   (company_id, shares, override_share, is_manually_edited, csv_modified_after_edit, manual_edit_date)
+                   VALUES (?, ?, ?, 1, 1, CURRENT_TIMESTAMP)''',
                 [company_id, share_data['csv_shares'], share_data['override_shares']]
             )
     else:
@@ -254,8 +269,8 @@ def _update_shares_with_manual_edit(company_id: int, share_data: Dict, cursor, s
         else:
             cursor.execute(
                 '''INSERT INTO company_shares
-                   (company_id, shares, override_share, is_manually_edited)
-                   VALUES (?, ?, ?, 1)''',
+                   (company_id, shares, override_share, is_manually_edited, manual_edit_date)
+                   VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)''',
                 [company_id, share_data['csv_shares'], share_data['override_shares']]
             )
 
@@ -305,8 +320,9 @@ def _remove_company(
     existing_company_map: Dict,
     account_id: int,
     cursor,
-    shared_identifiers: Set[str] = None
-) -> bool:
+    shared_identifiers: Set[str] = None,
+    manual_company_ids: Set[int] = None
+) -> str:
     """
     Remove a company and clean up related records.
 
@@ -317,19 +333,28 @@ def _remove_company(
         cursor: Database cursor
         shared_identifiers: Pre-computed set of identifiers used by other accounts
                            (optimization to avoid N+1 queries)
+        manual_company_ids: Pre-computed set of company IDs that were manually added
+                           (these will be protected from removal)
 
     Returns:
-        True if company was removed successfully, False otherwise
+        'removed' if company was removed successfully
+        'protected' if company was protected (manual source)
+        'not_found' if company was not found
     """
     if company_name not in existing_company_map:
         logger.warning(
             f"Cannot remove company '{company_name}' - not found in existing_company_map. "
             f"Available companies: {list(existing_company_map.keys())}"
         )
-        return False
+        return 'not_found'
 
     company_id = existing_company_map[company_name]['id']
     identifier = existing_company_map[company_name]['identifier']
+
+    # Protect manually-added companies from removal during CSV import
+    if manual_company_ids and company_id in manual_company_ids:
+        logger.info(f"Protecting manual company '{company_name}' (ID: {company_id}) from CSV removal")
+        return 'protected'
 
     # Determine removal reason for logging
     logger.info(f"Removing company '{company_name}' (ID: {company_id}, identifier: {identifier})")
@@ -364,4 +389,4 @@ def _remove_company(
             logger.info(f"No other accounts use {identifier}, removing from market_prices")
             cursor.execute('DELETE FROM market_prices WHERE identifier = ?', [identifier])
 
-    return True
+    return 'removed'

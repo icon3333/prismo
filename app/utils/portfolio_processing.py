@@ -784,14 +784,14 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
 
         default_portfolio_id = assign_portfolios(account_id, cursor)
         override_map = get_existing_overrides(account_id)
-        user_edit_map = get_user_edit_data(account_id)
+        user_edit_map, identifier_edit_map = get_user_edit_data(account_id)
 
         # Step 5: Calculate share changes
         logger.info("Step 4: Calculating share changes...")
         if progress_callback:
             progress_callback(30, 100, "Calculating share changes...", "processing")
 
-        share_calculations = calculate_share_changes(df, company_positions, user_edit_map)
+        share_calculations = calculate_share_changes(df, company_positions, user_edit_map, identifier_edit_map)
 
         # Step 6: Identify companies to remove
         csv_company_names = set(df['holdingname'])

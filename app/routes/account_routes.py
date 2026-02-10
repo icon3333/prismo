@@ -561,7 +561,7 @@ def import_data():
                         variable_value = state['variable_value']
                         
                         # Special handling for portfolio allocation data
-                        if state['page_name'] == 'build' and state['variable_name'] == 'portfolios':
+                        if state['page_name'] == 'builder' and state['variable_name'] == 'portfolios':
                             try:
                                 portfolios_data = json.loads(variable_value)
                                 # Create a mapping from old portfolio ID to new portfolio data (ID + name)

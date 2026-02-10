@@ -3,7 +3,7 @@
 {% block title %}Simulator{% endblock %}
 
 {% block head_extras %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/allocate.css') }}?v={{ range(1000, 9999) | random }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/simulator.css') }}?v={{ range(1000, 9999) | random }}">
 {% endblock %}
 
 {% block content %}
@@ -200,8 +200,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/allocate.js') }}?v={{ range(1000, 9999) | random }}"></script>
 <script src="{{ url_for('static', filename='js/simulator.js') }}?v={{ range(1000, 9999) | random }}"></script>
+<script src="{{ url_for('static', filename='js/simulation-scenarios.js') }}?v={{ range(1000, 9999) | random }}"></script>
 <script>
   // Initialize Allocation Simulator on page load
   (function() {

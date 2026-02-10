@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 10
+    LATEST_VERSION = 13
 
     try:
         # Get current schema version
@@ -588,6 +588,91 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 10, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 10 completed: cash column added to accounts")
+
+        # Migration 11: Add source column for tracking manual vs CSV-imported companies
+        if current_version < 11:
+            logger.info("Applying migration 11: Adding source column to companies")
+            _safe_add_column(cursor, "companies", "source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual'))")
+            # Update existing companies to 'csv' (they all came from CSV imports)
+            cursor.execute("UPDATE companies SET source = 'csv' WHERE source IS NULL")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)")
+            cursor.execute("UPDATE schema_version SET version = 11, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 11 completed: source column added to companies")
+
+        # Migration 12: Make identifier and portfolio_id nullable in companies table
+        if current_version < 12:
+            logger.info("Applying migration 12: Making identifier and portfolio_id nullable")
+            # Disable foreign keys temporarily - company_shares references companies,
+            # which blocks DROP TABLE when foreign_keys is ON
+            cursor.execute('PRAGMA foreign_keys = OFF')
+            # SQLite doesn't support ALTER COLUMN, so we recreate the table
+            cursor.execute('''
+                CREATE TABLE companies_new (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    identifier TEXT,
+                    sector TEXT NOT NULL,
+                    thesis TEXT DEFAULT '',
+                    portfolio_id INTEGER,
+                    account_id INTEGER NOT NULL,
+                    total_invested REAL DEFAULT 0,
+                    override_country TEXT,
+                    country_manually_edited BOOLEAN DEFAULT 0,
+                    country_manual_edit_date DATETIME,
+                    custom_total_value REAL,
+                    custom_price_eur REAL,
+                    is_custom_value BOOLEAN DEFAULT 0,
+                    custom_value_date DATETIME,
+                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+                    override_identifier TEXT,
+                    identifier_manually_edited BOOLEAN DEFAULT 0,
+                    identifier_manual_edit_date DATETIME,
+                    source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual')),
+                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id),
+                    UNIQUE (account_id, name)
+                )
+            ''')
+            # Copy data from old table
+            cursor.execute('''
+                INSERT INTO companies_new
+                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
+                       total_invested, override_country, country_manually_edited,
+                       country_manual_edit_date, custom_total_value, custom_price_eur,
+                       is_custom_value, custom_value_date, investment_type,
+                       override_identifier, identifier_manually_edited,
+                       identifier_manual_edit_date, source
+                FROM companies
+            ''')
+            # Drop old table
+            cursor.execute('DROP TABLE companies')
+            # Rename new table
+            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
+            # Recreate indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
+            # Re-enable foreign keys
+            cursor.execute('PRAGMA foreign_keys = ON')
+            cursor.execute("UPDATE schema_version SET version = 12, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 12 completed: identifier and portfolio_id are now nullable")
+
+        # Migration 13: Rename page_name values to match tab labels
+        if current_version < 13:
+            logger.info("Applying migration 13: Renaming page_name values in expanded_state")
+            cursor.execute("UPDATE expanded_state SET page_name = 'performance' WHERE page_name = 'analyse'")
+            cursor.execute("UPDATE expanded_state SET page_name = 'builder' WHERE page_name = 'build'")
+            cursor.execute("UPDATE schema_version SET version = 13, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 13 completed: page_name values renamed (analyse→performance, build→builder)")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

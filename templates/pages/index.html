@@ -342,7 +342,7 @@
     <div class="risk-section">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Stocks Missing</h2>
-            <a href="{{ url_for('portfolio.build') }}" class="button is-primary">
+            <a href="{{ url_for('portfolio.builder') }}" class="button is-primary">
                 <i class="fas fa-hammer me-2"></i>
                 Go to Builder
             </a>
@@ -570,7 +570,7 @@
 
         async function fetchAllocationRules() {
             try {
-                const response = await fetch('/portfolio/api/state?page=build');
+                const response = await fetch('/portfolio/api/state?page=builder');
                 if (!response.ok) return null;
                 const data = await response.json();
                 if (data && data.rules) {

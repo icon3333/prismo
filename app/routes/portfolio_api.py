@@ -466,7 +466,7 @@ def manage_state():
                 db.commit()
 
                 # Invalidate cache if build page state was modified (affects allocation calculations)
-                if page_name == 'build':
+                if page_name == 'builder':
                     invalidate_portfolio_cache(account_id)
 
             logger.info(
@@ -498,7 +498,7 @@ def invalidate_portfolio_cache(account_id: int) -> None:
         account_id: The account ID whose cache should be invalidated
     """
     try:
-        cache.delete_memoized(_get_allocate_portfolio_data_internal, account_id)
+        cache.delete_memoized(_get_simulator_portfolio_data_internal, account_id)
         logger.debug(f"Cache invalidated for account_id: {account_id}")
     except Exception as e:
         # Cache invalidation failure is not critical - log full traceback and continue
@@ -506,7 +506,7 @@ def invalidate_portfolio_cache(account_id: int) -> None:
 
 
 @cache.memoize(timeout=60)
-def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
+def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
     """
     Internal function to get structured portfolio data for rebalancing.
 
@@ -554,11 +554,11 @@ def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
             LEFT JOIN expanded_state es_portfolios ON
                 es_portfolios.account_id = p.account_id AND
-                es_portfolios.page_name = 'build' AND
+                es_portfolios.page_name = 'builder' AND
                 es_portfolios.variable_name = 'portfolios'
             LEFT JOIN expanded_state es_rules ON
                 es_rules.account_id = p.account_id AND
-                es_rules.page_name = 'build' AND
+                es_rules.page_name = 'builder' AND
                 es_rules.variable_name = 'rules'
             WHERE p.account_id = ? AND p.name IS NOT NULL
             ORDER BY p.name, c.sector, c.name
@@ -639,21 +639,21 @@ def _get_allocate_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
 
 
 @require_auth
-def get_allocate_portfolio_data():
+def get_simulator_portfolio_data():
     """API endpoint to get structured portfolio data for the rebalancing feature"""
     logger.info("API request for allocate portfolio data")
 
     try:
         account_id = g.account_id
-        result = _get_allocate_portfolio_data_internal(account_id)
+        result = _get_simulator_portfolio_data_internal(account_id)
         return jsonify(result)
 
     except ValidationError as e:
-        logger.error(f"Validation error in get_allocate_portfolio_data: {e}")
+        logger.error(f"Validation error in get_simulator_portfolio_data: {e}")
         return error_response(str(e), status=400)
 
     except DataIntegrityError as e:
-        logger.error(f"Data integrity error in get_allocate_portfolio_data: {e}")
+        logger.error(f"Data integrity error in get_simulator_portfolio_data: {e}")
         return error_response(str(e), status=409)
 
     except Exception as e:
@@ -1716,7 +1716,7 @@ def get_portfolios_api():
             try:
                 saved_portfolios_data = query_db('''
                     SELECT variable_value FROM expanded_state 
-                    WHERE account_id = ? AND page_name = 'build' AND variable_name = 'portfolios'
+                    WHERE account_id = ? AND page_name = 'builder' AND variable_name = 'portfolios'
                 ''', [account_id], one=True)
                 
                 if saved_portfolios_data and isinstance(saved_portfolios_data, dict):

@@ -9,14 +9,15 @@ from app.decorators import require_auth
 from app.cache import cache
 from app.routes.portfolio_api import (
     get_portfolios_api, get_portfolio_data_api, get_single_portfolio_data_api, manage_state,
-    get_allocate_portfolio_data, get_country_capacity_data, get_sector_capacity_data,
+    get_simulator_portfolio_data, get_country_capacity_data, get_sector_capacity_data,
     get_effective_capacity_data, update_portfolio_api, upload_csv, manage_portfolios,
     csv_upload_progress, cancel_csv_upload, get_portfolio_metrics, get_investment_type_distribution,
     simulator_ticker_lookup, simulator_portfolio_allocations,
     simulator_simulations_list, simulator_simulation_create, simulator_simulation_get,
     simulator_simulation_update, simulator_simulation_delete,
     builder_investment_targets,
-    get_account_cash, set_account_cash
+    get_account_cash, set_account_cash,
+    add_company, validate_identifier, delete_manual_companies, get_portfolios_for_dropdown
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -192,27 +193,24 @@ def risk_overview():
     return render_template('pages/risk_overview.html')
 
 
-@portfolio_bp.route('/analyse')
+@portfolio_bp.route('/performance')
 @require_auth
-def analyse():
-    """Portfolio analysis page"""
-    logger.info("Accessing analyse page")
+def performance():
+    """Portfolio performance page"""
+    logger.info("Accessing performance page")
 
     account_id = g.account_id
-    logger.info(f"Loading analyse page for account_id: {account_id}")
+    logger.info(f"Loading performance page for account_id: {account_id}")
 
     account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
-    return render_template('pages/analyse.html')
+    return render_template('pages/performance.html')
 
-# Route to serve the build.html page
-
-
-@portfolio_bp.route('/build')
+@portfolio_bp.route('/builder')
 @require_auth
-def build():
+def builder():
     """Builder page - configure portfolio allocation targets"""
     logger.info("Accessing Builder page")
 
@@ -226,14 +224,11 @@ def build():
     # Pass empty data that Vue.js will replace
     position = {'companyName': ''}  # Placeholder to avoid Jinja2 errors
 
-    return render_template('pages/build.html', position=position)
+    return render_template('pages/builder.html', position=position)
 
-# Route to serve the allocate.html page
-
-
-@portfolio_bp.route('/allocate')
+@portfolio_bp.route('/simulator')
 @require_auth
-def allocate():
+def simulator():
     """Simulator page - test allocation strategies"""
     logger.info("Accessing Simulator page")
 
@@ -244,7 +239,29 @@ def allocate():
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
-    return render_template('pages/allocate.html')
+    return render_template('pages/simulator.html')
+
+
+# Backward-compatibility redirects for old URLs
+@portfolio_bp.route('/analyse')
+@require_auth
+def analyse_redirect():
+    return redirect(url_for('portfolio.performance'), code=301)
+
+@portfolio_bp.route('/build')
+@require_auth
+def build_redirect():
+    return redirect(url_for('portfolio.builder'), code=301)
+
+@portfolio_bp.route('/allocate')
+@require_auth
+def allocate_redirect():
+    return redirect(url_for('portfolio.simulator'), code=301)
+
+@portfolio_bp.route('/api/allocate/<path:subpath>')
+@require_auth
+def allocate_api_redirect(subpath):
+    return redirect(f'/portfolio/api/simulator/{subpath}', code=301)
 
 
 # Register API routes with the blueprint
@@ -254,13 +271,13 @@ portfolio_bp.add_url_rule(
     '/api/portfolio_companies/<int:portfolio_id>', view_func=get_portfolio_companies)
 portfolio_bp.add_url_rule('/api/portfolio_data',
                           view_func=get_portfolio_data_api, methods=['GET'])
-portfolio_bp.add_url_rule('/api/allocate/portfolio-data',
-                          view_func=get_allocate_portfolio_data)
-portfolio_bp.add_url_rule('/api/allocate/country-capacity',
+portfolio_bp.add_url_rule('/api/simulator/portfolio-data',
+                          view_func=get_simulator_portfolio_data)
+portfolio_bp.add_url_rule('/api/simulator/country-capacity',
                           view_func=get_country_capacity_data)
-portfolio_bp.add_url_rule('/api/allocate/sector-capacity',
+portfolio_bp.add_url_rule('/api/simulator/sector-capacity',
                           view_func=get_sector_capacity_data)
-portfolio_bp.add_url_rule('/api/allocate/effective-capacity',
+portfolio_bp.add_url_rule('/api/simulator/effective-capacity',
                           view_func=get_effective_capacity_data)
 portfolio_bp.add_url_rule('/api/portfolios', view_func=get_portfolios_api)
 # Simple upload - no background complexity
@@ -319,3 +336,12 @@ portfolio_bp.add_url_rule('/api/account/cash',
                           view_func=get_account_cash, methods=['GET'])
 portfolio_bp.add_url_rule('/api/account/cash',
                           view_func=set_account_cash, methods=['POST'])
+# Manual Stock Management API
+portfolio_bp.add_url_rule('/api/add_company',
+                          view_func=add_company, methods=['POST'])
+portfolio_bp.add_url_rule('/api/validate_identifier',
+                          view_func=validate_identifier, methods=['GET'])
+portfolio_bp.add_url_rule('/api/delete_companies',
+                          view_func=delete_manual_companies, methods=['POST'])
+portfolio_bp.add_url_rule('/api/portfolios_dropdown',
+                          view_func=get_portfolios_for_dropdown, methods=['GET'])

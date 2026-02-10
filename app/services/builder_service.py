@@ -81,6 +81,14 @@ class BuilderService:
 
         for p in portfolios:
             allocation = float(p.get('allocation', 0) or 0)
+            # Validate allocation is within valid bounds
+            if allocation < 0:
+                logger.warning(f"Invalid negative allocation {allocation}% for portfolio {p.get('name')}, using 0")
+                allocation = 0
+            elif allocation > 100:
+                logger.warning(f"Invalid allocation {allocation}% (>100%) for portfolio {p.get('name')}, capping at 100")
+                allocation = 100
+
             target_amount = total_investable * (allocation / 100)
 
             portfolio_targets.append({
@@ -181,7 +189,7 @@ class BuilderService:
             """
             SELECT variable_value
             FROM expanded_state
-            WHERE account_id = ? AND page_name = 'build' AND variable_name = ?
+            WHERE account_id = ? AND page_name = 'builder' AND variable_name = ?
             """,
             (account_id, variable_name)
         )
@@ -202,7 +210,7 @@ class BuilderService:
             """
             SELECT MAX(last_updated) as last_updated
             FROM expanded_state
-            WHERE account_id = ? AND page_name = 'build'
+            WHERE account_id = ? AND page_name = 'builder'
             """,
             (account_id,)
         )

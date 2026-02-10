@@ -1,2130 +1,1488 @@
 /**
- * Allocation Simulator
- *
- * Shows portfolio allocation with simulated additions,
- * real-time percentage breakdowns by country and sector.
- * Supports saving/loading simulations and scope toggling.
+ * Portfolio Allocation - Main JavaScript file
+ * This file handles the portfolio allocation calculation based on user input.
  */
 
-class AllocationSimulator {
-  constructor(containerId) {
-    this.container = document.getElementById(containerId);
-    if (!this.container) {
-      console.error('Simulator container not found:', containerId);
-      return;
-    }
-
-    // Data stores
-    this.items = [];                   // Simulated items
-    this.portfolioData = null;         // Portfolio baseline data
-    this.portfolios = [];              // Available portfolios for selection
-    this.savedSimulations = [];        // List of saved simulations
-    this.currentSimulationId = null;   // Currently loaded simulation ID
-    this.currentSimulationName = null; // Currently loaded simulation name
-    this.saveAsMode = false;           // true when "Save As" was clicked
-
-    // Investment targets from Builder (for "Remaining to Invest" display)
-    this.investmentTargets = null;     // Investment target data from Builder
-    this.hasBuilderConfig = false;     // Whether Builder has been configured
-
-    // Settings
-    this.scope = 'global';             // 'global' or 'portfolio'
-    this.portfolioId = null;           // Selected portfolio ID (if scope='portfolio')
-
-    // DOM references (will be set after render)
-    this.tableBody = null;
-    this.countryChart = null;
-    this.sectorChart = null;
-
-    // Category mode for sector chart (sector or thesis)
-    this.categoryMode = 'thesis';     // 'sector' or 'thesis'
-
-    // Expanded chart bar state (one at a time per chart type)
-    this.expandedCountryBar = null;   // Label of expanded country bar
-    this.expandedSectorBar = null;  // Label of expanded sector bar (also used for thesis)
-
-    // Auto-expand tracking for newly added items
-    this.pendingExpandSector = null;
-    this.pendingExpandCountry = null;
-
-    // Debounced chart update for real-time feedback
-    this.debouncedChartUpdate = this.debounce(() => this.updateCharts(), 300);
-
-    // Initialize
-    this.render();
-    this.bindEvents();
-    this.initialize();
-  }
-
-  async initialize() {
-    await this.initializeScope();
-    this.loadSavedSimulations();
-    this.loadPortfolioAllocations();
-  }
-
-  // Debounce utility
-  debounce(fn, delay) {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => fn.apply(this, args), delay);
+// Debounce function to limit how often a function can be called
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
     };
-  }
-
-  // ============================================================================
-  // State Persistence (localStorage)
-  // ============================================================================
-
-  saveState() {
-    const state = {
-      scope: this.scope,
-      portfolioId: this.portfolioId,
-      simulationId: this.currentSimulationId
-    };
-    localStorage.setItem('simulator_state', JSON.stringify(state));
-  }
-
-  loadState() {
-    try {
-      const saved = localStorage.getItem('simulator_state');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      console.error('Failed to load simulator state:', e);
-      return null;
-    }
-  }
-
-  // ============================================================================
-  // Initialization
-  // ============================================================================
-
-  async initializeScope() {
-    // Load saved state from localStorage
-    const savedState = this.loadState();
-
-    // Load portfolios for dropdown (with IDs and values for display)
-    try {
-      const response = await fetch('/portfolio/api/portfolios?include_ids=true&include_values=true');
-      const result = await response.json();
-      if (result && result.length > 0) {
-        this.portfolios = result;
-        this.populatePortfolioDropdown();
-      }
-    } catch (error) {
-      console.error('Failed to load portfolios:', error);
-    }
-
-    // Restore saved scope and portfolio selection
-    if (savedState) {
-      if (savedState.scope) {
-        this.scope = savedState.scope;
-      }
-      if (savedState.portfolioId) {
-        this.portfolioId = savedState.portfolioId;
-      }
-    }
-
-    // For portfolio scope, also check global state (cross-page persistence)
-    if (this.scope === 'portfolio' && typeof PortfolioState !== 'undefined') {
-      const globalPortfolioId = await PortfolioState.getSelectedPortfolio();
-      if (globalPortfolioId) {
-        // Convert to number if the dropdown uses numeric IDs
-        const numericId = parseInt(globalPortfolioId);
-        if (!isNaN(numericId)) {
-          this.portfolioId = numericId;
-        }
-      }
-    }
-
-    // Update UI to reflect restored state
-    if (savedState || this.portfolioId) {
-      this.updateScopeUI();
-    }
-
-    // Bind scope toggle events
-    const scopeRadios = document.querySelectorAll('input[name="simulator-scope"]');
-    scopeRadios.forEach(radio => {
-      radio.addEventListener('change', () => this.handleScopeChange(radio.value));
-    });
-
-    // Bind portfolio select event
-    const portfolioSelect = document.getElementById('simulator-portfolio-select');
-    if (portfolioSelect) {
-      portfolioSelect.addEventListener('change', async () => {
-        this.portfolioId = portfolioSelect.value ? parseInt(portfolioSelect.value) : null;
-        this.saveState();
-        // Save to global state for cross-page persistence
-        if (typeof PortfolioState !== 'undefined' && this.portfolioId) {
-          await PortfolioState.setSelectedPortfolio(this.portfolioId);
-        }
-        // Refresh portfolios list with latest values, then load allocations
-        await this.refreshPortfolios();
-        await this.loadPortfolioAllocations();
-      });
-    }
-  }
-
-  populatePortfolioDropdown() {
-    const select = document.getElementById('simulator-portfolio-select');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">Select portfolio...</option>';
-    this.portfolios.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.id;
-      option.textContent = p.name;
-      select.appendChild(option);
-    });
-  }
-
-  async refreshPortfolios() {
-    try {
-      const response = await fetch('/portfolio/api/portfolios?include_ids=true&include_values=true');
-      const result = await response.json();
-      if (result && result.length > 0) {
-        this.portfolios = result;
-        // Preserve current selection
-        const currentValue = this.portfolioId;
-        this.populatePortfolioDropdown();
-        // Restore selection
-        const select = document.getElementById('simulator-portfolio-select');
-        if (select && currentValue) {
-          select.value = String(currentValue);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to refresh portfolios:', error);
-    }
-  }
-
-  formatNumber(value) {
-    const num = parseFloat(value) || 0;
-    // Format with thousands separator (German locale)
-    return num.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  }
-
-  // Normalize sector/country labels to lowercase for consistent matching
-  normalizeLabel(label) {
-    if (!label || label === '—') return label;
-    return label.toLowerCase().trim();
-  }
-
-  async handleScopeChange(scope) {
-    this.scope = scope;
-    const portfolioWrapper = document.getElementById('simulator-portfolio-select-wrapper');
-
-    if (scope === 'portfolio') {
-      portfolioWrapper.style.display = 'block';
-      if (this.portfolioId) {
-        await this.refreshPortfolios();
-        await this.loadPortfolioAllocations();
-      }
-    } else {
-      portfolioWrapper.style.display = 'none';
-      await this.refreshPortfolios();
-      await this.loadPortfolioAllocations();
-    }
-    this.saveState();
-  }
-
-  // ============================================================================
-  // Portfolio Data Loading
-  // ============================================================================
-
-  async loadPortfolioAllocations() {
-    try {
-      let url = '/portfolio/api/simulator/portfolio-allocations?scope=' + this.scope;
-      if (this.scope === 'portfolio' && this.portfolioId) {
-        url += '&portfolio_id=' + this.portfolioId;
-      }
-
-      const response = await fetch(url);
-      const result = await response.json();
-
-      if (result.success) {
-        this.portfolioData = result.data;
-
-        // Extract investment targets from Builder (for "Remaining to Invest" display)
-        if (result.data.investmentTargets) {
-          this.investmentTargets = result.data.investmentTargets;
-          this.hasBuilderConfig = result.data.investmentTargets.hasBuilderConfig || false;
-        } else {
-          this.investmentTargets = null;
-          this.hasBuilderConfig = false;
-        }
-
-        // Recalculate percentage-based items when baseline changes
-        this.recalculateAllPercentageItems();
-        this.renderTable();
-        this.updateCharts();
-        this.updateInvestmentProgress();
-      } else {
-        console.error('Failed to load portfolio allocations:', result.error);
-        this.portfolioData = { countries: [], sectors: [], theses: [], positions: [], total_value: 0 };
-        this.investmentTargets = null;
-        this.hasBuilderConfig = false;
-        this.recalculateAllPercentageItems();
-        this.renderTable();
-        this.updateCharts();
-        this.updateInvestmentProgress();
-      }
-    } catch (error) {
-      console.error('Error loading portfolio allocations:', error);
-      this.portfolioData = { countries: [], sectors: [], theses: [], positions: [], total_value: 0 };
-      this.investmentTargets = null;
-      this.hasBuilderConfig = false;
-      this.recalculateAllPercentageItems();
-      this.renderTable();
-      this.updateCharts();
-      this.updateInvestmentProgress();
-    }
-  }
-
-  // ============================================================================
-  // Saved Simulations
-  // ============================================================================
-
-  async loadSavedSimulations() {
-    try {
-      const response = await fetch('/portfolio/api/simulator/simulations');
-      const result = await response.json();
-
-      if (result.success) {
-        this.savedSimulations = result.data.simulations || [];
-        this.populateSimulationsDropdown();
-
-        // Restore saved simulation from localStorage
-        const savedState = this.loadState();
-        if (savedState && savedState.simulationId) {
-          // Check if simulation still exists
-          const exists = this.savedSimulations.some(s => s.id === savedState.simulationId);
-          if (exists) {
-            // Update dropdown and load simulation (without showing toast)
-            const select = document.getElementById('simulator-load-select');
-            if (select) select.value = savedState.simulationId;
-            await this.loadSimulationSilent(savedState.simulationId);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load saved simulations:', error);
-    }
-  }
-
-  populateSimulationsDropdown() {
-    const select = document.getElementById('simulator-load-select');
-    if (!select) return;
-
-    // Keep the "New Simulation" option
-    select.innerHTML = '<option value="">New Simulation</option>';
-
-    this.savedSimulations.forEach(sim => {
-      const option = document.createElement('option');
-      option.value = sim.id;
-      option.textContent = sim.name;
-      select.appendChild(option);
-    });
-
-    // Update delete button visibility
-    this.updateDeleteButtonVisibility();
-  }
-
-  updateDeleteButtonVisibility() {
-    const deleteBtn = document.getElementById('simulator-delete-btn');
-    if (deleteBtn) {
-      deleteBtn.style.display = this.currentSimulationId ? 'inline-flex' : 'none';
-    }
-  }
-
-  updateSaveButtonVisibility() {
-    const saveBtn = document.getElementById('simulator-save-btn');
-    if (saveBtn) {
-      // Show Save button only when editing an existing simulation
-      saveBtn.style.display = this.currentSimulationId ? 'inline-flex' : 'none';
-    }
-  }
-
-  async loadSimulation(simulationId) {
-    if (!simulationId) {
-      // "New Simulation" selected - reset
-      this.resetSimulation();
-      return;
-    }
-
-    try {
-      const response = await fetch(`/portfolio/api/simulator/simulations/${simulationId}`);
-      const result = await response.json();
-
-      if (result.success) {
-        const simulation = result.data.simulation;
-        this.currentSimulationId = simulation.id;
-        this.currentSimulationName = simulation.name;
-        this.scope = simulation.scope || 'global';
-        this.portfolioId = simulation.portfolio_id;
-        this.items = simulation.items || [];
-
-        // Update UI to reflect loaded simulation
-        this.updateScopeUI();
-        this.renderTable();
-        this.loadPortfolioAllocations();
-        this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
-        this.saveState();
-
-        this.showToast(`Loaded "${simulation.name}"`, 'success');
-      } else {
-        this.showToast(result.error || 'Failed to load simulation', 'danger');
-      }
-    } catch (error) {
-      console.error('Error loading simulation:', error);
-      this.showToast('Failed to load simulation', 'danger');
-    }
-  }
-
-  // Silent version for auto-restore (no toast notifications)
-  // Note: Does NOT override scope/portfolioId - keeps user's current selection from localStorage
-  async loadSimulationSilent(simulationId) {
-    if (!simulationId) return;
-
-    try {
-      const response = await fetch(`/portfolio/api/simulator/simulations/${simulationId}`);
-      const result = await response.json();
-
-      if (result.success) {
-        const simulation = result.data.simulation;
-        this.currentSimulationId = simulation.id;
-        this.currentSimulationName = simulation.name;
-        // Don't override scope/portfolioId - keep user's current selection from localStorage
-        this.items = simulation.items || [];
-
-        // Render table and load allocations (scope UI already set by initializeScope)
-        this.renderTable();
-        this.loadPortfolioAllocations();
-        this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
-      }
-    } catch (error) {
-      console.error('Error loading simulation:', error);
-    }
-  }
-
-  resetSimulation() {
-    this.currentSimulationId = null;
-    this.currentSimulationName = null;
-    this.items = [];
-    this.renderTable();
-    this.updateCharts();
-    this.updateDeleteButtonVisibility();
-    this.updateSaveButtonVisibility();
-    this.saveState();
-
-    // Reset load dropdown
-    const select = document.getElementById('simulator-load-select');
-    if (select) select.value = '';
-  }
-
-  updateScopeUI() {
-    // Update scope radio buttons
-    const scopeRadios = document.querySelectorAll('input[name="simulator-scope"]');
-    scopeRadios.forEach(radio => {
-      radio.checked = radio.value === this.scope;
-    });
-
-    // Update portfolio select visibility and value
-    const portfolioWrapper = document.getElementById('simulator-portfolio-select-wrapper');
-    const portfolioSelect = document.getElementById('simulator-portfolio-select');
-
-    if (this.scope === 'portfolio') {
-      portfolioWrapper.style.display = 'block';
-      if (portfolioSelect && this.portfolioId) {
-        // Ensure string comparison for select value
-        portfolioSelect.value = String(this.portfolioId);
-      }
-    } else {
-      portfolioWrapper.style.display = 'none';
-    }
-  }
-
-  /**
-   * Save changes to the current simulation (only available when editing existing)
-   */
-  saveSimulation() {
-    if (!this.currentSimulationId) return;  // Safety check
-
-    this.saveAsMode = false;
-    const modal = document.getElementById('save-simulation-modal');
-    const nameInput = document.getElementById('simulation-name-input');
-
-    nameInput.value = this.currentSimulationName;
-    modal.style.display = 'flex';
-    nameInput.focus();
-  }
-
-  /**
-   * Save as a new simulation (creates a copy/fork)
-   */
-  saveAsSimulation() {
-    this.saveAsMode = true;
-    const modal = document.getElementById('save-simulation-modal');
-    const nameInput = document.getElementById('simulation-name-input');
-
-    // Suggest name based on current simulation
-    const suggestedName = this.currentSimulationName
-      ? `Copy of ${this.currentSimulationName}`
-      : '';
-
-    nameInput.value = suggestedName;
-    modal.style.display = 'flex';
-    nameInput.focus();
-    nameInput.select();
-  }
-
-  async confirmSaveSimulation() {
-    const nameInput = document.getElementById('simulation-name-input');
-    const name = nameInput.value.trim();
-
-    if (!name) {
-      this.showToast('Please enter a simulation name', 'warning');
-      return;
-    }
-
-    const simulationData = {
-      name: name,
-      scope: this.scope,
-      portfolio_id: this.scope === 'portfolio' ? this.portfolioId : null,
-      items: this.items
-    };
-
-    try {
-      let response;
-      // If editing existing AND NOT in saveAs mode → update existing
-      if (this.currentSimulationId && !this.saveAsMode) {
-        // Update existing simulation
-        response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(simulationData)
-        });
-      } else {
-        // Create new simulation
-        response = await fetch('/portfolio/api/simulator/simulations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(simulationData)
-        });
-      }
-
-      const result = await response.json();
-
-      if (result.success) {
-        const simulation = result.data.simulation;
-        this.currentSimulationId = simulation.id;
-        this.currentSimulationName = simulation.name;
-
-        // Close modal
-        document.getElementById('save-simulation-modal').style.display = 'none';
-
-        // Refresh simulations list
-        await this.loadSavedSimulations();
-
-        // Update dropdown selection
-        const select = document.getElementById('simulator-load-select');
-        if (select) select.value = simulation.id;
-
-        this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
-        this.showToast(`Saved "${name}"`, 'success');
-      } else {
-        this.showToast(result.error || 'Failed to save simulation', 'danger');
-      }
-    } catch (error) {
-      console.error('Error saving simulation:', error);
-      this.showToast('Failed to save simulation', 'danger');
-    }
-  }
-
-  async deleteSimulation() {
-    if (!this.currentSimulationId) return;
-
-    const confirmed = confirm(`Delete simulation "${this.currentSimulationName}"?`);
-    if (!confirmed) return;
-
-    try {
-      const response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
-        method: 'DELETE'
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        this.showToast(`Deleted "${this.currentSimulationName}"`, 'success');
-        this.resetSimulation();
-        await this.loadSavedSimulations();
-      } else {
-        this.showToast(result.error || 'Failed to delete simulation', 'danger');
-      }
-    } catch (error) {
-      console.error('Error deleting simulation:', error);
-      this.showToast('Failed to delete simulation', 'danger');
-    }
-  }
-
-  // ============================================================================
-  // Rendering
-  // ============================================================================
-
-  render() {
-    this.container.innerHTML = `
-      <!-- Input Forms -->
-      <div class="simulator-input-forms">
-        <div class="simulator-input-form">
-          <label class="label">Add Identifier</label>
-          <div class="input-row">
-            <input type="text" class="input" id="simulator-ticker-input"
-                   placeholder="e.g., AAPL, MSFT">
-            <button class="button is-small" id="simulator-add-ticker-btn">
-              <span class="btn-text">Add</span>
-              <span class="btn-spinner" style="display: none;">
-                <i class="fas fa-spinner fa-spin"></i>
-              </span>
-            </button>
-          </div>
-        </div>
-        <div class="simulator-input-form">
-          <label class="label">Add Sector</label>
-          <div class="input-row">
-            <div class="combobox-wrapper" id="simulator-sector-combobox">
-              <input type="text" class="input combobox-input" id="simulator-sector-input"
-                     placeholder="Select or type sector..." autocomplete="off">
-              <button class="combobox-toggle" type="button" tabindex="-1">
-                <i class="fas fa-chevron-down"></i>
-              </button>
-              <div class="combobox-dropdown" id="simulator-sector-dropdown"></div>
-            </div>
-            <button class="button is-small" id="simulator-add-sector-btn">Add</button>
-          </div>
-        </div>
-        <div class="simulator-input-form">
-          <label class="label">Add Thesis</label>
-          <div class="input-row">
-            <div class="combobox-wrapper" id="simulator-thesis-combobox">
-              <input type="text" class="input combobox-input" id="simulator-thesis-input"
-                     placeholder="Select or type thesis..." autocomplete="off">
-              <button class="combobox-toggle" type="button" tabindex="-1">
-                <i class="fas fa-chevron-down"></i>
-              </button>
-              <div class="combobox-dropdown" id="simulator-thesis-dropdown"></div>
-            </div>
-            <button class="button is-small" id="simulator-add-thesis-btn">Add</button>
-          </div>
-        </div>
-        <div class="simulator-input-form">
-          <label class="label">Add Country</label>
-          <div class="input-row">
-            <div class="combobox-wrapper" id="simulator-country-combobox">
-              <input type="text" class="input combobox-input" id="simulator-country-input"
-                     placeholder="Select or type country..." autocomplete="off">
-              <button class="combobox-toggle" type="button" tabindex="-1">
-                <i class="fas fa-chevron-down"></i>
-              </button>
-              <div class="combobox-dropdown" id="simulator-country-dropdown"></div>
-            </div>
-            <button class="button is-small" id="simulator-add-country-btn">Add</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Data Table -->
-      <div class="simulator-table-wrapper">
-        <table class="unified-table simulator-table">
-          <thead>
-            <tr>
-              <th class="col-ticker">Identifier</th>
-              <th class="col-name">Name</th>
-              <th class="col-portfolio">Portfolio</th>
-              <th class="col-sector">Sector</th>
-              <th class="col-thesis">Thesis</th>
-              <th class="col-country">Country</th>
-              <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
-              <th class="col-delete"></th>
-            </tr>
-          </thead>
-          <tbody id="simulator-table-body">
-            <tr class="empty-state-row">
-              <td colspan="8" class="empty-state">
-                <i class="fas fa-chart-pie"></i>
-                <span>No items added yet. Use the forms above to add positions.</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Investment Progress (Remaining to Invest from Builder) -->
-      <div class="investment-progress-section" id="simulator-investment-progress">
-        <div class="progress-loading">Loading investment targets...</div>
-      </div>
-
-      <!-- Aggregation Charts -->
-      <div class="simulator-charts">
-        <div class="simulator-chart-panel">
-          <div class="simulator-chart-header">
-            <h5 class="simulator-chart-label">Country Allocation</h5>
-          </div>
-          <div class="chart-content" id="simulator-country-chart">
-            <div class="chart-empty">Loading portfolio data...</div>
-          </div>
-        </div>
-        <div class="simulator-chart-panel">
-          <div class="simulator-chart-header">
-            <h5 class="simulator-chart-label" id="simulator-category-title">Thesis Allocation</h5>
-            <div class="toggle-group" id="simulator-category-toggle">
-              <button class="toggle-btn" data-mode="sector">Sector</button>
-              <button class="toggle-btn active" data-mode="thesis">Thesis</button>
-            </div>
-          </div>
-          <div class="chart-content" id="simulator-sector-chart">
-            <div class="chart-empty">Loading portfolio data...</div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Store DOM references
-    this.tableBody = document.getElementById('simulator-table-body');
-    this.countryChart = document.getElementById('simulator-country-chart');
-    this.sectorChart = document.getElementById('simulator-sector-chart');
-    this.investmentProgressContainer = document.getElementById('simulator-investment-progress');
-  }
-
-  bindEvents() {
-    // Add Ticker
-    const tickerInput = document.getElementById('simulator-ticker-input');
-    const tickerBtn = document.getElementById('simulator-add-ticker-btn');
-
-    if (tickerBtn && tickerInput) {
-      tickerBtn.addEventListener('click', () => this.handleAddTicker());
-      tickerInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddTicker();
-      });
-    }
-
-    // Add Sector with combobox
-    const sectorInput = document.getElementById('simulator-sector-input');
-    const sectorBtn = document.getElementById('simulator-add-sector-btn');
-    const sectorCombobox = document.getElementById('simulator-sector-combobox');
-
-    if (sectorBtn && sectorInput) {
-      sectorBtn.addEventListener('click', () => this.handleAddSector());
-      sectorInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddSector();
-      });
-      this.initCombobox(sectorCombobox, sectorInput, 'sector');
-    }
-
-    // Add Thesis with combobox
-    const thesisInput = document.getElementById('simulator-thesis-input');
-    const thesisBtn = document.getElementById('simulator-add-thesis-btn');
-    const thesisCombobox = document.getElementById('simulator-thesis-combobox');
-
-    if (thesisBtn && thesisInput) {
-      thesisBtn.addEventListener('click', () => this.handleAddThesis());
-      thesisInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddThesis();
-      });
-      this.initCombobox(thesisCombobox, thesisInput, 'thesis');
-    }
-
-    // Add Country with combobox
-    const countryInput = document.getElementById('simulator-country-input');
-    const countryBtn = document.getElementById('simulator-add-country-btn');
-    const countryCombobox = document.getElementById('simulator-country-combobox');
-
-    if (countryBtn && countryInput) {
-      countryBtn.addEventListener('click', () => this.handleAddCountry());
-      countryInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddCountry();
-      });
-      this.initCombobox(countryCombobox, countryInput, 'country');
-    }
-
-    // Table event delegation (for edit and delete)
-    this.tableBody.addEventListener('click', (e) => this.handleTableClick(e));
-    this.tableBody.addEventListener('blur', (e) => this.handleTableBlur(e), true);
-    this.tableBody.addEventListener('keydown', (e) => this.handleTableKeydown(e));
-    this.tableBody.addEventListener('input', (e) => this.handleTableInput(e));
-    this.tableBody.addEventListener('change', (e) => this.handleTableChange(e));
-
-    // Category toggle (sector/thesis)
-    const categoryToggle = document.getElementById('simulator-category-toggle');
-    if (categoryToggle) {
-      categoryToggle.addEventListener('click', (e) => {
-        const btn = e.target.closest('.toggle-btn');
-        if (!btn) return;
-
-        const mode = btn.dataset.mode;
-        if (mode === this.categoryMode) return; // No change
-
-        // Update active state
-        categoryToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update title
-        const titleEl = document.getElementById('simulator-category-title');
-        if (titleEl) {
-          titleEl.textContent = mode === 'thesis' ? 'Thesis Allocation' : 'Sector Allocation';
-        }
-
-        // Update mode and re-render chart
-        this.categoryMode = mode;
-        this.expandedSectorBar = null; // Reset expanded bar when switching modes
-        this.updateCharts();
-      });
-    }
-
-    // Save/Load simulation events
-    const loadSelect = document.getElementById('simulator-load-select');
-    if (loadSelect) {
-      loadSelect.addEventListener('change', () => this.loadSimulation(loadSelect.value));
-    }
-
-    const saveBtn = document.getElementById('simulator-save-btn');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.saveSimulation());
-    }
-
-    const saveAsBtn = document.getElementById('simulator-saveas-btn');
-    if (saveAsBtn) {
-      saveAsBtn.addEventListener('click', () => this.saveAsSimulation());
-    }
-
-    const deleteBtn = document.getElementById('simulator-delete-btn');
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', () => this.deleteSimulation());
-    }
-
-    // Save modal events
-    const saveConfirmBtn = document.getElementById('save-simulation-confirm');
-    const saveCancelBtn = document.getElementById('save-simulation-cancel');
-    const saveCloseBtn = document.getElementById('save-simulation-close');
-    const saveModal = document.getElementById('save-simulation-modal');
-
-    if (saveConfirmBtn) {
-      saveConfirmBtn.addEventListener('click', () => this.confirmSaveSimulation());
-    }
-
-    if (saveCancelBtn) {
-      saveCancelBtn.addEventListener('click', () => {
-        saveModal.style.display = 'none';
-      });
-    }
-
-    if (saveCloseBtn) {
-      saveCloseBtn.addEventListener('click', () => {
-        saveModal.style.display = 'none';
-      });
-    }
-
-    // Close modal on overlay click
-    if (saveModal) {
-      saveModal.addEventListener('click', (e) => {
-        if (e.target === saveModal) {
-          saveModal.style.display = 'none';
-        }
-      });
-    }
-
-    // Enter key in save modal
-    const nameInput = document.getElementById('simulation-name-input');
-    if (nameInput) {
-      nameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.confirmSaveSimulation();
-      });
-    }
-  }
-
-  // ============================================================================
-  // Add Handlers
-  // ============================================================================
-
-  async handleAddTicker() {
-    const input = document.getElementById('simulator-ticker-input');
-    const btn = document.getElementById('simulator-add-ticker-btn');
-    const ticker = input.value.trim().toUpperCase();
-
-    if (!ticker) {
-      this.showToast('Please enter a ticker symbol', 'warning');
-      return;
-    }
-
-    // Show loading state
-    btn.querySelector('.btn-text').style.display = 'none';
-    btn.querySelector('.btn-spinner').style.display = 'inline';
-    btn.disabled = true;
-
-    try {
-      const response = await fetch('/portfolio/api/simulator/ticker-lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticker })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const data = result.data;
-        this.addItem({
-          id: this.generateId(),
-          ticker: data.ticker,
-          sector: this.normalizeLabel(data.sector) || '—',
-          thesis: this.normalizeLabel(data.thesis) || '—',
-          country: this.normalizeLabel(data.country) || '—',
-          value: 0,
-          valueMode: 'absolute', // Default to absolute mode
-          source: 'ticker',
-          name: data.name,
-          existsInPortfolio: data.existsInPortfolio || false,
-          portfolioData: data.portfolioData || null,
-          portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
-        });
-        input.value = '';
-
-        const existsMsg = data.existsInPortfolio ? ' (exists in portfolio)' : '';
-        this.showToast(`Added ${data.ticker} (${data.name})${existsMsg}`, 'success');
-      } else {
-        this.showToast(result.error || 'Ticker not found', 'danger');
-      }
-    } catch (error) {
-      console.error('Ticker lookup error:', error);
-      this.showToast('Failed to fetch ticker data', 'danger');
-    } finally {
-      // Reset button state
-      btn.querySelector('.btn-text').style.display = 'inline';
-      btn.querySelector('.btn-spinner').style.display = 'none';
-      btn.disabled = false;
-    }
-  }
-
-  handleAddSector() {
-    const input = document.getElementById('simulator-sector-input');
-    const sector = input.value.trim();
-
-    if (!sector) {
-      this.showToast('Please enter a sector name', 'warning');
-      return;
-    }
-
-    const normalizedSector = this.normalizeLabel(sector);
-
-    // Set pending expand so the chart auto-expands this sector
-    this.pendingExpandSector = normalizedSector;
-
-    this.addItem({
-      id: this.generateId(),
-      ticker: '—',
-      sector: normalizedSector,
-      thesis: '—',
-      country: '—',
-      value: 0,
-      valueMode: 'absolute', // Default to absolute mode
-      source: 'sector',
-      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
-    });
-    input.value = '';
-
-    // Hide dropdown
-    const dropdown = document.getElementById('simulator-sector-dropdown');
-    if (dropdown) dropdown.classList.remove('show');
-  }
-
-  handleAddThesis() {
-    const input = document.getElementById('simulator-thesis-input');
-    const thesis = input.value.trim();
-
-    if (!thesis) {
-      this.showToast('Please enter a thesis name', 'warning');
-      return;
-    }
-
-    const normalizedThesis = this.normalizeLabel(thesis);
-
-    // Set pending expand so the chart auto-expands this thesis (when in thesis mode)
-    if (this.categoryMode === 'thesis') {
-      this.pendingExpandSector = normalizedThesis;
-    }
-
-    this.addItem({
-      id: this.generateId(),
-      ticker: '—',
-      sector: '—',
-      thesis: normalizedThesis,
-      country: '—',
-      value: 0,
-      valueMode: 'absolute', // Default to absolute mode
-      source: 'thesis',
-      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
-    });
-    input.value = '';
-
-    // Hide dropdown
-    const dropdown = document.getElementById('simulator-thesis-dropdown');
-    if (dropdown) dropdown.classList.remove('show');
-  }
-
-  handleAddCountry() {
-    const input = document.getElementById('simulator-country-input');
-    const country = input.value.trim();
-
-    if (!country) {
-      this.showToast('Please enter a country name', 'warning');
-      return;
-    }
-
-    const normalizedCountry = this.normalizeLabel(country);
-
-    // Set pending expand so the chart auto-expands this country
-    this.pendingExpandCountry = normalizedCountry;
-
-    this.addItem({
-      id: this.generateId(),
-      ticker: '—',
-      sector: '—',
-      thesis: '—',
-      country: normalizedCountry,
-      value: 0,
-      valueMode: 'absolute', // Default to absolute mode
-      source: 'country',
-      portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
-    });
-    input.value = '';
-
-    // Hide dropdown
-    const dropdown = document.getElementById('simulator-country-dropdown');
-    if (dropdown) dropdown.classList.remove('show');
-  }
-
-  // ============================================================================
-  // Data Management
-  // ============================================================================
-
-  addItem(item) {
-    this.items.push(item);
-    this.renderTable();
-    this.updateCharts();
-
-    // Focus the value input for the new row
-    setTimeout(() => {
-      const valueInput = this.tableBody.querySelector(`[data-id="${item.id}"] .value-input`);
-      if (valueInput) valueInput.focus();
-    }, 50);
-  }
-
-  updateItem(id, field, value) {
-    const item = this.items.find(i => i.id === id);
-    if (item) {
-      item[field] = value;
-      this.updateCharts();
-    }
-  }
-
-  deleteItem(id) {
-    const index = this.items.findIndex(i => i.id === id);
-    if (index !== -1) {
-      this.items.splice(index, 1);
-      this.renderTable();
-      this.updateCharts();
-    }
-  }
-
-  generateId() {
-    return 'sim_' + Math.random().toString(36).substr(2, 9);
-  }
-
-  // ============================================================================
-  // Table Rendering
-  // ============================================================================
-
-  renderTable() {
-    if (this.items.length === 0) {
-      this.tableBody.innerHTML = `
-        <tr class="empty-state-row">
-          <td colspan="8" class="empty-state">
-            <i class="fas fa-chart-pie"></i>
-            <span>No items added yet. Use the forms above to add positions.</span>
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-    this.tableBody.innerHTML = this.items.map(item => {
-      // Determine value mode display
-      const isPercentMode = item.valueMode === 'percentage';
-      const displayValue = isPercentMode ? (item.targetPercent || 0) : item.value;
-      const modeSymbol = isPercentMode ? '%' : '€';
-      const formattedValue = isPercentMode
-        ? (item.targetPercent || 0).toFixed(1)
-        : this.formatValue(item.value);
-
-      // Show calculated € value for percentage mode items
-      const calculatedHint = isPercentMode && item.value > 0
-        ? `<span class="value-calculated-hint sensitive-value" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
-        : '';
-
-      // Warning if target is below current
-      const warningHint = item.targetWarning
-        ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
-        : '';
-
-      return `
-        <tr data-id="${item.id}">
-          <td class="col-ticker">
-            ${item.source === 'ticker'
-              ? `<span class="ticker-badge">${item.ticker}</span>
-                 ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
-              : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
-                       data-field="ticker" placeholder="—">`
-            }
-          </td>
-          <td class="col-name">
-            <span class="name-display">${this.escapeHtml(item.name || '—')}</span>
-          </td>
-          <td class="col-portfolio">
-            <select class="editable-cell portfolio-select" data-field="portfolio_id">
-              ${this.portfolios.map(p =>
-                `<option value="${p.id}" ${item.portfolio_id == p.id ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>`
-              ).join('')}
-            </select>
-          </td>
-          <td class="col-sector">
-            <input type="text" class="editable-cell sector-input" value="${this.escapeHtml(item.sector === '—' ? item.sector : (item.sector || '').toLowerCase())}"
-                   data-field="sector" placeholder="—">
-          </td>
-          <td class="col-thesis">
-            <input type="text" class="editable-cell thesis-input" value="${this.escapeHtml(item.thesis === '—' ? item.thesis : (item.thesis || '').toLowerCase())}"
-                   data-field="thesis" placeholder="—">
-          </td>
-          <td class="col-country">
-            <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
-                   data-field="country" placeholder="—">
-          </td>
-          <td class="col-value">
-            <div class="value-input-wrapper">
-              <button class="value-mode-toggle ${isPercentMode ? 'mode-percent' : 'mode-euro'}"
-                      data-field="valueMode" title="Toggle between € amount and % target">
-                ${modeSymbol}
-              </button>
-              <input type="text" class="editable-cell value-input sensitive-value ${isPercentMode ? 'percent-mode' : ''}"
-                     value="${formattedValue}"
-                     data-field="value" placeholder="0">
-              ${calculatedHint}
-              ${warningHint}
-            </div>
-          </td>
-          <td class="col-delete">
-            <button class="btn-delete" title="Remove">
-              <i class="fas fa-times"></i>
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // ============================================================================
-  // Table Event Handlers
-  // ============================================================================
-
-  handleTableClick(e) {
-    // Delete button
-    if (e.target.closest('.btn-delete')) {
-      const row = e.target.closest('tr');
-      if (row) {
-        const id = row.dataset.id;
-        // Fade out animation
-        row.style.opacity = '0';
-        row.style.transform = 'translateX(10px)';
-        setTimeout(() => this.deleteItem(id), 200);
-      }
-      return;
-    }
-
-    // Value mode toggle button
-    if (e.target.closest('.value-mode-toggle')) {
-      const row = e.target.closest('tr');
-      if (row) {
-        const id = row.dataset.id;
-        this.toggleValueMode(id);
-      }
-    }
-  }
-
-  toggleValueMode(id) {
-    const item = this.items.find(i => i.id === id);
-    if (!item) return;
-
-    const wasPercentMode = item.valueMode === 'percentage';
-
-    if (wasPercentMode) {
-      // Switching to absolute euro mode
-      item.valueMode = 'absolute';
-      // Keep the calculated value as the new absolute value
-    } else {
-      // Switching to percentage mode
-      item.valueMode = 'percentage';
-      // Calculate target percentage based on current value
-      const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
-      const combinedTotal = baselineTotal + item.value;
-      if (combinedTotal > 0) {
-        // Current allocation would be: (baselineValue + item.value) / combinedTotal * 100
-        const currentPercent = ((baselineValue + item.value) / combinedTotal) * 100;
-        item.targetPercent = parseFloat(currentPercent.toFixed(1));
-      } else {
-        item.targetPercent = 0;
-      }
-    }
-
-    // Recalculate if now in percentage mode
-    if (item.valueMode === 'percentage') {
-      this.recalculatePercentageItem(item);
-    }
-
-    this.renderTable();
-    this.updateCharts();
-  }
-
-  handleTableBlur(e) {
-    if (e.target.classList.contains('editable-cell')) {
-      this.saveCell(e.target);
-    }
-  }
-
-  handleTableKeydown(e) {
-    if (e.target.classList.contains('editable-cell')) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        e.target.blur();
-      } else if (e.key === 'Escape') {
-        // Revert to original value
-        const row = e.target.closest('tr');
-        const id = row.dataset.id;
-        const field = e.target.dataset.field;
-        const item = this.items.find(i => i.id === id);
-        if (item) {
-          e.target.value = field === 'value' ? this.formatValue(item[field]) : item[field];
-        }
-        e.target.blur();
-      }
-    }
-  }
-
-  handleTableInput(e) {
-    // Convert sector/thesis/country to lowercase as user types
-    if (e.target.classList.contains('sector-input') ||
-        e.target.classList.contains('thesis-input') ||
-        e.target.classList.contains('country-input')) {
-      const cursorPos = e.target.selectionStart;
-      e.target.value = e.target.value.toLowerCase();
-      e.target.setSelectionRange(cursorPos, cursorPos);
-    }
-
-    // Real-time chart updates with debounce (only for value inputs)
-    if (e.target.classList.contains('value-input')) {
-      const row = e.target.closest('tr');
-      if (!row) return;
-
-      const id = row.dataset.id;
-      const item = this.items.find(i => i.id === id);
-      if (item) {
-        if (item.valueMode === 'percentage') {
-          // For percentage mode, update target percent and recalculate
-          const cleanedValue = e.target.value.replace('%', '').trim();
-          const percentValue = parseFloat(cleanedValue);
-          if (!isNaN(percentValue)) {
-            item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
-            this.recalculatePercentageItem(item);
-          }
-        } else {
-          // For absolute mode, update value directly
-          const newValue = this.parseValue(e.target.value);
-          item.value = newValue;
-        }
-        this.debouncedChartUpdate();
-      }
-    }
-  }
-
-  saveCell(input) {
-    const row = input.closest('tr');
-    if (!row) return;
-
-    const id = row.dataset.id;
-    const field = input.dataset.field;
-    let value = input.value.trim();
-    const item = this.items.find(i => i.id === id);
-
-    if (field === 'value') {
-      // Check if item is in percentage mode
-      if (item && item.valueMode === 'percentage') {
-        // Parse as percentage target
-        const cleanedValue = value.replace('%', '').trim();
-        const percentValue = parseFloat(cleanedValue);
-
-        if (!isNaN(percentValue)) {
-          item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
-          input.value = item.targetPercent.toFixed(1);
-
-          // Recalculate the € value needed
-          this.recalculatePercentageItem(item);
-        }
-      } else {
-        // Parse numeric euro value
-        value = this.parseValue(value);
-        input.value = this.formatValue(value);
-        this.updateItem(id, 'value', value);
-      }
-    } else if (field === 'portfolio_id') {
-      // Parse portfolio_id as number or null
-      value = value ? parseInt(value) : null;
-      this.updateItem(id, field, value);
-    } else if (field === 'sector' || field === 'thesis' || field === 'country') {
-      // Normalize sector/thesis/country to lowercase
-      if (value && value !== '—') {
-        value = this.normalizeLabel(value);
-        input.value = value;
-      }
-      // Update if value is empty, set to placeholder
-      if (value === '') {
-        value = '—';
-        input.value = '—';
-      }
-      this.updateItem(id, field, value);
-
-      // If sector, thesis, or country changes, recalculate percentage items
-      if (item && item.valueMode === 'percentage') {
-        this.recalculatePercentageItem(item);
-      }
-    } else {
-      // Update if value is empty, set to placeholder
-      if (value === '' && field !== 'value' && field !== 'portfolio_id') {
-        value = '—';
-        input.value = '—';
-      }
-      this.updateItem(id, field, value);
-    }
-
-    // Re-render table to show calculated values
-    if (item && item.valueMode === 'percentage') {
-      this.renderTable();
-    }
-
-    this.updateCharts();
-
-    // Visual feedback
-    input.classList.add('cell-saved');
-    setTimeout(() => input.classList.remove('cell-saved'), 500);
-  }
-
-  handleTableChange(e) {
-    // Handle select element changes (e.g., portfolio dropdown)
-    if (e.target.classList.contains('portfolio-select')) {
-      this.saveCell(e.target);
-      // Explicitly update charts when portfolio assignment changes
-      this.updateCharts();
-    }
-  }
-
-  // ============================================================================
-  // Investment Progress Display (Remaining to Invest from Builder)
-  // ============================================================================
-
-  updateInvestmentProgress() {
-    const container = this.investmentProgressContainer;
-    if (!container) return;
-
-    if (!this.hasBuilderConfig || !this.investmentTargets) {
-      container.innerHTML = this.renderNoBuilderConfig();
-      return;
-    }
-
-    const data = this.investmentTargets;
-    const currentValue = this.portfolioData?.total_value || 0;
-    const targetAmount = data.targetAmount || 0;
-
-    // Calculate simulated total (only items matching current scope/portfolio)
-    let simulatedTotal = 0;
-    this.items.forEach(item => {
-      if (this.scope === 'portfolio' && this.portfolioId) {
-        if (item.portfolio_id !== this.portfolioId) return;
-      }
-      simulatedTotal += parseFloat(item.value) || 0;
-    });
-
-    const projectedValue = currentValue + simulatedTotal;
-    const percentComplete = targetAmount > 0 ? Math.min(100, (currentValue / targetAmount) * 100) : 0;
-    const projectedPercent = targetAmount > 0 ? (projectedValue / targetAmount) * 100 : 0;
-    const remaining = Math.max(0, targetAmount - currentValue);
-    const projectedRemaining = Math.max(0, targetAmount - projectedValue);
-    const isOverTarget = currentValue > targetAmount;
-    const projectedOverTarget = projectedValue > targetAmount;
-
-    // Determine scope label
-    let scopeLabel = 'Global';
-    let allocationInfo = '';
-    if (this.scope === 'portfolio' && data.portfolioName) {
-      scopeLabel = data.portfolioName;
-      if (data.allocationPercent) {
-        allocationInfo = ` (${data.allocationPercent}%)`;
-      }
-    }
-
-    // Status class
-    const statusClass = isOverTarget ? 'over-target' : percentComplete >= 100 ? 'complete' : '';
-
-    container.innerHTML = `
-      <div class="progress-header">
-        <div class="progress-title">
-          <i class="fas fa-bullseye"></i>
-          <span class="label">Investment Progress</span>
-          <span class="scope-badge">${scopeLabel}${allocationInfo}</span>
-        </div>
-        <div class="progress-values">
-          <span class="current-value">${this.formatCurrency(currentValue)}</span>
-          <span class="separator">/</span>
-          <span class="target-value">${this.formatCurrency(targetAmount)}</span>
-        </div>
-      </div>
-
-      <div class="progress-bar-container">
-        <div class="progress-track">
-          <div class="progress-fill ${statusClass}" style="width: ${percentComplete.toFixed(1)}%"></div>
-          ${simulatedTotal > 0 ? `
-            <div class="progress-simulated" style="left: ${Math.min(100, percentComplete).toFixed(1)}%; width: ${Math.min(100 - percentComplete, (simulatedTotal / targetAmount) * 100).toFixed(1)}%"></div>
-          ` : ''}
-        </div>
-        <div class="progress-labels">
-          <span class="percent-complete ${statusClass}">
-            ${isOverTarget
-              ? `${percentComplete.toFixed(1)}% — ${this.formatCurrency(currentValue - targetAmount)} over target`
-              : `${percentComplete.toFixed(1)}% complete`}
-          </span>
-          <span class="remaining-amount">
-            ${isOverTarget ? '' : `${this.formatCurrency(remaining)} remaining`}
-          </span>
-        </div>
-      </div>
-
-      ${simulatedTotal > 0 ? `
-        <div class="simulated-impact ${projectedOverTarget ? 'over-target' : ''}">
-          <span class="simulated-label">With simulated additions:</span>
-          <span class="simulated-value">${this.formatCurrency(projectedValue)}</span>
-          <span class="simulated-percent">(${projectedPercent.toFixed(1)}%)</span>
-          ${!projectedOverTarget && projectedRemaining > 0 ? `
-            <span class="simulated-remaining">— ${this.formatCurrency(projectedRemaining)} still needed</span>
-          ` : ''}
-          ${projectedOverTarget ? `
-            <span class="simulated-over">— exceeds target</span>
-          ` : ''}
-        </div>
-      ` : ''}
-    `;
-  }
-
-  renderNoBuilderConfig() {
-    return `
-      <div class="no-builder-config">
-        <i class="fas fa-info-circle"></i>
-        <span>Set up your investment targets in the <a href="/portfolio/build">Builder</a> to see your progress here.</span>
-      </div>
-    `;
-  }
-
-  formatCurrency(value) {
-    const num = parseFloat(value) || 0;
-    const formatted = '€' + num.toLocaleString('de-DE', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    });
-    return `<span class="sensitive-value">${formatted}</span>`;
-  }
-
-  // ============================================================================
-  // Chart Rendering with Combined Allocations
-  // ============================================================================
-
-  updateCharts() {
-    const combined = this.calculateCombinedAllocations();
-    // Store for position detail access
-    this.lastCombinedData = combined;
-
-    this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
-
-    // For the category chart, use sector or thesis based on categoryMode
-    const categoryData = this.categoryMode === 'thesis' ? combined.byThesis : combined.bySector;
-    const baselineData = this.categoryMode === 'thesis' ? combined.baselineByThesis : combined.baselineBySector;
-    this.renderBarChart(this.sectorChart, categoryData, combined.combinedTotal, baselineData, combined.baselineTotal, 'sector');
-
-    // Handle pending auto-expand for newly added items
-    this.handlePendingExpand();
-
-    // Update investment progress (simulated items impact remaining-to-invest)
-    this.updateInvestmentProgress();
-  }
-
-  /**
-   * Auto-expand chart bars for newly added categories/countries
-   */
-  handlePendingExpand() {
-    if (this.pendingExpandSector) {
-      // Set the expanded sector bar
-      this.expandedSectorBar = this.pendingExpandSector;
-      // Re-render the sector chart to show expanded state
-      const combined = this.lastCombinedData || this.calculateCombinedAllocations();
-      const categoryData = this.categoryMode === 'thesis' ? combined.byThesis : combined.bySector;
-      const baselineData = this.categoryMode === 'thesis' ? combined.baselineByThesis : combined.baselineBySector;
-      this.renderBarChart(this.sectorChart, categoryData, combined.combinedTotal, baselineData, combined.baselineTotal, 'sector');
-      this.pendingExpandSector = null;
-    }
-
-    if (this.pendingExpandCountry) {
-      // Set the expanded country bar
-      this.expandedCountryBar = this.pendingExpandCountry;
-      // Re-render the country chart to show expanded state
-      const combined = this.lastCombinedData || this.calculateCombinedAllocations();
-      this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
-      this.pendingExpandCountry = null;
-    }
-  }
-
-  calculateCombinedAllocations() {
-    const byCountry = {};
-    const bySector = {};
-    const byThesis = {};
-    const baselineByCountry = {};
-    const baselineBySector = {};
-    const baselineByThesis = {};
-
-    // Add portfolio baseline data
-    // Use portfolio_total (includes cash) if available, fallback to total_value for backwards compatibility
-    const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
-
-    if (this.portfolioData) {
-      // Store baseline for delta calculations (normalize labels to lowercase)
-      (this.portfolioData.countries || []).forEach(c => {
-        const normalizedName = (c.name || 'unknown').toLowerCase().trim();
-        baselineByCountry[normalizedName] = (baselineByCountry[normalizedName] || 0) + c.value;
-        byCountry[normalizedName] = (byCountry[normalizedName] || 0) + c.value;
-      });
-
-      (this.portfolioData.sectors || []).forEach(c => {
-        const normalizedName = (c.name || 'unknown').toLowerCase().trim();
-        baselineBySector[normalizedName] = (baselineBySector[normalizedName] || 0) + c.value;
-        bySector[normalizedName] = (bySector[normalizedName] || 0) + c.value;
-      });
-
-      (this.portfolioData.theses || []).forEach(c => {
-        const normalizedName = (c.name || 'unassigned').toLowerCase().trim();
-        baselineByThesis[normalizedName] = (baselineByThesis[normalizedName] || 0) + c.value;
-        byThesis[normalizedName] = (byThesis[normalizedName] || 0) + c.value;
-      });
-    }
-
-    // Add simulated items (only those matching selected portfolio when in portfolio scope)
-    let simulatedTotal = 0;
-    this.items.forEach(item => {
-      // Skip items that don't match the selected portfolio (when in portfolio scope)
-      if (this.scope === 'portfolio' && this.portfolioId) {
-        if (item.portfolio_id !== this.portfolioId) {
-          return; // Skip this item - not assigned to selected portfolio
-        }
-      }
-
-      const value = parseFloat(item.value) || 0;
-      simulatedTotal += value;
-
-      // Country aggregation (normalize to lowercase)
-      const country = item.country === '—' || !item.country ? 'unknown' : item.country.toLowerCase();
-      byCountry[country] = (byCountry[country] || 0) + value;
-
-      // Sector aggregation (normalize to lowercase)
-      const sector = item.sector === '—' || !item.sector ? 'unknown' : item.sector.toLowerCase();
-      bySector[sector] = (bySector[sector] || 0) + value;
-
-      // Thesis aggregation (normalize to lowercase)
-      const thesis = item.thesis === '—' || !item.thesis ? 'unassigned' : item.thesis.toLowerCase();
-      byThesis[thesis] = (byThesis[thesis] || 0) + value;
-    });
-
-    const combinedTotal = portfolioTotal + simulatedTotal;
-
-    // Return data for both sector and thesis (the chart renderer will choose based on categoryMode)
-    return {
-      byCountry,
-      bySector,
-      byThesis,
-      // Legacy aliases for compatibility
-      byCategory: this.categoryMode === 'thesis' ? byThesis : bySector,
-      baselineByCountry,
-      baselineBySector,
-      baselineByThesis,
-      baselineByCategory: this.categoryMode === 'thesis' ? baselineByThesis : baselineBySector,
-      combinedTotal,
-      baselineTotal: portfolioTotal,
-      simulatedTotal
-    };
-  }
-
-  renderBarChart(container, data, total, baseline, baselineTotal, chartType) {
-    if (total === 0 || Object.keys(data).length === 0) {
-      container.innerHTML = '<div class="chart-empty">No data to display</div>';
-      return;
-    }
-
-    // Sort by value descending
-    const sorted = Object.entries(data)
-      .sort((a, b) => b[1] - a[1]);
-
-    // Determine which bar is currently expanded for this chart type
-    const expandedLabel = chartType === 'country' ? this.expandedCountryBar : this.expandedSectorBar;
-
-    container.innerHTML = sorted.map(([label, value]) => {
-      const percentage = (value / total * 100).toFixed(1);
-      const isUnknown = label === 'unknown';
-      const isExpanded = label === expandedLabel;
-
-      // Calculate delta from baseline
-      const baselineValue = baseline?.[label] || 0;
-      const baselinePercentage = baselineTotal > 0 ? (baselineValue / baselineTotal * 100) : 0;
-      const deltaPercentage = parseFloat(percentage) - baselinePercentage;
-
-      let deltaHtml = '';
-      if (Math.abs(deltaPercentage) >= 0.1) {
-        const deltaClass = deltaPercentage > 0 ? 'delta-positive' : 'delta-negative';
-        const deltaSign = deltaPercentage > 0 ? '+' : '';
-        deltaHtml = `<span class="delta-indicator ${deltaClass}">(${deltaSign}${deltaPercentage.toFixed(1)}%)</span>`;
-      }
-
-      // Generate position details if expanded
-      const positionDetailsHtml = isExpanded ? this.renderPositionDetails(chartType, label, total) : '';
-
-      return `
-        <div class="chart-bar-item ${isExpanded ? 'chart-bar-expanded' : ''}"
-             data-chart-type="${chartType}"
-             data-label="${this.escapeHtml(label)}"
-             title="${label}: €${this.formatValue(value)} (${percentage}%)">
-          <div class="bar-label">
-            <span class="bar-expand-icon">${isExpanded ? '▼' : '▶'}</span>
-            ${this.escapeHtml(label)}
-          </div>
-          <div class="bar-track">
-            <div class="bar-fill ${isUnknown ? 'bar-fill-unknown' : ''}"
-                 style="width: ${percentage}%"></div>
-          </div>
-          <div class="bar-percentage">${percentage}% ${deltaHtml}</div>
-        </div>
-        ${positionDetailsHtml}
-      `;
-    }).join('');
-
-    // Bind click events to chart bars
-    this.bindChartBarEvents(container, chartType);
-  }
-
-  // ============================================================================
-  // Chart Bar Click Handlers
-  // ============================================================================
-
-  bindChartBarEvents(container, chartType) {
-    const barItems = container.querySelectorAll('.chart-bar-item');
-    barItems.forEach(barItem => {
-      barItem.addEventListener('click', (e) => {
-        const label = barItem.dataset.label;
-        this.togglePositionDetails(chartType, label);
-      });
-    });
-  }
-
-  togglePositionDetails(chartType, label) {
-    if (chartType === 'country') {
-      // Toggle: if clicking same bar, collapse; otherwise expand new one
-      if (this.expandedCountryBar === label) {
-        this.expandedCountryBar = null;
-      } else {
-        this.expandedCountryBar = label;
-      }
-    } else if (chartType === 'sector') {
-      if (this.expandedSectorBar === label) {
-        this.expandedSectorBar = null;
-      } else {
-        this.expandedSectorBar = label;
-      }
-    }
-
-    // Re-render the chart to reflect expansion state
-    const combined = this.lastCombinedData || this.calculateCombinedAllocations();
-    if (chartType === 'country') {
-      this.renderBarChart(this.countryChart, combined.byCountry, combined.combinedTotal, combined.baselineByCountry, combined.baselineTotal, 'country');
-    } else {
-      this.renderBarChart(this.sectorChart, combined.byCategory, combined.combinedTotal, combined.baselineByCategory, combined.baselineTotal, 'sector');
-    }
-  }
-
-  /**
-   * Calculate the global total from all portfolios
-   * Used for global % calculation even when in portfolio scope
-   */
-  getGlobalTotal() {
-    // Sum up all portfolio values
-    const portfolioSum = this.portfolios.reduce((sum, p) => sum + (parseFloat(p.total_value) || 0), 0);
-    // Add simulated items (all of them, regardless of portfolio assignment)
-    const simulatedSum = this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
-    return portfolioSum + simulatedSum;
-  }
-
-  renderPositionDetails(chartType, label, totalValue) {
-    // Get all positions (portfolio + simulated) that match the label
-    const positions = this.getPositionsForLabel(chartType, label);
-
-    if (positions.length === 0) {
-      return `
-        <div class="position-details-panel">
-          <div class="position-details-empty">No positions found</div>
-        </div>
-      `;
-    }
-
-    // Sort positions by value descending
-    positions.sort((a, b) => b.value - a.value);
-
-    // Calculate segment total for percentage within segment
-    const segmentTotal = positions.reduce((sum, p) => sum + p.value, 0);
-
-    // Calculate totals for multi-level percentages
-    const portfolioTotal = totalValue; // Combined total for current scope (portfolio + simulated)
-    const globalTotal = this.getGlobalTotal(); // All portfolios combined + all simulated
-
-    // Determine which columns to show based on scope
-    // Global scope: segment % + global % (portfolio % would be redundant)
-    // Portfolio scope: segment % + portfolio % + global %
-    const isGlobalScope = this.scope === 'global';
-
-    const positionRows = positions.map(pos => {
-      const percentOfSegment = segmentTotal > 0 ? ((pos.value / segmentTotal) * 100).toFixed(1) : '0.0';
-      const percentOfPortfolio = portfolioTotal > 0 ? ((pos.value / portfolioTotal) * 100).toFixed(1) : '0.0';
-      const percentOfGlobal = globalTotal > 0 ? ((pos.value / globalTotal) * 100).toFixed(1) : '0.0';
-
-      // Add visual distinction for simulated items
-      const isSimulated = pos.source === 'simulated';
-      const simulatedClass = isSimulated ? 'position-simulated' : '';
-      const simulatedBadge = isSimulated ? '<span class="simulated-badge">+ Simulated</span>' : '';
-      const tickerDisplay = isSimulated
-        ? `${simulatedBadge}`
-        : `${this.escapeHtml(pos.ticker || '—')}`;
-
-      if (isGlobalScope) {
-        // 2 columns: segment % (bold) + global % (smallest)
-        return `
-          <div class="position-detail-row position-detail-row-2col ${simulatedClass}">
-            <span class="position-detail-ticker">${tickerDisplay}</span>
-            <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
-            <span class="position-detail-value sensitive-value">€${this.formatValue(pos.value)}</span>
-            <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
-            <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
-          </div>
-        `;
-      } else {
-        // 3 columns: segment % (bold) + portfolio % (muted) + global % (smallest)
-        return `
-          <div class="position-detail-row position-detail-row-3col ${simulatedClass}">
-            <span class="position-detail-ticker">${tickerDisplay}</span>
-            <span class="position-detail-name">${this.escapeHtml(pos.name || '—')}</span>
-            <span class="position-detail-value sensitive-value">€${this.formatValue(pos.value)}</span>
-            <span class="position-detail-percent position-detail-percent-seg">${percentOfSegment}%</span>
-            <span class="position-detail-percent position-detail-percent-port">${percentOfPortfolio}%</span>
-            <span class="position-detail-percent position-detail-percent-glob">${percentOfGlobal}%</span>
-          </div>
-        `;
-      }
-    }).join('');
-
-    return `
-      <div class="position-details-panel">
-        <div class="position-details-header">
-          <span class="position-details-count">${positions.length} position${positions.length !== 1 ? 's' : ''}</span>
-          <span class="position-details-total sensitive-value">€${this.formatValue(segmentTotal)}</span>
-        </div>
-        <div class="position-details-list">
-          ${positionRows}
-        </div>
-      </div>
-    `;
-  }
-
-  getPositionsForLabel(chartType, label) {
-    const positions = [];
-    const normalizedLabel = label.toLowerCase().trim();
-
-    // Determine which field to match based on chart type and category mode
-    // For 'sector' chart type, use thesis or sector depending on categoryMode
-    const getMatchField = (pos) => {
-      if (chartType === 'country') {
-        return pos.country;
-      } else {
-        // 'sector' chart type - can show sector or thesis data
-        return this.categoryMode === 'thesis' ? pos.thesis : pos.sector;
-      }
-    };
-
-    // Default value for unassigned items
-    const getDefaultValue = () => {
-      if (chartType === 'country') {
-        return 'unknown';
-      } else {
-        return this.categoryMode === 'thesis' ? 'unassigned' : 'unknown';
-      }
-    };
-
-    // Add portfolio positions
-    if (this.portfolioData && this.portfolioData.positions) {
-      this.portfolioData.positions.forEach(pos => {
-        const matchField = getMatchField(pos);
-        const defaultVal = getDefaultValue();
-        const normalizedField = (matchField || defaultVal).toLowerCase().trim();
-
-        if (normalizedField === normalizedLabel) {
-          positions.push({
-            ticker: pos.ticker || pos.identifier || '—',
-            name: pos.name || '—',
-            value: pos.value || 0,
-            source: 'portfolio'
-          });
-        }
-      });
-    }
-
-    // Add simulated items (respecting portfolio scope)
-    this.items.forEach(item => {
-      // Skip items that don't match the selected portfolio (when in portfolio scope)
-      if (this.scope === 'portfolio' && this.portfolioId) {
-        if (item.portfolio_id !== this.portfolioId) {
-          return;
-        }
-      }
-
-      const matchField = getMatchField(item);
-      const defaultVal = getDefaultValue();
-      const normalizedField = (matchField === '—' || !matchField) ? defaultVal : matchField.toLowerCase().trim();
-
-      if (normalizedField === normalizedLabel) {
-        positions.push({
-          ticker: item.ticker || '—',
-          name: item.name || '—',
-          value: parseFloat(item.value) || 0,
-          source: 'simulated'
-        });
-      }
-    });
-
-    return positions;
-  }
-
-  // ============================================================================
-  // Utilities
-  // ============================================================================
-
-  // ============================================================================
-  // Combobox Functionality
-  // ============================================================================
-
-  initCombobox(wrapper, input, type) {
-    if (!wrapper || !input) return;
-
-    const toggle = wrapper.querySelector('.combobox-toggle');
-    const dropdown = wrapper.querySelector('.combobox-dropdown');
-
-    // Toggle dropdown on button click
-    if (toggle) {
-      toggle.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.toggleComboboxDropdown(wrapper, type);
-      });
-    }
-
-    // Filter on input
-    input.addEventListener('input', () => {
-      this.populateComboboxDropdown(dropdown, type, input.value);
-      dropdown.classList.add('show');
-    });
-
-    // Show dropdown on focus
-    input.addEventListener('focus', () => {
-      this.populateComboboxDropdown(dropdown, type, input.value);
-      dropdown.classList.add('show');
-    });
-
-    // Hide dropdown on click outside
-    document.addEventListener('click', (e) => {
-      if (!wrapper.contains(e.target)) {
-        dropdown.classList.remove('show');
-      }
-    });
-
-    // Handle keyboard navigation
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        dropdown.classList.remove('show');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        const firstOption = dropdown.querySelector('.combobox-option');
-        if (firstOption) firstOption.focus();
-      }
-    });
-
-    // Handle option selection via event delegation
-    dropdown.addEventListener('click', (e) => {
-      const option = e.target.closest('.combobox-option');
-      if (option) {
-        input.value = option.dataset.value;
-        dropdown.classList.remove('show');
-        input.focus();
-      }
-    });
-  }
-
-  toggleComboboxDropdown(wrapper, type) {
-    const dropdown = wrapper.querySelector('.combobox-dropdown');
-    const input = wrapper.querySelector('.combobox-input');
-    const isVisible = dropdown.classList.contains('show');
-
-    if (isVisible) {
-      dropdown.classList.remove('show');
-    } else {
-      this.populateComboboxDropdown(dropdown, type, input.value);
-      dropdown.classList.add('show');
-    }
-  }
-
-  populateComboboxDropdown(dropdown, type, filter = '') {
-    if (!this.portfolioData) {
-      dropdown.innerHTML = '<div class="combobox-empty">Loading portfolio data...</div>';
-      return;
-    }
-
-    let sourceData;
-    if (type === 'sector') {
-      sourceData = this.portfolioData.sectors || [];
-    } else if (type === 'thesis') {
-      sourceData = this.portfolioData.theses || [];
-    } else {
-      sourceData = this.portfolioData.countries || [];
-    }
-
-    // Use portfolio_total (includes cash) for percentage calculations
-    const totalValue = this.portfolioData.portfolio_total || this.portfolioData.total_value || 0;
-    const filterLower = filter.toLowerCase().trim();
-
-    // Sort by value (largest first) and filter
-    const filtered = sourceData
-      .filter(item => {
-        if (!filterLower) return true;
-        return (item.name || '').toLowerCase().includes(filterLower);
-      })
-      .sort((a, b) => (b.value || 0) - (a.value || 0));
-
-    if (filtered.length === 0) {
-      dropdown.innerHTML = filterLower
-        ? `<div class="combobox-empty">No matches. Press Enter to add "${this.escapeHtml(filter)}"</div>`
-        : '<div class="combobox-empty">No existing data</div>';
-      return;
-    }
-
-    dropdown.innerHTML = filtered.map(item => {
-      const name = item.name || 'Unknown';
-      const value = item.value || 0;
-      const percent = totalValue > 0 ? ((value / totalValue) * 100).toFixed(1) : '0.0';
-
-      return `
-        <div class="combobox-option" data-value="${this.escapeHtml(name.toLowerCase())}" tabindex="-1">
-          <span class="combobox-option-name">${this.escapeHtml(name)}</span>
-          <span class="combobox-option-percent">${percent}%</span>
-        </div>
-      `;
-    }).join('');
-  }
-
-  // ============================================================================
-  // Percentage Mode Calculation
-  // ============================================================================
-
-  /**
-   * Get baseline value and total for an item based on its sector/country
-   * Used for percentage target calculations
-   */
-  getBaselineForItem(item) {
-    // Use portfolio_total (includes cash) for percentage calculations
-    const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
-    let baselineValue = 0;
-
-    // Determine which baseline to use based on item source
-    if (item.source === 'sector' && item.sector && item.sector !== '—') {
-      const normalizedSector = item.sector.toLowerCase();
-      const sectorData = (this.portfolioData?.sectors || [])
-        .find(c => (c.name || '').toLowerCase() === normalizedSector);
-      baselineValue = sectorData?.value || 0;
-    } else if (item.source === 'thesis' && item.thesis && item.thesis !== '—') {
-      const normalizedThesis = item.thesis.toLowerCase();
-      const thesisData = (this.portfolioData?.theses || [])
-        .find(c => (c.name || '').toLowerCase() === normalizedThesis);
-      baselineValue = thesisData?.value || 0;
-    } else if (item.source === 'country' && item.country && item.country !== '—') {
-      const normalizedCountry = item.country.toLowerCase();
-      const countryData = (this.portfolioData?.countries || [])
-        .find(c => (c.name || '').toLowerCase() === normalizedCountry);
-      baselineValue = countryData?.value || 0;
-    } else if (item.source === 'ticker') {
-      // For ticker items, the baseline is the existing value in portfolio if exists
-      if (item.existsInPortfolio && item.portfolioData) {
-        baselineValue = item.portfolioData.value || 0;
-      }
-    }
-
-    return { baselineValue, baselineTotal: portfolioTotal };
-  }
-
-  /**
-   * Calculate the € amount needed to achieve a target percentage allocation
-   *
-   * Formula:
-   * Let X = amount to add
-   * (baseline + X) / (total + X) = targetPercent / 100
-   *
-   * Solving for X:
-   * baseline + X = (targetPercent / 100) * (total + X)
-   * baseline + X = (targetPercent / 100) * total + (targetPercent / 100) * X
-   * X - (targetPercent / 100) * X = (targetPercent / 100) * total - baseline
-   * X * (1 - targetPercent / 100) = (targetPercent / 100) * total - baseline
-   * X = ((targetPercent / 100) * total - baseline) / (1 - targetPercent / 100)
-   */
-  recalculatePercentageItem(item) {
-    if (item.valueMode !== 'percentage' || !item.targetPercent) {
-      return;
-    }
-
-    const targetPercent = item.targetPercent;
-    const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
-
-    // Edge cases
-    if (targetPercent >= 100) {
-      item.targetWarning = 'Target cannot be 100% or more';
-      item.value = 0;
-      return;
-    }
-
-    if (targetPercent <= 0) {
-      item.targetWarning = null;
-      item.value = 0;
-      return;
-    }
-
-    // Current percentage (before adding anything)
-    const currentPercent = baselineTotal > 0 ? (baselineValue / baselineTotal) * 100 : 0;
-
-    if (targetPercent <= currentPercent && baselineValue > 0) {
-      item.targetWarning = `Already at ${currentPercent.toFixed(1)}%, can't add to reach ${targetPercent}%`;
-      item.value = 0;
-      return;
-    }
-
-    // Calculate required addition
-    const targetFraction = targetPercent / 100;
-    const numerator = (targetFraction * baselineTotal) - baselineValue;
-    const denominator = 1 - targetFraction;
-
-    if (denominator <= 0) {
-      item.targetWarning = 'Invalid target percentage';
-      item.value = 0;
-      return;
-    }
-
-    const requiredAddition = numerator / denominator;
-
-    if (requiredAddition < 0) {
-      item.targetWarning = `Would need to remove €${this.formatValue(Math.abs(requiredAddition))}`;
-      item.value = 0;
-      return;
-    }
-
-    item.targetWarning = null;
-    item.value = Math.round(requiredAddition * 100) / 100;
-  }
-
-  /**
-   * Recalculate all percentage-based items
-   * Called when portfolio baseline changes
-   */
-  recalculateAllPercentageItems() {
-    this.items.forEach(item => {
-      if (item.valueMode === 'percentage') {
-        this.recalculatePercentageItem(item);
-      }
-    });
-  }
-
-  formatValue(value) {
-    const num = parseFloat(value) || 0;
-    // Round to 2 decimal places for consistency with parser
-    const rounded = Math.round(num * 100) / 100;
-    return rounded.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  }
-
-  parseValue(str) {
-    if (!str) return 0;
-    // Remove currency symbols, spaces, and handle European format (1.000,50 -> 1000.50)
-    const cleaned = str.replace(/[€\s]/g, '').replace(/\./g, '').replace(',', '.');
-    const num = parseFloat(cleaned);
-    if (isNaN(num)) return 0;
-    // Clamp to valid range: 0 to 999,999,999 (reasonable portfolio limit)
-    const clamped = Math.min(Math.max(0, num), 999999999);
-    // Round to 2 decimal places for consistency
-    return Math.round(clamped * 100) / 100;
-  }
-
-  escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  showToast(message, type = 'info') {
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = `simulator-toast simulator-toast-${type}`;
-    const iconMap = {
-      danger: 'exclamation-circle',
-      warning: 'exclamation-triangle',
-      success: 'check-circle',
-      info: 'info-circle'
-    };
-    toast.innerHTML = `
-      <i class="fas fa-${iconMap[type] || 'info-circle'}"></i>
-      <span>${message}</span>
-    `;
-
-    // Add to page
-    document.body.appendChild(toast);
-
-    // Animate in
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    // Remove after delay
-    setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  }
 }
 
-// Initialize when DOM is ready (will be called from allocate.js or inline)
-window.AllocationSimulator = AllocationSimulator;
+// Format number with commas and decimals
+function formatNumber(number) {
+    return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Parse number from string, removing commas
+function parseNumber(string) {
+    return parseFloat(string.replace(/,/g, '')) || 0;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Get tab elements
+    const globalTab = document.getElementById('global-tab');
+    const detailedTab = document.getElementById('detailed-tab');
+    const globalContent = document.getElementById('global');
+    const detailedContent = document.getElementById('detailed');
+
+    // Defensive check: ensure all required elements exist
+    if (!globalTab || !detailedTab || !globalContent || !detailedContent) {
+        console.error('Required tab elements not found. Page may not be fully loaded.');
+        // Show the global content by default if elements are missing
+        if (globalContent) {
+            globalContent.style.display = 'block';
+        }
+        return;
+    }
+
+    // Function to handle tab switching
+    function switchTab(tabId) {
+        // Remove active class from all tabs and content
+        [globalTab, detailedTab].forEach(tab => tab.classList.remove('active'));
+        [globalContent, detailedContent].forEach(content => {
+            content.classList.remove('active');
+            content.style.display = 'none';
+        });
+
+        // Add active class to selected tab and content
+        if (tabId === 'global') {
+            globalTab.classList.add('active');
+            globalContent.classList.add('active');
+            globalContent.style.display = 'block';
+        } else {
+            detailedTab.classList.add('active');
+            detailedContent.classList.add('active');
+            detailedContent.style.display = 'block';
+        }
+
+        // Add smooth transition effect
+        const activeContent = tabId === 'global' ? globalContent : detailedContent;
+        activeContent.style.transition = 'opacity 0.3s ease-in-out';
+        activeContent.style.opacity = '0';
+
+        setTimeout(() => {
+            activeContent.style.opacity = '1';
+        }, 50);
+    }
+
+    // Add click event listeners to tabs
+    globalTab.addEventListener('click', () => switchTab('global'));
+    detailedTab.addEventListener('click', () => switchTab('detailed'));
+
+    // Add hover effect to tabs
+    [globalTab, detailedTab].forEach(tab => {
+        tab.addEventListener('mouseenter', () => {
+            if (!tab.classList.contains('active')) {
+                tab.style.backgroundColor = '#f8f9fa';
+            }
+        });
+
+        tab.addEventListener('mouseleave', () => {
+            if (!tab.classList.contains('active')) {
+                tab.style.backgroundColor = '';
+            }
+        });
+    });
+
+    // Portfolio allocation functionality
+    class PortfolioAllocator {
+        constructor() {
+            this.portfolioData = null;
+            this.investmentAmount = 0;
+            this.rebalanceMode = 'existing-only'; // 'existing-only', 'new-only', 'new-with-sells'
+            this.sectorsExpanded = new Set(); // Track expanded sectors
+            this.selectedPortfolio = null; // Track selected portfolio
+
+            // OPTIMIZATION: Create formatters once, reuse many times (15% faster)
+            this.currencyFormatter = new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'EUR',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+
+            this.percentageFormatter = new Intl.NumberFormat('en-US', {
+                style: 'percent',
+                minimumFractionDigits: 1,
+                maximumFractionDigits: 1
+            });
+
+            this.init();
+        }
+
+        async init() {
+            this.hideExpandCollapseButtons(); // Hide buttons initially
+            await this.fetchPortfolioData();
+            this.setupEventListeners();
+            await this.restoreGlobalPortfolioSelection();
+
+            // Initialize tab view
+            switchTab('global');
+        }
+
+        async restoreGlobalPortfolioSelection() {
+            // Restore global portfolio selection (cross-page persistence)
+            if (typeof PortfolioState !== 'undefined') {
+                const savedId = await PortfolioState.getSelectedPortfolio();
+                const portfolioSelect = document.getElementById('portfolio-select');
+                if (savedId && portfolioSelect && portfolioSelect.querySelector(`option[value="${savedId}"]`)) {
+                    portfolioSelect.value = savedId;
+                    this.selectedPortfolio = savedId;
+                    this.renderDetailedView();
+                }
+            }
+        }
+
+        setupEventListeners() {
+            // Add event listener for investment amount input
+            const investmentInput = document.getElementById('investment-amount');
+            if (investmentInput) {
+                // Combined event listener for formatting and updating calculations
+                investmentInput.addEventListener('input', (e) => {
+                    // Clean and format the input value
+                    const cleanValue = e.target.value.replace(/[^\d.]/g, '');
+                    const number = parseFloat(cleanValue) || 0;
+
+                    // Format the display value
+                    e.target.value = formatNumber(number);
+
+                    // Update the investment amount and trigger calculations immediately
+                    this.investmentAmount = number;
+                    this.updateTableCalculations();
+                    this.renderDetailedView(); // Update detailed view when investment amount changes
+                });
+            }
+
+            // Add event listeners for rebalance mode radio buttons
+            const rebalanceModeRadios = document.querySelectorAll('input[name="rebalance-mode"]');
+            rebalanceModeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    this.rebalanceMode = e.target.value;
+                    this.handleModeChange();
+                    this.updateTableCalculations();
+                    this.renderDetailedView();
+                });
+            });
+
+            // Add portfolio selection change listener
+            const portfolioSelect = document.getElementById('portfolio-select');
+            if (portfolioSelect) {
+                portfolioSelect.addEventListener('change', async (e) => {
+                    this.selectedPortfolio = e.target.value;
+                    // Save to global state for cross-page persistence
+                    if (typeof PortfolioState !== 'undefined' && e.target.value) {
+                        await PortfolioState.setSelectedPortfolio(e.target.value);
+                    }
+                    this.renderDetailedView();
+                });
+            }
+
+            // Add expand/collapse all buttons event listeners
+            const expandAllBtn = document.getElementById('expand-all-btn');
+            if (expandAllBtn) {
+                expandAllBtn.addEventListener('click', () => {
+                    this.expandAllSectors();
+                });
+            }
+
+            const collapseAllBtn = document.getElementById('collapse-all-btn');
+            if (collapseAllBtn) {
+                collapseAllBtn.addEventListener('click', () => {
+                    this.collapseAllSectors();
+                });
+            }
+        }
+
+        handleModeChange() {
+            const investmentInputContainer = document.getElementById('investment-input-container');
+            if (this.rebalanceMode === 'existing-only') {
+                // Hide investment amount input for existing capital only mode
+                investmentInputContainer.style.display = 'none';
+                this.investmentAmount = 0; // No new investment
+                // Also update the input field visually
+                const investmentInput = document.getElementById('investment-amount');
+                if (investmentInput) {
+                    investmentInput.value = '';
+                }
+            } else {
+                // Show investment amount input for modes that use new capital
+                investmentInputContainer.style.display = 'block';
+            }
+        }
+
+        async fetchPortfolioData() {
+            try {
+                const response = await fetch('/portfolio/api/simulator/portfolio-data');
+
+                // Check for redirect (usually means session expired)
+                if (response.redirected) {
+                    console.error('Session expired or auth failed, redirecting to home');
+                    window.location.href = '/';
+                    return;
+                }
+
+                // Check for non-OK responses
+                if (!response.ok) {
+                    // Try to get error details from response
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                // Verify we got JSON response
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned non-JSON response. Session may have expired.');
+                }
+
+                this.portfolioData = await response.json();
+                if (!this.portfolioData || !this.portfolioData.portfolios) {
+                    throw new Error('Invalid portfolio data received');
+                }
+
+                // Initialize UI state based on current mode
+                this.handleModeChange();
+                this.renderPortfolioTable();
+                this.populatePortfolioSelect();
+                this.renderDetailedView();
+            } catch (error) {
+                console.error('Error fetching portfolio data:', error);
+                this.showError(`Failed to load portfolio data: ${error.message}`);
+            }
+        }
+
+        populatePortfolioSelect() {
+            const portfolioSelect = document.getElementById('portfolio-select');
+            if (!portfolioSelect || !this.portfolioData || !this.portfolioData.portfolios) return;
+
+            // Clear existing options
+            portfolioSelect.innerHTML = '';
+
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Select a portfolio';
+            portfolioSelect.appendChild(defaultOption);
+
+            // Add portfolio options - show all portfolios with target allocations (even if empty)
+            this.portfolioData.portfolios.forEach(portfolio => {
+                // Filter out portfolios with target allocation AND valid names (not "Unknown")
+                const isValidPortfolio = portfolio.targetWeight > 0 &&
+                                        portfolio.name &&
+                                        !portfolio.name.toLowerCase().includes('unknown');
+
+                if (isValidPortfolio) {
+                    const option = document.createElement('option');
+                    option.value = portfolio.name;
+                    // Add "(Empty)" suffix for empty portfolios
+                    option.textContent = portfolio.currentValue > 0
+                        ? portfolio.name
+                        : `${portfolio.name} (Empty)`;
+                    portfolioSelect.appendChild(option);
+                }
+            });
+
+            // Set initial selection if none exists
+            if (!this.selectedPortfolio && portfolioSelect.options.length > 1) {
+                this.selectedPortfolio = portfolioSelect.options[1].value;
+                portfolioSelect.value = this.selectedPortfolio;
+            }
+        }
+
+        showError(message) {
+            const container = document.getElementById('portfolio-table-container');
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i> ${message}
+                    </div>
+                `;
+            }
+        }
+
+        showNoPositionsMessage() {
+            const container = document.getElementById('portfolio-table-container');
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-info">
+                        No stock or crypto positions found. Please add positions on the Enrich tab.
+                    </div>
+                `;
+            }
+            const detailed = document.getElementById('detailed-portfolio-container');
+            if (detailed) {
+                detailed.innerHTML = `
+                    <div class="alert alert-info mt-4">
+                        No stock or crypto positions found. Please add positions on the Enrich tab.
+                    </div>
+                `;
+            }
+            this.hideExpandCollapseButtons();
+        }
+
+        formatCurrency(value) {
+            // Defensive check for invalid values
+            if (value === undefined || value === null || isNaN(value)) {
+                return '<span class="sensitive-value">€0.00</span>';
+            }
+            const formatted = this.currencyFormatter.format(value);
+            return `<span class="sensitive-value">${formatted}</span>`;
+        }
+
+        formatPercentage(value) {
+            return this.percentageFormatter.format(value / 100);
+        }
+
+        // Helper method to count current positions in a portfolio
+        countCurrentPositions(portfolio) {
+            if (!portfolio.sectors) return 0;
+            return portfolio.sectors
+                .filter(sector => sector.name !== 'Missing Positions')
+                .reduce((sum, sector) => sum + (sector.positionCount || 0), 0);
+        }
+
+        renderPortfolioTable() {
+            if (!this.portfolioData || !this.portfolioData.portfolios || this.portfolioData.portfolios.length === 0) {
+                this.showNoPositionsMessage();
+                return;
+            }
+
+            // Include ALL portfolios with target allocations from builder (even if empty)
+            // Rationale: If user set target allocation in Build page, they want to see it here
+            const filteredPortfolios = this.portfolioData.portfolios.filter(portfolio =>
+                portfolio.targetWeight > 0  // Include any portfolio with target allocation (even if currentValue is 0)
+            );
+
+            if (filteredPortfolios.length === 0) {
+                this.showError('No portfolios with target allocations found. Please configure allocations in the Build page first.');
+                return;
+            }
+
+            // Calculate total current value across all portfolios
+            const totalCurrentValue = filteredPortfolios.reduce(
+                (sum, portfolio) => sum + (portfolio.currentValue || 0), 0
+            );
+
+            // Calculate new total value based on rebalancing mode
+            let newTotalValue = totalCurrentValue;
+            if (this.rebalanceMode !== 'existing-only') {
+                newTotalValue += this.investmentAmount;
+            }
+
+            // Normalize target weights and calculate target values
+            const totalTargetWeight = filteredPortfolios.reduce((sum, p) => sum + (p.targetWeight || 0), 0);
+            
+            filteredPortfolios.forEach(portfolio => {
+                const normalizedWeight = totalTargetWeight > 0 ? (portfolio.targetWeight / totalTargetWeight) * 100 : 0;
+                portfolio.targetValue = (normalizedWeight / 100) * newTotalValue;
+                portfolio.discrepancy = portfolio.targetValue - portfolio.currentValue;
+            });
+
+            // Calculate actions based on rebalancing mode
+            this.calculateRebalancingActions(filteredPortfolios, totalCurrentValue);
+
+            // Sync calculated actions back to master portfolioData for detailed view consistency
+            filteredPortfolios.forEach(filtered => {
+                const originalPortfolio = this.portfolioData.portfolios.find(p => p.name === filtered.name);
+                if (originalPortfolio) {
+                    originalPortfolio.action = filtered.action;
+                    originalPortfolio.targetValue = filtered.targetValue;
+                    originalPortfolio.discrepancy = filtered.discrepancy;
+                }
+            });
+
+            // Generate table HTML
+            const tableHTML = this.generatePortfolioTableHTML(filteredPortfolios, totalCurrentValue, newTotalValue);
+
+            // Update the table container
+            const container = document.getElementById('portfolio-table-container');
+            if (container) {
+                container.innerHTML = tableHTML;
+            }
+        }
+
+        calculateRebalancingActions(portfolios, totalCurrentValue) {
+            /**
+             * UNIFIED ALLOCATION LOGIC
+             * All modes follow the same core principles:
+             * 1. Calculate gap = target_value - current_value
+             * 2. Exclude items with gap = 0 (already at target)
+             * 3. Distribute capital proportionally based on gap sizes
+             *
+             * Mode differences:
+             * - existing-only: Allows sells (negative gaps), no new capital, buys = sells
+             * - new-only: Only buys (positive gaps), distribute new capital only
+             * - new-with-sells: Allows both, distribute full target adjustment
+             */
+
+            if (this.rebalanceMode === 'existing-only') {
+                // Mode: Rebalance Existing Capital (no new money, buys must equal sells)
+                // Calculate gaps and distribute proportionally
+                const positiveGaps = [];
+                const negativeGaps = [];
+                let totalPositiveGap = 0;
+                let totalNegativeGap = 0;
+
+                portfolios.forEach(portfolio => {
+                    const gap = portfolio.discrepancy;
+
+                    if (Math.abs(gap) < 0.01) {
+                        // At target - no action
+                        portfolio.action = 0;
+                    } else if (gap > 0) {
+                        // Below target - needs to buy
+                        positiveGaps.push(portfolio);
+                        totalPositiveGap += gap;
+                    } else {
+                        // Above target - needs to sell
+                        negativeGaps.push(portfolio);
+                        totalNegativeGap += Math.abs(gap);
+                    }
+                });
+
+                // Calculate the smaller of total buys or total sells
+                const rebalanceAmount = Math.min(totalPositiveGap, totalNegativeGap);
+
+                // Distribute buys proportionally
+                positiveGaps.forEach(portfolio => {
+                    const proportionalShare = portfolio.discrepancy / totalPositiveGap;
+                    portfolio.action = proportionalShare * rebalanceAmount;
+                });
+
+                // Distribute sells proportionally
+                negativeGaps.forEach(portfolio => {
+                    const proportionalShare = Math.abs(portfolio.discrepancy) / totalNegativeGap;
+                    portfolio.action = -1 * proportionalShare * rebalanceAmount;
+                });
+
+            } else if (this.rebalanceMode === 'new-only') {
+                // Mode: New Capital Only (no sales, only buys)
+                // Only allocate to portfolios BELOW target
+                // Distribute proportionally based on gap size
+
+                const eligibleGaps = [];
+                let totalGap = 0;
+
+                portfolios.forEach(portfolio => {
+                    const gap = portfolio.discrepancy;
+
+                    if (gap <= 0) {
+                        // At or above target - gets 0€
+                        portfolio.action = 0;
+                    } else {
+                        // Below target - eligible for allocation
+                        eligibleGaps.push({ portfolio, gap });
+                        totalGap += gap;
+                    }
+                });
+
+                // Distribute new capital proportionally by gap size
+                if (this.investmentAmount > 0 && totalGap > 0) {
+                    eligibleGaps.forEach(item => {
+                        const proportionalShare = item.gap / totalGap;
+                        item.portfolio.action = proportionalShare * this.investmentAmount;
+                    });
+                }
+
+            } else if (this.rebalanceMode === 'new-with-sells') {
+                // Mode: New Capital with Full Rebalancing (allows both buys and sells)
+                // Distribute full discrepancy, allowing both positive and negative actions
+
+                portfolios.forEach(portfolio => {
+                    const gap = portfolio.discrepancy;
+
+                    if (Math.abs(gap) < 0.01) {
+                        // At target - no action
+                        portfolio.action = 0;
+                    } else {
+                        // Apply full gap adjustment (buy if positive, sell if negative)
+                        portfolio.action = gap;
+                    }
+                });
+            }
+        }
+
+        generatePortfolioTableHTML(portfolios, totalCurrentValue, newTotalValue) {
+            // OPTIMIZATION: Use array for efficient string building (O(n) vs O(n²) for concatenation)
+            const htmlParts = [];
+
+            // Header
+            htmlParts.push(`
+            <div class="table-responsive">
+                <table class="table table-striped table-hover unified-table">
+                    <thead>
+                        <tr>
+                            <th class="col-company">Name</th>
+                            <th class="col-currency">Current Value</th>
+                            <th class="col-percentage">Current Allocation</th>
+                            <th class="col-percentage">Target Allocation</th>
+                            <th class="col-currency">Target Value</th>
+                            <th class="col-input-medium">Actions</th>
+                            <th class="col-currency">Value After Action</th>
+                            <th class="col-percentage">Allocation After Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `);
+
+            // Track totals for summary
+            let totalTargetValue = 0;
+            let totalBuys = 0;
+            let totalSells = 0;
+            let totalValueAfter = 0;
+
+            // Portfolio rows - push to array instead of concatenating
+            portfolios.forEach(portfolio => {
+                const currentAllocation = totalCurrentValue > 0 ? (portfolio.currentValue / totalCurrentValue) * 100 : 0;
+                const valueAfterAction = portfolio.currentValue + portfolio.action;
+                const allocationAfterAction = newTotalValue > 0 ? (valueAfterAction / newTotalValue) * 100 : 0;
+
+                // Determine action styling and text
+                let actionClass = "actions-neutral";
+                let actionText = "No action";
+
+                if (portfolio.action > 0.01) {
+                    actionClass = "actions-positive";
+                    actionText = `Buy ${this.formatCurrency(portfolio.action)}`;
+                    totalBuys += portfolio.action;
+                } else if (portfolio.action < -0.01) {
+                    actionClass = "actions-negative";
+                    actionText = `Sell ${this.formatCurrency(Math.abs(portfolio.action))}`;
+                    totalSells += Math.abs(portfolio.action);
+                }
+
+                // Check for position deficits
+                const currentPositions = this.countCurrentPositions(portfolio);
+                // Use desiredPositions if set, otherwise fall back to minPositions
+                const targetPositions = portfolio.desiredPositions ?? portfolio.minPositions ?? 0;
+                const positionDeficit = Math.max(0, targetPositions - currentPositions);
+
+                let portfolioNameDisplay = portfolio.name;
+
+                // Show indicator for completely empty portfolios
+                if (portfolio.currentValue === 0 || !portfolio.currentValue) {
+                    portfolioNameDisplay = `${portfolio.name}<br><span class="badge bg-info" style="font-size: 0.75em; padding: 0.25em 0.5em;">Empty - Needs Positions</span>`;
+                } else if (positionDeficit > 0) {
+                    // Show warning for portfolios that need more positions (only if desired > current)
+                    portfolioNameDisplay = `${portfolio.name} <span class="text-warning" title="Needs ${positionDeficit} more positions">⚠️</span>`;
+                }
+
+                totalTargetValue += portfolio.targetValue;
+                totalValueAfter += valueAfterAction;
+
+                // Push row to array
+                htmlParts.push(`
+                    <tr ${positionDeficit > 0 ? 'class="table-warning"' : ''}>
+                        <td class="col-company">${portfolioNameDisplay}</td>
+                        <td class="col-currency current-value">${this.formatCurrency(portfolio.currentValue)}</td>
+                        <td class="col-percentage allocation-percentage">${this.formatPercentage(currentAllocation)}</td>
+                        <td class="col-percentage target-value">${this.formatPercentage(portfolio.targetWeight || 0)}</td>
+                        <td class="col-currency target-value">${this.formatCurrency(portfolio.targetValue)}</td>
+                        <td class="col-input-medium ${actionClass}">${actionText}</td>
+                        <td class="col-currency value-after">${this.formatCurrency(valueAfterAction)}</td>
+                        <td class="col-percentage allocation-after">${this.formatPercentage(allocationAfterAction)}</td>
+                    </tr>
+                `);
+            });
+
+            // Total row
+            htmlParts.push(`
+                    <tr class="total-row">
+                        <td class="col-company"><strong>Total</strong></td>
+                        <td class="col-currency current-value"><strong>${this.formatCurrency(totalCurrentValue)}</strong></td>
+                        <td class="col-percentage allocation-percentage"><strong>100%</strong></td>
+                        <td class="col-percentage target-value"><strong>100%</strong></td>
+                        <td class="col-currency target-value"><strong>${this.formatCurrency(totalTargetValue)}</strong></td>
+                        <td class="col-input-medium">
+                            ${totalBuys > 0 ? `<span class="actions-positive">Buy: ${this.formatCurrency(totalBuys)}</span><br>` : ''}
+                            ${totalSells > 0 ? `<span class="actions-negative">Sell: ${this.formatCurrency(totalSells)}</span>` : ''}
+                            ${totalBuys === 0 && totalSells === 0 ? '<span class="actions-neutral">No action</span>' : ''}
+                        </td>
+                        <td class="col-currency value-after"><strong>${this.formatCurrency(totalValueAfter)}</strong></td>
+                        <td class="col-percentage allocation-after"><strong>100%</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+            </div>
+            `);
+
+            // Summary footer
+            htmlParts.push(this.generateSummaryFooter(totalCurrentValue, totalBuys, totalSells, totalValueAfter));
+
+            // OPTIMIZATION: Single join operation instead of n concatenations
+            return htmlParts.join('');
+        }
+
+        generateSummaryFooter(currentValue, totalBuys, totalSells, newValue) {
+            const netCapital = totalBuys - totalSells;
+            
+            return `
+            <div class="rebalance-summary">
+                <div class="summary-row">
+                    <span class="summary-label">Portfolio Value:</span>
+                    <span class="summary-value">${this.formatCurrency(currentValue)}</span>
+                </div>
+                ${netCapital > 0 ? `
+                <div class="summary-row">
+                    <span class="summary-label">New Capital Required:</span>
+                    <span class="summary-value positive">${this.formatCurrency(netCapital)}</span>
+                </div>
+                ` : ''}
+                <div class="summary-row">
+                    <span class="summary-label">New Portfolio Value:</span>
+                    <span class="summary-value">${this.formatCurrency(newValue)}</span>
+                </div>
+                ${totalBuys > 0 || totalSells > 0 ? `
+                <div class="summary-row">
+                    <span class="summary-label">Total Transactions:</span>
+                    <span class="summary-value">
+                        ${totalBuys > 0 ? `<span class="positive">Buy: ${this.formatCurrency(totalBuys)}</span>` : ''}
+                        ${totalBuys > 0 && totalSells > 0 ? ' | ' : ''}
+                        ${totalSells > 0 ? `<span class="negative">Sell: ${this.formatCurrency(totalSells)}</span>` : ''}
+                    </span>
+                </div>
+                ` : ''}
+            </div>
+            `;
+        }
+
+        updateTableCalculations() {
+            if (this.portfolioData) {
+                this.renderPortfolioTable();
+            }
+        }
+
+        toggleSectorExpand(sectorId) {
+            console.log(`Toggling sector: ${sectorId}`);
+            if (this.sectorsExpanded.has(sectorId)) {
+                this.sectorsExpanded.delete(sectorId);
+                console.log(`Collapsed: ${sectorId}`);
+            } else {
+                this.sectorsExpanded.add(sectorId);
+                console.log(`Expanded: ${sectorId}`);
+            }
+            this.renderDetailedView();
+        }
+
+        expandAllSectors() {
+            if (!this.selectedPortfolio || !this.portfolioData) return;
+
+            const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
+            if (!portfolio || !portfolio.sectors) return;
+
+            // Add all sector IDs to the expanded set
+            portfolio.sectors.forEach((sector, sectorIndex) => {
+                if (sector.positions && sector.positions.length > 0) {
+                    const sectorId = sector.name === 'Missing Positions'
+                        ? `${portfolio.name}-Missing-Positions`
+                        : `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    this.sectorsExpanded.add(sectorId);
+                }
+            });
+
+            console.log('Expanded all sectors:', Array.from(this.sectorsExpanded));
+            this.renderDetailedView();
+        }
+
+        collapseAllSectors() {
+            if (!this.selectedPortfolio || !this.portfolioData) return;
+
+            const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
+            if (!portfolio || !portfolio.sectors) return;
+
+            // Remove all sector IDs for this portfolio from the expanded set
+            portfolio.sectors.forEach((sector, sectorIndex) => {
+                if (sector.positions && sector.positions.length > 0) {
+                    const sectorId = sector.name === 'Missing Positions'
+                        ? `${portfolio.name}-Missing-Positions`
+                        : `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    this.sectorsExpanded.delete(sectorId);
+                }
+            });
+
+            console.log('Collapsed all sectors:', Array.from(this.sectorsExpanded));
+            this.renderDetailedView();
+        }
+
+        showExpandCollapseButtons() {
+            const expandBtn = document.getElementById('expand-all-btn');
+            const collapseBtn = document.getElementById('collapse-all-btn');
+            if (expandBtn) expandBtn.style.display = 'inline-block';
+            if (collapseBtn) collapseBtn.style.display = 'inline-block';
+        }
+
+        hideExpandCollapseButtons() {
+            const expandBtn = document.getElementById('expand-all-btn');
+            const collapseBtn = document.getElementById('collapse-all-btn');
+            if (expandBtn) expandBtn.style.display = 'none';
+            if (collapseBtn) collapseBtn.style.display = 'none';
+        }
+
+        /**
+         * Render the detailed view according to the rebalancing actions table plan
+         */
+        renderDetailedView() {
+            const detailedContainer = document.getElementById('detailed-portfolio-container');
+
+            if (!detailedContainer) return;
+            if (!this.portfolioData || !this.portfolioData.portfolios || this.portfolioData.portfolios.length === 0) {
+                this.showNoPositionsMessage();
+                return;
+            }
+
+            // Clear the container
+            detailedContainer.innerHTML = '';
+
+            // If no portfolio is selected, show a message
+            if (!this.selectedPortfolio) {
+                detailedContainer.innerHTML = `
+                    <div class="alert alert-info mt-4">
+                        Please select a portfolio to view its details.
+                    </div>
+                `;
+                this.hideExpandCollapseButtons();
+                return;
+            }
+
+            // Find the selected portfolio
+            const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
+            if (!portfolio) return;
+
+            // Special handling for GME portfolio - add debugging
+            if (portfolio.name === "GME") {
+                console.log("Processing GME portfolio:", portfolio);
+            }
+
+            // Skip portfolios with no current value
+            if (!portfolio.currentValue || portfolio.currentValue === 0) {
+                detailedContainer.innerHTML = `
+                    <div class="alert alert-warning mt-4">
+                        No data available for the selected portfolio.
+                    </div>
+                `;
+                this.hideExpandCollapseButtons();
+                return;
+            }
+
+            // Skip portfolios with no target weight defined
+            if (!portfolio.targetWeight || portfolio.targetWeight === 0) {
+                detailedContainer.innerHTML = `
+                    <div class="alert alert-warning mt-4">
+                        This portfolio has no target allocation defined in the builder. Please define a target allocation first.
+                    </div>
+                `;
+                this.hideExpandCollapseButtons();
+                return;
+            }
+
+            // Get the portfolio action amount from the global view calculation
+            // This ensures consistency between global and detailed views
+            const globalPortfolio = this.portfolioData.portfolios.find(p => p.name === portfolio.name);
+            const portfolioActionAmount = globalPortfolio && globalPortfolio.action ? globalPortfolio.action : 0;
+
+            // Display the action amount for this portfolio at the top of the detailed view
+            const investmentInfo = document.createElement('div');
+            investmentInfo.className = 'investment-info mb-4';
+            
+            let infoText = '';
+            if (this.rebalanceMode === 'existing-only') {
+                if (portfolioActionAmount > 0) {
+                    infoText = `Portfolio needs: ${this.formatCurrency(portfolioActionAmount)} (rebalancing existing capital)`;
+                } else if (portfolioActionAmount < 0) {
+                    infoText = `Portfolio excess: ${this.formatCurrency(Math.abs(portfolioActionAmount))} (rebalancing existing capital)`;
+                } else {
+                    infoText = `Portfolio is balanced (rebalancing existing capital)`;
+                }
+            } else {
+                infoText = `Portfolio allocation amount: ${this.formatCurrency(Math.max(0, portfolioActionAmount))}`;
+                if (this.investmentAmount > 0) {
+                    infoText += ` <span class="text-muted ms-2">(from total investment: ${this.formatCurrency(this.investmentAmount)})</span>`;
+                }
+            }
+            
+            investmentInfo.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    ${infoText}
+                </div>
+            `;
+            detailedContainer.appendChild(investmentInfo);
+
+            // Create rebalancing table
+            const tableResponsive = document.createElement('div');
+            tableResponsive.className = 'table-responsive';
+
+            const table = document.createElement('table');
+            table.className = 'table table-hover';
+
+            // Table header
+            const thead = document.createElement('thead');
+            thead.innerHTML = `
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Current Value</th>
+                    <th>Current Allocation</th>
+                    <th>Target Allocation</th>
+                    <th>Target Value</th>
+                    <th>Actions</th>
+                    <th>Value After Action</th>
+                    <th>Allocation After Action</th>
+                </tr>
+            `;
+
+            // Table body
+            const tbody = document.createElement('tbody');
+
+            // Calculate the distribution base and target value
+            let totalCurrentValue = portfolio.currentValue || 0;
+
+            // Key fix: For "new-only" mode, distribute only the allocated new capital
+            // For rebalancing modes, use the final target value (current + action)
+            let distributionBase;
+            let portfolioTargetValue;  // Final value after all actions
+
+            if (this.rebalanceMode === 'new-only') {
+                // New-only mode: positions compete for their share of NEW capital only
+                distributionBase = portfolioActionAmount;  // Distribute the €18K
+                portfolioTargetValue = totalCurrentValue + portfolioActionAmount;  // Final value €80K
+            } else {
+                // Rebalancing modes: positions target their share of final portfolio value
+                distributionBase = totalCurrentValue + portfolioActionAmount;  // Both distribute and target the same €80K
+                portfolioTargetValue = distributionBase;
+            }
+
+            let totalAction = 0;
+            let totalValueAfter = 0;
+
+            // Define totalValueAfterAllActions at the portfolio level for consistent scope
+            const totalValueAfterAllActions = portfolioTargetValue;
+
+            // Count total number of positions and positions with user-defined allocations
+            let totalPositionsCount = 0;
+            let userDefinedAllocationsCount = 0;
+            let sumUserDefinedAllocations = 0;
+
+            // First pass: gather position counts and target allocations
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach(sector => {
+                    if (!sector.positions || sector.positions.length === 0) return;
+                    if (sector.name === 'Missing Positions') {
+                        const placeholderPosition = sector.positions.find(pos => pos.isPlaceholder);
+                        if (placeholderPosition) {
+                            totalPositionsCount += placeholderPosition.positionsRemaining || 0;
+                        }
+                    } else {
+                        sector.positions.forEach(position => {
+                            totalPositionsCount++;
+                            // Check if position has user-defined allocation
+                            if (position.targetAllocation && position.targetAllocation > 0) {
+                                userDefinedAllocationsCount++;
+                                sumUserDefinedAllocations += position.targetAllocation;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Use builder configuration instead of crude equal distribution
+            let defaultAllocation = 0;
+
+            // Get builder positions data for this portfolio
+            const builderPositions = portfolio.builderPositions || [];
+            const builderPositionsMap = new Map();
+
+            // Map builder positions by company name for easy lookup
+            builderPositions.forEach(pos => {
+                if (!pos.isPlaceholder) {
+                    builderPositionsMap.set(pos.companyName, pos.weight || 0);
+                }
+            });
+
+            // Find placeholder position for default weight calculation
+            const placeholderPosition = builderPositions.find(pos => pos.isPlaceholder);
+
+            if (placeholderPosition) {
+                // Use builder's calculated weight per position for missing positions
+                defaultAllocation = placeholderPosition.weight || 0;
+            } else if (sumUserDefinedAllocations < 100) {
+                // Fallback to equal distribution if no builder data
+                const remainingAllocation = 100 - sumUserDefinedAllocations;
+                const positionsWithoutUserDefinedAllocation = totalPositionsCount - userDefinedAllocationsCount;
+                defaultAllocation = positionsWithoutUserDefinedAllocation > 0 ?
+                    remainingAllocation / positionsWithoutUserDefinedAllocation : 0;
+            }
+
+            // No longer need totalPositiveDiscrepancy since we calculate actions directly
+
+            // Second pass: Check if we should show missing positions
+            // This must be done BEFORE normalization
+            let shouldShowMissingPositions = false;
+            const missingPositionsSector = portfolio.sectors && portfolio.sectors.find(sector =>
+                sector.name === 'Missing Positions' ||
+                (sector.positions && sector.positions.some(pos => pos.isPlaceholder))
+            );
+
+            if (missingPositionsSector) {
+                // Calculate total weight of real positions from builder
+                const realBuilderPositions = builderPositions.filter(pos => !pos.isPlaceholder);
+                const totalRealWeight = realBuilderPositions.reduce((sum, pos) => sum + (pos.weight || 0), 0);
+
+                // Use effectivePositions (user's desired count, or minPositions as fallback)
+                const effectivePositions = portfolio.effectivePositions || portfolio.minPositions || 0;
+                const currentPositionsCount = portfolio.sectors
+                    .filter(sector => sector.name !== 'Missing Positions')
+                    .reduce((sum, sector) => sum + (sector.positions ? sector.positions.length : 0), 0);
+
+                shouldShowMissingPositions = (
+                    currentPositionsCount < effectivePositions &&
+                    Math.round(totalRealWeight) < 100
+                );
+
+                console.log(`Portfolio ${portfolio.name}: shouldShowMissingPositions=${shouldShowMissingPositions}, currentPositions=${currentPositionsCount}, effectivePositions=${effectivePositions}, minPositions=${portfolio.minPositions || 0}, desiredPositions=${portfolio.desiredPositions}, totalRealWeight=${totalRealWeight}%`);
+            }
+
+            // Third pass: assign target allocations and calculate total for normalization
+            let totalTargetAllocation = 0;
+            let hasBackendConstrainedValues = false;
+
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    // Assign target allocations for each position
+                    sector.positions.forEach(position => {
+                        // Check if backend provided constrained target value
+                        if (position.targetValue !== undefined && position.targetValue !== null) {
+                            hasBackendConstrainedValues = true;
+                            // Calculate percentage for display (will be recalculated properly later)
+                            const backendPct = portfolioTargetValue > 0
+                                ? (position.targetValue / portfolioTargetValue) * 100
+                                : 0;
+                            totalTargetAllocation += backendPct;
+                        } else {
+                            // Use builder weight if available, otherwise use default allocation
+                            if (!position.targetAllocation || position.targetAllocation <= 0) {
+                                const builderWeight = builderPositionsMap.get(position.name);
+                                position.targetAllocation = builderWeight || defaultAllocation;
+                            }
+                            totalTargetAllocation += position.targetAllocation;
+                        }
+                    });
+                });
+            }
+
+            // Normalize target allocations to sum to exactly 100%
+            // SKIP normalization if backend provided constrained values (already normalized)
+            const normalizationFactor = (!hasBackendConstrainedValues && totalTargetAllocation > 0)
+                ? (100 / totalTargetAllocation)
+                : 1;
+            console.log(`Portfolio ${portfolio.name}: Total target allocation before normalization: ${totalTargetAllocation}%, normalization factor: ${normalizationFactor}, using backend values: ${hasBackendConstrainedValues}`);
+
+            // Fourth pass: normalize allocations and calculate target values
+            // Store normalized allocations in a separate map to avoid mutating originals
+            const normalizedAllocations = new Map();
+
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    // Calculate sector metrics
+                    let sectorCurrentValue = 0;
+                    let sectorTargetAllocation = 0;
+
+                    // Calculate values for each position in the sector
+                    sector.positions.forEach(position => {
+                        sectorCurrentValue += (position.currentValue || 0);
+
+                        // CRITICAL: Use backend's constrained target value if available
+                        // Backend applies type constraints (maxPerStock, maxPerETF) with recursive redistribution
+                        if (position.targetValue !== undefined && position.targetValue !== null) {
+                            // Backend has already calculated constrained value - use it directly
+                            position.calculatedTargetValue = position.targetValue;
+
+                            // Calculate the percentage this represents (for display)
+                            const backendAllocation = portfolioTargetValue > 0
+                                ? (position.targetValue / portfolioTargetValue) * 100
+                                : 0;
+                            normalizedAllocations.set(position, backendAllocation);
+                            sectorTargetAllocation += backendAllocation;
+
+                            console.log(`Using backend constrained value for ${position.name}: ${position.targetValue.toFixed(2)} (${backendAllocation.toFixed(2)}%)`);
+                        } else {
+                            // Fallback to frontend normalization if backend didn't provide targetValue
+                            const normalizedAllocation = position.targetAllocation * normalizationFactor;
+                            normalizedAllocations.set(position, normalizedAllocation);
+                            sectorTargetAllocation += normalizedAllocation;
+
+                            const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
+                            position.calculatedTargetValue = targetValue;
+
+                            console.log(`Using frontend normalization for ${position.name}: ${normalizedAllocation.toFixed(2)}%`);
+                        }
+                    });
+
+                    // Set sector values
+                    sector.currentValue = sectorCurrentValue;
+                    sector.targetAllocation = sectorTargetAllocation;
+                    sector.calculatedTargetValue = (sectorTargetAllocation / 100) * portfolioTargetValue;
+                });
+            }
+
+            // Fifth pass: UNIFIED ALLOCATION DISTRIBUTION LOGIC
+            /**
+             * All modes follow the same core principles:
+             * 1. Calculate gap = target_value - current_value for each position
+             * 2. Exclude positions with gap = 0 (already at target)
+             * 3. Exclude entire sectors if sector is at/above target
+             * 4. Distribute capital proportionally based on gap sizes
+             *
+             * Mode differences:
+             * - existing-only: Allows sells (negative gaps), buys = sells at portfolio level
+             * - new-only: Only buys (positive gaps), distribute portfolio's new capital
+             * - new-with-sells: Allows both buys and sells, full rebalancing
+             */
+
+            const positiveGaps = [];
+            const negativeGaps = [];
+            let totalPositiveGap = 0;
+            let totalNegativeGap = 0;
+
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    // Check if sector is at or above target (for all modes)
+                    const sectorCurrentValue = sector.currentValue || 0;
+                    const sectorTargetValue = sector.calculatedTargetValue || 0;
+                    const sectorGap = sectorTargetValue - sectorCurrentValue;
+
+                    // Process positions within this sector
+                    sector.positions.forEach(position => {
+                        const positionCurrentValue = position.currentValue || 0;
+                        const positionTargetValue = position.calculatedTargetValue || 0;
+                        const positionGap = positionTargetValue - positionCurrentValue;
+
+                        position.gap = positionGap;
+
+                        // Determine eligibility based on mode and gap
+                        if (Math.abs(positionGap) < 0.01) {
+                            // At target - no action needed
+                            position.excludedReason = 'at_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (sectorGap <= 0 && positionGap > 0) {
+                            // Sector is at/above target but position is below
+                            // In this case, sector constraint takes precedence
+                            position.excludedReason = 'sector_above_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (this.rebalanceMode === 'new-only' && positionGap <= 0) {
+                            // New-only mode: exclude positions at or above target
+                            position.excludedReason = 'at_or_above_target';
+                            position.action = 0;
+                            position.valueAfter = positionCurrentValue;
+
+                        } else if (this.rebalanceMode === 'existing-only' || this.rebalanceMode === 'new-with-sells') {
+                            // Rebalancing modes: include all positions with gaps
+                            if (positionGap > 0) {
+                                // Below target - needs to buy
+                                positiveGaps.push({
+                                    position: position,
+                                    gap: positionGap,
+                                    sector: sector.name
+                                });
+                                totalPositiveGap += positionGap;
+                            } else {
+                                // Above target - needs to sell
+                                negativeGaps.push({
+                                    position: position,
+                                    gap: Math.abs(positionGap),
+                                    sector: sector.name
+                                });
+                                totalNegativeGap += Math.abs(positionGap);
+                            }
+
+                        } else {
+                            // New-only mode with positive gap
+                            positiveGaps.push({
+                                position: position,
+                                gap: positionGap,
+                                sector: sector.name
+                            });
+                            totalPositiveGap += positionGap;
+                        }
+                    });
+                });
+            }
+
+            console.log(`Portfolio ${portfolio.name} (${this.rebalanceMode}): ${positiveGaps.length} buys (€${totalPositiveGap.toFixed(2)}), ${negativeGaps.length} sells (€${totalNegativeGap.toFixed(2)})`);
+
+            // Distribute capital based on mode
+            if (this.rebalanceMode === 'new-only') {
+                // New-only: Distribute new capital proportionally to positive gaps only
+                if (totalPositiveGap > 0 && portfolioActionAmount > 0) {
+                    const availableCapital = Math.max(0, portfolioActionAmount);
+
+                    positiveGaps.forEach(item => {
+                        const proportionalShare = item.gap / totalPositiveGap;
+                        const allocation = proportionalShare * availableCapital;
+
+                        item.position.action = allocation;
+                        item.position.valueAfter = (item.position.currentValue || 0) + allocation;
+
+                        if (item.gap > 100) {
+                            console.log(`  Buy ${item.position.name}: gap=€${item.gap.toFixed(2)}, share=${(proportionalShare*100).toFixed(1)}%, allocation=€${allocation.toFixed(2)}`);
+                        }
+                    });
+                }
+
+            } else if (this.rebalanceMode === 'existing-only') {
+                // Existing-only: Proportional buys and sells, buys = sells
+                const rebalanceAmount = Math.min(totalPositiveGap, totalNegativeGap);
+
+                if (rebalanceAmount > 0) {
+                    // Distribute buys proportionally
+                    if (totalPositiveGap > 0) {
+                        positiveGaps.forEach(item => {
+                            const proportionalShare = item.gap / totalPositiveGap;
+                            const allocation = proportionalShare * rebalanceAmount;
+
+                            item.position.action = allocation;
+                            item.position.valueAfter = (item.position.currentValue || 0) + allocation;
+                        });
+                    }
+
+                    // Distribute sells proportionally
+                    if (totalNegativeGap > 0) {
+                        negativeGaps.forEach(item => {
+                            const proportionalShare = item.gap / totalNegativeGap;
+                            const allocation = proportionalShare * rebalanceAmount;
+
+                            item.position.action = -allocation;
+                            item.position.valueAfter = (item.position.currentValue || 0) - allocation;
+                        });
+                    }
+                }
+
+            } else if (this.rebalanceMode === 'new-with-sells') {
+                // New-with-sells: Full rebalancing - apply full gaps
+                positiveGaps.forEach(item => {
+                    item.position.action = item.gap;
+                    item.position.valueAfter = (item.position.currentValue || 0) + item.gap;
+                });
+
+                negativeGaps.forEach(item => {
+                    item.position.action = -item.gap;
+                    item.position.valueAfter = (item.position.currentValue || 0) - item.gap;
+                });
+            }
+
+            // Ensure all positions have action and valueAfter set
+            if (portfolio.sectors) {
+                portfolio.sectors.forEach(sector => {
+                    if (sector.positions) {
+                        sector.positions.forEach(position => {
+                            if (position.action === undefined) {
+                                position.action = 0;
+                                position.valueAfter = position.currentValue || 0;
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Sixth pass: render sectors and positions
+            if (portfolio.sectors && portfolio.sectors.length > 0) {
+                portfolio.sectors.forEach((sector, sectorIndex) => {
+                    // Skip sectors with no positions
+                    if (!sector.positions || sector.positions.length === 0) return;
+
+                    // Skip missing positions if they shouldn't be shown
+                    if (sector.name === 'Missing Positions' && !shouldShowMissingPositions) return;
+
+                    const sectorId = `${portfolio.name}-${sector.name}-${sectorIndex}`;
+                    const isExpanded = this.sectorsExpanded.has(sectorId);
+
+                    // Calculate sector metrics for rendering
+                    let sectorAction = 0;
+                    let sectorValueAfter = 0;
+
+                    // Calculate sector percentages
+                    const sectorCurrentAllocation = totalCurrentValue > 0
+                        ? (sector.currentValue / totalCurrentValue) * 100
+                        : 0;
+
+                    // Use the already calculated position actions and aggregate for sector
+                    sector.positions.forEach(position => {
+                        sectorAction += position.action;
+                        sectorValueAfter += position.valueAfter;
+                    });
+
+                    // Determine action class and text for the sector
+                    let sectorActionClass = "actions-neutral";
+                    let sectorActionText = "No action";
+
+                    if (sectorAction > 0.01) {
+                        sectorActionClass = "actions-positive";
+                        sectorActionText = `Buy ${this.formatCurrency(sectorAction)}`;
+                    } else if (sectorAction < -0.01) {
+                        sectorActionClass = "actions-negative";
+                        sectorActionText = `Sell ${this.formatCurrency(Math.abs(sectorAction))}`;
+                    }
+
+                    const sectorRow = document.createElement('tr');
+                    // Add special styling for Missing Positions
+                    const isMissingPositions = sector.name === 'Missing Positions';
+                    sectorRow.className = isMissingPositions
+                        ? 'table-warning sector-row missing-positions-sector'
+                        : 'table-secondary sector-row';
+                    sectorRow.style.cursor = 'pointer';
+
+                    // Calculate allocation after action for sector
+                    const sectorAllocationAfterAction = totalValueAfterAllActions > 0
+                        ? (sectorValueAfter / totalValueAfterAllActions) * 100
+                        : 0;
+
+                    // Build sector name display with special icon for missing positions
+                    const sectorNameHtml = isMissingPositions
+                        ? `<i class="fas fa-exclamation-triangle me-2 text-warning"></i><strong>Missing Positions (${sector.positions.length})</strong>`
+                        : `<strong>${sector.name}</strong>`;
+
+                    sectorRow.innerHTML = `
+                        <td>
+                            <i class="fas ${isExpanded ? 'fa-caret-down' : 'fa-caret-right'} me-2"></i>
+                            ${sectorNameHtml}
+                        </td>
+                        <td></td>
+                        <td class="current-value">${this.formatCurrency(sector.currentValue || 0)}</td>
+                        <td>${this.formatPercentage(sectorCurrentAllocation)}</td>
+                        <td>${this.formatPercentage(sector.targetAllocation || 0)}</td>
+                        <td class="target-value">${this.formatCurrency(sector.calculatedTargetValue || 0)}</td>
+                        <td class="${sectorActionClass}">${sectorActionText}</td>
+                        <td class="value-after">${this.formatCurrency(sectorValueAfter)}</td>
+                        <td class="allocation-after">${this.formatPercentage(sectorAllocationAfterAction)}</td>
+                    `;
+
+                    sectorRow.addEventListener('click', () => {
+                        this.toggleSectorExpand(sectorId);
+                    });
+
+                    tbody.appendChild(sectorRow);
+
+                    // Add position rows if sector is expanded
+                    if (isExpanded) {
+                        // Positions in this sector
+                        sector.positions.forEach(position => {
+                            // Calculate current allocation
+                            const positionCurrentAllocation = totalCurrentValue > 0
+                                ? ((position.currentValue || 0) / totalCurrentValue) * 100
+                                : 0;
+
+                            // Calculate allocation after action for position
+                            const positionAllocationAfterAction = totalValueAfterAllActions > 0
+                                ? (position.valueAfter / totalValueAfterAllActions) * 100
+                                : 0;
+
+                            // Determine action class and text
+                            let actionClass = "actions-neutral";
+                            let actionText = "No action";
+
+                            if (position.action > 0.01) {
+                                actionClass = "actions-positive";
+                                actionText = `Buy ${this.formatCurrency(position.action)}`;
+                            } else if (position.action < -0.01) {
+                                actionClass = "actions-negative";
+                                actionText = `Sell ${this.formatCurrency(Math.abs(position.action))}`;
+                            }
+
+                            // Position row - indented to show hierarchy
+                            const positionRow = document.createElement('tr');
+                            const isPlaceholder = position.isPlaceholder || false;
+                            positionRow.className = isPlaceholder
+                                ? 'position-row placeholder-position'
+                                : 'position-row';
+
+                            // Add special styling for placeholder positions
+                            if (isPlaceholder) {
+                                positionRow.style.fontStyle = 'italic';
+                                positionRow.style.color = '#6c757d';
+                                positionRow.title = "This represents a future position to be filled";
+                            }
+
+                            // Build position name with icon for placeholders
+                            const positionNameHtml = isPlaceholder
+                                ? `<i class="fas fa-plus-circle me-2 text-muted"></i>${position.name}`
+                                : position.name;
+
+                            // Get the normalized allocation for display
+                            const displayAllocation = normalizedAllocations.get(position) || 0;
+
+                            // Investment type display with icon
+                            let typeDisplay = '-';
+                            let typeIcon = '';
+                            if (position.investment_type === 'Stock') {
+                                typeIcon = '<i class="fas fa-chart-line me-1" style="color: #3b82f6;"></i>';
+                                typeDisplay = typeIcon + 'Stock';
+                            } else if (position.investment_type === 'ETF') {
+                                typeIcon = '<i class="fas fa-layer-group me-1" style="color: #10b981;"></i>';
+                                typeDisplay = typeIcon + 'ETF';
+                            }
+
+                            // Check if position is capped and build target allocation display
+                            let targetAllocationDisplay = this.formatPercentage(displayAllocation);
+                            if (position.is_capped) {
+                                const rule = position.applicable_rule === 'maxPerStock' ? 'Stock' : 'ETF';
+                                const unconstrainedPct = (position.unconstrained_target_value / portfolioTargetValue) * 100;
+                                targetAllocationDisplay = `
+                                    <span class="text-warning" title="Capped by max ${rule} rule. Unconstrained: ${this.formatPercentage(unconstrainedPct)}">
+                                        <i class="fas fa-lock me-1"></i>${this.formatPercentage(displayAllocation)}
+                                    </span>
+                                `;
+                            }
+
+                            positionRow.innerHTML = `
+                                <td class="position-name">
+                                    <span class="ms-4">${positionNameHtml}</span>
+                                </td>
+                                <td class="text-center">${typeDisplay}</td>
+                                <td class="current-value">${this.formatCurrency(position.currentValue || 0)}</td>
+                                <td>${this.formatPercentage(positionCurrentAllocation)}</td>
+                                <td>${targetAllocationDisplay}</td>
+                                <td class="target-value">${this.formatCurrency(position.calculatedTargetValue || 0)}</td>
+                                <td class="${actionClass}">${actionText}</td>
+                                <td class="value-after">${this.formatCurrency(position.valueAfter || 0)}</td>
+                                <td class="allocation-after">${this.formatPercentage(positionAllocationAfterAction)}</td>
+                            `;
+
+                            tbody.appendChild(positionRow);
+
+                            // Add to totals
+                            totalAction += position.action;
+                            totalValueAfter += position.valueAfter;
+                        });
+                    } else {
+                        // If sector is collapsed, still add actions to totals
+                        totalAction += sectorAction;
+                        totalValueAfter += sectorValueAfter;
+                    }
+                });
+            }
+
+            // Verification: Check if totalAction matches portfolioActionAmount
+            console.log(`Portfolio ${portfolio.name} verification:`);
+            console.log(`  Expected action (from global): €${portfolioActionAmount.toFixed(2)}`);
+            console.log(`  Calculated action (from positions): €${totalAction.toFixed(2)}`);
+            console.log(`  Difference: €${Math.abs(totalAction - portfolioActionAmount).toFixed(2)}`);
+
+            if (Math.abs(totalAction - portfolioActionAmount) > 0.10) {
+                console.warn(`⚠️ Mismatch detected! Detailed view actions don't match global view.`);
+            } else {
+                console.log(`✓ Actions match within rounding tolerance`);
+            }
+
+            // Portfolio total row
+            const totalRow = document.createElement('tr');
+            totalRow.className = 'table-primary fw-bold';
+
+            totalRow.innerHTML = `
+                <td>Portfolio Total</td>
+                <td></td>
+                <td class="current-value">${this.formatCurrency(totalCurrentValue)}</td>
+                <td>100%</td>
+                <td>100%</td>
+                <td class="target-value">${this.formatCurrency(portfolioTargetValue)}</td>
+                <td>${this.formatCurrency(totalAction)}</td>
+                <td class="value-after">${this.formatCurrency(totalValueAfter)}</td>
+                <td class="allocation-after">100%</td>
+            `;
+
+            tbody.appendChild(totalRow);
+
+            // Assemble table
+            table.appendChild(thead);
+            table.appendChild(tbody);
+            tableResponsive.appendChild(table);
+
+            // Add to container
+            detailedContainer.appendChild(tableResponsive);
+
+            // Show expand/collapse buttons since we have valid data
+            this.showExpandCollapseButtons();
+        }
+
+        renderDetailedChart() {
+            const detailedChartContainer = document.getElementById('detailedChart');
+
+            if (!detailedChartContainer) return;
+            if (!this.portfolioData || !this.portfolioData.portfolios) return;
+
+            // Filter out portfolios with current value of 0
+            const filteredPortfolios = this.portfolioData.portfolios.filter(portfolio =>
+                portfolio.currentValue !== 0 && portfolio.currentValue !== null
+            );
+
+            // Clear previous chart contents
+            detailedChartContainer.innerHTML = '';
+
+            // Prepare data for the detailed chart
+            const allSectors = [];
+
+            filteredPortfolios.forEach((portfolio) => {
+                if (portfolio.sectors && portfolio.sectors.length > 0) {
+                    portfolio.sectors.forEach(sector => {
+                        // Skip missing positions in chart
+                        if (sector.name === 'Missing Positions') return;
+
+                        allSectors.push({
+                            portfolio: portfolio.name,
+                            sector: sector.name,
+                            value: sector.currentValue || 0
+                        });
+                    });
+                }
+            });
+
+            if (typeof ChartConfig !== 'undefined' && allSectors.length > 0) {
+                const labels = allSectors.map(s => `${s.portfolio} - ${s.sector}`);
+                const values = allSectors.map(s => s.value);
+                ChartConfig.createStandardDoughnutChart('detailedChart', labels, values);
+            } else {
+                detailedChartContainer.innerHTML = `
+                    <div class="alert alert-info">
+                        No detailed sector data available.
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // Initialize portfolio allocator
+    const allocator = new PortfolioAllocator();
+
+});

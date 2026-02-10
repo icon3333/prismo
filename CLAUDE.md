@@ -87,14 +87,24 @@ Database (SQLite with proper indexing)
 
 2. **Services** (`app/services/`): Pure Python business logic
    - `AllocationService`: Portfolio allocation calculations and rebalancing logic with standardized allocation modes and type constraints
-   - `PortfolioService`: Portfolio analytics, aggregations, and P&L calculations
-   - `PriceService`: Price operations and currency conversion
+   - `BuilderService`: Investment targets and budget planning
+     - `get_investment_targets(account_id)`: Returns budget and portfolio targets
+     - `get_portfolio_target(account_id, portfolio_id)`: Single portfolio target
+     - `get_investment_progress(account_id, portfolio_id?)`: Investment progress calculation
    - No Flask dependencies - fully testable without app context
 
 3. **Repositories** (`app/repositories/`): Single source of truth for data access
    - `PortfolioRepository`: Portfolio and company data queries
    - `PriceRepository`: Market price operations
-   - `AccountRepository`: Account management
+   - `AccountRepository`: Account management with cash balance tracking
+     - `get_cash(account_id)`, `set_cash(account_id, amount)`: Cash balance operations
+   - `SimulationRepository`: Allocation simulator scenario management
+     - `get_all(account_id)`: List all simulations
+     - `get_by_id(simulation_id, account_id)`: Get simulation with full items
+     - `create(account_id, name, scope, items, portfolio_id?)`: Create simulation
+     - `update(...)`: Update existing simulation
+     - `delete(simulation_id, account_id)`: Delete simulation
+     - `exists(name, account_id, exclude_id?)`: Check name uniqueness
    - All methods validate `account_id` for data isolation
 
 4. **Utils** (`app/utils/`): Supporting utilities
@@ -105,8 +115,9 @@ Database (SQLite with proper indexing)
 
 ## Database Schema
 
-**SQLite** database with 10 core tables:
+**SQLite** database with 11 core tables:
 - `accounts`: User accounts (single-user but multi-account support)
+  - `cash REAL`: Cash balance tracking for investment planning
 - `portfolios`: Portfolio definitions
 - `companies`: Holdings (securities/positions) with:
   - Custom value support (`custom_total_value`, `custom_price_eur`, `is_custom_value`, `custom_value_date`)
@@ -114,20 +125,34 @@ Database (SQLite with proper indexing)
   - Country override capabilities (`override_country`, `country_manually_edited`)
   - Identifier protection (`override_identifier`, `identifier_manually_edited`, `identifier_manual_edit_date`)
   - Total invested tracking (for P&L calculations)
+  - Thesis tracking (`thesis TEXT`): Investment rationale per holding
+  - Sector classification (`sector`): Renamed from category
 - `company_shares`: Share quantities with manual override support and edit tracking
 - `market_prices`: Cached market prices (updated via yfinance) - stores both native currency (`price`) and EUR (`price_eur`)
 - `exchange_rates`: Daily exchange rates for consistent currency conversion (refreshed every 24h)
 - `identifier_mappings`: Custom ticker symbol mappings
 - `expanded_state`: UI state persistence
 - `background_jobs`: Job status tracking
+- `simulations`: Allocation simulator scenarios with:
+  - `id`, `account_id`, `name`, `scope` (global/portfolio)
+  - `portfolio_id` (optional, for portfolio-scoped simulations)
+  - `items` (JSON): Serialized allocation items
+  - `created_at`, `updated_at` timestamps
 - Schema in `app/schema.sql` (automatically applied on startup)
-- **Database migrations** handle schema evolution (6 migrations currently implemented in `db_manager.py`):
+- **Database migrations** handle schema evolution (13 migrations currently implemented in `db_manager.py`):
   1. User-edited shares tracking columns
   2. Country override columns
   3. Custom value columns
   4. Investment type column
   5. Identifier manual edit tracking columns
   6. Exchange rates table for consistent currency conversion
+  7. Simulations table for allocation simulator scenarios
+  8. Thesis column in companies table for investment rationale
+  9. Category → sector rename in companies table
+  10. Cash column in accounts table for cash balance tracking
+  11. Source column for tracking manual vs CSV-imported companies
+  12. Make identifier and portfolio_id nullable in companies table
+  13. Rename page_name values (analyse→performance, build→builder)
 
 ## Caching Strategy
 
@@ -214,12 +239,12 @@ Use structured exceptions (`app/exceptions.py`):
 ## Recent Features & Improvements
 
 ### Major Features Added
-- **P&L Tracking**: Profit & loss calculations displayed in Analyse page
+- **P&L Tracking**: Profit & loss calculations displayed in Performance page
   - Absolute P&L: `current_value - total_invested`
   - Percentage P&L: `(pnl_absolute / total_invested) * 100`
   - Calculated in `portfolio_api.py` for all positions with `total_invested > 0`
 
-- **Editable Desired Positions**: Build page allows direct editing of target position counts
+- **Editable Desired Positions**: Builder page allows direct editing of target position counts
   - Input validation with min/max constraints
   - Real-time visual warnings for values below minimum
   - Saves to `expanded_state` table for persistence
@@ -232,6 +257,26 @@ Use structured exceptions (`app/exceptions.py`):
 - **Portfolio Rename**: Fixed bug preventing portfolio renaming functionality
 
 - **Enhanced UI**: Improved table scrollbars and visual polish across all pages
+
+- **Allocation Simulator**: Save and load simulation scenarios with custom allocations
+  - Supports global and portfolio-scoped simulations
+  - Persists to database via `SimulationRepository`
+  - Full CRUD operations with name uniqueness validation
+
+- **Cash Balance Tracking**: Track cash reserves alongside investments
+  - Stored in accounts table (`cash` column)
+  - Accessible via `AccountRepository.get_cash()` and `set_cash()`
+  - Integrated into investment progress calculations
+
+- **Thesis Tracking**: Investment rationale per holding
+  - `thesis` column in companies table
+  - Bulk edit support for efficient management
+  - Helps document investment decisions
+
+- **Investment Targets**: Budget goals and portfolio allocation targets
+  - `BuilderService` handles target calculations
+  - Progress tracking against defined goals
+  - Supports both global budget and per-portfolio targets
 
 ### Performance Optimizations
 - Pre-fetching company data with JOIN queries to avoid N+1 problems
@@ -248,6 +293,13 @@ Environment variables via `.env` file (auto-generated on first run):
 - `CACHE_DEFAULT_TIMEOUT`: Cache timeout in seconds
 - `PRICE_UPDATE_INTERVAL_HOURS`: Auto price update interval (default: 24)
 - `BACKUP_INTERVAL_HOURS`: Database backup interval (default: 6)
+- `SESSION_LIFETIME_DAYS`: Session lifetime in days (default: 1)
+- `DB_BACKUP_DIR`: Backup directory path
+- `MAX_BACKUP_FILES`: Max backup files to keep (default: 10)
+- `BATCH_SIZE`: Ticker batch size for price fetching (default: 5)
+- `MAX_CONTENT_LENGTH`: Max upload size (default: 16MB)
+- `UPLOAD_FOLDER`: Upload directory
+- `PER_PAGE`: Pagination default (default: 20)
 
 See `config.py` for all configuration options.
 
@@ -290,6 +342,10 @@ Pragmatic test coverage (50-60% on critical paths):
 10. **Protected edits**: Manual edits to identifiers, shares, and countries are preserved across CSV reimports
 11. **Editable positions**: Build page allows direct editing of desired position counts with min/max validation
 12. **Debug mode**: Controlled via `FLASK_ENV` environment variable (development/production)
+13. **Allocation simulator**: Save/load simulation scenarios for what-if allocation planning
+14. **Cash tracking**: Track available cash for investment alongside portfolio positions
+15. **Thesis tracking**: Document investment rationale per holding with bulk edit support
+16. **Investment targets**: Set budget goals and portfolio allocation targets via BuilderService
 
 ## Common Tasks
 

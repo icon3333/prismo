@@ -16,51 +16,7 @@
         color: var(--aqua-500);
     }
 
-    /* Cash Toggle Styling */
-    .cash-toggle-container {
-        margin-top: var(--space-md);
-        padding-top: var(--space-md);
-        border-top: 1px solid var(--border-subtle);
-    }
-
-    .cash-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-sm);
-        cursor: pointer;
-        padding: var(--space-xs) var(--space-sm);
-        border-radius: var(--radius-sm);
-        transition: background-color var(--transition-base);
-    }
-
-    .cash-toggle:hover {
-        background-color: var(--hover-bg);
-    }
-
-    .cash-toggle input[type="checkbox"] {
-        margin-right: var(--space-xs);
-    }
-
-    .cash-toggle-label {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-xs);
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-    }
-
-    .cash-toggle-label i {
-        color: var(--aqua-500);
-    }
-
-    .cash-balance-tag {
-        font-size: 0.75rem;
-        display: none;
-    }
-
-    .cash-balance-tag.is-visible {
-        display: inline-flex;
-    }
+    /* Cash Toggle Styling - now in ocean-depth.css */
 </style>
 {% endblock %}
 
@@ -191,7 +147,7 @@
     </div>
 </div>
 
-{% include "components/analyse_components.html" %}
+{% include "components/performance_components.html" %}
 
 <!-- Load centralized value calculator utility -->
 <script src="{{ url_for('static', filename='js/utils/value-calculator.js') }}"></script>
@@ -300,7 +256,7 @@
         async function fetchAllocationRules() {
             console.log('Fetching allocation rules...');
             try {
-                const response = await fetch('/portfolio/api/state?page=build');
+                const response = await fetch('/portfolio/api/state?page=builder');
                 console.log('Allocation rules API response status:', response.status);
 
                 if (!response.ok) {
@@ -1038,7 +994,8 @@
                     percentages: percentages,
                     total: totalValue,
                     formatPercentage: window.formatPercentage || (v => `${v.toFixed(1)}%`),
-                    height: 350
+                    height: 350,
+                    isHoldingsChart: true  // Skip companies section in tooltip - each bar IS a holding
                 }
                 );
             } catch (error) {
@@ -1206,7 +1163,14 @@
                             fontSize: '12px',
                             fontWeight: 400
                         },
-                        maxHeight: 120
+                        maxHeight: 120,
+                        formatter: function(value) {
+                            // Truncate long labels to 15 characters
+                            if (value && value.length > 15) {
+                                return value.substring(0, 15) + '...';
+                            }
+                            return value;
+                        }
                     }
                 },
                 yaxis: {
@@ -1226,7 +1190,19 @@
                             const label = w.globals.labels[dataPointIndex];
                             const value = series[seriesIndex][dataPointIndex];
 
-                            // Get company details for this sector
+                            // For holdings chart, show simple tooltip without companies breakdown
+                            if (options.isHoldingsChart) {
+                                return `<div style="padding: 12px; background: rgba(0,0,0,0.85); color: white; border-radius: 8px; font-size: 12px; max-width: 300px; overflow: hidden; box-sizing: border-box;">
+                                    <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.3); padding-bottom: 4px;">
+                                        ${truncateText(label, 25)}
+                                    </div>
+                                    <div>
+                                        <strong>Allocation: ${value.toFixed(2)}%</strong>
+                                    </div>
+                                </div>`;
+                            }
+
+                            // Get company details for this sector/category
                             const companies = options.companyDetails?.[label] || [];
 
                             let companyList = '';

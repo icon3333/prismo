@@ -28,11 +28,11 @@ def calculate_missing_positions(account_id: int, portfolios) -> Dict[str, Any]:
     """
     try:
         # Import the pure function (no Flask dependencies, safe to import)
-        from app.routes.portfolio_api import _get_allocate_portfolio_data_internal
+        from app.routes.portfolio_api import _get_simulator_portfolio_data_internal
 
         try:
             # Call internal function directly with account_id - no session manipulation
-            rebalancer_data = _get_allocate_portfolio_data_internal(account_id)
+            rebalancer_data = _get_simulator_portfolio_data_internal(account_id)
         except (ValidationError, DataIntegrityError) as e:
             logger.error(f"Error getting rebalancer data: {e}")
             return {
@@ -238,4 +238,4 @@ def get_accounts():
     """API endpoint to get all accounts"""
     accounts = query_db(
         'SELECT id, username, created_at FROM accounts WHERE username != "_global"')
-    return jsonify(accounts)
+    return jsonify([dict(a) for a in accounts] if accounts else [])

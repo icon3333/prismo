@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // Load saved state from the server
       async loadSavedState() {
         try {
-          const response = await axios.get('/portfolio/api/state?page=build');
+          const response = await axios.get('/portfolio/api/state?page=builder');
           debugLog('Loaded saved state:', response.data);
 
           // OPTIMIZATION: Parse all JSON strings once at the beginning (20% faster)
@@ -1649,7 +1649,7 @@ document.addEventListener('DOMContentLoaded', function () {
           this.autoSaveIndicator = true;
 
           const data = {
-            page: 'build',
+            page: 'builder',
             budgetData: JSON.stringify(this.budgetData),
             rules: JSON.stringify(this.rules),
             portfolios: JSON.stringify(this.portfolios),

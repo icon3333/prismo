@@ -226,7 +226,7 @@
                 <div class="summary-divider" v-if="builderData !== null || (builderDataLoaded && builderData === null)"></div>
                 <div class="summary-item summary-item-builder" v-if="builderData !== null">
                     <span class="summary-label">
-                        <a href="/portfolio/build" class="builder-link" title="Open Builder">
+                        <a href="/portfolio/builder" class="builder-link" title="Open Builder">
                             <i class="fas fa-hammer"></i>Available to Invest
                         </a>
                     </span>
@@ -241,7 +241,7 @@
                 </div>
                 <div class="summary-item summary-item-builder" v-else-if="builderDataLoaded && builderData === null">
                     <span class="summary-label">
-                        <a href="/portfolio/build" class="builder-link-configure" title="Configure Builder">
+                        <a href="/portfolio/builder" class="builder-link-configure" title="Configure Builder">
                             <i class="fas fa-hammer"></i>Configure Builder
                         </a>
                     </span>
@@ -505,21 +505,33 @@
                                         <!-- Show "M" badge for manual stocks -->
                                         <span v-if="item.source === 'manual'" class="manual-badge" title="Manually added">M</span>
                                         <!-- Editable identifier for all stocks -->
-                                        <input class="input is-small"
-                                               type="text"
-                                               :value="getEditingValue(item, 'identifier')"
-                                               @input="setEditingValue(item, 'identifier', $event.target.value)"
-                                               :class="{ 'user-edited': item.identifier_manually_edited }"
-                                               :title="item.identifier_manually_edited
-                                                       ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
-                                                       : ''"
-                                               @focus="trackOriginal(item, 'identifier')"
-                                               @blur="commitIdentifier(item)"
-                                               @keydown.enter="commitIdentifier(item); $event.target.blur()"
-                                               @dblclick="$event.target.select()"
-                                               @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'identifier'))"
-                                               @mouseleave="hideOverflowTooltip($event)">
-                                        <span v-if="savingStates[item.id] && savingStates[item.id].identifier" class="tag is-small is-info">Saving...</span>
+                                        <div class="field has-addons mb-0" :class="{ 'has-revert': item.identifier_manually_edited }">
+                                            <div class="control is-expanded">
+                                                <input class="input is-small"
+                                                       type="text"
+                                                       :value="getEditingValue(item, 'identifier')"
+                                                       @input="setEditingValue(item, 'identifier', $event.target.value)"
+                                                       :class="{ 'user-edited': item.identifier_manually_edited }"
+                                                       :title="item.identifier_manually_edited
+                                                               ? 'Manually edited on ' + formatDateAgo(item.identifier_manual_edit_date)
+                                                               : ''"
+                                                       @focus="trackOriginal(item, 'identifier')"
+                                                       @blur="commitIdentifier(item)"
+                                                       @keydown.enter="commitIdentifier(item); $event.target.blur()"
+                                                       @dblclick="$event.target.select()"
+                                                       @mouseenter="showOverflowTooltip($event, getEditingValue(item, 'identifier'))"
+                                                       @mouseleave="hideOverflowTooltip($event)">
+                                            </div>
+                                            <span v-if="savingStates[item.id] && savingStates[item.id].identifier" class="tag is-small is-info" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%);">...</span>
+                                            <button v-if="item.identifier_manually_edited"
+                                                    class="revert-btn"
+                                                    @click="resetIdentifier(item)"
+                                                    title="Reset to original identifier">
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-undo"></i>
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </td>
                                 <td class="col-company">
@@ -609,7 +621,7 @@
                                     </div>
                                 </td>
                                 <td class="col-input-small">
-                                    <div class="field has-addons">
+                                    <div class="field has-addons" :class="{ 'has-revert': item.country_manually_edited }">
                                         <div class="control is-expanded">
                                             <div class="select is-small is-fullwidth">
                                                 <select v-model="item.effective_country"
@@ -626,24 +638,23 @@
                                                 </select>
                                             </div>
                                         </div>
-                                        <div class="control" v-if="item.country_manually_edited">
-                                            <button class="button is-small"
-                                                    @click="resetCountry(item)"
-                                                    title="Reset to yfinance data">
-                                                <span class="icon is-small">
-                                                    <i class="fas fa-undo"></i>
-                                                </span>
-                                            </button>
-                                        </div>
+                                        <button v-if="item.country_manually_edited"
+                                                class="revert-btn"
+                                                @click="resetCountry(item)"
+                                                title="Reset to yfinance data">
+                                            <span class="icon is-small">
+                                                <i class="fas fa-undo"></i>
+                                            </span>
+                                        </button>
                                     </div>
                                 </td>
                                 <td class="col-input-medium">
-                                    <div class="field has-addons">
+                                    <div class="field has-addons" :class="{ 'has-revert': item.is_manually_edited }">
                                         <div class="control is-expanded">
                                             <input class="input is-small sensitive-value" :class="{
                                                        'user-edited': item.is_manually_edited && !item.csv_modified_after_edit,
                                                        'csv-modified': item.is_manually_edited && item.csv_modified_after_edit
-                                                   }" type="text" :value="formatNumber(getEditingValue(item, 'shares') ?? item.effective_shares)"
+                                                   }" type="text" :value="formatNumber(editingValues[item.id]?.shares ?? item.effective_shares)"
                                                    @focus="trackOriginalShares(item)"
                                                    @input="(e) => { setEditingValue(item, 'shares', parseGermanNumber(e.target.value)); }"
                                                    @blur="commitShares(item)"
@@ -651,23 +662,40 @@
                                                    @dblclick="$event.target.select()"
                                                    :title="getSharesTitle(item)">
                                         </div>
-                                        <div class="control" v-if="savingStates[item.id] && savingStates[item.id].shares">
-                                            <span class="tag is-small is-info">Saving...</span>
-                                        </div>
+                                        <span v-if="savingStates[item.id] && savingStates[item.id].shares" class="tag is-small is-info" style="position: absolute; right: 2px; top: 50%; transform: translateY(-50%);">...</span>
+                                        <button v-if="item.is_manually_edited"
+                                                class="revert-btn"
+                                                @click="resetShares(item)"
+                                                title="Reset to CSV shares">
+                                            <span class="icon is-small">
+                                                <i class="fas fa-undo"></i>
+                                            </span>
+                                        </button>
                                     </div>
                                 </td>
                                 <td class="col-currency">
                                     <!-- Priority 1: If custom value set, show it in orange -->
                                     <div v-if="item.is_custom_value && item.custom_total_value" class="value-edit-wrapper">
-                                        <input class="input is-small user-edited sensitive-value"
-                                               type="text"
-                                               :value="formatCurrencyRaw(item.custom_total_value)"
-                                               @focus="trackOriginalTotalValue(item)"
-                                               @blur="commitTotalValue(item, $event.target.value)"
-                                               @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
-                                               @dblclick="$event.target.select()"
-                                               title="Custom total value - manually entered">
-                                        <span v-if="savingStates[item.id] && savingStates[item.id].totalValue" class="tag is-small is-info">Saving...</span>
+                                        <div class="field has-addons mb-0 has-revert">
+                                            <div class="control is-expanded">
+                                                <input class="input is-small user-edited sensitive-value"
+                                                       type="text"
+                                                       :value="formatCurrencyRaw(item.custom_total_value)"
+                                                       @focus="trackOriginalTotalValue(item)"
+                                                       @blur="commitTotalValue(item, $event.target.value)"
+                                                       @keydown.enter="commitTotalValue(item, $event.target.value); $event.target.blur()"
+                                                       @dblclick="$event.target.select()"
+                                                       title="Custom total value - manually entered">
+                                            </div>
+                                            <span v-if="savingStates[item.id] && savingStates[item.id].totalValue" class="tag is-small is-info" style="position: absolute; right: 24px; top: 50%; transform: translateY(-50%);">...</span>
+                                            <button class="revert-btn"
+                                                    @click="resetCustomValue(item)"
+                                                    title="Reset to market price">
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-undo"></i>
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
                                     <!-- Priority 2: If custom price exists (but not total), calculate using custom price -->
                                     <span v-else-if="item.is_custom_value && item.custom_price_eur && !item.custom_total_value"

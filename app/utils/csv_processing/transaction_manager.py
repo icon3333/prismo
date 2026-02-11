@@ -212,10 +212,18 @@ def _update_existing_company(
     # Preserve existing portfolio assignment unless it's None
     final_portfolio_id = existing_portfolio_id if existing_portfolio_id else default_portfolio_id
 
+    # Convert first_bought_date to string if it's a pandas Timestamp
+    first_bought = position.get('first_bought_date')
+    if first_bought is not None and hasattr(first_bought, 'strftime'):
+        first_bought = first_bought.strftime('%Y-%m-%d %H:%M:%S')
+
     # Update company record (now with protected identifier)
+    # Use COALESCE for first_bought_date to preserve existing value if CSV doesn't provide one
     cursor.execute(
-        'UPDATE companies SET identifier = ?, portfolio_id = ?, total_invested = ? WHERE id = ?',
-        [final_identifier, final_portfolio_id, position['total_invested'], company_id]
+        '''UPDATE companies SET identifier = ?, portfolio_id = ?, total_invested = ?,
+           first_bought_date = COALESCE(?, first_bought_date)
+           WHERE id = ?''',
+        [final_identifier, final_portfolio_id, position['total_invested'], first_bought, company_id]
     )
 
     # Get existing override if any
@@ -298,12 +306,17 @@ def _insert_new_company(
     cursor
 ) -> None:
     """Insert a new company record."""
+    # Convert first_bought_date to string if it's a pandas Timestamp
+    first_bought = position.get('first_bought_date')
+    if first_bought is not None and hasattr(first_bought, 'strftime'):
+        first_bought = first_bought.strftime('%Y-%m-%d %H:%M:%S')
+
     cursor.execute(
         '''INSERT INTO companies
-           (name, identifier, sector, portfolio_id, account_id, total_invested)
-           VALUES (?, ?, ?, ?, ?, ?)''',
+           (name, identifier, sector, portfolio_id, account_id, total_invested, first_bought_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?)''',
         [company_name, position['identifier'], '', default_portfolio_id,
-         account_id, position['total_invested']]
+         account_id, position['total_invested'], first_bought]
     )
     company_id = cursor.lastrowid
 

@@ -91,6 +91,10 @@ Database (SQLite with proper indexing)
      - `get_investment_targets(account_id)`: Returns budget and portfolio targets
      - `get_portfolio_target(account_id, portfolio_id)`: Single portfolio target
      - `get_investment_progress(account_id, portfolio_id?)`: Investment progress calculation
+   - `CompanyService`: Manual stock addition and management
+     - `add_company_manual(account_id, data)`: Add stocks manually with or without identifier
+     - `validate_identifier(identifier)`: Real-time identifier validation via yfinance
+     - `delete_manual_companies(account_id, company_ids)`: Delete manually-added stocks
    - No Flask dependencies - fully testable without app context
 
 3. **Repositories** (`app/repositories/`): Single source of truth for data access
@@ -127,6 +131,9 @@ Database (SQLite with proper indexing)
   - Total invested tracking (for P&L calculations)
   - Thesis tracking (`thesis TEXT`): Investment rationale per holding
   - Sector classification (`sector`): Renamed from category
+  - Source tracking (`source`: csv/manual): Distinguishes CSV-imported vs manually-added stocks
+  - First bought date (`first_bought_date DATETIME`): Tracks initial purchase date for performance tracking
+  - Nullable identifier and portfolio_id: Supports manual stocks without tickers or unassigned positions
 - `company_shares`: Share quantities with manual override support and edit tracking
 - `market_prices`: Cached market prices (updated via yfinance) - stores both native currency (`price`) and EUR (`price_eur`)
 - `exchange_rates`: Daily exchange rates for consistent currency conversion (refreshed every 24h)
@@ -139,7 +146,7 @@ Database (SQLite with proper indexing)
   - `items` (JSON): Serialized allocation items
   - `created_at`, `updated_at` timestamps
 - Schema in `app/schema.sql` (automatically applied on startup)
-- **Database migrations** handle schema evolution (13 migrations currently implemented in `db_manager.py`):
+- **Database migrations** handle schema evolution (14 migrations currently implemented in `db_manager.py`):
   1. User-edited shares tracking columns
   2. Country override columns
   3. Custom value columns
@@ -153,6 +160,7 @@ Database (SQLite with proper indexing)
   11. Source column for tracking manual vs CSV-imported companies
   12. Make identifier and portfolio_id nullable in companies table
   13. Rename page_name values (analyse→performance, build→builder)
+  14. First bought date column for "Since Purchase" performance tracking
 
 ## Caching Strategy
 
@@ -239,6 +247,13 @@ Use structured exceptions (`app/exceptions.py`):
 ## Recent Features & Improvements
 
 ### Major Features Added
+- **Manual Stock Addition** (In Progress - see `docs/PRD_ADD_STOCK.md`):
+  - Add stocks manually via Enrich page without CSV import
+  - Two flows: with identifier (auto-fetch prices) or without (custom values)
+  - `CompanyService` handles business logic with duplicate detection
+  - Manual stocks protected from CSV import deletion
+  - Visual "Manual" badge distinguishes manually-added stocks
+
 - **P&L Tracking**: Profit & loss calculations displayed in Performance page
   - Absolute P&L: `current_value - total_invested`
   - Percentage P&L: `(pnl_absolute / total_invested) * 100`
@@ -346,6 +361,8 @@ Pragmatic test coverage (50-60% on critical paths):
 14. **Cash tracking**: Track available cash for investment alongside portfolio positions
 15. **Thesis tracking**: Document investment rationale per holding with bulk edit support
 16. **Investment targets**: Set budget goals and portfolio allocation targets via BuilderService
+17. **Manual stock addition**: Add stocks manually without CSV import (see `docs/PRD_ADD_STOCK.md`)
+18. **Source tracking**: Distinguishes CSV-imported vs manually-added stocks to prevent accidental deletion
 
 ## Common Tasks
 
@@ -375,7 +392,7 @@ Pragmatic test coverage (50-60% on critical paths):
 ```
 app/
 ├── main.py                  # Flask app factory
-├── db_manager.py           # Database connections and migrations
+├── db_manager.py           # Database connections and migrations (14 migrations)
 ├── schema.sql              # Database schema (auto-applied)
 ├── cache.py                # Cache instance (prevents circular imports)
 ├── validation.py           # Input validation utilities
@@ -384,9 +401,16 @@ app/
 │   └── auth.py            # @require_auth decorator
 ├── routes/                 # HTTP request handlers
 ├── services/               # Business logic (pure Python)
+│   ├── allocation_service.py    # Portfolio allocation calculations
+│   ├── builder_service.py       # Investment targets and planning
+│   └── company_service.py       # Manual stock operations (new)
 ├── repositories/           # Data access layer
 └── utils/                  # Supporting utilities
     └── csv_processing/     # Modular CSV import logic
+
+docs/
+├── DESIGN_SYSTEM.md        # Ocean Depth UI design system
+└── PRD_ADD_STOCK.md        # Manual stock addition feature spec (new)
 
 config.py                   # Environment-based configuration
 run.py                      # Application entry point

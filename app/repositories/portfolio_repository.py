@@ -274,7 +274,8 @@ class PortfolioRepository:
                 p.id,
                 p.name,
                 COUNT(DISTINCT c.id) as num_holdings,
-                COALESCE(SUM(cs.shares * mp.price_eur), 0) as total_value
+                COALESCE(SUM(cs.shares * mp.price_eur), 0) as total_value,
+                COUNT(DISTINCT CASE WHEN c.id IS NOT NULL AND mp.price_eur IS NULL THEN c.id END) as num_missing_prices
             FROM portfolios p
             LEFT JOIN companies c ON p.id = c.portfolio_id
             LEFT JOIN company_shares cs ON c.id = cs.company_id
@@ -700,6 +701,8 @@ class PortfolioRepository:
                 c.custom_price_eur,
                 c.is_custom_value,
                 c.custom_value_date,
+                c.source,
+                c.first_bought_date,
                 p.name as portfolio_name,
                 cs.shares,
                 cs.override_share,
@@ -778,7 +781,9 @@ class PortfolioRepository:
                     'custom_total_value': float(row['custom_total_value']) if row.get('custom_total_value') is not None else None,
                     'custom_price_eur': float(row['custom_price_eur']) if row.get('custom_price_eur') is not None else None,
                     'is_custom_value': bool(row.get('is_custom_value', False)),
-                    'custom_value_date': row.get('custom_value_date')
+                    'custom_value_date': row.get('custom_value_date'),
+                    'source': row.get('source', 'csv'),  # 'csv' or 'manual'
+                    'first_bought_date': row.get('first_bought_date')
                 }
                 portfolio_data.append(item)
             except Exception as e:
@@ -788,3 +793,167 @@ class PortfolioRepository:
 
         logger.info(f"Returning {len(portfolio_data)} portfolio items")
         return portfolio_data
+
+    @staticmethod
+    def find_duplicate_company(
+        account_id: int,
+        name: str,
+        identifier: Optional[str] = None
+    ) -> Optional[Dict]:
+        """
+        Check if company with same name or identifier exists.
+
+        Args:
+            account_id: Account ID
+            name: Company name to check
+            identifier: Optional identifier to check
+
+        Returns:
+            Existing company dict or None
+        """
+        query = '''
+            SELECT c.id, c.name, c.identifier, c.portfolio_id,
+                   p.name as portfolio_name
+            FROM companies c
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            WHERE c.account_id = ?
+              AND (LOWER(c.name) = LOWER(?)
+                   OR (c.identifier = ? AND ? IS NOT NULL AND c.identifier IS NOT NULL))
+            LIMIT 1
+        '''
+        return query_db(query, [account_id, name, identifier, identifier], one=True)
+
+    @staticmethod
+    def create_company_manual(
+        account_id: int,
+        portfolio_id: Optional[int],
+        name: str,
+        identifier: Optional[str],
+        sector: str,
+        investment_type: Optional[str],
+        country: Optional[str],
+        shares: float,
+        is_custom_value: bool,
+        custom_total_value: Optional[float],
+        custom_price_eur: Optional[float],
+        source: str = 'manual'
+    ) -> int:
+        """
+        Create a manually-added company.
+
+        Args:
+            account_id: Account ID
+            portfolio_id: Portfolio ID (None for unassigned)
+            name: Company name
+            identifier: Ticker/ISIN (optional)
+            sector: Sector name
+            investment_type: 'Stock', 'ETF', or None
+            country: Country code (optional)
+            shares: Number of shares
+            is_custom_value: Whether using custom value (no market price)
+            custom_total_value: Custom total value (if is_custom_value)
+            custom_price_eur: Custom price per share (if is_custom_value)
+            source: 'manual' or 'csv'
+
+        Returns:
+            New company ID
+        """
+        db = get_db()
+
+        # Insert company
+        cursor = db.execute('''
+            INSERT INTO companies (
+                account_id, portfolio_id, name, identifier, sector,
+                investment_type, override_country, country_manually_edited,
+                is_custom_value, custom_total_value, custom_price_eur,
+                custom_value_date, source, total_invested
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                      CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,
+                      ?, 0)
+        ''', [
+            account_id, portfolio_id, name, identifier, sector,
+            investment_type, country, 1 if country else 0,
+            1 if is_custom_value else 0, custom_total_value, custom_price_eur,
+            is_custom_value,  # for the CASE statement
+            source
+        ])
+
+        company_id = cursor.lastrowid
+
+        # Insert shares record
+        db.execute('''
+            INSERT INTO company_shares (company_id, shares)
+            VALUES (?, ?)
+        ''', [company_id, shares])
+
+        db.commit()
+
+        logger.info(f"Created manual company '{name}' with ID {company_id}")
+        return company_id
+
+    @staticmethod
+    def delete_manual_company(account_id: int, company_id: int) -> bool:
+        """
+        Delete a manually-added company.
+
+        Only companies with source='manual' can be deleted.
+
+        Args:
+            account_id: Account ID (for security)
+            company_id: Company ID to delete
+
+        Returns:
+            True if deleted, False if not found or not manual
+        """
+        db = get_db()
+
+        # First verify it's a manual company
+        company = query_db(
+            'SELECT id, source FROM companies WHERE id = ? AND account_id = ?',
+            [company_id, account_id],
+            one=True
+        )
+
+        if not company:
+            logger.warning(f"Company {company_id} not found for account {account_id}")
+            return False
+
+        if company.get('source') != 'manual':
+            logger.warning(f"Company {company_id} is not manual (source={company.get('source')})")
+            return False
+
+        # Delete shares first (foreign key)
+        db.execute('DELETE FROM company_shares WHERE company_id = ?', [company_id])
+
+        # Delete company
+        db.execute(
+            'DELETE FROM companies WHERE id = ? AND account_id = ? AND source = ?',
+            [company_id, account_id, 'manual']
+        )
+
+        db.commit()
+        logger.info(f"Deleted manual company {company_id}")
+        return True
+
+    @staticmethod
+    def get_manual_company_ids(account_id: int, company_ids: List[int]) -> List[int]:
+        """
+        Filter a list of company IDs to only include manual companies.
+
+        Args:
+            account_id: Account ID
+            company_ids: List of company IDs to filter
+
+        Returns:
+            List of company IDs that are manual
+        """
+        if not company_ids:
+            return []
+
+        placeholders = ','.join('?' * len(company_ids))
+        query = f'''
+            SELECT id FROM companies
+            WHERE account_id = ? AND source = 'manual' AND id IN ({placeholders})
+        '''
+        results = query_db(query, [account_id] + company_ids)
+        return [r['id'] for r in results]

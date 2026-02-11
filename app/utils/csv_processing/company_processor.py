@@ -83,12 +83,19 @@ def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[s
                 'identifier': identifier,
                 'total_shares': 0,
                 'total_invested': 0,
+                'first_bought_date': None,
             }
 
         company = company_positions[company_name]
         transaction_amount = shares * price
         company['total_shares'] = round(company['total_shares'] + shares, 6)
         company['total_invested'] = round(company['total_invested'] + transaction_amount, 2)
+
+        # Track earliest buy date
+        if 'parsed_date' in row and pd.notna(row['parsed_date']):
+            txn_date = row['parsed_date']
+            if company['first_bought_date'] is None or txn_date < company['first_bought_date']:
+                company['first_bought_date'] = txn_date
 
         logger.info(
             f"Buy/TransferIn: {company_name}, +{shares} @ {price}, "

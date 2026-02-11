@@ -13,6 +13,7 @@ This tool was born out of necessity over several months of struggling with portf
 
 It's a portfolio rebalancer specifically designed to work with Parqet's data, helping you:
 - Import your Parqet portfolio data via CSV
+- **Manual Stock Addition**: Add stocks manually without CSV import (with or without identifier lookup)
 - Enrich holdings with real-time market prices from yfinance (or set custom values for unlisted holdings)
 - Classify positions by investment type (Stock/ETF) for allocation constraints
 - Build and set target allocations with editable desired position counts
@@ -20,6 +21,10 @@ It's a portfolio rebalancer specifically designed to work with Parqet's data, he
 - Get smart rebalancing recommendations (buy/sell amounts) with multiple allocation modes
 - Protect manually edited identifiers from CSV reimport overwrites
 - Analyze portfolio composition, performance, and risks with visualizations
+- **Allocation Simulator**: Save and load simulation scenarios with custom allocations for what-if planning
+- **Cash Balance Tracking**: Track available cash reserves alongside your investments
+- **Thesis Tracking**: Document investment rationale per holding with bulk edit support
+- **Investment Targets**: Set budget goals and portfolio allocation targets to track progress
 
 Guided by a philosophy of **elegance, simplicity, and robustness**, it delivers 80% of the impact with 20% of the effort—focusing on automated, user-friendly features in a minimalistic, Apple-inspired UI.
 
@@ -115,7 +120,7 @@ The app includes automatic backup management and price update scheduling.
 Start with `python3 run.py --port 8065`. Create/select an account, then navigate through:
 
 - **Build**: Upload Parqet CSV, define target allocations, and edit desired position counts (with min/max validation)
-- **Enrich**: Update prices and metadata via yfinance integration, set custom values for unlisted holdings, and edit identifiers with automatic protection from reimport overwrites
+- **Enrich**: Update prices and metadata via yfinance integration, set custom values for unlisted holdings, edit identifiers with automatic protection from reimport overwrites, and **add stocks manually** without CSV import
 - **Allocate**: Get precise buy/sell trade recommendations with standardized allocation modes and Stock/ETF constraints
 - **Analyse**: View portfolio composition charts, metrics, and P&L tracking (absolute and percentage profit/loss per position)
 - **Risk Overview**: Global allocation and risk analysis with position type breakdown
@@ -226,8 +231,8 @@ This project has evolved through three major phases:
 - Simple allocation calculations
 
 ### **Phase 2**: Performance & Architecture (Completed)
-- Introduced **Service Layer** (AllocationService, PortfolioService, PriceService)
-- Introduced **Repository Layer** (PortfolioRepository for data access)
+- Introduced **Service Layer** (AllocationService, BuilderService)
+- Introduced **Repository Layer** (PortfolioRepository, SimulationRepository for data access)
 - Added **Flask-Caching** (15-min for prices, 1-hr for exchange rates)
 - Smart **batch processing** (sync for <20 items, async for ≥20)
 - **50-90% reduction in API calls** through strategic caching
@@ -257,6 +262,7 @@ Focused refactoring for single-user homeserver deployment:
   - Allocation service tests
 
 **Recent Feature Additions** (Phase 2 & 3 Improvements):
+- 🚧 **Manual Stock Addition**: Add stocks via Enrich page without CSV import (in progress - see `docs/PRD_ADD_STOCK.md`)
 - ✅ **P&L Tracking**: Profit & loss calculations (absolute and percentage) for each position
 - ✅ **Editable Desired Positions**: Direct editing of target position counts in Build page with validation
 - ✅ **Protected Identifier Edits**: Manually edited identifiers preserved across CSV reimports
@@ -268,6 +274,7 @@ Focused refactoring for single-user homeserver deployment:
 - ✅ Timezone-aware date comparisons for manual share edit tracking
 - ✅ Enhanced CSV processing with zero-share position auto-removal
 - ✅ Debug mode control via FLASK_ENV environment variable
+- ✅ Source column tracking (csv vs manual) to prevent accidental deletion
 
 **Total Impact**:
 - **~200 lines of duplicate code removed**

@@ -32,9 +32,9 @@ def create_app(config_name=None):
     app.config.from_object(config.get(config_name, config['development']))
 
     # Configure caching (SimpleCache for single-user homeserver)
+    # Note: CACHE_DEFAULT_TIMEOUT comes from config.py (env var controllable)
     app.config.update(
         CACHE_TYPE='SimpleCache',  # In-memory cache, perfect for single user
-        CACHE_DEFAULT_TIMEOUT=900,  # 15 minutes default
         CACHE_KEY_PREFIX='portfolio_'
     )
 
@@ -126,9 +126,17 @@ def create_app(config_name=None):
         _db_time = time.time() - _db_start
         print(f"  ⏱️  Database init + migrations: {_db_time:.3f}s")
 
-    # Only run startup tasks in the main process (not during Werkzeug reloader restart)
-    # Skip silently in parent process to avoid duplicate/confusing output
-    if os.environ.get('WERKZEUG_RUN_MAIN'):
+    # Determine if we're in the main process that should run startup tasks
+    # - In development with reloader: WERKZEUG_RUN_MAIN is set in the child process
+    # - In production (no reloader): WERKZEUG_RUN_MAIN is not set, but we should still run
+    is_main_process = (
+        os.environ.get('WERKZEUG_RUN_MAIN') or  # Development with reloader (child process)
+        (not os.environ.get('WERKZEUG_RUN_MAIN') and not _is_debug)  # Production (no reloader)
+    )
+
+    if is_main_process:
+        app.logger.info("Main process detected - scheduling startup tasks")
+
         # OPTIMIZATION: Run startup tasks in background thread to avoid blocking startup
         # This makes the app responsive immediately while background tasks complete
         def run_startup_tasks():
@@ -148,7 +156,11 @@ def create_app(config_name=None):
                 # Trigger automatic price update on startup if needed
                 try:
                     from app.utils.startup_tasks import auto_update_prices_if_needed
-                    auto_update_prices_if_needed()
+                    result = auto_update_prices_if_needed()
+                    if result and result.get('status') == 'error':
+                        app.logger.error(f"STARTUP: Price update failed: {result.get('error')}")
+                    elif result:
+                        app.logger.info(f"STARTUP: Price update result: {result.get('status')}")
                 except Exception as e:
                     app.logger.error(f"Automatic price update failed: {e}")
 
@@ -164,6 +176,8 @@ def create_app(config_name=None):
         startup_thread = threading.Thread(target=run_startup_tasks, daemon=True)
         startup_thread.start()
         app.logger.info("Startup tasks scheduled in background thread")
+    else:
+        app.logger.debug("Reloader parent process - skipping startup tasks")
 
     if _show_timing:
         _total_time = time.time() - _create_app_start

@@ -17,7 +17,8 @@ from app.routes.portfolio_api import (
     simulator_simulation_update, simulator_simulation_delete,
     builder_investment_targets,
     get_account_cash, set_account_cash,
-    add_company, validate_identifier, delete_manual_companies, get_portfolios_for_dropdown
+    add_company, validate_identifier, delete_manual_companies, get_portfolios_for_dropdown,
+    get_historical_prices_api
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
@@ -345,3 +346,6 @@ portfolio_bp.add_url_rule('/api/delete_companies',
                           view_func=delete_manual_companies, methods=['POST'])
 portfolio_bp.add_url_rule('/api/portfolios_dropdown',
                           view_func=get_portfolios_for_dropdown, methods=['GET'])
+# Historical Prices API
+portfolio_bp.add_url_rule('/api/historical_prices',
+                          view_func=get_historical_prices_api, methods=['GET'])

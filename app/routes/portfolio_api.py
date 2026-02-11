@@ -711,7 +711,7 @@ def _get_all_portfolios_data(account_id: int) -> dict:
     companies_raw = query_db('''
         SELECT
             c.id, c.name, c.identifier, c.sector, c.thesis, c.investment_type,
-            c.total_invested, mp.country, c.override_country,
+            c.total_invested, c.first_bought_date, mp.country, c.override_country,
             COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
             cs.shares, cs.override_share,
             COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
@@ -790,6 +790,11 @@ def _get_all_portfolios_data(account_id: int) -> dict:
             if company['last_updated']:
                 if deduped[identifier]['last_updated'] is None or company['last_updated'] > deduped[identifier]['last_updated']:
                     deduped[identifier]['last_updated'] = company['last_updated']
+            # Keep earliest first_bought_date across portfolios
+            if company.get('first_bought_date'):
+                existing_date = deduped[identifier].get('first_bought_date')
+                if existing_date is None or company['first_bought_date'] < existing_date:
+                    deduped[identifier]['first_bought_date'] = company['first_bought_date']
         else:
             # First occurrence - copy company data
             deduped[identifier] = dict(company)
@@ -1040,7 +1045,7 @@ def get_single_portfolio_data_api(portfolio_id):
         companies = query_db('''
             SELECT
                 c.id, c.name, c.identifier, c.sector, c.thesis, c.investment_type,
-                c.total_invested, mp.country, c.override_country,
+                c.total_invested, c.first_bought_date, mp.country, c.override_country,
                 COALESCE(c.override_country, mp.country, 'Unknown') as effective_country,
                 cs.shares, cs.override_share,
                 COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
@@ -3484,3 +3489,76 @@ def get_portfolios_for_dropdown():
     except Exception as e:
         logger.exception("Error getting portfolios for dropdown")
         return error_response('Failed to get portfolios', 500)
+
+
+@require_auth
+def get_historical_prices_api():
+    """
+    Fetch historical close prices for a set of identifiers.
+
+    GET /portfolio/api/historical_prices?identifiers=AAPL,MSFT&period=1y
+
+    Query params:
+        identifiers: Comma-separated list of company identifiers (max 20)
+        period: 1y, 3y, 5y, or 10y (default: 1y)
+
+    Returns JSON with series keyed by original identifiers.
+    """
+    from app.utils.yfinance_utils import get_historical_prices, VALID_PERIODS
+    from app.utils.identifier_mapping import get_preferred_identifier
+    import re
+
+    account_id = g.account_id
+
+    raw_identifiers = request.args.get('identifiers', '')
+    period = request.args.get('period', '1y')
+    start_date = request.args.get('start_date', '')
+
+    if not raw_identifiers:
+        return validation_error_response('identifiers', 'identifiers parameter is required')
+
+    identifiers = [i.strip() for i in raw_identifiers.split(',') if i.strip()]
+
+    if not identifiers:
+        return validation_error_response('identifiers', 'At least one identifier is required')
+
+    if len(identifiers) > 50:
+        return validation_error_response('identifiers', 'Maximum 50 identifiers allowed')
+
+    # Validate start_date format if provided (mutually exclusive with period)
+    if start_date:
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$', start_date):
+            return validation_error_response('start_date', 'start_date must be in YYYY-MM-DD format')
+    elif period not in VALID_PERIODS:
+        return validation_error_response('period', f'Invalid period. Must be one of: {", ".join(sorted(VALID_PERIODS))}')
+
+    try:
+        # Resolve identifiers: ISIN → yfinance ticker via identifier_mappings
+        resolved_map = {}
+        for ident in identifiers:
+            preferred = get_preferred_identifier(account_id, ident)
+            resolved_map[ident] = preferred or ident
+
+        resolved_list = [v for v in set(resolved_map.values()) if v]
+
+        if start_date:
+            raw_data = get_historical_prices(resolved_list, start_date=start_date)
+        else:
+            raw_data = get_historical_prices(resolved_list, period)
+
+        # Re-key response by original identifiers
+        response_series = {}
+        for orig, resolved in resolved_map.items():
+            if resolved in raw_data.get('series', {}):
+                response_series[orig] = raw_data['series'][resolved]
+
+        return jsonify({
+            'success': True,
+            'series': response_series,
+            'errors': raw_data.get('errors', []),
+            'period': start_date if start_date else period
+        })
+
+    except Exception as e:
+        logger.exception("Error fetching historical prices")
+        return error_response('Failed to fetch historical prices', 500)

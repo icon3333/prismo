@@ -216,11 +216,14 @@ class AccountRepository:
             # Delete portfolios
             cursor.execute('DELETE FROM portfolios WHERE account_id = ?', [account_id])
 
-            # Delete saved settings
-            cursor.execute('DELETE FROM saved_settings WHERE account_id = ?', [account_id])
+            # Delete expanded state (UI state persistence)
+            cursor.execute('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
 
-            # Delete CSV processing jobs
-            cursor.execute('DELETE FROM csv_processing_jobs WHERE account_id = ?', [account_id])
+            # Delete identifier mappings
+            cursor.execute('DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
+
+            # Delete simulations
+            cursor.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
 
             # Delete the account itself
             cursor.execute('DELETE FROM accounts WHERE id = ?', [account_id])

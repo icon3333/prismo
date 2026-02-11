@@ -19,10 +19,10 @@ CREATE TABLE IF NOT EXISTS portfolios (
 CREATE TABLE IF NOT EXISTS companies (
  id INTEGER PRIMARY KEY,
  name TEXT NOT NULL,
- identifier TEXT NOT NULL,
+ identifier TEXT,
  sector TEXT NOT NULL,
  thesis TEXT DEFAULT '',
- portfolio_id INTEGER NOT NULL,
+ portfolio_id INTEGER,
  account_id INTEGER NOT NULL,
  total_invested REAL DEFAULT 0,
  override_country TEXT,
@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS companies (
  override_identifier TEXT,
  identifier_manually_edited BOOLEAN DEFAULT 0,
  identifier_manual_edit_date DATETIME,
+ source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual')),
+ first_bought_date DATETIME,
  FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
  FOREIGN KEY (account_id) REFERENCES accounts (id),
  UNIQUE (account_id, name)
@@ -139,6 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier);
 CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name);
 CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type);
 CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector);
+CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source);
 CREATE INDEX IF NOT EXISTS idx_portfolios_account_id ON portfolios(account_id);
 
 -- PERFORMANCE OPTIMIZATION: Composite indexes for common query patterns

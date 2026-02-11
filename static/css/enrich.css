@@ -397,6 +397,96 @@ td.col-checkbox {
   text-align: center;
 }
 
+/* Identifier column */
+th.col-identifier,
+td.col-identifier {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* Company column - flexible with constraints */
+th.col-company,
+td.col-company {
+  min-width: 120px;
+  max-width: 200px;
+}
+
+/* Price column - fixed width to prevent overflow */
+th.col-price,
+td.col-price {
+  width: 90px;
+  min-width: 90px;
+  max-width: 90px;
+}
+
+/* Small input columns (Portfolio, Sector, Thesis, Type, Country) */
+th.col-input-small,
+td.col-input-small {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+}
+
+/* Medium input columns (Shares) */
+th.col-input-medium,
+td.col-input-medium {
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+}
+
+/* Currency columns (Total Value, Total Invested) */
+th.col-currency,
+td.col-currency {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+}
+
+/* ===== Table Layout & Overflow Prevention ===== */
+
+/* Force fixed table layout for strict column width enforcement */
+.enrich-page .table.unified-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Prevent cell content overflow */
+.enrich-page .table td,
+.enrich-page .table th {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Constrain all form elements within their cells */
+.enrich-page .table td .select,
+.enrich-page .table td .select select,
+.enrich-page .table td .input,
+.enrich-page .table td input {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Field wrappers must not exceed cell width */
+.enrich-page .table td .field,
+.enrich-page .table td .field.has-addons,
+.enrich-page .table td .control {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Ensure identifier and company wrappers respect column bounds */
+.identifier-cell-wrapper,
+.company-edit-wrapper,
+.value-edit-wrapper {
+  max-width: 100%;
+  overflow: hidden;
+}
+
 /* ===== Progress Bar ===== */
 
 .progress-bar-container {
@@ -879,6 +969,53 @@ td.col-checkbox {
   min-width: 0;
   padding-left: 0;  /* Align with span text */
   text-align: right;  /* Currency values right-aligned */
+}
+
+/* ===== Revert Button Overlay Pattern ===== */
+
+/* Container needs relative positioning for absolute child */
+.enrich-page .table td .field.has-addons {
+  position: relative;
+}
+
+/* Compact revert button - positioned as overlay */
+.enrich-page .revert-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  opacity: 0.6;
+  z-index: 1;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.enrich-page .revert-btn:hover {
+  opacity: 1;
+  color: var(--warning);
+  background: rgba(249, 115, 22, 0.15);
+}
+
+.enrich-page .revert-btn .icon {
+  width: 14px;
+  height: 14px;
+  font-size: 0.7rem;
+}
+
+/* Adjust input padding to not overlap with revert button */
+.enrich-page .table td .field.has-addons.has-revert .input,
+.enrich-page .table td .field.has-addons.has-revert .select select {
+  padding-right: 24px;
 }
 
 /* ===== Add Stock Modal ===== */

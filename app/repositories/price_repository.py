@@ -282,3 +282,39 @@ class PriceRepository:
             one=True
         )
         return result is not None
+
+    @staticmethod
+    def upsert_price(
+        identifier: str,
+        price: Optional[float] = None,
+        currency: str = 'EUR',
+        price_eur: Optional[float] = None,
+        country: Optional[str] = None
+    ) -> None:
+        """
+        Insert or update a price record with all fields.
+
+        Args:
+            identifier: ISIN or ticker symbol
+            price: Native currency price (optional)
+            currency: Currency code (e.g., 'EUR', 'USD')
+            price_eur: Price in EUR
+            country: Country code (optional)
+        """
+        logger.debug(f"Upserting price for {identifier}: {price} {currency} -> {price_eur} EUR")
+
+        db = get_db()
+        db.execute(
+            '''
+            INSERT INTO market_prices (identifier, price, currency, price_eur, country, last_updated)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(identifier) DO UPDATE SET
+                price = COALESCE(excluded.price, price),
+                currency = excluded.currency,
+                price_eur = COALESCE(excluded.price_eur, price_eur),
+                country = COALESCE(excluded.country, country),
+                last_updated = CURRENT_TIMESTAMP
+            ''',
+            [identifier, price, currency, price_eur, country]
+        )
+        db.commit()

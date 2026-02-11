@@ -124,38 +124,47 @@ def _fetch_exchange_rates(currencies: List[str]) -> Dict[str, float]:
 
 
 def auto_update_prices_if_needed():
-    """Trigger bulk price update if last update is older than configured interval."""
+    """
+    Trigger bulk price update if last update is older than configured interval.
+
+    Returns:
+        dict: Status information with keys:
+            - status: 'started', 'skipped', 'error', or 'no_identifiers'
+            - reason: Human-readable explanation
+            - job_id: (if started) The batch job ID
+            - error: (if error) The error message
+    """
     try:
-        logger.info("🚀 Starting automatic price update check...")
-        
+        logger.info("=" * 50)
+        logger.info("STARTUP: Checking if price update is needed...")
+
         # Check last update time
         row = query_db("SELECT MAX(last_price_update) as last FROM accounts", one=True)
         last_str = row['last'] if row else None
-        logger.debug(f"📅 Last price update from database: {last_str}")
-        
+        logger.info(f"STARTUP: Last price update from database: {last_str}")
+
         needs_update = True
         if last_str:
             try:
                 last_dt = datetime.fromisoformat(last_str)
             except ValueError:
                 last_dt = datetime.strptime(last_str, "%Y-%m-%d %H:%M:%S")
-            
+
             time_since_update = datetime.now() - last_dt
             update_interval = current_app.config.get('PRICE_UPDATE_INTERVAL', timedelta(hours=24))
-            logger.debug(f"Time since last update: {time_since_update}")
-            logger.debug(f"Required update interval: {update_interval}")
-            
+            logger.info(f"STARTUP: Time since last update: {time_since_update}")
+            logger.info(f"STARTUP: Required update interval: {update_interval}")
+
             if time_since_update < update_interval:
                 needs_update = False
-                
-        logger.info(f"Price update needed: {needs_update}")
-        
+
         if not needs_update:
-            logger.info("✅ Price data is recent; skipping automatic update.")
-            return
+            logger.info("STARTUP: Prices are fresh - no update needed")
+            logger.info("=" * 50)
+            return {'status': 'skipped', 'reason': 'prices_fresh'}
 
         # Get identifiers from companies table
-        logger.debug("🔍 Querying companies table for identifiers...")
+        logger.info("STARTUP: Querying companies table for identifiers...")
         identifiers = query_db(
             """
             SELECT DISTINCT identifier FROM companies
@@ -163,22 +172,39 @@ def auto_update_prices_if_needed():
             """
         )
         identifiers = [row['identifier'] for row in identifiers]
-        
-        logger.info(f"Found {len(identifiers)} unique identifiers in companies table")
+
+        logger.info(f"STARTUP: Found {len(identifiers)} unique identifiers")
         if identifiers:
             logger.debug(f"First 10 identifiers: {identifiers[:10]}")
-            if len(identifiers) > 10:
-                logger.debug(f"... and {len(identifiers) - 10} more")
-        
-        if not identifiers:
-            logger.warning("No identifiers found for automatic price update - companies table may be empty")
-            return
 
-        logger.info(f"Starting batch process for {len(identifiers)} identifiers...")
+        if not identifiers:
+            logger.warning("STARTUP: No identifiers found - companies table may be empty")
+            logger.info("=" * 50)
+            return {'status': 'no_identifiers', 'reason': 'companies_table_empty'}
+
+        # Clear price cache before fetching fresh data
+        logger.info("STARTUP: Clearing price cache before update...")
+        try:
+            from app.utils.yfinance_utils import clear_price_cache
+            clear_price_cache()
+            logger.info("STARTUP: Price cache cleared successfully")
+        except Exception as e:
+            logger.warning(f"STARTUP: Could not clear price cache: {e}")
+
+        # Start the batch update
+        logger.info(f"STARTUP: Starting batch process for {len(identifiers)} identifiers...")
         job_id = start_batch_process(identifiers)
-        logger.info(f"Started automatic price update job {job_id} for {len(identifiers)} identifiers")
+        logger.info(f"STARTUP: Started price update job {job_id}")
+        logger.info("=" * 50)
+        return {'status': 'started', 'job_id': job_id, 'identifier_count': len(identifiers)}
+
     except Exception as exc:
-        logger.error(f"Failed to run automatic price update: {exc}", exc_info=True)
+        # Log at ERROR level with clear visibility
+        logger.error("=" * 50)
+        logger.error(f"STARTUP FAILED: Price update error: {exc}")
+        logger.error("=" * 50, exc_info=True)
+        # Return error status instead of silent failure
+        return {'status': 'error', 'error': str(exc)}
 
 
 def schedule_automatic_backups():

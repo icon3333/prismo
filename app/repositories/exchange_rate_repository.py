@@ -12,12 +12,15 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from app.db_manager import query_db, execute_db, get_db
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 # In-memory cache for exchange rates (cleared daily)
+# Thread-safe access via _cache_lock
 _rates_cache: Dict[str, float] = {}
 _cache_timestamp: Optional[datetime] = None
+_cache_lock = threading.Lock()
 CACHE_DURATION_HOURS = 24
 
 
@@ -301,40 +304,46 @@ class ExchangeRateRepository:
         logger.info(f"Deleted {deleted} exchange rate records")
         return deleted
 
-    # --- In-memory cache management ---
+    # --- In-memory cache management (thread-safe) ---
 
     @staticmethod
     def _get_cached_rate(cache_key: str) -> Optional[float]:
-        """Get rate from in-memory cache if still valid."""
+        """Get rate from in-memory cache if still valid (thread-safe)."""
         global _rates_cache, _cache_timestamp
 
-        if _cache_timestamp is None:
-            return None
+        with _cache_lock:
+            if _cache_timestamp is None:
+                return None
 
-        # Check if cache is still valid (within 24 hours)
-        if datetime.now() - _cache_timestamp > timedelta(hours=CACHE_DURATION_HOURS):
-            ExchangeRateRepository._clear_cache()
-            return None
+            # Check if cache is still valid (within 24 hours)
+            if datetime.now() - _cache_timestamp > timedelta(hours=CACHE_DURATION_HOURS):
+                # Clear cache while holding lock
+                _rates_cache.clear()
+                # Note: can't call _clear_cache here to avoid deadlock
+                return None
 
-        return _rates_cache.get(cache_key)
+            return _rates_cache.get(cache_key)
 
     @staticmethod
     def _set_cached_rate(cache_key: str, rate: float) -> None:
-        """Set rate in in-memory cache."""
+        """Set rate in in-memory cache (thread-safe)."""
         global _rates_cache, _cache_timestamp
 
-        if _cache_timestamp is None:
-            _cache_timestamp = datetime.now()
+        with _cache_lock:
+            if _cache_timestamp is None:
+                _cache_timestamp = datetime.now()
 
-        _rates_cache[cache_key] = rate
+            _rates_cache[cache_key] = rate
 
     @staticmethod
     def _clear_cache() -> None:
-        """Clear the in-memory cache."""
+        """Clear the in-memory cache (thread-safe)."""
         global _rates_cache, _cache_timestamp
-        _rates_cache = {}
-        _cache_timestamp = None
-        logger.debug("Cleared exchange rate in-memory cache")
+
+        with _cache_lock:
+            _rates_cache = {}
+            _cache_timestamp = None
+            logger.debug("Cleared exchange rate in-memory cache")
 
     @staticmethod
     def preload_cache() -> None:

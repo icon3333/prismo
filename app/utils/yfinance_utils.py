@@ -142,7 +142,6 @@ def _is_likely_crypto(identifier: str) -> bool:
 # --- Main Data Fetching Function ---
 
 
-@cache.memoize(timeout=CACHE_TIMEOUT_STOCK_PRICES)  # Cache for 15 minutes - good balance for stock prices
 def get_isin_data(identifier: str) -> Dict[str, Any]:
     """
     Get stock/crypto data using fallback pattern instead of pre-normalization.
@@ -150,12 +149,19 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
     Uses the new fallback approach: try original identifier first, then crypto format
     if rules suggest it. This replaces the expensive dual-testing during normalization.
 
-    Cached for 15 minutes to significantly reduce API calls while keeping prices
-    reasonably fresh for a homeserver portfolio app.
+    Uses manual caching that ONLY caches successful responses. Failed lookups are not
+    cached, allowing immediate retries after fixing issues.
     """
     from .identifier_normalization import fetch_price_with_crypto_fallback
 
-    logger.info(f"📥 get_isin_data called for: {identifier}")
+    # Check cache first
+    cache_key = f"isin_data_{identifier}"
+    cached = cache.get(cache_key)
+    if cached:
+        logger.debug(f"Cache HIT for {identifier}")
+        return cached
+
+    logger.info(f"📥 get_isin_data called for: {identifier} (cache miss)")
 
     try:
         # Use the new fallback pattern
@@ -164,6 +170,7 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         if not data:
             error_msg = f"Cascade returned empty data for identifier {identifier}"
             logger.error(f"❌ {error_msg}")
+            # NOT caching failed result - allows immediate retry
             return {'success': False, 'error': error_msg}
 
         logger.debug(f"Cascade returned data keys: {list(data.keys())}")
@@ -190,7 +197,7 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         elif price is not None:
             data['priceEUR'] = price  # Already in EUR
 
-        return {
+        result = {
             'success': True,
             'data': {
                 'currentPrice': data.get('price'),
@@ -201,9 +208,16 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
             'modified_identifier': effective_identifier
         }
 
+        # Only cache successful responses (15 minutes)
+        cache.set(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
+        logger.debug(f"Cached successful result for {identifier}")
+
+        return result
+
     except Exception as e:
         error_msg = f"Exception in get_isin_data for {identifier}: {str(e)}"
         logger.exception(error_msg)
+        # NOT caching failed result - allows immediate retry
         return {'success': False, 'error': error_msg}
 
 
@@ -373,24 +387,151 @@ def auto_categorize_investment_type(identifier: str) -> Optional[str]:
         return None
 
 
-def get_historical_prices(identifiers, years=5):
-    """Fetches historical price data for a list of identifiers."""
+CACHE_TIMEOUT_HISTORICAL = 3600  # 1 hour - historical data doesn't change frequently
+
+HISTORICAL_INTERVAL_MAP = {
+    '1y': '1wk',
+    '3y': '1wk',
+    '5y': '1mo',
+    '10y': '1mo',
+    'max': '1mo',
+}
+
+VALID_PERIODS = set(HISTORICAL_INTERVAL_MAP.keys())
+
+
+def _get_interval_for_date_range(start_date_str):
+    """Pick a smart interval based on the span from start_date to today."""
+    from datetime import datetime
+    try:
+        start = datetime.strptime(start_date_str, '%Y-%m-%d')
+        span_days = (datetime.now() - start).days
+        if span_days < 90:
+            return '1d'
+        elif span_days < 3 * 365:
+            return '1wk'
+        else:
+            return '1mo'
+    except (ValueError, TypeError):
+        return '1mo'
+
+
+@cache.memoize(timeout=CACHE_TIMEOUT_HISTORICAL)
+def get_historical_prices(identifiers, period='1y', start_date=None):
+    """
+    Fetch historical close prices for a list of identifiers.
+
+    Args:
+        identifiers: List of yfinance-compatible ticker strings.
+        period: One of '1y', '3y', '5y', '10y', 'max'.
+        start_date: Optional YYYY-MM-DD string. When provided, overrides period
+                    and fetches data from this date onwards.
+
+    Returns:
+        dict with 'series' (ticker → [{date, close}, ...]) and 'errors' list.
+    """
+    tickers = list(set(identifiers)) if isinstance(identifiers, list) else [identifiers]
+    tickers = [t for t in tickers if t]  # Filter empty strings
+
+    result = {'series': {}, 'errors': []}
+
+    if not tickers:
+        return result
+
+    # Determine download kwargs based on start_date vs period
+    if start_date:
+        interval = _get_interval_for_date_range(start_date)
+        download_kwargs = {'start': start_date, 'interval': interval}
+    else:
+        if period not in VALID_PERIODS:
+            period = '1y'
+        interval = HISTORICAL_INTERVAL_MAP[period]
+        download_kwargs = {'period': period, 'interval': interval}
+
     try:
         yf = _get_yfinance()
-        end_date = datetime.now()
-        start_date = end_date.replace(year=end_date.year - years)
+        # yf.download returns different shapes for single vs multiple tickers
+        df = yf.download(
+            tickers,
+            **download_kwargs,
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
 
-        data = yf.download(identifiers, start=start_date,
-                           end=end_date, auto_adjust=True)['Close']
-        return data.ffill()
+        if df is None or df.empty:
+            result['errors'].append('No data returned from yfinance')
+            return result
+
+        # Extract Close prices
+        if 'Close' in df.columns or (hasattr(df.columns, 'get_level_values') and 'Close' in df.columns.get_level_values(0)):
+            close_df = df['Close']
+        else:
+            close_df = df
+
+        # Forward-fill missing values
+        close_df = close_df.ffill()
+
+        # Single ticker: close_df is a Series, not a DataFrame
+        if len(tickers) == 1:
+            ticker = tickers[0]
+            if hasattr(close_df, 'to_frame'):
+                close_df = close_df.to_frame(name=ticker)
+
+        # Build series dict
+        for ticker in tickers:
+            try:
+                if ticker in close_df.columns:
+                    col = close_df[ticker].dropna()
+                    if col.empty:
+                        result['errors'].append(f'No data for {ticker}')
+                        continue
+                    result['series'][ticker] = [
+                        {'date': idx.strftime('%Y-%m-%d'), 'close': round(float(val), 2)}
+                        for idx, val in col.items()
+                    ]
+                else:
+                    result['errors'].append(f'No column for {ticker}')
+            except Exception as e:
+                logger.warning(f'Error processing {ticker}: {e}')
+                result['errors'].append(f'{ticker}: {str(e)}')
+
     except Exception as e:
         logger.error(f"Error fetching historical prices: {e}")
-        return None
+        result['errors'].append(str(e))
+
+    return result
 
 # (Add other historical data functions as needed)
 
 
 # --- Cache Management Utilities ---
+
+def clear_price_cache(identifier: str = None):
+    """
+    Clear price cache - single identifier or all price-related caches.
+
+    This is the primary function to call before bulk price updates to ensure
+    fresh data is fetched from yfinance.
+
+    Args:
+        identifier: If provided, clear cache for this identifier only.
+                   If None, clear all price-related caches.
+
+    Example:
+        clear_price_cache("AAPL")  # Clear AAPL's cache
+        clear_price_cache()        # Clear all price caches
+    """
+    if identifier:
+        # Clear specific identifier - both manual cache key and memoized
+        cache.delete(f"isin_data_{identifier}")
+        cache.delete_memoized(get_yfinance_info, identifier)
+        logger.info(f"✓ Cleared price cache for: {identifier}")
+    else:
+        # Clear entire cache (SimpleCache doesn't support pattern delete)
+        cache.clear()
+        logger.info(f"✓ Cleared entire price cache")
+
 
 def clear_identifier_cache(identifier: str = None):
     """
@@ -407,12 +548,5 @@ def clear_identifier_cache(identifier: str = None):
         clear_identifier_cache("TNK")  # Clear TNK's cache
         clear_identifier_cache()       # Clear all price caches
     """
-    if identifier:
-        # Clear specific identifier from both caches
-        cache.delete_memoized(get_isin_data, identifier)
-        cache.delete_memoized(get_yfinance_info, identifier)
-        logger.info(f"✓ Cleared cache for identifier: {identifier}")
-    else:
-        # Clear entire cache (use sparingly)
-        cache.clear()
-        logger.info(f"✓ Cleared entire price cache")
+    # Delegate to clear_price_cache for consistency
+    clear_price_cache(identifier)

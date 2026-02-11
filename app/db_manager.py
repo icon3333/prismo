@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 13
+    LATEST_VERSION = 14
 
     try:
         # Get current schema version
@@ -673,6 +673,14 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 13, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 13 completed: page_name values renamed (analyse→performance, build→builder)")
+
+        # Migration 14: Add first_bought_date column for "Since Purchase" chart period
+        if current_version < 14:
+            logger.info("Applying migration 14: Adding first_bought_date column to companies")
+            _safe_add_column(cursor, "companies", "first_bought_date DATETIME")
+            cursor.execute("UPDATE schema_version SET version = 14, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 14 completed: first_bought_date column added to companies")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

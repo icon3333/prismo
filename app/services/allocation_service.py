@@ -489,7 +489,7 @@ class AllocationService:
             # Store complete builder configuration - keyed by NAME for reliable matching
             # (Portfolio IDs in saved state can become stale; names are unique per account)
             portfolio_builder_data[portfolio_name] = {
-                'minPositions': portfolio.get('minPositions', 0),
+                'minPositions': portfolio.get('minPositions') or 0,
                 'desiredPositions': portfolio.get('desiredPositions'),  # User's desired position count
                 'allocation': portfolio.get('allocation', 0),
                 'positions': portfolio.get('positions', []),
@@ -631,7 +631,7 @@ class AllocationService:
 
             # Calculate effective positions (user's desired, falling back to calculated minimum)
             desired_positions = builder_data.get('desiredPositions')
-            min_positions = builder_data.get('minPositions', 0)
+            min_positions = builder_data.get('minPositions') or 0
             effective_positions = desired_positions if desired_positions is not None else min_positions
 
             portfolio_entry = {

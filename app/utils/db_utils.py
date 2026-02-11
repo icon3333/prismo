@@ -93,7 +93,7 @@ def execute_background_db(query, args=()):
 def update_price_in_db_background(identifier: str, price: float, currency: str, price_eur: float, country: Optional[str] = None, modified_identifier: Optional[str] = None) -> bool:
     """
     Update price in database for a single identifier from background threads.
-    This version uses get_background_db() and doesn't require Flask application context.
+    Uses a SINGLE database connection/transaction for all operations to avoid SQLite lock contention.
 
     Args:
         identifier: Stock identifier (ISIN or ticker)
@@ -106,10 +106,11 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
     Returns:
         Success status
     """
+    conn = None
     try:
         logger.debug(f"Starting database update for identifier: {identifier}")
         logger.debug(f"Price data: {price} {currency} ({price_eur} EUR), country: {country}")
-        
+
         if not identifier or price is None:
             logger.warning(f"Missing identifier or price: {identifier}, {price}")
             return False
@@ -117,54 +118,34 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         now = datetime.now().isoformat()
         logger.debug(f"⏰ Timestamp: {now}")
 
+        # Get a single connection for all operations
+        conn = get_background_db()
+        cursor = conn.cursor()
+
         # If we have a modified identifier, update the company records first
         if modified_identifier:
             logger.info(f"Updating identifier in database from {identifier} to {modified_identifier}")
-
-            # Update identifier in companies table
-            rows_updated = execute_background_db('''
-                UPDATE companies 
+            cursor.execute('''
+                UPDATE companies
                 SET identifier = ?
                 WHERE identifier = ?
             ''', [modified_identifier, identifier])
-
-            logger.info(f"Updated {rows_updated} company records with new identifier {modified_identifier}")
-
+            logger.info(f"Updated {cursor.rowcount} company records with new identifier {modified_identifier}")
             # Use the modified identifier for all subsequent operations
             identifier = modified_identifier
 
-        # Check if the record exists in market_prices
-        logger.debug(f"Checking if price record exists for {identifier}")
-        existing = query_background_db(
-            'SELECT 1 FROM market_prices WHERE identifier = ?',
-            [identifier],
-            one=True
-        )
-        logger.debug(f"📋 Existing record found: {bool(existing)}")
-
-        if existing:
-            # Update existing record
-            logger.debug(f"🔄 Updating existing price record for {identifier}")
-            rows_affected = execute_background_db('''
-                UPDATE market_prices
-                SET price = ?, currency = ?, price_eur = ?, last_updated = ?,
-                    country = ?
-                WHERE identifier = ?
-            ''', [price, currency, price_eur, now, country, identifier])
-            logger.info(f"Updated existing price record for {identifier} ({rows_affected} rows affected)")
-        else:
-            # Insert new record
-            logger.debug(f"➕ Creating new price record for {identifier}")
-            rows_affected = execute_background_db('''
-                INSERT INTO market_prices
-                (identifier, price, currency, price_eur, last_updated, country)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', [identifier, price, currency, price_eur, now, country])
-            logger.info(f"Created new price record for {identifier} ({rows_affected} rows affected)")
+        # Use INSERT OR REPLACE instead of SELECT + UPDATE/INSERT to reduce lock contention
+        logger.debug(f"📝 Upserting price record for {identifier}")
+        cursor.execute('''
+            INSERT OR REPLACE INTO market_prices
+            (identifier, price, currency, price_eur, last_updated, country)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', [identifier, price, currency, price_eur, now, country])
+        logger.debug(f"Price record upserted for {identifier}")
 
         # Update last_price_update in accounts table for all accounts that have this identifier
         logger.debug(f"🔄 Updating account timestamps for {identifier}")
-        accounts_affected = execute_background_db('''
+        cursor.execute('''
             UPDATE accounts
             SET last_price_update = ?
             WHERE id IN (
@@ -173,30 +154,35 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                 WHERE identifier = ?
             )
         ''', [now, identifier])
-        logger.debug(f"Updated {accounts_affected} account records with new timestamp")
+        logger.debug(f"Updated {cursor.rowcount} account records with new timestamp")
 
-        # Auto-categorize investment type if not already set
+        # Commit all changes in a single transaction
+        conn.commit()
+
+        # Auto-categorize investment type if not already set (separate transaction, non-critical)
         try:
             from app.utils.yfinance_utils import auto_categorize_investment_type
 
             # Check if any companies with this identifier have NULL investment_type
-            uncategorized = query_background_db('''
+            cursor.execute('''
                 SELECT COUNT(*) as count
                 FROM companies
                 WHERE identifier = ? AND investment_type IS NULL
-            ''', [identifier], one=True)
+            ''', [identifier])
+            row = cursor.fetchone()
+            uncategorized_count = row[0] if row else 0
 
-            if uncategorized and uncategorized['count'] > 0:
+            if uncategorized_count > 0:
                 investment_type = auto_categorize_investment_type(identifier)
 
                 if investment_type:
-                    # Update all companies with this identifier
-                    rows_categorized = execute_background_db('''
+                    cursor.execute('''
                         UPDATE companies
                         SET investment_type = ?
                         WHERE identifier = ? AND investment_type IS NULL
                     ''', [investment_type, identifier])
-                    logger.info(f"✅ Auto-categorized {rows_categorized} companies with identifier {identifier} as {investment_type}")
+                    conn.commit()
+                    logger.info(f"✅ Auto-categorized {cursor.rowcount} companies with identifier {identifier} as {investment_type}")
                 else:
                     logger.debug(f"Could not auto-categorize {identifier} - requires manual categorization")
         except Exception as e:
@@ -207,10 +193,18 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         return True
 
     except Exception as e:
+        if conn:
+            conn.rollback()
         logger.error(f"Failed to update price in database for {identifier}: {str(e)}")
         logger.error(f"🚨 Exception type: {type(e).__name__}")
         logger.error(f"Full exception details:", exc_info=True)
         return False
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def update_price_in_db(identifier: str, price: float, currency: str, price_eur: float, country: Optional[str] = None, modified_identifier: Optional[str] = None) -> bool:

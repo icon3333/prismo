@@ -1223,8 +1223,31 @@ class PortfolioTableApp {
                     isSavingCash: false,
                     // Builder KPI data
                     builderData: null,
-                    builderDataLoaded: false
+                    builderDataLoaded: false,
                     // Country options now server-rendered like portfolios
+                    // Add Stock Modal
+                    showAddStockModal: false,
+                    isAddingStock: false,
+                    addStockError: null,
+                    addStockForm: {
+                        identifier: '',
+                        name: '',
+                        portfolio_id: null,
+                        sector: '',
+                        investment_type: null,
+                        country: '',
+                        shares: '',
+                        total_value: ''
+                    },
+                    addStockErrors: {},
+                    addStockPortfolios: [],
+                    identifierValidation: {
+                        loading: false,
+                        status: null,  // null, 'valid', 'invalid'
+                        priceData: null
+                    },
+                    // Delete stocks
+                    isDeletingStocks: false
                 };
             },
             computed: {
@@ -1357,9 +1380,17 @@ class PortfolioTableApp {
                 },
                 priceHealthPercentage() {
                     if (this.filteredPortfolioItems.length === 0) return 0;
-                    const filledCount = this.filteredPortfolioItems.filter(item =>
-                        item.price_eur && item.price_eur > 0
-                    ).length;
+                    const filledCount = this.filteredPortfolioItems.filter(item => {
+                        // Has custom price from custom value
+                        if (item.is_custom_value && item.custom_price_eur && item.custom_price_eur > 0) {
+                            return true;
+                        }
+                        // Has market price
+                        if (item.price_eur && item.price_eur > 0) {
+                            return true;
+                        }
+                        return false;
+                    }).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 },
                 countryHealthPercentage() {
@@ -1395,6 +1426,18 @@ class PortfolioTableApp {
                     if (pct === 100) return 'has-text-success';        // Green - complete
                     if (pct >= 70) return 'has-text-warning-dark';     // Orange - partial
                     return 'has-text-danger';                           // Red - low
+                },
+                // Show total value field when identifier is empty or invalid
+                showTotalValueField() {
+                    return !this.addStockForm.identifier ||
+                           this.addStockForm.identifier.trim() === '' ||
+                           this.identifierValidation.status === 'invalid';
+                },
+                // Count of selected items that are manual stocks
+                selectedManualCount() {
+                    return this.portfolioItems.filter(item =>
+                        this.selectedItemIds.includes(item.id) && item.source === 'manual'
+                    ).length;
                 }
             },
             watch: {
@@ -1414,29 +1457,8 @@ class PortfolioTableApp {
                 syncUIWithVueModel() {
                     // Use a more robust approach with a setTimeout to ensure DOM is fully loaded
                     setTimeout(() => {
-                        // Setup two-way binding with portfolio dropdown
-                        const portfolioDropdown = document.getElementById('filter-portfolio');
-                        if (portfolioDropdown) {
-                            debugLog('Found portfolio dropdown element');
-                            // Initial value from Vue to DOM
-                            portfolioDropdown.value = this.selectedPortfolio;
-
-                            // DOM to Vue binding
-                            portfolioDropdown.addEventListener('change', () => {
-                                debugLog('Portfolio dropdown changed to:', portfolioDropdown.value);
-                                this.selectedPortfolio = portfolioDropdown.value;
-                                // Force update filtered list
-                                this.updateFilteredMetrics();
-                            });
-
-                            // Vue to DOM binding
-                            this.$watch('selectedPortfolio', (newVal) => {
-                                debugLog('selectedPortfolio changed in Vue:', newVal);
-                                portfolioDropdown.value = newVal;
-                            });
-                        } else {
-                            console.warn('Portfolio dropdown element not found with ID: filter-portfolio');
-                        }
+                        // Portfolio dropdown is now managed by Vue binding (v-model)
+                        // No manual sync needed
 
                         // Setup two-way binding with company search input
                         const companySearchInput = document.getElementById('company-search');
@@ -1798,32 +1820,9 @@ class PortfolioTableApp {
                                 this.portfolioOptions = filteredPortfolios;
                                 debugLog('Updated portfolio options (filtered):', this.portfolioOptions);
 
-                                // Update the DOM dropdown as well
-                                const portfolioDropdown = document.getElementById('filter-portfolio');
-                                if (portfolioDropdown) {
-                                    // Save current selection
-                                    const currentSelection = portfolioDropdown.value;
-
-                                    // Clear existing options except the "All Portfolios" option
-                                    while (portfolioDropdown.options.length > 1) {
-                                        portfolioDropdown.remove(1);
-                                    }
-
-                                    // Add filtered options
-                                    filteredPortfolios.forEach(portfolio => {
-                                        const option = document.createElement('option');
-                                        option.value = portfolio;
-                                        option.text = portfolio;
-                                        portfolioDropdown.add(option);
-                                    });
-
-                                    // Restore selection if it still exists, otherwise reset to "All Portfolios"
-                                    if (filteredPortfolios.includes(currentSelection)) {
-                                        portfolioDropdown.value = currentSelection;
-                                    } else {
-                                        portfolioDropdown.value = '';
-                                        this.selectedPortfolio = '';
-                                    }
+                                // Reset selection if current portfolio is no longer in the filtered list
+                                if (this.selectedPortfolio && !filteredPortfolios.includes(this.selectedPortfolio)) {
+                                    this.selectedPortfolio = '';
                                 }
                             } else {
                                 console.warn('No portfolio options received or empty array');
@@ -2160,6 +2159,33 @@ class PortfolioTableApp {
                     }
                 },
 
+                // Commit company name change (on blur or enter) - only for manual stocks
+                commitCompany(item) {
+                    // Only allow editing for manual stocks
+                    if (item.source !== 'manual') return;
+
+                    const original = this.editingOriginals[item.id]?.company;
+                    const newValue = this.editingValues[item.id]?.company ?? item.company;
+
+                    if (newValue !== original) {
+                        // Sync local value to item (triggers one re-sort)
+                        item.company = newValue;
+                        // Show saving state and save
+                        if (!this.savingStates[item.id]) {
+                            this.$set(this.savingStates, item.id, {});
+                        }
+                        this.$set(this.savingStates[item.id], 'company', true);
+                        this.saveCompanyChange(item);
+                    }
+                    // Clean up
+                    if (this.editingOriginals[item.id]) {
+                        delete this.editingOriginals[item.id].company;
+                    }
+                    if (this.editingValues[item.id]) {
+                        delete this.editingValues[item.id].company;
+                    }
+                },
+
                 // Commit shares change (on blur or enter)
                 commitShares(item) {
                     const original = this.editingOriginals[item.id]?.shares;
@@ -2411,6 +2437,57 @@ class PortfolioTableApp {
                         console.error('Error updating thesis:', error);
                         if (typeof showNotification === 'function') {
                             showNotification('Failed to update thesis', 'is-danger');
+                        }
+                    }
+                },
+
+                async saveCompanyChange(item) {
+                    debugLog('saveCompanyChange called with item:', item);
+                    if (!item || !item.id) {
+                        console.error('Invalid item for company change');
+                        return;
+                    }
+
+                    // Only allow saving for manual stocks
+                    if (item.source !== 'manual') {
+                        console.error('Cannot change company name for non-manual stocks');
+                        return;
+                    }
+
+                    try {
+                        debugLog('Sending company name update request for item ID:', item.id, 'Name:', item.company);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: item.company || ''
+                            })
+                        });
+
+                        const result = await response.json();
+                        debugLog('Company name update response:', result);
+
+                        if (result.success) {
+                            // Show success notification using the global function if available
+                            if (typeof showNotification === 'function') {
+                                showNotification('Company name updated successfully', 'is-success', 3000);
+                            } else {
+                                debugLog('Company name updated successfully');
+                            }
+                        } else {
+                            // Show error notification
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Error updating company name: ${result.error}`, 'is-danger');
+                            } else {
+                                console.error(`Error updating company name: ${result.error}`);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error updating company name:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to update company name', 'is-danger');
                         }
                     }
                 },
@@ -2855,6 +2932,373 @@ class PortfolioTableApp {
                             showNotification('Failed to reset country: ' + error.message, 'is-danger');
                         }
                     }
+                },
+
+                async resetIdentifier(item) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for identifier reset');
+                        return;
+                    }
+                    try {
+                        debugLog('Resetting identifier for item ID:', item.id);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reset_identifier: true })
+                        });
+                        const result = await response.json();
+                        debugLog('Identifier reset response:', result);
+
+                        if (result.success) {
+                            // Reload data to get fresh identifier from yfinance
+                            await this.loadPortfolioData();
+                            if (typeof showNotification === 'function') {
+                                showNotification('Identifier reset successfully', 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Reset failed');
+                        }
+                    } catch (error) {
+                        console.error('Identifier reset error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to reset identifier: ' + error.message, 'is-danger');
+                        }
+                    }
+                },
+
+                async resetShares(item) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for shares reset');
+                        return;
+                    }
+                    try {
+                        debugLog('Resetting shares for item ID:', item.id);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reset_shares: true })
+                        });
+                        const result = await response.json();
+                        debugLog('Shares reset response:', result);
+
+                        if (result.success) {
+                            // Update local state
+                            item.override_share = null;
+                            item.effective_shares = item.shares;
+                            item.is_manually_edited = false;
+                            item.csv_modified_after_edit = false;
+                            // Clear editing state
+                            if (this.editingValues[item.id]) {
+                                delete this.editingValues[item.id].shares;
+                            }
+                            if (typeof showNotification === 'function') {
+                                showNotification(`Shares reset to ${this.formatNumber(item.shares)} from CSV`, 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Reset failed');
+                        }
+                    } catch (error) {
+                        console.error('Shares reset error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to reset shares: ' + error.message, 'is-danger');
+                        }
+                    }
+                },
+
+                async resetCustomValue(item) {
+                    if (!item || !item.id) {
+                        console.error('Invalid item for custom value reset');
+                        return;
+                    }
+                    try {
+                        debugLog('Resetting custom value for item ID:', item.id);
+                        const response = await fetch(`/portfolio/api/update_portfolio/${item.id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reset_custom_value: true })
+                        });
+                        const result = await response.json();
+                        debugLog('Custom value reset response:', result);
+
+                        if (result.success) {
+                            // Update local state
+                            item.custom_total_value = null;
+                            item.custom_price_eur = null;
+                            item.is_custom_value = false;
+                            const msg = item.price_eur
+                                ? 'Reset to market price'
+                                : 'Custom value cleared';
+                            if (typeof showNotification === 'function') {
+                                showNotification(msg, 'is-success');
+                            }
+                        } else {
+                            throw new Error(result.error || 'Reset failed');
+                        }
+                    } catch (error) {
+                        console.error('Custom value reset error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to reset custom value: ' + error.message, 'is-danger');
+                        }
+                    }
+                },
+
+                // =============================================================================
+                // Add Stock Modal Methods
+                // =============================================================================
+
+                async openAddStockModal() {
+                    debugLog('Opening Add Stock modal');
+                    this.resetAddStockForm();
+                    this.showAddStockModal = true;
+
+                    // Fetch portfolios for dropdown
+                    try {
+                        const response = await fetch('/portfolio/api/portfolios_dropdown');
+                        const result = await response.json();
+                        if (result.success) {
+                            this.addStockPortfolios = result.portfolios;
+                            debugLog('Loaded portfolios for dropdown:', this.addStockPortfolios);
+
+                            // Pre-select current portfolio filter if one is selected
+                            if (this.selectedPortfolio) {
+                                const matchingPortfolio = this.addStockPortfolios.find(
+                                    p => p.name === this.selectedPortfolio
+                                );
+                                if (matchingPortfolio) {
+                                    this.addStockForm.portfolio_id = matchingPortfolio.id;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch portfolios:', error);
+                    }
+                },
+
+                closeAddStockModal() {
+                    this.showAddStockModal = false;
+                    this.resetAddStockForm();
+                },
+
+                resetAddStockForm() {
+                    this.addStockForm = {
+                        identifier: '',
+                        name: '',
+                        portfolio_id: null,
+                        sector: '',
+                        investment_type: null,
+                        country: '',
+                        shares: '',
+                        total_value: ''
+                    };
+                    this.addStockErrors = {};
+                    this.addStockError = null;
+                    this.identifierValidation = {
+                        loading: false,
+                        status: null,
+                        priceData: null
+                    };
+                },
+
+                async validateIdentifier() {
+                    const identifier = this.addStockForm.identifier.trim();
+
+                    // Reset validation state if identifier is empty
+                    if (!identifier) {
+                        this.identifierValidation = {
+                            loading: false,
+                            status: null,
+                            priceData: null
+                        };
+                        return;
+                    }
+
+                    this.identifierValidation.loading = true;
+                    this.identifierValidation.status = null;
+
+                    try {
+                        const response = await fetch(
+                            `/portfolio/api/validate_identifier?identifier=${encodeURIComponent(identifier)}`
+                        );
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.identifierValidation.status = 'valid';
+                            this.identifierValidation.priceData = result.price_data;
+
+                            // Auto-fill country if available
+                            if (result.price_data && result.price_data.country && !this.addStockForm.country) {
+                                this.addStockForm.country = result.price_data.country;
+                            }
+
+                            debugLog('Identifier validated successfully:', result.price_data);
+                        } else {
+                            this.identifierValidation.status = 'invalid';
+                            this.identifierValidation.priceData = null;
+                            debugLog('Identifier validation failed:', result.error);
+                        }
+                    } catch (error) {
+                        console.error('Identifier validation error:', error);
+                        this.identifierValidation.status = 'invalid';
+                        this.identifierValidation.priceData = null;
+                    } finally {
+                        this.identifierValidation.loading = false;
+                    }
+                },
+
+                validateAddStockForm() {
+                    this.addStockErrors = {};
+
+                    // Validate name
+                    if (!this.addStockForm.name || !this.addStockForm.name.trim()) {
+                        this.addStockErrors.name = 'Company name is required';
+                    }
+
+                    // Validate sector
+                    if (!this.addStockForm.sector || !this.addStockForm.sector.trim()) {
+                        this.addStockErrors.sector = 'Sector is required';
+                    }
+
+                    // Validate shares
+                    const shares = parseGermanNumber(this.addStockForm.shares);
+                    if (isNaN(shares) || shares <= 0) {
+                        this.addStockErrors.shares = 'Shares must be greater than 0';
+                    }
+
+                    // Validate total_value if required
+                    if (this.showTotalValueField) {
+                        const totalValue = parseGermanNumber(this.addStockForm.total_value);
+                        if (isNaN(totalValue) || totalValue <= 0) {
+                            this.addStockErrors.total_value = 'Total value is required and must be greater than 0';
+                        }
+                    }
+
+                    return Object.keys(this.addStockErrors).length === 0;
+                },
+
+                async submitAddStock() {
+                    if (!this.validateAddStockForm()) {
+                        return;
+                    }
+
+                    this.isAddingStock = true;
+                    this.addStockError = null;
+
+                    try {
+                        const payload = {
+                            name: this.addStockForm.name.trim(),
+                            identifier: this.addStockForm.identifier.trim() || null,
+                            portfolio_id: this.addStockForm.portfolio_id,
+                            sector: this.addStockForm.sector.trim(),
+                            investment_type: this.addStockForm.investment_type,
+                            country: this.addStockForm.country || null,
+                            shares: parseGermanNumber(this.addStockForm.shares)
+                        };
+
+                        // Add total_value if needed
+                        if (this.showTotalValueField) {
+                            payload.total_value = parseGermanNumber(this.addStockForm.total_value);
+                        }
+
+                        debugLog('Submitting add stock:', payload);
+
+                        const response = await fetch('/portfolio/api/add_company', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            debugLog('Stock added successfully:', result);
+                            this.closeAddStockModal();
+
+                            // Refresh portfolio data
+                            await this.loadData();
+
+                            if (typeof showNotification === 'function') {
+                                showNotification(result.message || 'Stock added successfully', 'is-success');
+                            }
+                        } else if (result.error === 'duplicate') {
+                            this.addStockError = `A company named "${result.existing.name}" already exists in portfolio "${result.existing.portfolio_name}". Please edit the existing entry instead.`;
+                        } else {
+                            this.addStockError = result.error || 'Failed to add stock';
+                        }
+                    } catch (error) {
+                        console.error('Add stock error:', error);
+                        this.addStockError = 'An unexpected error occurred. Please try again.';
+                    } finally {
+                        this.isAddingStock = false;
+                    }
+                },
+
+                async deleteManualStocks() {
+                    // Get manual stock IDs from selection
+                    const manualIds = this.portfolioItems
+                        .filter(item => this.selectedItemIds.includes(item.id) && item.source === 'manual')
+                        .map(item => item.id);
+
+                    if (manualIds.length === 0) {
+                        if (typeof showNotification === 'function') {
+                            showNotification('No manual stocks selected for deletion', 'is-warning');
+                        }
+                        return;
+                    }
+
+                    // Get names for confirmation
+                    const manualNames = this.portfolioItems
+                        .filter(item => manualIds.includes(item.id))
+                        .map(item => item.company);
+
+                    const confirmMessage = manualIds.length === 1
+                        ? `Are you sure you want to delete "${manualNames[0]}"?`
+                        : `Are you sure you want to delete ${manualIds.length} manually-added stocks?\n\n${manualNames.join(', ')}`;
+
+                    if (!confirm(confirmMessage)) {
+                        return;
+                    }
+
+                    this.isDeletingStocks = true;
+
+                    try {
+                        const response = await fetch('/portfolio/api/delete_companies', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ company_ids: manualIds })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            debugLog('Stocks deleted:', result);
+
+                            // Clear selection
+                            this.selectedItemIds = [];
+
+                            // Refresh portfolio data
+                            await this.loadData();
+
+                            if (typeof showNotification === 'function') {
+                                showNotification(
+                                    `Deleted ${result.deleted_count} stock(s)`,
+                                    'is-success'
+                                );
+                            }
+                        } else {
+                            throw new Error(result.error || 'Failed to delete stocks');
+                        }
+                    } catch (error) {
+                        console.error('Delete stocks error:', error);
+                        if (typeof showNotification === 'function') {
+                            showNotification('Failed to delete stocks: ' + error.message, 'is-danger');
+                        }
+                    } finally {
+                        this.isDeletingStocks = false;
+                    }
                 }
             },
             created() {
@@ -2886,6 +3330,7 @@ class PortfolioTableApp {
                 // Wrap all save methods to auto-clear saving state
                 wrapSaveMethod('saveSectorChange', 'sector');
                 wrapSaveMethod('saveThesisChange', 'thesis');
+                wrapSaveMethod('saveCompanyChange', 'company');
                 wrapSaveMethod('saveIdentifierChange', 'identifier');
                 wrapSaveMethod('saveSharesChange', 'shares');
                 wrapSaveMethod('saveTotalValueChange', 'totalValue');

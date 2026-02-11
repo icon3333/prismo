@@ -13,19 +13,27 @@
     <div id="analysisContent" style="display: none;">
 
 
-        <!-- Portfolio Selection Section -->
+        <!-- Portfolio Selection & Summary -->
         <section class="mb-6">
             <div class="box">
-                <h2 class="section-title mb-4">Portfolio Analysis</h2>
-
-                <!-- Portfolio Dropdown -->
-                <div class="field">
-                    <label class="label">Select Portfolio</label>
-                    <div class="control">
-                        <div class="select is-fullwidth">
+                <!-- Top row: dropdown + cash toggle -->
+                <div class="performance-header">
+                    <div class="performance-selector">
+                        <span class="performance-selector-label">Portfolio</span>
+                        <div class="select">
                             <select id="portfolioSelector">
-                                <option value="">-- Loading portfolios --</option>
+                                <option value="">-- Loading --</option>
                             </select>
+                        </div>
+                        <!-- Cash Toggle -->
+                        <div id="cashToggleContainer" class="cash-toggle-container" style="display: none;">
+                            <label class="checkbox cash-toggle">
+                                <input type="checkbox" id="includeCashToggle">
+                                <span class="cash-toggle-label">
+                                    <i class="fas fa-coins"></i>Cash
+                                </span>
+                                <span id="cashBalanceDisplay" class="tag is-info is-light cash-balance-tag sensitive-value"></span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -33,18 +41,14 @@
                 <!-- No portfolios message (hidden initially) -->
                 <div id="noPortfoliosMessage" style="display: none;" class="notification is-info mt-4">
                     <p><strong>No portfolios with holdings found.</strong></p>
-                    <p class="mt-2">To view performance data, import holdings via CSV upload on the <a href="{{ url_for('main.index') }}">Overview</a> page.</p>
+                    <p class="mt-2">Import holdings via CSV on the <a href="{{ url_for('main.index') }}">Overview</a> page.</p>
                 </div>
 
                 <!-- Summary Statistics (hidden initially) -->
                 <div id="portfolioSummary" style="display: none;" class="mt-4">
                     <div class="columns is-mobile">
                         <div class="column has-text-centered">
-                            <p class="heading">Portfolio</p>
-                            <p class="title is-5" id="summaryPortfolioName">-</p>
-                        </div>
-                        <div class="column has-text-centered">
-                            <p class="heading">Total Value</p>
+                            <p class="heading">Value</p>
                             <p class="title is-5" id="summaryTotalValue">-</p>
                         </div>
                         <div class="column has-text-centered">
@@ -56,31 +60,20 @@
                             <p class="title is-5" id="summaryHoldings">-</p>
                         </div>
                         <div class="column has-text-centered">
-                            <p class="heading">Last Updated</p>
+                            <p class="heading">Updated</p>
                             <p class="title is-5" id="summaryLastUpdated">-</p>
                         </div>
                     </div>
                 </div>
-
-                <!-- Cash Toggle -->
-                <div id="cashToggleContainer" class="cash-toggle-container" style="display: none;">
-                    <label class="checkbox cash-toggle">
-                        <input type="checkbox" id="includeCashToggle">
-                        <span class="cash-toggle-label">
-                            <i class="fas fa-coins"></i>Include Cash
-                        </span>
-                        <span id="cashBalanceDisplay" class="tag is-info is-light cash-balance-tag sensitive-value"></span>
-                    </label>
-                </div>
             </div>
         </section>
 
-        <!-- Portfolio Allocation Table (hidden initially) -->
+        <!-- Portfolio Allocation Table + Performance Chart (hidden initially) -->
         <section id="portfolioTables" class="mb-6" style="display: none;">
-            <div class="columns is-centered">
-                <!-- Unified Allocation Table -->
-                <div class="column is-10">
-                    <div class="box" style="max-width: 900px; margin: 0 auto;">
+            <div class="columns">
+                <!-- Allocation Table (left) -->
+                <div class="column is-6">
+                    <div class="box">
                         <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
                             <h3 class="subtitle is-5 mb-0" id="allocationTableTitle">Thesis Allocation</h3>
                             <div class="toggle-group" id="allocationToggle">
@@ -92,6 +85,41 @@
                         </div>
                         <!-- Unified Tabulator table for all modes -->
                         <div id="allocationTable"></div>
+                    </div>
+                </div>
+                <!-- Performance Chart (right) -->
+                <div class="column is-6">
+                    <div class="box" id="performanceChartBox">
+                        <div class="mb-3">
+                            <h3 class="subtitle is-5 mb-2" id="performanceChartTitle">Returns</h3>
+                            <div class="is-flex" style="gap: var(--space-sm, 8px); flex-wrap: wrap;">
+                                <div class="toggle-group" id="chartModeToggle">
+                                    <button class="toggle-btn" data-mode="individual">Individual</button>
+                                    <button class="toggle-btn" data-mode="both">Combined</button>
+                                    <button class="toggle-btn active" data-mode="aggregate">Aggregate</button>
+                                </div>
+                                <div class="toggle-group" id="periodToggle">
+                                    <button class="toggle-btn" data-period="3y">3Y</button>
+                                    <button class="toggle-btn active" data-period="5y">5Y</button>
+                                    <button class="toggle-btn" data-period="10y">10Y</button>
+                                    <button class="toggle-btn" data-period="max">MAX</button>
+                                    <button class="toggle-btn" data-period="since_purchase">Since Purchase</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Chart container -->
+                        <div id="performanceChart" style="min-height: 350px; display: none;"></div>
+                        <!-- Loading spinner -->
+                        <div id="performanceChartLoading" style="display: none;" class="has-text-centered p-6">
+                            <div class="chart-spinner"></div>
+                        </div>
+                        <!-- Empty state -->
+                        <div id="performanceChartEmpty" class="has-text-centered p-6">
+                            <p class="has-text-grey">
+                                <i class="fas fa-chart-line mr-2"></i>
+                                Click a row to see performance over time
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -183,6 +211,18 @@
             let heatmapMode = 'sector'; // 'sector' or 'thesis'
             let includeCash = false;
             let cashBalance = 0;
+
+            // Performance chart state
+            let currentChartPeriod = '5y';
+            let currentChartMode = 'aggregate'; // 'individual', 'both', 'aggregate'
+            let currentChartIdentifiers = [];
+            let currentChartNames = [];
+            let currentChartValues = [];
+            let currentChartGroupName = '';
+            let performanceChartInstance = null;
+            let historicalDataCache = new Map();
+            let chartAbortController = null;
+            let selectedRow = null;
 
             // Make portfolioData available globally for heatmap
             window.portfolioData = [];
@@ -609,6 +649,8 @@
                     initTableSorting();
                     initAllocationToggle();
                     initHeatmapToggle();
+                    initPeriodToggle();
+                    initChartModeToggle();
                     setupThemeChangeHandler();
 
                     // Initialize concentration heatmap if no portfolio was already loaded
@@ -703,8 +745,11 @@
                 const portfolioId = event.target.value;
                 if (!portfolioId) {
                     hidePortfolioDisplay();
+                    clearPerformanceChart();
                     return;
                 }
+                clearPerformanceChart();
+                historicalDataCache.clear();
                 await loadPortfolioData(portfolioId);
                 await savePortfolioSelection(portfolioId);
             }
@@ -752,7 +797,6 @@
             }
 
             function updateSummaryBox() {
-                document.getElementById('summaryPortfolioName').textContent = currentPortfolioData.portfolio_name;
                 const displayValue = includeCash
                     ? currentPortfolioData.total_value + cashBalance
                     : currentPortfolioData.total_value;
@@ -827,6 +871,8 @@
                     // Stocks mode: flat list of companies
                     tableData = (currentPortfolioData.companies || []).map(c => ({
                         name: c.name,
+                        identifier: c.identifier,
+                        current_value: c.current_value || 0,
                         sector: c.sector || 'Unassigned',
                         percentage: pct(c.current_value || 0),
                         total_value: c.current_value || 0,
@@ -911,6 +957,8 @@
                                 const companyValue = c.current_value || 0;
                                 return {
                                     name: c.name,
+                                    identifier: c.identifier,
+                                    current_value: companyValue,
                                     percentage: pct(companyValue),
                                     total_value: companyValue,
                                     pnl_absolute: c.pnl_absolute,
@@ -1003,6 +1051,8 @@
 
                                 return {
                                     name: c.name,
+                                    identifier: c.identifier,
+                                    current_value: companyValue,
                                     percentage: pct(companyValue),
                                     category_percentage: categoryPercent,
                                     total_value: companyValue,
@@ -1108,6 +1158,7 @@
 
                 // If table exists and same mode, just update data
                 if (allocationTable && allocationTable._lastMode === allocationMode) {
+                    selectedRow = null;
                     allocationTable.setData(tableData);
                     return;
                 }
@@ -1116,6 +1167,7 @@
                 if (allocationTable) {
                     allocationTable.destroy();
                     allocationTable = null;
+                    selectedRow = null;
                 }
 
                 // Create Tabulator instance with appropriate config
@@ -1123,7 +1175,8 @@
                     data: tableData,
                     layout: "fitColumns",
                     placeholder: emptyMessage,
-                    columns: columns
+                    columns: columns,
+                    selectableRows: 1
                 };
 
                 // Add tree config for portfolios/thesis/sector modes (not stocks)
@@ -1136,6 +1189,62 @@
 
                 allocationTable = new Tabulator("#allocationTable", config);
                 allocationTable._lastMode = allocationMode; // Track mode for optimization
+
+                // Click any row to load its performance chart
+                allocationTable.on("rowClick", function(e, row) {
+                    // Let tree control clicks pass through to native expand/collapse
+                    if (e.target.closest('.tabulator-data-tree-control')) return;
+
+                    const data = row.getData();
+
+                    // Ignore Cash rows
+                    if (data.name === 'Cash') return;
+
+                    // Toggle off: clicking already-selected row deselects and clears chart
+                    if (selectedRow === row) {
+                        row.deselect();
+                        selectedRow = null;
+                        clearPerformanceChart();
+                        return;
+                    }
+
+                    // Deselect previous row, select new one
+                    if (selectedRow) {
+                        try { selectedRow.deselect(); } catch(e) {}
+                    }
+                    row.select();
+                    selectedRow = row;
+
+                    // Determine if this is a parent row (has _children) or a leaf/stock row
+                    const isParent = !isStocksMode && !row.getTreeParent();
+                    if (isParent) {
+                        // Parent row: aggregate children identifiers
+                        const children = row.getTreeChildren().map(c => c.getData());
+                        const withIdentifiers = children.filter(c => c.identifier);
+                        if (withIdentifiers.length > 0) {
+                            loadPerformanceChart(
+                                withIdentifiers.map(c => c.identifier),
+                                withIdentifiers.map(c => c.name),
+                                data.name,
+                                withIdentifiers.map(c => c.current_value || 0)
+                            );
+                        } else {
+                            showNoTickerMessage(data.name);
+                        }
+                    } else {
+                        // Stock row (child in tree mode, or flat in stocks mode)
+                        if (data.identifier) {
+                            loadPerformanceChart(
+                                [data.identifier],
+                                [data.name],
+                                data.name,
+                                [data.current_value || 0]
+                            );
+                        } else {
+                            showNoTickerMessage(data.name);
+                        }
+                    }
+                });
 
                 // Initialize P&L sort toggles in Tabulator header
                 initTabulatorPnLSorting();
@@ -1203,6 +1312,9 @@
                     // Update mode
                     allocationMode = mode;
 
+                    // Clear performance chart on mode switch
+                    clearPerformanceChart();
+
                     // Render the appropriate table
                     renderAllocationTable();
                 });
@@ -1259,7 +1371,7 @@
                 });
             }
 
-            // Re-render heatmap when theme changes to update colors
+            // Re-render charts when theme changes to update colors
             function setupThemeChangeHandler() {
                 const observer = new MutationObserver((mutations) => {
                     mutations.forEach((mutation) => {
@@ -1268,6 +1380,11 @@
                             if (selectedPortfolioIds.length > 0) {
                                 const heatmapData = calculateExposureData(selectedPortfolioIds, heatmapMode);
                                 renderHeatmap(heatmapData, heatmapMode, 'sectorHeatmap');
+                            }
+                            // Re-render performance chart with new theme colors
+                            const cacheKey = getChartCacheKey(currentChartIdentifiers);
+                            if (performanceChartInstance && historicalDataCache.has(cacheKey)) {
+                                renderPerformanceChart(historicalDataCache.get(cacheKey), currentChartNames, currentChartGroupName, currentChartValues);
                             }
                         }
                     });
@@ -1330,6 +1447,516 @@
                 const div = document.createElement('div');
                 div.textContent = text;
                 return div.innerHTML;
+            }
+
+            // ======================================================
+            // Performance Chart Functions
+            // ======================================================
+
+            function showChartLoading() {
+                document.getElementById('performanceChart').style.display = 'none';
+                document.getElementById('performanceChartEmpty').style.display = 'none';
+                document.getElementById('performanceChartLoading').style.display = '';
+            }
+
+            function hideChartLoading() {
+                document.getElementById('performanceChartLoading').style.display = 'none';
+            }
+
+            function clearPerformanceChart() {
+                if (performanceChartInstance) {
+                    performanceChartInstance.destroy();
+                    performanceChartInstance = null;
+                }
+                document.getElementById('performanceChart').style.display = 'none';
+                document.getElementById('performanceChartLoading').style.display = 'none';
+                const emptyEl = document.getElementById('performanceChartEmpty');
+                emptyEl.style.display = '';
+                emptyEl.innerHTML = '<p class="has-text-grey"><i class="fas fa-chart-line mr-2"></i>Click a row to see performance over time</p>';
+                document.getElementById('performanceChartTitle').textContent = 'Returns';
+                currentChartIdentifiers = [];
+                currentChartNames = [];
+                currentChartValues = [];
+                currentChartGroupName = '';
+                // Clear row selection
+                if (selectedRow) {
+                    try { selectedRow.deselect(); } catch(e) {}
+                    selectedRow = null;
+                }
+            }
+
+            function showNoTickerMessage(name) {
+                if (performanceChartInstance) {
+                    performanceChartInstance.destroy();
+                    performanceChartInstance = null;
+                }
+                document.getElementById('performanceChart').style.display = 'none';
+                document.getElementById('performanceChartLoading').style.display = 'none';
+                const emptyEl = document.getElementById('performanceChartEmpty');
+                emptyEl.style.display = '';
+                emptyEl.innerHTML = `<p class="has-text-grey"><i class="fas fa-chart-line mr-2"></i>No ticker available for ${escapeHtml(name)}</p>`;
+                document.getElementById('performanceChartTitle').textContent = 'Returns';
+                currentChartIdentifiers = [];
+                currentChartNames = [];
+                currentChartValues = [];
+                currentChartGroupName = '';
+            }
+
+            function getChartCacheKey(identifiers) {
+                // Compute a consistent cache key that accounts for since_purchase mode
+                let keyPart = currentChartPeriod;
+                if (currentChartPeriod === 'since_purchase') {
+                    const info = getSincePurchaseDateInfo(identifiers);
+                    keyPart = info ? ('sd:' + info.earliestDate) : 'max';
+                }
+                return identifiers.slice().sort().join(',') + '|' + keyPart;
+            }
+
+            function getSincePurchaseDateInfo(identifiers) {
+                // Collect per-stock purchase dates and find earliest/latest
+                if (!currentPortfolioData || !currentPortfolioData.companies) return null;
+
+                const identifierSet = new Set(identifiers);
+                const purchaseDates = {};
+                let earliestDate = null;
+                let latestDate = null;
+
+                for (const company of currentPortfolioData.companies) {
+                    if (!identifierSet.has(company.identifier)) continue;
+                    if (!company.first_bought_date) continue;
+
+                    const d = company.first_bought_date.substring(0, 10); // YYYY-MM-DD
+                    purchaseDates[company.identifier] = d;
+
+                    if (!earliestDate || d < earliestDate) earliestDate = d;
+                    if (!latestDate || d > latestDate) latestDate = d;
+                }
+
+                if (!earliestDate) return null;
+
+                return { earliestDate, latestDate, purchaseDates };
+            }
+
+            async function loadPerformanceChart(identifiers, names, groupName, values) {
+                // Cancel any in-flight request
+                if (chartAbortController) {
+                    chartAbortController.abort();
+                }
+                chartAbortController = new AbortController();
+
+                currentChartIdentifiers = identifiers;
+                currentChartNames = names;
+                currentChartValues = values || [];
+                currentChartGroupName = groupName;
+
+                document.getElementById('performanceChartTitle').textContent = groupName + ' Returns';
+                showChartLoading();
+
+                // Resolve "since_purchase" to a start_date or fall back to "max"
+                let effectivePeriod = currentChartPeriod;
+                let startDate = null;
+                let sincePurchaseInfo = null;
+                if (currentChartPeriod === 'since_purchase') {
+                    sincePurchaseInfo = getSincePurchaseDateInfo(identifiers);
+                    if (sincePurchaseInfo) {
+                        const daysSince = (Date.now() - new Date(sincePurchaseInfo.earliestDate).getTime()) / 86400000;
+                        if (daysSince < 2) {
+                            // Dates are likely wrong (import timestamps) — fall back gracefully
+                            console.warn('Since Purchase: earliest date is today/yesterday, falling back to 5y');
+                            sincePurchaseInfo = null;
+                            effectivePeriod = '5y';
+                        } else {
+                            startDate = sincePurchaseInfo.earliestDate;
+                        }
+                    } else {
+                        effectivePeriod = '5y'; // Fallback when no dates available
+                    }
+                }
+
+                // Check frontend cache
+                const cacheKey = identifiers.slice().sort().join(',') + '|' + (startDate || effectivePeriod);
+                if (historicalDataCache.has(cacheKey)) {
+                    hideChartLoading();
+                    renderPerformanceChart(historicalDataCache.get(cacheKey), names, groupName, values, sincePurchaseInfo);
+                    return;
+                }
+
+                try {
+                    const params = new URLSearchParams({
+                        identifiers: identifiers.join(',')
+                    });
+                    if (startDate) {
+                        params.set('start_date', startDate);
+                    } else {
+                        params.set('period', effectivePeriod);
+                    }
+                    const response = await fetch(`/portfolio/api/historical_prices?${params}`, {
+                        signal: chartAbortController.signal
+                    });
+
+                    if (!response.ok) throw new Error('Failed to fetch historical data');
+                    const data = await response.json();
+
+                    // Cache the result
+                    historicalDataCache.set(cacheKey, data);
+
+                    hideChartLoading();
+                    renderPerformanceChart(data, names, groupName, values, sincePurchaseInfo);
+
+                } catch (error) {
+                    if (error.name === 'AbortError') return; // Cancelled, ignore
+                    console.error('Error loading performance chart:', error);
+                    hideChartLoading();
+                    document.getElementById('performanceChart').style.display = '';
+                    document.getElementById('performanceChart').innerHTML =
+                        '<div class="has-text-centered p-4"><p class="has-text-grey">Failed to load historical data</p></div>';
+                }
+            }
+
+            function renderPerformanceChart(data, names, groupName, values, sincePurchaseInfo) {
+                const chartEl = document.getElementById('performanceChart');
+                chartEl.style.display = '';
+                chartEl.innerHTML = '';
+
+                const seriesData = data.series || {};
+                const themeColors = ChartConfig.getThemeColors();
+
+                // Build series: normalize each to base 100
+                const allSeries = [];
+                const identifiers = currentChartIdentifiers;
+
+                for (let i = 0; i < identifiers.length; i++) {
+                    const id = identifiers[i];
+                    const name = names[i] || id;
+                    let points = seriesData[id];
+                    if (!points || points.length === 0) continue;
+
+                    // In since_purchase mode, trim each stock to its own purchase date
+                    let purchaseDate = null;
+                    if (sincePurchaseInfo && sincePurchaseInfo.purchaseDates[id]) {
+                        purchaseDate = sincePurchaseInfo.purchaseDates[id];
+                        const cutoff = new Date(purchaseDate).getTime();
+                        points = points.filter(p => new Date(p.date).getTime() >= cutoff);
+                        if (points.length === 0) continue;
+                    }
+
+                    const basePrice = points[0].close;
+                    if (basePrice === 0) continue;
+
+                    allSeries.push({
+                        name: name,
+                        identifier: id,
+                        value: (values && values[i]) || 0,
+                        purchaseDate: purchaseDate,
+                        data: points.map(p => ({
+                            x: new Date(p.date).getTime(),
+                            y: parseFloat(((p.close / basePrice) * 100).toFixed(2))
+                        }))
+                    });
+                }
+
+                if (allSeries.length === 0) {
+                    chartEl.innerHTML =
+                        '<div class="has-text-centered p-4"><p class="has-text-grey">No historical data available for ' + escapeHtml(groupName) + '</p></div>';
+                    return;
+                }
+
+                // Build display series based on mode
+                let displaySeries = [];
+                const mode = currentChartMode;
+
+                if (mode === 'individual' || mode === 'both') {
+                    displaySeries = allSeries.map(s => ({
+                        name: s.name,
+                        data: s.data
+                    }));
+                }
+
+                if (mode === 'aggregate' || mode === 'both') {
+                    const aggSeries = computeAggregate(allSeries, sincePurchaseInfo);
+                    if (aggSeries) {
+                        displaySeries.push(aggSeries);
+                    }
+                }
+
+                // Colors
+                const colors = displaySeries.map(s => {
+                    if (s.name === 'Weighted Avg') return '#06b6d4'; // aqua-500
+                    return ChartConfig.colorMapping[s.name] || null;
+                }).map((c, i) => c || ChartConfig.oceanDepthColors.palette[i % ChartConfig.oceanDepthColors.palette.length]);
+
+                // Stroke config
+                const strokeWidths = displaySeries.map(s => {
+                    if (s.name === 'Weighted Avg') return 3;
+                    return displaySeries.length > 8 ? 1.5 : 2;
+                });
+                const dashArray = displaySeries.map(s => s.name === 'Weighted Avg' ? 5 : 0);
+                // Destroy previous chart
+                if (performanceChartInstance) {
+                    performanceChartInstance.destroy();
+                    performanceChartInstance = null;
+                }
+
+                const options = {
+                    series: displaySeries,
+                    chart: {
+                        type: 'area',
+                        height: 350,
+                        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+                        toolbar: { show: false },
+                        zoom: { enabled: false },
+                        background: 'transparent',
+                        animations: { enabled: false }
+                    },
+                    colors: colors,
+                    stroke: {
+                        width: strokeWidths,
+                        curve: 'smooth',
+                        dashArray: dashArray
+                    },
+                    fill: {
+                        type: mode === 'aggregate' ? 'solid' : 'gradient',
+                        opacity: mode === 'aggregate' ? 0 : 0.05,
+                        gradient: {
+                            shade: 'light',
+                            type: 'vertical',
+                            opacityFrom: 0.08,
+                            opacityTo: 0.01
+                        }
+                    },
+                    dataLabels: { enabled: false },
+                    grid: {
+                        show: true,
+                        borderColor: themeColors.textMuted + '20',
+                        strokeDashArray: 4,
+                        xaxis: { lines: { show: false } },
+                        yaxis: { lines: { show: true } }
+                    },
+                    xaxis: {
+                        type: 'datetime',
+                        labels: {
+                            style: { colors: themeColors.textTertiary, fontSize: '11px' }
+                        },
+                        axisBorder: { show: false },
+                        axisTicks: { show: false }
+                    },
+                    yaxis: {
+                        labels: {
+                            style: { colors: themeColors.textTertiary, fontSize: '11px' },
+                            formatter: v => v.toFixed(0),
+                            offsetX: -8
+                        }
+                    },
+                    tooltip: {
+                        theme: themeColors.tooltipTheme,
+                        x: { format: sincePurchaseInfo ? 'dd MMM yyyy' : 'MMM yyyy' },
+                        y: {
+                            formatter: function(val) {
+                                const change = val - 100;
+                                const sign = change >= 0 ? '+' : '';
+                                return val.toFixed(1) + ' (' + sign + change.toFixed(1) + '%)';
+                            }
+                        }
+                    },
+                    legend: {
+                        show: displaySeries.length > 1,
+                        position: 'bottom',
+                        horizontalAlign: 'center',
+                        fontSize: '12px',
+                        labels: { colors: themeColors.textSecondary },
+                        markers: { size: 4 },
+                        formatter: function(seriesName) {
+                            return '<span class="sensitive-value">' + seriesName + '</span>';
+                        }
+                    },
+                    annotations: {
+                        yaxis: [{
+                            y: 100,
+                            borderColor: themeColors.textMuted + '40',
+                            strokeDashArray: 2,
+                            label: { show: false }
+                        }]
+                    }
+                };
+
+                performanceChartInstance = new ApexCharts(chartEl, options);
+                performanceChartInstance.render();
+            }
+
+            function computeAggregate(allSeries, sincePurchaseInfo) {
+                if (allSeries.length === 0) return null;
+
+                if (sincePurchaseInfo) {
+                    return computeChainLinkedAggregate(allSeries);
+                }
+                return computeSimpleAggregate(allSeries);
+            }
+
+            function computeSimpleAggregate(allSeries) {
+                // Weighted average by current portfolio value
+                const totalValue = allSeries.reduce((sum, s) => sum + (s.value || 1), 0);
+                const weights = allSeries.map(s => totalValue > 0 ? (s.value || 1) / totalValue : 1 / allSeries.length);
+
+                // Collect all unique dates across all series
+                const dateMap = new Map();
+                allSeries.forEach((s, idx) => {
+                    s.data.forEach(point => {
+                        if (!dateMap.has(point.x)) {
+                            dateMap.set(point.x, new Array(allSeries.length).fill(null));
+                        }
+                        dateMap.get(point.x)[idx] = point.y;
+                    });
+                });
+
+                const sortedDates = Array.from(dateMap.keys()).sort((a, b) => a - b);
+
+                // Forward-fill and compute weighted average
+                const lastKnown = new Array(allSeries.length).fill(100);
+                const hasData = new Array(allSeries.length).fill(false);
+                const aggData = [];
+
+                for (const date of sortedDates) {
+                    const vals = dateMap.get(date);
+                    let weightedSum = 0;
+                    let weightSum = 0;
+
+                    for (let i = 0; i < vals.length; i++) {
+                        if (vals[i] !== null) { lastKnown[i] = vals[i]; hasData[i] = true; }
+                        if (!hasData[i]) continue; // Skip stocks with no data yet
+                        weightedSum += lastKnown[i] * weights[i];
+                        weightSum += weights[i];
+                    }
+
+                    aggData.push({
+                        x: date,
+                        y: parseFloat((weightedSum / weightSum).toFixed(2))
+                    });
+                }
+
+                return { name: 'Weighted Avg', data: aggData };
+            }
+
+            function computeChainLinkedAggregate(allSeries) {
+                // Chain-linked aggregate: stocks enter the weighted average at their
+                // purchase date without causing discontinuities.
+
+                // Build per-series lookup: date -> normalized value (base 100)
+                const seriesLookups = allSeries.map(s => {
+                    const map = new Map();
+                    s.data.forEach(p => map.set(p.x, p.y));
+                    return map;
+                });
+
+                // Determine each series' start date (first data point)
+                const seriesStartDates = allSeries.map(s => s.data[0].x);
+
+                // Collect all unique dates, sorted
+                const allDatesSet = new Set();
+                allSeries.forEach(s => s.data.forEach(p => allDatesSet.add(p.x)));
+                const sortedDates = Array.from(allDatesSet).sort((a, b) => a - b);
+
+                if (sortedDates.length === 0) return null;
+
+                // Portfolio weights by value
+                const totalValue = allSeries.reduce((sum, s) => sum + (s.value || 1), 0);
+                const weights = allSeries.map(s => totalValue > 0 ? (s.value || 1) / totalValue : 1 / allSeries.length);
+
+                // Track previous known value per series (for computing period returns)
+                const prevLevel = new Array(allSeries.length).fill(null);
+                let aggregateLevel = 100;
+                const aggData = [];
+
+                for (const date of sortedDates) {
+                    // Determine which series are active (have started and have data)
+                    let totalActiveWeight = 0;
+                    let weightedReturn = 0;
+
+                    for (let i = 0; i < allSeries.length; i++) {
+                        if (date < seriesStartDates[i]) continue; // Not yet active
+
+                        const val = seriesLookups[i].get(date);
+                        if (val == null) continue; // No data for this date
+
+                        if (prevLevel[i] == null) {
+                            // First data point for this series - enters at base 100
+                            prevLevel[i] = val;
+                            // Don't add to totalActiveWeight on entry: contributing 0 return
+                            // with positive weight would dilute the aggregate
+                        } else {
+                            // Compute period return for this series
+                            const periodReturn = (val - prevLevel[i]) / prevLevel[i];
+                            weightedReturn += periodReturn * weights[i];
+                            totalActiveWeight += weights[i];
+                            prevLevel[i] = val;
+                        }
+                    }
+
+                    if (totalActiveWeight > 0) {
+                        // Normalize weighted return by active weight
+                        const normalizedReturn = weightedReturn / totalActiveWeight;
+                        aggregateLevel *= (1 + normalizedReturn);
+                    }
+
+                    aggData.push({
+                        x: date,
+                        y: parseFloat(aggregateLevel.toFixed(2))
+                    });
+                }
+
+                return { name: 'Weighted Avg', data: aggData };
+            }
+
+            function initPeriodToggle() {
+                const toggleGroup = document.getElementById('periodToggle');
+                if (!toggleGroup) return;
+
+                toggleGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.toggle-btn');
+                    if (!btn) return;
+                    btn.blur();
+
+                    const period = btn.dataset.period;
+                    if (period === currentChartPeriod) return;
+
+                    toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    currentChartPeriod = period;
+
+                    // Reload chart if we have active identifiers
+                    if (currentChartIdentifiers.length > 0) {
+                        loadPerformanceChart(currentChartIdentifiers, currentChartNames, currentChartGroupName, currentChartValues);
+                    }
+                });
+            }
+
+            function initChartModeToggle() {
+                const toggleGroup = document.getElementById('chartModeToggle');
+                if (!toggleGroup) return;
+
+                toggleGroup.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.toggle-btn');
+                    if (!btn) return;
+                    btn.blur();
+
+                    const mode = btn.dataset.mode;
+                    if (mode === currentChartMode) return;
+
+                    toggleGroup.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    currentChartMode = mode;
+
+                    // Re-render with same data if chart is showing
+                    const cacheKey = getChartCacheKey(currentChartIdentifiers);
+                    if (historicalDataCache.has(cacheKey)) {
+                        let sincePurchaseInfo = null;
+                        if (currentChartPeriod === 'since_purchase') {
+                            sincePurchaseInfo = getSincePurchaseDateInfo(currentChartIdentifiers);
+                        }
+                        renderPerformanceChart(historicalDataCache.get(cacheKey), currentChartNames, currentChartGroupName, currentChartValues, sincePurchaseInfo);
+                    }
+                });
             }
 
             // END NEW INITIALIZATION LOGIC

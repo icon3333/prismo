@@ -207,20 +207,46 @@ def _convert_numeric(val, field_name: str = None):
         return None
 
 
+def _fix_numeric_date_column(series):
+    """
+    Fix date column corrupted by thousands='.' in read_csv.
+
+    pd.read_csv(thousands='.') interprets '15.05.2023' as int 15052023.
+    This reconstructs the DD.MM.YYYY string by zero-padding to 8 digits.
+    """
+    def convert(x):
+        try:
+            s = str(int(x)).zfill(8)  # DDMMYYYY
+            return f"{s[:2]}.{s[2:4]}.{s[4:]}"
+        except (ValueError, TypeError):
+            return str(x)
+    return series.apply(convert)
+
+
 def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     """Parse dates from various formats and sort chronologically."""
+    # Fix: thousands='.' in read_csv converts dates like '15.05.2023' to int 15052023
+    if 'date' in df.columns and df['date'].dtype in ['int64', 'float64']:
+        logger.info("Fixing numeric date column (corrupted by thousands='.' setting)")
+        df['date'] = _fix_numeric_date_column(df['date'])
+
+    # Same fix for datetime column (same thousands='.' corruption)
+    if 'datetime' in df.columns and df['datetime'].dtype in ['int64', 'float64']:
+        logger.info("Fixing numeric datetime column (corrupted by thousands='.' setting)")
+        df['datetime'] = _fix_numeric_date_column(df['datetime'])
+
     try:
         if 'datetime' in df.columns:
-            df['parsed_date'] = pd.to_datetime(df['datetime'], errors='coerce')
+            df['parsed_date'] = pd.to_datetime(df['datetime'], utc=True, dayfirst=True, errors='coerce')
             mask = df['parsed_date'].isna()
             if mask.any():
                 df.loc[mask, 'parsed_date'] = pd.to_datetime(
-                    df.loc[mask, 'date'], format='%d.%m.%Y', errors='coerce'
+                    df.loc[mask, 'datetime'], format='%d.%m.%Y', errors='coerce'
                 )
                 still_mask = df['parsed_date'].isna()
                 if still_mask.any():
                     df.loc[still_mask, 'parsed_date'] = pd.to_datetime(
-                        df.loc[still_mask, 'date'], dayfirst=True, errors='coerce'
+                        df.loc[still_mask, 'datetime'], dayfirst=True, errors='coerce'
                     )
         else:
             df['parsed_date'] = pd.to_datetime(
@@ -234,6 +260,11 @@ def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     except Exception as e:
         logger.warning(f"Error during date parsing: {str(e)}. Falling back to default parsing.")
         df['parsed_date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
+
+    # Strip timezone info to keep everything tz-naive (avoids TypeError on comparison)
+    # utc=True parsing produces tz-aware timestamps, but date-only parsing produces tz-naive
+    if hasattr(df['parsed_date'].dtype, 'tz') and df['parsed_date'].dtype.tz is not None:
+        df['parsed_date'] = df['parsed_date'].dt.tz_localize(None)
 
     nat_count = df['parsed_date'].isna().sum()
     if nat_count > 0:

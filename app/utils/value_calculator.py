@@ -27,6 +27,25 @@ logger = logging.getLogger(__name__)
 # Module-level cache for exchange rates (loaded once per request cycle)
 _exchange_rates_cache: Optional[Dict[str, float]] = None
 
+# Hardcoded fallback rates (approximate) for common currencies when DB rates unavailable
+# These are rough estimates - actual rates should come from the database
+# Using 1.0 as fallback would cause USD assets to be valued as EUR (major error)
+_FALLBACK_RATES: Dict[str, float] = {
+    'EUR': 1.0,
+    'USD': 0.92,   # ~0.92 EUR per USD
+    'GBP': 1.17,   # ~1.17 EUR per GBP
+    'CHF': 1.05,   # ~1.05 EUR per CHF
+    'JPY': 0.0061, # ~0.0061 EUR per JPY
+    'CAD': 0.68,   # ~0.68 EUR per CAD
+    'AUD': 0.60,   # ~0.60 EUR per AUD
+    'SEK': 0.087,  # ~0.087 EUR per SEK
+    'NOK': 0.085,  # ~0.085 EUR per NOK
+    'DKK': 0.134,  # ~0.134 EUR per DKK
+    'HKD': 0.118,  # ~0.118 EUR per HKD
+    'SGD': 0.69,   # ~0.69 EUR per SGD
+    'NZD': 0.55,   # ~0.55 EUR per NZD
+}
+
 
 def _get_exchange_rate(currency: str) -> float:
     """
@@ -39,7 +58,7 @@ def _get_exchange_rate(currency: str) -> float:
         currency: Currency code (e.g., 'USD', 'GBP')
 
     Returns:
-        Exchange rate to EUR, or 1.0 if not found
+        Exchange rate to EUR, or fallback rate if not found
     """
     global _exchange_rates_cache
 
@@ -53,13 +72,20 @@ def _get_exchange_rate(currency: str) -> float:
             _exchange_rates_cache = ExchangeRateRepository.get_all_rates('EUR')
             logger.debug(f"Loaded {len(_exchange_rates_cache)} exchange rates for value calculation")
         except Exception as e:
-            logger.warning(f"Could not load exchange rates: {e}")
-            _exchange_rates_cache = {'EUR': 1.0}
+            logger.error(f"Failed to load exchange rates from database: {e}. Using fallback rates.")
+            _exchange_rates_cache = _FALLBACK_RATES.copy()
 
     rate = _exchange_rates_cache.get(currency)
     if rate is None:
-        logger.warning(f"No exchange rate found for {currency}, using 1.0")
-        return 1.0
+        # Check fallback rates for common currencies
+        fallback_rate = _FALLBACK_RATES.get(currency)
+        if fallback_rate is not None:
+            logger.warning(f"No exchange rate found for {currency} in DB, using fallback rate {fallback_rate}")
+            return fallback_rate
+        else:
+            # Unknown currency - log error as this could cause significant valuation errors
+            logger.error(f"No exchange rate found for unknown currency {currency}, using 1.0 (WILL CAUSE INCORRECT VALUATION)")
+            return 1.0
 
     return rate
 

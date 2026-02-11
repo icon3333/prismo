@@ -171,6 +171,10 @@ def delete_account():
             # Delete related data in the correct order to maintain foreign key constraints
             db.execute(
                 'DELETE FROM expanded_state WHERE account_id = ?', [account_id])
+            db.execute(
+                'DELETE FROM simulations WHERE account_id = ?', [account_id])
+            db.execute(
+                'DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
 
             # Find identifiers used by this account
             identifiers = query_db('''
@@ -374,6 +378,10 @@ def export_data():
         identifier_mappings = query_db('SELECT * FROM identifier_mappings WHERE account_id = ?', [account_id])
         export_data['data']['identifier_mappings'] = identifier_mappings if identifier_mappings else []
 
+        # Export simulations
+        simulations = query_db('SELECT * FROM simulations WHERE account_id = ?', [account_id])
+        export_data['data']['simulations'] = simulations if simulations else []
+
         # Create JSON file in memory
         json_data = json.dumps(export_data, indent=2, default=str)
         json_file = io.BytesIO(json_data.encode('utf-8'))
@@ -450,6 +458,7 @@ def import_data():
                 )
             ''', [account_id])
             db.execute('DELETE FROM companies WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
             db.execute('DELETE FROM portfolios WHERE account_id = ?', [account_id])
 
             # Clean up orphaned market prices
@@ -625,6 +634,36 @@ def import_data():
                         logger.error(f"Error importing identifier_mapping record {mapping.get('csv_identifier', 'unknown')}: {str(e)}")
                         raise
                 logger.info(f"Successfully imported {mappings_count} identifier_mappings records")
+
+            # Import simulations with portfolio_id remapping
+            simulations_count = 0
+            if 'simulations' in data and data['simulations']:
+                logger.info(f"Importing {len(data['simulations'])} simulation records")
+                for sim in data['simulations']:
+                    try:
+                        # Remap portfolio_id if present
+                        old_portfolio_id = sim.get('portfolio_id')
+                        new_portfolio_id = None
+                        if old_portfolio_id is not None:
+                            new_portfolio_id = old_to_new_portfolio_map.get(old_portfolio_id)
+                            if new_portfolio_id is None:
+                                logger.warning(f"Skipping simulation '{sim.get('name')}': portfolio_id {old_portfolio_id} not found in mapping")
+                                continue
+
+                        db.execute('''
+                            INSERT INTO simulations (account_id, name, scope, portfolio_id, items, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ''', [
+                            account_id, sim['name'], sim.get('scope', 'global'),
+                            new_portfolio_id, sim['items'],
+                            sim.get('created_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')),
+                            sim.get('updated_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                        ])
+                        simulations_count += 1
+                    except Exception as e:
+                        logger.error(f"Error importing simulation '{sim.get('name', 'unknown')}': {str(e)}")
+                        raise
+                logger.info(f"Successfully imported {simulations_count} simulation records")
 
             # Update last_price_update timestamp
             db.execute(

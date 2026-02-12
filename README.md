@@ -34,8 +34,10 @@ Guided by a philosophy of **elegance, simplicity, and robustness**, it delivers 
 |---|---|
 | ![Overview](docs/screenshots/Overview.png) | ![Performance](docs/screenshots/Performance.png) |
 | **Overview** — Portfolio overview and allocation breakdown | **Performance** — P&L tracking and historical charts |
-| ![Rebalancer](docs/screenshots/Rebalancer.png) | ![Risk](docs/screenshots/Risk.png) |
-| **Rebalancer** — Smart buy/sell recommendations | **Risk** — Global allocation and risk analysis |
+| ![Rebalancer](docs/screenshots/Rebalancer.png) | ![Simulator](docs/screenshots/Simulator.png) |
+| **Rebalancer** — Smart buy/sell recommendations | **Simulator** — What-if allocation scenario planning |
+| ![Risk](docs/screenshots/Risk.png) | |
+| **Risk** — Global allocation and risk analysis | |
 
 ## 🤓 The Backstory
 

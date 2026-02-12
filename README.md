@@ -28,6 +28,15 @@ It's a portfolio rebalancer specifically designed to work with Parqet's data, he
 
 Guided by a philosophy of **elegance, simplicity, and robustness**, it delivers 80% of the impact with 20% of the effort—focusing on automated, user-friendly features in a minimalistic, Apple-inspired UI.
 
+## 📸 Screenshots
+
+| | |
+|---|---|
+| ![Overview](docs/screenshots/Overview.png) | ![Performance](docs/screenshots/Performance.png) |
+| **Overview** — Portfolio overview and allocation breakdown | **Performance** — P&L tracking and historical charts |
+| ![Rebalancer](docs/screenshots/Rebalancer.png) | ![Risk](docs/screenshots/Risk.png) |
+| **Rebalancer** — Smart buy/sell recommendations | **Risk** — Global allocation and risk analysis |
+
 ## 🤓 The Backstory
 
 This project started as a weekend experiment and grew organically over a few months. I had little formal coding knowledge but was frustrated with manually calculating portfolio rebalancing for my Parqet portfolios. So I decided to have some fun and build something that actually worked!

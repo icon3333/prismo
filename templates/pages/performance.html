@@ -5,6 +5,8 @@
 
 {% block content %}
 <div class="container portfolio-analysis">
+    <h1 class="page-title">Performance</h1>
+
     <!-- Loading indicator -->
     <div id="loadingIndicator">
         {{ loading_indicator('Loading portfolio data...') }}
@@ -902,7 +904,7 @@
                             title: "%",
                             field: "percentage",
                             hozAlign: "right",
-                            widthGrow: 0.4,
+                            widthGrow: 0.6,
                             formatter: function(cell) {
                                 return formatPercentage(cell.getValue());
                             }
@@ -911,7 +913,7 @@
                             title: "Value",
                             field: "total_value",
                             hozAlign: "right",
-                            widthGrow: 1,
+                            widthGrow: 0.8,
                             formatter: function(cell) {
                                 return formatCurrency(cell.getValue());
                             }
@@ -921,7 +923,7 @@
                             field: "pnl_absolute",
                             hozAlign: "right",
                             headerSort: false,
-                            widthGrow: 1,
+                            widthGrow: 1.2,
                             sorter: function(a, b, aRow, bRow, column, dir, sorterParams) {
                                 const aData = aRow.getData();
                                 const bData = bRow.getData();
@@ -981,10 +983,10 @@
                             }
                         },
                         {
-                            title: "% of Total",
+                            title: "%",
                             field: "percentage",
                             hozAlign: "right",
-                            widthGrow: 1,
+                            widthGrow: 0.6,
                             formatter: function(cell) {
                                 const row = cell.getRow();
                                 const data = row.getData();
@@ -1002,7 +1004,7 @@
                             title: "Value",
                             field: "total_value",
                             hozAlign: "right",
-                            widthGrow: 1,
+                            widthGrow: 0.8,
                             formatter: function(cell) {
                                 return formatCurrency(cell.getValue());
                             }
@@ -1078,10 +1080,10 @@
                             }
                         },
                         {
-                            title: "% of Portfolio",
+                            title: "%",
                             field: "percentage",
                             hozAlign: "right",
-                            widthGrow: 1,
+                            widthGrow: 0.6,
                             formatter: function(cell) {
                                 const row = cell.getRow();
                                 const data = row.getData();
@@ -1091,7 +1093,7 @@
                                     // Child row: show category % and portfolio %
                                     const catPct = (data.category_percentage || 0).toFixed(1);
                                     const portfolioPct = (data.percentage || 0).toFixed(1);
-                                    return `${catPct}% <span class="has-text-grey-light">(${portfolioPct}% of portfolio)</span>`;
+                                    return `${catPct}% <span class="has-text-grey-light">(${portfolioPct}% total)</span>`;
                                 }
                                 return formatPercentage(cell.getValue());
                             }
@@ -1100,7 +1102,7 @@
                             title: "Value",
                             field: "total_value",
                             hozAlign: "right",
-                            widthGrow: 1,
+                            widthGrow: 0.8,
                             formatter: function(cell) {
                                 return formatCurrency(cell.getValue());
                             }
@@ -1110,7 +1112,7 @@
                             field: "pnl_absolute",
                             hozAlign: "right",
                             headerSort: false,
-                            widthGrow: 1,
+                            widthGrow: 1.2,
                             sorter: function(a, b, aRow, bRow, column, dir, sorterParams) {
                                 const aData = aRow.getData();
                                 const bData = bRow.getData();
@@ -2163,7 +2165,7 @@
                         <thead>
                             <tr>
                                 <th class="is-sortable company-column" data-sort="string">Sector</th>
-                                <th class="is-sortable percentage-column" data-sort="number">% of Portfolio</th>
+                                <th class="is-sortable percentage-column" data-sort="number">%</th>
                                 <th class="is-sortable value-column" data-sort="number">Current Value</th>
                                 <th class="is-sortable value-column" data-sort="number">Total Invested</th>
                             </tr>
@@ -2339,7 +2341,7 @@
                         <td>
                             <span class="is-size-7" title="Sector: ${sectorPercentageText} | Portfolio: ${portfolioPercentageText}">
                                 ${sectorPercentageText}
-                                <span class="has-text-grey-light">(${portfolioPercentageText} of portfolio)</span>
+                                <span class="has-text-grey-light">(${portfolioPercentageText} total)</span>
                             </span>
                         </td>
                         <td><span class="is-size-7">${formatCurrency(company.currentValue)}</span></td>

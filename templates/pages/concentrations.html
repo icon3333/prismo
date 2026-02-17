@@ -1,27 +1,18 @@
 {% extends "base.html" %}
 {% from "components/loading_components.html" import loading_indicator %}
 
-{% block title %}Risk Overview{% endblock %}
+{% block title %}Concentrations{% endblock %}
 
 {% block head_extras %}
 <style>
-    /* Page title with icon variant */
-    .page-title.has-icon {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);
-    }
-
-    .page-title.has-icon i {
-        color: var(--aqua-500);
-    }
-
     /* Cash Toggle Styling - now in ocean-depth.css */
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
+    <h1 class="page-title">Concentrations</h1>
+
     <!-- Loading indicator -->
     <div id="loadingIndicator">
         {{ loading_indicator('Loading portfolio data...') }}
@@ -1263,8 +1254,9 @@
                 return 'Crypto';
             }
 
-            // For non-crypto assets, use effective_country with fallback
-            return (company.effective_country || company.country || '').trim() || 'Unknown';
+            // For non-crypto assets, use effective_country with fallback, Title Case normalized
+            const raw = (company.effective_country || company.country || '').trim() || 'Unknown';
+            return raw.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
         }
 
         function updateDistributionCharts() {
@@ -1289,7 +1281,9 @@
                 if (field === 'country') {
                     key = getDisplayCountry(company);
                 } else {
-                    key = company[field] || 'Unknown';
+                    // Title Case normalize sector to prevent duplicate groupings
+                    const raw = company[field] || 'Unknown';
+                    key = raw.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
                 }
 
                 distributions[key] = (distributions[key] || 0) + value;
@@ -1437,7 +1431,9 @@
 
             allCompanies.forEach(company => {
                 const value = company.currentValue || 0;
-                const thesis = company.thesis && company.thesis.trim() ? company.thesis.trim() : 'Unassigned';
+                const rawThesis = company.thesis && company.thesis.trim() ? company.thesis.trim() : 'Unassigned';
+                // Title Case normalize to prevent duplicate groupings
+                const thesis = rawThesis === 'Unassigned' ? rawThesis : rawThesis.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 
                 distributions[thesis] = (distributions[thesis] || 0) + value;
 

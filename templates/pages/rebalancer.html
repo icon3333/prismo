@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Rebalancer{% endblock %}
+
+{% block head_extras %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/rebalancer.css') }}?v={{ range(1000, 9999) | random }}">
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1 class="page-title">Rebalancer</h1>
+
+  <!-- Tab Navigation for Rebalancer -->
+  <div class="header-content">
+    <div class="tabs">
+      <ul class="nav-tabs" id="allocationTabs" role="tablist">
+        <li class="nav-item">
+          <button class="nav-link active" id="global-tab" type="button" role="tab">
+            <i class="fas fa-globe mr-2"></i>Global Overview
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="detailed-tab" type="button" role="tab">
+            <i class="fas fa-chart-pie mr-2"></i>Detailed Overview
+          </button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Tab Content -->
+  <div class="tab-content" id="allocationTabsContent" style="display: block;">
+    <!-- Global Overview Tab -->
+    <div class="tab-pane active" id="global" role="tabpanel" style="display: block;">
+      <!-- Rebalancing Mode -->
+      <div class="rebalancing-controls">
+        <div class="control">
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="existing-only" checked>
+            Rebalance Existing Capital
+          </label>
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="new-only">
+            New Capital only (no sales)
+          </label>
+          <label class="radio">
+            <input type="radio" name="rebalance-mode" value="new-with-sells">
+            New Capital (with sales)
+          </label>
+        </div>
+        <div class="investment-input" id="investment-input-container">
+          <label class="label">Investment Amount:</label>
+          <div class="input-group">
+            <span class="input-group-text">&euro;</span>
+            <input type="text" class="input sensitive-value" id="investment-amount" placeholder="Enter amount">
+          </div>
+        </div>
+      </div>
+
+      <!-- Portfolio Table -->
+      <div class="card">
+        <div id="portfolio-table-container">
+          <div class="has-text-centered">
+            <div class="spinner-border" role="status">
+              <span class="is-sr-only">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legacy Country/Sector Charts (hidden, kept for backward compatibility) -->
+      <div id="legacy-charts" style="display: none;">
+        <div id="country-capacity-chart"></div>
+        <div id="sector-capacity-chart"></div>
+      </div>
+    </div>
+
+    <!-- Detailed Overview Tab -->
+    <div class="tab-pane" id="detailed" role="tabpanel">
+      <!-- Portfolio Selection Dropdown -->
+      <div class="card">
+        <div class="portfolio-select">
+          <label class="label">Select Portfolio:</label>
+          <div class="select is-fullwidth">
+            <select class="form-select" id="portfolio-select">
+              <option value="">Select a portfolio</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Expand/Collapse buttons -->
+        <div class="mb-3">
+          <button type="button" class="button is-primary is-outlined is-small me-2" id="expand-all-btn">
+            <i class="fas fa-expand-arrows-alt me-1"></i>Expand All
+          </button>
+          <button type="button" class="button is-light is-small" id="collapse-all-btn">
+            <i class="fas fa-compress-arrows-alt me-1"></i>Collapse All
+          </button>
+        </div>
+
+        <!-- Single portfolio table will be rendered here -->
+        <div id="detailed-portfolio-container">
+          <div class="has-text-centered">
+            <div class="spinner-border" role="status">
+              <span class="is-sr-only">Loading...</span>
+            </div>
+          </div>
+        </div>
+        <div id="detailedChart" class="mt-4"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/rebalancer.js') }}?v={{ range(1000, 9999) | random }}"></script>
+{% endblock %}

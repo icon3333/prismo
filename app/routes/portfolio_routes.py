@@ -178,20 +178,20 @@ def enrich():
                            })
 
 
-@portfolio_bp.route('/risk_overview')
+@portfolio_bp.route('/concentrations')
 @require_auth
-def risk_overview():
-    """Risk overview page with global portfolio allocation visualizations"""
-    logger.info("Accessing risk overview page")
+def concentrations():
+    """Concentrations page with global portfolio allocation visualizations"""
+    logger.info("Accessing concentrations page")
 
     account_id = g.account_id
-    logger.info(f"Loading risk overview page for account_id: {account_id}")
+    logger.info(f"Loading concentrations page for account_id: {account_id}")
 
     account = g.account
     if isinstance(account, dict):
         logger.info(f"Account found: {account.get('username', '')}")
 
-    return render_template('pages/risk_overview.html')
+    return render_template('pages/concentrations.html')
 
 
 @portfolio_bp.route('/performance')
@@ -227,10 +227,25 @@ def builder():
 
     return render_template('pages/builder.html', position=position)
 
+@portfolio_bp.route('/rebalancer')
+@require_auth
+def rebalancer():
+    """Rebalancer page - recommend buy/sell actions to rebalance portfolio allocations"""
+    logger.info("Accessing Rebalancer page")
+
+    account_id = g.account_id
+    logger.info(f"Loading Rebalancer page for account_id: {account_id}")
+
+    account = g.account
+    if isinstance(account, dict):
+        logger.info(f"Account found: {account.get('username', '')}")
+
+    return render_template('pages/rebalancer.html')
+
 @portfolio_bp.route('/simulator')
 @require_auth
 def simulator():
-    """Simulator page - test allocation strategies"""
+    """Simulator page - what-if scenario sandbox for hypothetical positions"""
     logger.info("Accessing Simulator page")
 
     account_id = g.account_id
@@ -257,7 +272,12 @@ def build_redirect():
 @portfolio_bp.route('/allocate')
 @require_auth
 def allocate_redirect():
-    return redirect(url_for('portfolio.simulator'), code=301)
+    return redirect(url_for('portfolio.rebalancer'), code=301)
+
+@portfolio_bp.route('/risk_overview')
+@require_auth
+def risk_overview_redirect():
+    return redirect(url_for('portfolio.concentrations'), code=301)
 
 @portfolio_bp.route('/api/allocate/<path:subpath>')
 @require_auth

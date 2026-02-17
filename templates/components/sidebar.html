@@ -34,11 +34,11 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a href="{{ url_for('portfolio.risk_overview') }}"
-                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.risk_overview' }}"
-                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.risk_overview' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                <a href="{{ url_for('portfolio.concentrations') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.concentrations' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.concentrations' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
                     <i class="fas fa-chart-pie me-3" style="width: 20px; color: var(--coral-500);"></i>
-                    <span>Risk Overview</span>
+                    <span>Concentrations</span>
                 </a>
             </li>
             <li class="nav-item">
@@ -64,6 +64,14 @@
                    style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.builder' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
                     <i class="fas fa-cubes me-3" style="width: 20px; color: var(--teal-400);"></i>
                     <span>Builder</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="{{ url_for('portfolio.rebalancer') }}"
+                   class="nav-link d-flex align-items-center py-2 px-3 {{ 'active' if request.endpoint == 'portfolio.rebalancer' }}"
+                   style="color: var(--text-primary); border-radius: 0; transition: all 0.15s ease; {% if request.endpoint == 'portfolio.rebalancer' %}background: var(--bg-tertiary); border-left: 3px solid var(--aqua-500);{% endif %}">
+                    <i class="fas fa-balance-scale me-3" style="width: 20px; color: var(--aqua-400);"></i>
+                    <span>Rebalancer</span>
                 </a>
             </li>
             <li class="nav-item">

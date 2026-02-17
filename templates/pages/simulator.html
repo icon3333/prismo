@@ -8,160 +8,39 @@
 
 {% block content %}
 <div class="container">
-  <!-- Rebalancer Section -->
-  <h2 class="section-title">Rebalancer</h2>
-
-  <!-- Tab Navigation for Rebalancer -->
-  <div class="header-content">
-    <div class="tabs">
-      <ul class="nav-tabs" id="allocationTabs" role="tablist">
-        <li class="nav-item">
-          <button class="nav-link active" id="global-tab" type="button" role="tab">
-            <i class="fas fa-globe mr-2"></i>Global Overview
-          </button>
-        </li>
-        <li class="nav-item">
-          <button class="nav-link" id="detailed-tab" type="button" role="tab">
-            <i class="fas fa-chart-pie mr-2"></i>Detailed Overview
-          </button>
-        </li>
-      </ul>
-    </div>
-  </div>
-
-  <!-- Tab Content -->
-  <div class="tab-content" id="allocationTabsContent" style="display: block;">
-    <!-- Global Overview Tab -->
-    <div class="tab-pane active" id="global" role="tabpanel" style="display: block;">
-      <!-- Rebalancing Mode -->
-      <div class="rebalancing-controls">
-        <div class="control">
-          <label class="radio">
-            <input type="radio" name="rebalance-mode" value="existing-only" checked>
-            Rebalance Existing Capital
-          </label>
-          <label class="radio">
-            <input type="radio" name="rebalance-mode" value="new-only">
-            New Capital only (no sales)
-          </label>
-          <label class="radio">
-            <input type="radio" name="rebalance-mode" value="new-with-sells">
-            New Capital (with sales)
-          </label>
-        </div>
-        <div class="investment-input" id="investment-input-container">
-          <label class="label">Investment Amount:</label>
-          <div class="input-group">
-            <span class="input-group-text">€</span>
-            <input type="text" class="input sensitive-value" id="investment-amount" placeholder="Enter amount">
-          </div>
-        </div>
-      </div>
-
-      <!-- Portfolio Table -->
-      <div class="card">
-        <div id="portfolio-table-container">
-          <div class="has-text-centered">
-            <div class="spinner-border" role="status">
-              <span class="is-sr-only">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Legacy Country/Sector Charts (hidden, kept for backward compatibility) -->
-      <div id="legacy-charts" style="display: none;">
-        <div id="country-capacity-chart"></div>
-        <div id="sector-capacity-chart"></div>
-      </div>
-    </div>
-
-    <!-- Detailed Overview Tab -->
-    <div class="tab-pane" id="detailed" role="tabpanel">
-      <!-- Portfolio Selection Dropdown -->
-      <div class="card">
-        <div class="portfolio-select">
-          <label class="label">Select Portfolio:</label>
-          <div class="select is-fullwidth">
-            <select class="form-select" id="portfolio-select">
-              <option value="">Select a portfolio</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Expand/Collapse buttons -->
-        <div class="mb-3">
-          <button type="button" class="button is-primary is-outlined is-small me-2" id="expand-all-btn">
-            <i class="fas fa-expand-arrows-alt me-1"></i>Expand All
-          </button>
-          <button type="button" class="button is-light is-small" id="collapse-all-btn">
-            <i class="fas fa-compress-arrows-alt me-1"></i>Collapse All
-          </button>
-        </div>
-
-        <!-- Single portfolio table will be rendered here -->
-        <div id="detailed-portfolio-container">
-          <div class="has-text-centered">
-            <div class="spinner-border" role="status">
-              <span class="is-sr-only">Loading...</span>
-            </div>
-          </div>
-        </div>
-        <div id="detailedChart" class="mt-4"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Simulator Section -->
-  <div class="section-header-collapsible">
-    <h2 class="section-title" style="margin-bottom: 0;">
-      Simulator
-    </h2>
-  </div>
+  <h1 class="page-title">Simulator</h1>
   <div class="card" id="allocation-simulator-card" style="padding: var(--space-md);">
-    <!-- Simulator Header with Load/Save -->
+    <!-- Simulator Header: Portfolio (left) & Simulation (right) -->
     <div class="simulator-header-bar">
       <div class="simulator-header-left">
-        <div class="simulator-load-section">
+        <div class="simulator-control">
+          <label class="simulator-control-label" for="simulator-portfolio-select">Portfolio</label>
           <div class="select-wrapper">
-            <select class="form-select simulator-load-select" id="simulator-load-select">
-              <option value="">New Simulation</option>
+            <select class="form-select simulator-select" id="simulator-portfolio-select">
+              <option value="">Global</option>
             </select>
           </div>
-          <button class="button is-danger is-outlined is-small" id="simulator-delete-btn" style="display: none;" title="Delete simulation">
-            <i class="fas fa-trash"></i>
-          </button>
         </div>
       </div>
       <div class="simulator-header-right">
-        <!-- Save button - only visible when editing existing simulation -->
-        <button class="button is-primary is-small" id="simulator-save-btn" style="display: none;" title="Save changes to current simulation">
-          <i class="fas fa-save"></i> Save
-        </button>
+        <!-- Auto-save status indicator -->
+        <span class="autosave-status" id="simulator-autosave-status" style="display: none;"></span>
+        <div class="simulator-control">
+          <label class="simulator-control-label" for="simulator-load-select">Simulation</label>
+          <div class="select-wrapper">
+            <select class="form-select simulator-select" id="simulator-load-select">
+              <option value="">New Simulation</option>
+            </select>
+          </div>
+        </div>
         <!-- Save As button - always visible -->
         <button class="button is-primary is-small" id="simulator-saveas-btn" title="Save as new simulation">
           <i class="fas fa-copy"></i> Save As...
         </button>
-      </div>
-    </div>
-
-    <!-- Scope Toggle -->
-    <div class="simulator-scope-toggle">
-      <div class="scope-label">Portfolio Scope:</div>
-      <div class="scope-options">
-        <label class="scope-option">
-          <input type="radio" name="simulator-scope" value="global" checked>
-          <span class="scope-option-text"><i class="fas fa-globe"></i> Global</span>
-        </label>
-        <label class="scope-option">
-          <input type="radio" name="simulator-scope" value="portfolio">
-          <span class="scope-option-text"><i class="fas fa-folder"></i> Portfolio</span>
-        </label>
-      </div>
-      <div class="scope-portfolio-select" id="simulator-portfolio-select-wrapper" style="display: none;">
-        <select class="form-select" id="simulator-portfolio-select">
-          <option value="">Select portfolio...</option>
-        </select>
+        <!-- Delete button - pushed to far right -->
+        <button class="button is-danger is-outlined is-small" id="simulator-delete-btn" style="display: none;" title="Delete simulation">
+          <i class="fas fa-trash"></i>
+        </button>
       </div>
     </div>
 
@@ -200,7 +79,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/simulator.js') }}?v={{ range(1000, 9999) | random }}"></script>
 <script src="{{ url_for('static', filename='js/simulation-scenarios.js') }}?v={{ range(1000, 9999) | random }}"></script>
 <script>
   // Initialize Allocation Simulator on page load

@@ -1744,4 +1744,4 @@ When adding new financial displays:
 
 ---
 
-*Document Version: 1.1 | Generated from Portfolio Rebalancing Flask - Ocean Depth Design System*
+*Document Version: 1.1 | Generated from Prismo - Ocean Depth Design System*

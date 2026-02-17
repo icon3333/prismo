@@ -1,7 +1,7 @@
 services:
-  portfolio-app:
+  prismo:
     build: .
-    container_name: portfolio_rebalancer
+    container_name: prismo
     restart: unless-stopped
     ports:
       - "8065:8065"  # Main application port
@@ -18,8 +18,8 @@ services:
       # Enable autoheal monitoring
       - "autoheal=true"
     networks:
-      - portfolio_network
+      - prismo_network
 
 networks:
-  portfolio_network:
+  prismo_network:
     driver: bridge

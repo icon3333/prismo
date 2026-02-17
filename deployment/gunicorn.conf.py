@@ -41,7 +41,7 @@ def when_ready(server):
     access_logger.addFilter(HealthCheckFilter())
 
 # Process naming
-proc_name = "portfolio_rebalancer"
+proc_name = "prismo"
 
 # Server mechanics
 daemon = False

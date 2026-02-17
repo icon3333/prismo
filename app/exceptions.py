@@ -1,4 +1,4 @@
-"""Custom exceptions for portfolio rebalancer application.
+"""Custom exceptions for Prismo.
 
 These exceptions provide better error handling and debugging by making it clear
 what type of error occurred, rather than catching generic Exception everywhere.

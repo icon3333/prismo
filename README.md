@@ -1,4 +1,4 @@
-# Parqet Portfolio Rebalancer 📈
+# Prismo 📈
 
 A Flask web application designed specifically for [Parqet](https://parqet.com) portfolio management - helping you rebalance your investment portfolios with ease and precision.
 
@@ -9,9 +9,9 @@ A Flask web application designed specifically for [Parqet](https://parqet.com) p
 
 ## 🎯 What is this?
 
-This tool was born out of necessity over several months of struggling with portfolio allocation management on [Parqet](https://parqet.com). As someone who wanted better control over portfolio rebalancing and allocation visualization, I started tinkering with code and... well, here we are!
+Prismo was born out of necessity over several months of struggling with portfolio allocation management on [Parqet](https://parqet.com). As someone who wanted better control over portfolio rebalancing and allocation visualization, I started tinkering with code and... well, here we are!
 
-It's a portfolio rebalancer specifically designed to work with Parqet's data, helping you:
+Prismo is specifically designed to work with Parqet's data, helping you:
 - Import your Parqet portfolio data via CSV
 - **Manual Stock Addition**: Add stocks manually without CSV import (with or without identifier lookup)
 - Enrich holdings with real-time market prices from yfinance (or set custom values for unlisted holdings)
@@ -55,8 +55,8 @@ It's definitely **experimental** and **vibe-coded** - meaning I learned as I wen
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/portfolio-rebalancing-flask.git
-cd portfolio-rebalancing-flask
+git clone https://github.com/your-username/prismo.git
+cd prismo
 
 # Set up virtual environment (recommended)
 python3 -m venv venv
@@ -97,8 +97,8 @@ The workflow is designed to be intuitive—each page builds on the previous step
 
 1. **Clone and set up virtual environment** (as shown in Quick Start)
    ```bash
-   git clone https://github.com/your-username/portfolio-rebalancing-flask.git
-   cd portfolio-rebalancing-flask
+   git clone https://github.com/your-username/prismo.git
+   cd prismo
    python3 -m venv venv
    source venv/bin/activate
    ```
@@ -208,8 +208,8 @@ This project is licensed under the MIT License - feel free to use, modify, and s
 
 ### Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/portfolio-rebalancing-flask/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/portfolio-rebalancing-flask/discussions)
+- **Issues**: [GitHub Issues](https://github.com/your-username/prismo/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/prismo/discussions)
 
 ### Common Issues
 

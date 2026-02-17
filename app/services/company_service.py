@@ -7,6 +7,7 @@ Philosophy: Simple, clear operations for managing portfolio holdings.
 
 from typing import Dict, Optional, Any
 import logging
+from app.utils.text_normalization import normalize_sector, normalize_country
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,9 @@ class CompanyService:
         name = data.get('name', '').strip()
         identifier = (data.get('identifier') or '').strip() or None
         portfolio_id = data.get('portfolio_id')
-        sector = data.get('sector', '').strip()
+        sector = normalize_sector(data.get('sector', ''))
         investment_type = data.get('investment_type')
-        country = data.get('country')
+        country = normalize_country(data.get('country'))
         shares = float(data.get('shares', 0))
         total_value = data.get('total_value')
 

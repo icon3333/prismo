@@ -873,19 +873,24 @@ def validate_csv_format(file_content: str) -> Tuple[bool, str]:
         if not (has_semicolon or has_comma):
             return False, "CSV must use semicolon (;) or comma (,) as delimiter"
         
-        # Check for required column names
-        required = ['identifier', 'holdingname', 'shares', 'price', 'type']
+        # Check for required column names (Parqet or IBKR format)
         header_words = header.replace(';', ',').split(',')
-        
-        missing = []
-        for req in required:
-            if not any(req in word for word in header_words):
-                missing.append(req)
-        
-        if missing:
-            return False, f"Missing required columns: {missing}"
-        
-        return True, "CSV format is valid"
+        header_set = set(w.strip() for w in header_words)
+
+        # Parqet columns
+        parqet_required = ['identifier', 'holdingname', 'shares', 'type']
+        parqet_missing = [r for r in parqet_required if not any(r in w for w in header_set)]
+
+        # IBKR columns
+        ibkr_indicators = ['symbol', 'quantity', 'assetclass', 'currencyprimary', 'positionvalue']
+        ibkr_matches = sum(1 for col in ibkr_indicators if any(col in w for w in header_set))
+
+        if not parqet_missing:
+            return True, "CSV format is valid (Parqet)"
+        elif ibkr_matches >= 3:
+            return True, "CSV format is valid (IBKR)"
+        else:
+            return False, f"Missing required columns: {parqet_missing}"
         
     except Exception as e:
         return False, f"CSV validation error: {str(e)}"

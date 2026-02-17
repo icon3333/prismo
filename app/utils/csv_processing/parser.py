@@ -1,11 +1,13 @@
 """
 CSV Parser Module
 Handles CSV file parsing with validation and column mapping.
+Supports both Parqet and IBKR Flex Query CSV formats with auto-detection.
 """
 
 import pandas as pd
 import io
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +92,12 @@ def parse_csv_file(file_content: str) -> pd.DataFrame:
                 column_mapping[opt_col] = matching_cols[0]
                 break
 
-    # Rename columns
-    df = df.rename(columns=column_mapping)
+    # Rename columns: column_mapping is {standardized: csv_column}, but
+    # df.rename expects {old_name: new_name}, so we invert the mapping
+    reverse_mapping = {v: k for k, v in column_mapping.items() if v != k}
+    if reverse_mapping:
+        logger.info(f"Renaming CSV columns: {reverse_mapping}")
+    df = df.rename(columns=reverse_mapping)
 
     # Add missing optional columns with defaults
     if 'currency' not in df.columns:
@@ -125,7 +131,7 @@ def _clean_and_validate_data(df: pd.DataFrame) -> pd.DataFrame:
     df['type'] = df['type'].apply(_normalize_transaction_type)
 
     # Filter out empty identifiers
-    df = df[df['identifier'].str.len() > 0]
+    df = df[df['identifier'].str.len() > 0].copy()
     if len(df) == 0:
         raise ValueError("No valid entries found in CSV file")
 
@@ -225,6 +231,10 @@ def _fix_numeric_date_column(series):
 
 def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     """Parse dates from various formats and sort chronologically."""
+    # Deduplicate columns (can happen when substring column matching renames e.g. 'datetime' → 'date'
+    # while a 'date' column already exists)
+    df = df.loc[:, ~df.columns.duplicated()]
+
     # Fix: thousands='.' in read_csv converts dates like '15.05.2023' to int 15052023
     if 'date' in df.columns and df['date'].dtype in ['int64', 'float64']:
         logger.info("Fixing numeric date column (corrupted by thousands='.' setting)")
@@ -282,3 +292,237 @@ def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
         logger.debug(f"First 3 transactions: {df[['parsed_date', 'type', 'holdingname', 'shares']].head(3).to_dict('records')}")
 
     return df
+
+
+# --- IBKR Flex Query Support ---
+
+# IBKR asset categories to keep (equities and ETFs)
+_IBKR_EQUITY_TYPES = frozenset(['stk', 'stock', 'stocks', 'etf', 'fund'])
+
+
+def detect_csv_format(file_content: str) -> str:
+    """
+    Auto-detect CSV format based on structure and column names.
+
+    Returns:
+        'parqet' or 'ibkr'
+    """
+    first_lines = file_content[:2000].lower()
+
+    # IBKR indicators: comma-delimited, has IBKR-specific columns
+    # Actual IBKR Flex Query column names (lowercased): currencyprimary, assetclass, quantity, costbasismoney
+    ibkr_columns = ['symbol', 'quantity', 'assetclass', 'costbasismoney', 'currencyprimary', 'fxratetobase', 'positionvalue']
+    ibkr_matches = sum(1 for col in ibkr_columns if col in first_lines)
+
+    # Parqet indicators: semicolon-delimited, has Parqet-specific columns
+    parqet_columns = ['holdingname', 'type', 'holding']
+    parqet_matches = sum(1 for col in parqet_columns if col in first_lines)
+
+    # Delimiter detection
+    first_line = first_lines.split('\n')[0]
+    is_semicolon = ';' in first_line
+
+    if ibkr_matches >= 2 and not is_semicolon:
+        logger.info(f"Detected IBKR CSV format (matched {ibkr_matches} IBKR columns)")
+        return 'ibkr'
+    elif parqet_matches >= 2 or is_semicolon:
+        logger.info(f"Detected Parqet CSV format (matched {parqet_matches} Parqet columns, semicolon={is_semicolon})")
+        return 'parqet'
+    else:
+        logger.warning("Could not determine CSV format, defaulting to Parqet")
+        return 'parqet'
+
+
+def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
+    """
+    Parse IBKR Flex Query Open Positions CSV.
+
+    IBKR CSVs are comma-delimited snapshots: each row is a current position.
+    No buy/sell transactions - just final position state.
+
+    Args:
+        file_content: Raw CSV file content as string
+
+    Returns:
+        pd.DataFrame: Parsed DataFrame with standardized columns
+
+    Raises:
+        ValueError: If required columns are missing or CSV is invalid
+    """
+    logger.info(f"Starting IBKR CSV parsing, content length: {len(file_content)} characters")
+
+    df = pd.read_csv(io.StringIO(file_content))
+    df.columns = df.columns.str.lower().str.strip()
+
+    logger.info(f"Parsed IBKR CSV with {len(df)} rows and columns: {list(df.columns)}")
+
+    # Normalize IBKR-specific column names to consistent internal names
+    # IBKR uses different names than expected: CurrencyPrimary→currency, AssetClass→assetcategory
+    ibkr_column_aliases = {
+        'currencyprimary': 'currency',
+        'assetclass': 'assetcategory',
+    }
+    df = df.rename(columns={k: v for k, v in ibkr_column_aliases.items() if k in df.columns})
+
+    # Map IBKR columns to standardized names
+    column_mapping = {}
+    required_found = []
+
+    # Identifier: prefer ISIN, fall back to Symbol per-row when ISIN is empty
+    if 'isin' in df.columns and df['isin'].notna().any():
+        # Use ISIN as primary, but fill gaps with Symbol
+        if 'symbol' in df.columns:
+            df['isin'] = df['isin'].fillna(df['symbol'])
+        column_mapping['identifier'] = 'isin'
+        required_found.append('identifier')
+    elif 'symbol' in df.columns:
+        column_mapping['identifier'] = 'symbol'
+        required_found.append('identifier')
+
+    # Description → holdingname
+    if 'description' in df.columns:
+        column_mapping['holdingname'] = 'description'
+        required_found.append('holdingname')
+
+    # Position → shares
+    if 'position' in df.columns:
+        column_mapping['shares'] = 'position'
+        required_found.append('shares')
+    elif 'quantity' in df.columns:
+        column_mapping['shares'] = 'quantity'
+        required_found.append('shares')
+
+    missing = {'identifier', 'holdingname', 'shares'} - set(required_found)
+    if missing:
+        error_msg = f"Missing required IBKR columns: {', '.join(missing)}. Found: {list(df.columns)}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Optional columns
+    if 'costbasismoney' in df.columns:
+        column_mapping['total_invested'] = 'costbasismoney'
+    # Price fallback chain: markprice → costbasisprice → derive from positionvalue/quantity
+    if 'markprice' in df.columns:
+        column_mapping['price'] = 'markprice'
+    elif 'costbasisprice' in df.columns:
+        column_mapping['price'] = 'costbasisprice'
+    if 'currency' not in column_mapping and 'currency' in df.columns:
+        column_mapping['currency'] = 'currency'
+    if 'assetcategory' in df.columns:
+        column_mapping['assetcategory'] = 'assetcategory'
+    if 'opendatetime' in df.columns:
+        column_mapping['opendatetime'] = 'opendatetime'
+    if 'fxratetobase' in df.columns:
+        column_mapping['fxratetobase'] = 'fxratetobase'
+    if 'positionvalue' in df.columns:
+        column_mapping['positionvalue'] = 'positionvalue'
+    if 'side' in df.columns:
+        column_mapping['side'] = 'side'
+
+    # Rename columns
+    reverse_mapping = {v: k for k, v in column_mapping.items() if v != k}
+    if reverse_mapping:
+        logger.info(f"Renaming IBKR columns: {reverse_mapping}")
+    df = df.rename(columns=reverse_mapping)
+
+    # Filter out non-equity types
+    if 'assetcategory' in df.columns:
+        original_count = len(df)
+        df['assetcategory'] = df['assetcategory'].apply(
+            lambda x: str(x).strip().lower() if pd.notna(x) else ''
+        )
+        df = df[df['assetcategory'].isin(_IBKR_EQUITY_TYPES) | (df['assetcategory'] == '')].copy()
+        filtered = original_count - len(df)
+        if filtered > 0:
+            logger.info(f"Filtered out {filtered} non-equity rows (options, futures, cash, etc.)")
+
+    # Filter out SHORT positions
+    if 'side' in df.columns:
+        original_count = len(df)
+        df = df[df['side'].apply(lambda x: str(x).strip().upper() != 'SHORT' if pd.notna(x) else True)].copy()
+        filtered = original_count - len(df)
+        if filtered > 0:
+            logger.info(f"Filtered out {filtered} SHORT positions")
+
+    # Filter out summary/total rows
+    df = df[df['identifier'].apply(lambda x: pd.notna(x) and str(x).strip() != '' and str(x).strip().lower() != 'total')].copy()
+
+    # Clean string fields
+    df['identifier'] = df['identifier'].apply(lambda x: str(x).strip() if pd.notna(x) else '')
+    df['holdingname'] = df['holdingname'].apply(lambda x: str(x).strip() if pd.notna(x) else '')
+
+    # Filter out empty identifiers
+    df = df[df['identifier'].str.len() > 0].copy()
+    if len(df) == 0:
+        raise ValueError("No valid positions found in IBKR CSV file")
+
+    # Convert numeric columns
+    df['shares'] = df['shares'].apply(lambda x: _convert_numeric(x, 'shares'))
+    df = df.dropna(subset=['shares'])
+
+    # Filter out zero/negative positions
+    df = df[df['shares'] > 0].copy()
+    if len(df) == 0:
+        raise ValueError("No positions with positive shares found in IBKR CSV")
+
+    if 'total_invested' in df.columns:
+        df['total_invested'] = df['total_invested'].apply(lambda x: _convert_numeric(x, 'total_invested'))
+    else:
+        df['total_invested'] = 0.0
+
+    if 'price' in df.columns:
+        df['price'] = df['price'].apply(lambda x: _convert_numeric(x, 'price'))
+    elif 'positionvalue' in df.columns:
+        # Derive price from positionvalue / shares as last resort
+        df['positionvalue'] = df['positionvalue'].apply(lambda x: _convert_numeric(x, 'positionvalue'))
+        df['price'] = df.apply(
+            lambda row: round(row['positionvalue'] / row['shares'], 4) if row['shares'] > 0 else 0.0,
+            axis=1
+        )
+        logger.info("Derived price from PositionValue / Quantity (no MarkPrice column)")
+    else:
+        df['price'] = 0.0
+
+    if 'currency' not in df.columns:
+        df['currency'] = 'USD'
+
+    # Parse first_bought_date from openDateTime
+    if 'opendatetime' in df.columns:
+        df['first_bought_date'] = df['opendatetime'].apply(_parse_ibkr_datetime)
+    else:
+        df['first_bought_date'] = None
+
+    # Map investment_type from assetcategory
+    if 'assetcategory' in df.columns:
+        df['investment_type'] = df['assetcategory'].apply(_map_ibkr_asset_type)
+    else:
+        df['investment_type'] = None
+
+    logger.info(f"IBKR CSV parsing completed: {len(df)} valid positions")
+    return df
+
+
+def _parse_ibkr_datetime(val) -> object:
+    """Parse IBKR datetime formats (yyyyMMdd or yyyyMMdd;HHmmss)."""
+    if pd.isna(val) or not str(val).strip():
+        return None
+    val_str = str(val).strip()
+    for fmt in ('%Y%m%d;%H%M%S', '%Y%m%d', '%Y-%m-%d', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(val_str, fmt)
+        except ValueError:
+            continue
+    logger.warning(f"Could not parse IBKR datetime: {val_str}")
+    return None
+
+
+def _map_ibkr_asset_type(category) -> str:
+    """Map IBKR AssetCategory to investment_type."""
+    if pd.isna(category):
+        return None
+    cat = str(category).strip().lower()
+    if cat in ('etf', 'fund'):
+        return 'ETF'
+    elif cat in ('stk', 'stock', 'stocks'):
+        return 'Stock'
+    return None

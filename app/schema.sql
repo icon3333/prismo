@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS companies (
  override_identifier TEXT,
  identifier_manually_edited BOOLEAN DEFAULT 0,
  identifier_manual_edit_date DATETIME,
- source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual')),
+ source TEXT DEFAULT 'parqet' CHECK(source IN ('parqet', 'ibkr', 'manual')),
  first_bought_date DATETIME,
  FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
  FOREIGN KEY (account_id) REFERENCES accounts (id),

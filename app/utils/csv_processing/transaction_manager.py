@@ -19,7 +19,8 @@ def apply_share_changes(
     default_portfolio_id: int,
     companies_to_remove: Set[str],
     cursor,
-    progress_callback=None
+    progress_callback=None,
+    source: str = 'parqet'
 ) -> Dict[str, List[str]]:
     """
     Apply share changes to database within a transaction.
@@ -27,7 +28,7 @@ def apply_share_changes(
     This function:
     1. Updates or inserts companies with new share counts
     2. Preserves user manual edits and portfolio assignments
-    3. Removes companies not in CSV or with zero shares
+    3. Removes companies not in CSV or with zero shares (scoped to source)
     4. Provides progress updates if callback provided
 
     Args:
@@ -40,6 +41,7 @@ def apply_share_changes(
         companies_to_remove: Set of company names to remove
         cursor: Database cursor for operations
         progress_callback: Optional callback(current, total, message, status)
+        source: Import source ('parqet' or 'ibkr') for new companies and scoped deletion
 
     Returns:
         Dict with 'added', 'updated', 'removed' lists of company names, and 'protected_identifiers_count'
@@ -73,6 +75,9 @@ def apply_share_changes(
         [account_id]
     )
 
+    # Track company sources for broker-scoped deletion
+    company_source_map = {}  # company_id -> source
+
     # Build lookup maps from the combined query result
     for row in company_data_rows:
         company_id = row['id']
@@ -87,6 +92,8 @@ def apply_share_changes(
         # Track manual companies for protection during removal
         if row.get('source') == 'manual':
             manual_company_ids.add(company_id)
+        # Track all company sources
+        company_source_map[company_id] = row.get('source', 'parqet')
 
     # Process company updates and additions
     for company_name, share_data in share_calculations.items():
@@ -128,7 +135,8 @@ def apply_share_changes(
                 current_shares=current_shares,
                 default_portfolio_id=default_portfolio_id,
                 account_id=account_id,
-                cursor=cursor
+                cursor=cursor,
+                source=source
             )
             positions_added.append(company_name)
 
@@ -154,17 +162,23 @@ def apply_share_changes(
             shared_identifiers = {row['identifier'] for row in shared_rows}
             logger.debug(f"Found {len(shared_identifiers)} identifiers shared with other accounts")
 
-    # Remove companies not in CSV or with zero shares (but protect manual companies)
+    # Remove companies not in CSV or with zero shares
+    # Broker-scoped: only remove companies matching the import source
     manual_protected_count = 0
+    source_protected_count = 0
     for company_name in companies_to_remove:
         result = _remove_company(
             company_name, existing_company_map, account_id, cursor,
-            shared_identifiers, manual_company_ids
+            shared_identifiers, manual_company_ids,
+            company_source_map=company_source_map,
+            import_source=source
         )
         if result == 'removed':
             positions_removed.append(company_name)
         elif result == 'protected':
             manual_protected_count += 1
+        elif result == 'source_protected':
+            source_protected_count += 1
 
     return {
         'added': positions_added,
@@ -218,12 +232,18 @@ def _update_existing_company(
         first_bought = first_bought.strftime('%Y-%m-%d %H:%M:%S')
 
     # Update company record (now with protected identifier)
-    # Use COALESCE for first_bought_date to preserve existing value if CSV doesn't provide one
+    # Only update first_bought_date if new value is earlier than existing, or existing is NULL
+    # This prevents corrupted dates (e.g. import timestamps) from overwriting correct historical dates
     cursor.execute(
         '''UPDATE companies SET identifier = ?, portfolio_id = ?, total_invested = ?,
-           first_bought_date = COALESCE(?, first_bought_date)
+           first_bought_date = CASE
+               WHEN first_bought_date IS NULL THEN ?
+               WHEN ? IS NOT NULL AND ? < first_bought_date THEN ?
+               ELSE first_bought_date
+           END
            WHERE id = ?''',
-        [final_identifier, final_portfolio_id, position['total_invested'], first_bought, company_id]
+        [final_identifier, final_portfolio_id, position['total_invested'],
+         first_bought, first_bought, first_bought, first_bought, company_id]
     )
 
     # Get existing override if any
@@ -303,7 +323,8 @@ def _insert_new_company(
     current_shares: float,
     default_portfolio_id: int,
     account_id: int,
-    cursor
+    cursor,
+    source: str = 'parqet'
 ) -> None:
     """Insert a new company record."""
     # Convert first_bought_date to string if it's a pandas Timestamp
@@ -311,12 +332,15 @@ def _insert_new_company(
     if first_bought is not None and hasattr(first_bought, 'strftime'):
         first_bought = first_bought.strftime('%Y-%m-%d %H:%M:%S')
 
+    # Get investment_type from position data (e.g., IBKR provides this)
+    investment_type = position.get('investment_type')
+
     cursor.execute(
         '''INSERT INTO companies
-           (name, identifier, sector, portfolio_id, account_id, total_invested, first_bought_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?)''',
+           (name, identifier, sector, portfolio_id, account_id, total_invested, first_bought_date, source, investment_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         [company_name, position['identifier'], '', default_portfolio_id,
-         account_id, position['total_invested'], first_bought]
+         account_id, position['total_invested'], first_bought, source, investment_type]
     )
     company_id = cursor.lastrowid
 
@@ -325,7 +349,7 @@ def _insert_new_company(
         [company_id, current_shares]
     )
 
-    logger.info(f"Added new company: {company_name} with {current_shares} shares")
+    logger.info(f"Added new company: {company_name} with {current_shares} shares (source={source})")
 
 
 def _remove_company(
@@ -334,10 +358,14 @@ def _remove_company(
     account_id: int,
     cursor,
     shared_identifiers: Set[str] = None,
-    manual_company_ids: Set[int] = None
+    manual_company_ids: Set[int] = None,
+    company_source_map: Dict[int, str] = None,
+    import_source: str = None
 ) -> str:
     """
     Remove a company and clean up related records.
+
+    Supports broker-scoped deletion: only removes companies matching the import source.
 
     Args:
         company_name: Name of company to remove
@@ -345,13 +373,14 @@ def _remove_company(
         account_id: Current account ID
         cursor: Database cursor
         shared_identifiers: Pre-computed set of identifiers used by other accounts
-                           (optimization to avoid N+1 queries)
         manual_company_ids: Pre-computed set of company IDs that were manually added
-                           (these will be protected from removal)
+        company_source_map: Pre-computed map of company_id -> source
+        import_source: Current import source ('parqet' or 'ibkr') for scoped deletion
 
     Returns:
         'removed' if company was removed successfully
         'protected' if company was protected (manual source)
+        'source_protected' if company belongs to a different broker
         'not_found' if company was not found
     """
     if company_name not in existing_company_map:
@@ -368,6 +397,16 @@ def _remove_company(
     if manual_company_ids and company_id in manual_company_ids:
         logger.info(f"Protecting manual company '{company_name}' (ID: {company_id}) from CSV removal")
         return 'protected'
+
+    # Broker-scoped deletion: only remove companies from the same source
+    if import_source and company_source_map:
+        company_source = company_source_map.get(company_id)
+        if company_source and company_source != import_source:
+            logger.info(
+                f"Protecting '{company_name}' (source={company_source}) from "
+                f"{import_source} import removal"
+            )
+            return 'source_protected'
 
     # Determine removal reason for logging
     logger.info(f"Removing company '{company_name}' (ID: {company_id}, identifier: {identifier})")

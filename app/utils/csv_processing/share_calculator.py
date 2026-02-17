@@ -216,6 +216,87 @@ def _calculate_net_change(transactions: pd.DataFrame) -> float:
     return float(buys - sells)
 
 
+def calculate_share_changes_snapshot(
+    company_positions: Dict[str, Dict],
+    user_edit_map: Dict[str, Dict],
+    identifier_edit_map: Dict[str, Dict] = None
+) -> Dict[str, Dict]:
+    """
+    Calculate share changes for snapshot imports (IBKR).
+
+    Simpler than transaction-based: snapshot shares are the final state.
+    Still handles manual edit protection.
+
+    Args:
+        company_positions: Dict of company_name -> position data (from process_companies_snapshot)
+        user_edit_map: Dict of company_name -> user edit data
+        identifier_edit_map: Optional Dict of identifier -> user edit data (fallback)
+
+    Returns:
+        Dict[str, Dict]: company_name -> calculated share data
+    """
+    share_calculations = {}
+
+    for company_name, position in company_positions.items():
+        snapshot_shares = position['total_shares']
+
+        if abs(snapshot_shares) <= SHARE_EPSILON:
+            logger.info(f"Skipping {company_name} - snapshot shares are zero")
+            continue
+
+        # Check for manual edits (same logic as transaction-based)
+        user_edit_info = None
+        if company_name in user_edit_map:
+            user_edit_info = user_edit_map[company_name]
+        elif identifier_edit_map and position.get('identifier') in identifier_edit_map:
+            user_edit_info = identifier_edit_map[position['identifier']]
+            logger.warning(
+                f"Company '{company_name}' matched by identifier '{position['identifier']}' for manual edit"
+            )
+
+        if user_edit_info is not None:
+            manual_shares = user_edit_info['manual_shares']
+            previous_csv_shares = user_edit_info['original_shares']
+
+            # If snapshot shares differ from previous CSV shares, apply delta to override
+            if previous_csv_shares is not None and abs(snapshot_shares - previous_csv_shares) > SHARE_EPSILON:
+                delta = snapshot_shares - previous_csv_shares
+                final_override = round(manual_shares + delta, 6)
+
+                logger.info(
+                    f"Snapshot delta for {company_name}: "
+                    f"snapshot={snapshot_shares}, prev_csv={previous_csv_shares}, "
+                    f"delta={delta}, manual={manual_shares}, new_override={final_override}"
+                )
+
+                if abs(snapshot_shares) <= SHARE_EPSILON and abs(final_override) <= SHARE_EPSILON:
+                    continue
+
+                share_calculations[company_name] = {
+                    'csv_shares': snapshot_shares,
+                    'override_shares': final_override,
+                    'has_manual_edit': True,
+                    'csv_modified_after_edit': True
+                }
+            else:
+                # No change in broker shares - keep override as is
+                share_calculations[company_name] = {
+                    'csv_shares': snapshot_shares,
+                    'override_shares': manual_shares,
+                    'has_manual_edit': True,
+                    'csv_modified_after_edit': False
+                }
+        else:
+            share_calculations[company_name] = {
+                'csv_shares': snapshot_shares,
+                'override_shares': None,
+                'has_manual_edit': False,
+                'csv_modified_after_edit': False
+            }
+
+    return share_calculations
+
+
 def identify_companies_to_remove(
     csv_company_names: Set[str],
     db_company_names: Set[str],

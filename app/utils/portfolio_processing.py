@@ -722,7 +722,7 @@ def process_csv_data(account_id, file_content):
             cursor.close()
 
 
-def process_csv_data_refactored(account_id: int, file_content: str, progress_callback=None):
+def process_csv_data_refactored(account_id: int, file_content: str, progress_callback=None, mode: str = 'replace'):
     """
     Refactored CSV processing using modular architecture.
 
@@ -733,15 +733,20 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
         account_id: Account ID for this import
         file_content: Raw CSV file content
         progress_callback: Optional callback(current, total, message, status)
+        mode: Import mode - 'add' (no deletions) or 'replace' (delete missing positions)
 
     Returns:
         Tuple[bool, str, dict]: (success, message, details)
     """
     from app.utils.csv_processing import (
         parse_csv_file,
+        detect_csv_format,
+        parse_ibkr_csv,
         process_companies,
+        process_companies_snapshot,
         assign_portfolios,
         calculate_share_changes,
+        calculate_share_changes_snapshot,
         apply_share_changes,
         update_prices_from_csv
     )
@@ -759,23 +764,34 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
         logger.info("Creating automatic backup before CSV processing...")
         backup_database()
 
-        # Step 1: Parse CSV file
-        logger.info("Step 1: Parsing CSV file...")
+        # Step 1: Detect format and parse CSV file
+        logger.info("Step 1: Detecting format and parsing CSV file...")
         if progress_callback:
-            progress_callback(0, 100, "Parsing CSV file...", "processing")
+            progress_callback(0, 100, "Detecting CSV format...", "processing")
 
-        df = parse_csv_file(file_content)
+        csv_format = detect_csv_format(file_content)
+        logger.info(f"Detected CSV format: {csv_format}")
+
+        if csv_format == 'ibkr':
+            df = parse_ibkr_csv(file_content)
+            source = 'ibkr'
+        else:
+            df = parse_csv_file(file_content)
+            source = 'parqet'
 
         # Step 2: Get database connection
         db = get_db()
         cursor = db.cursor()
 
         # Step 3: Process companies and calculate positions
-        logger.info("Step 2: Processing company records...")
+        logger.info(f"Step 2: Processing company records ({csv_format} mode)...")
         if progress_callback:
-            progress_callback(10, 100, "Processing company records...", "processing")
+            progress_callback(10, 100, f"Processing {csv_format.upper()} records...", "processing")
 
-        existing_company_map, company_positions = process_companies(df, account_id, cursor)
+        if csv_format == 'ibkr':
+            existing_company_map, company_positions = process_companies_snapshot(df, account_id, cursor)
+        else:
+            existing_company_map, company_positions = process_companies(df, account_id, cursor)
 
         # Step 4: Get/create portfolios
         logger.info("Step 3: Setting up portfolios...")
@@ -791,14 +807,25 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
         if progress_callback:
             progress_callback(30, 100, "Calculating share changes...", "processing")
 
-        share_calculations = calculate_share_changes(df, company_positions, user_edit_map, identifier_edit_map)
+        if csv_format == 'ibkr':
+            share_calculations = calculate_share_changes_snapshot(
+                company_positions, user_edit_map, identifier_edit_map
+            )
+        else:
+            share_calculations = calculate_share_changes(
+                df, company_positions, user_edit_map, identifier_edit_map
+            )
 
-        # Step 6: Identify companies to remove
-        csv_company_names = set(df['holdingname'])
-        db_company_names = {company['name'] for company in existing_company_map.values()}
-        companies_to_remove = identify_companies_to_remove(
-            csv_company_names, db_company_names, company_positions
-        )
+        # Step 6: Identify companies to remove (skip in add mode)
+        if mode == 'add':
+            companies_to_remove = set()
+            logger.info("Add mode: skipping company removal")
+        else:
+            csv_company_names = set(df['holdingname'])
+            db_company_names = {company['name'] for company in existing_company_map.values()}
+            companies_to_remove = identify_companies_to_remove(
+                csv_company_names, db_company_names, company_positions
+            )
 
         # Step 7: Apply changes in transaction
         logger.info("Step 5: Applying database changes...")
@@ -814,8 +841,13 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
             default_portfolio_id=default_portfolio_id,
             companies_to_remove=companies_to_remove,
             cursor=cursor,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            source=source
         )
+
+        # Seed market prices from IBKR data for immediate display
+        if csv_format == 'ibkr':
+            _seed_ibkr_prices(company_positions, cursor)
 
         # Commit changes
         db.commit()
@@ -841,7 +873,8 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
             progress_callback(100, 100, "CSV import completed successfully!", "completed")
 
         # Build result message
-        message = "CSV data imported successfully with simple add/subtract calculation"
+        format_label = csv_format.upper()
+        message = f"{format_label} data imported successfully"
         if results['removed']:
             removed_details = ', '.join(results['removed'])
             if len(removed_details) > 100:
@@ -856,6 +889,7 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
             'updated': results['updated'],
             'removed': results['removed'],
             'failed_prices': failed_prices,
+            'format': csv_format,
         }
 
     except ValueError as e:
@@ -878,6 +912,38 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
     finally:
         if cursor:
             cursor.close()
+
+
+def _seed_ibkr_prices(company_positions, cursor):
+    """
+    Seed market_prices table with IBKR markPrice data for immediate display.
+
+    This provides price data before yfinance refresh, so positions show values
+    immediately after import. yfinance will overwrite with fresher data on next update.
+    """
+    seeded = 0
+    for company_name, position in company_positions.items():
+        identifier = position.get('identifier')
+        price = position.get('price')
+        currency = position.get('currency', 'USD')
+
+        if not identifier or not price or price <= 0:
+            continue
+
+        # Only seed if no existing price (don't overwrite fresher data)
+        cursor.execute('SELECT identifier FROM market_prices WHERE identifier = ?', [identifier])
+        if cursor.fetchone():
+            continue
+
+        cursor.execute(
+            '''INSERT OR IGNORE INTO market_prices (identifier, price, currency, last_updated)
+               VALUES (?, ?, ?, datetime('now'))''',
+            [identifier, price, currency]
+        )
+        seeded += 1
+
+    if seeded > 0:
+        logger.info(f"Seeded {seeded} market prices from IBKR data")
 
 
 def update_csv_progress_background(job_id: str, current: int, total: int, message: str = "Processing...", status: str = "processing"):
@@ -928,7 +994,7 @@ def _do_progress_update(job_id: str, current: int, total: int, message: str, sta
         logger.warning(f"Failed to update progress for job {job_id}: {e}", exc_info=True)
 
 
-def process_csv_data_background(account_id: int, file_content: str, job_id: str, use_refactored: bool = True):
+def process_csv_data_background(account_id: int, file_content: str, job_id: str, use_refactored: bool = True, mode: str = 'replace'):
     """
     Process CSV data in background thread using database-based progress tracking.
     This version doesn't use Flask session which isn't available in background threads.
@@ -938,6 +1004,7 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
         file_content: Raw CSV file content
         job_id: Background job ID for progress tracking
         use_refactored: If True, use new modular csv_processing package with timezone fix (default: True)
+        mode: Import mode - 'add' (no deletions) or 'replace' (delete missing positions)
 
     Returns:
         Tuple[bool, str, dict]: (success, message, details)
@@ -965,7 +1032,7 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
             # Use new refactored modular CSV processing
             logger.info("Using refactored modular CSV processing")
             success, message, details = process_csv_data_refactored(
-                account_id, file_content, background_progress_wrapper
+                account_id, file_content, background_progress_wrapper, mode=mode
             )
             return success, message, details
         else:

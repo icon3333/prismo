@@ -169,3 +169,87 @@ def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[s
     existing_company_map = {c['name']: c for c in existing_companies}
 
     return existing_company_map, company_positions
+
+
+def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, int], Dict[str, Dict]]:
+    """
+    Process company records from a snapshot CSV (e.g., IBKR Open Positions).
+
+    Unlike process_companies() which calculates positions from buy/sell transactions,
+    this function treats each row as the final position state. Multiple rows for the
+    same company are aggregated (IBKR may split into lots).
+
+    Args:
+        df: DataFrame with parsed snapshot data (must have 'holdingname', 'identifier', 'shares')
+        account_id: Account ID for this import
+        cursor: Database cursor for queries
+
+    Returns:
+        Tuple of:
+        - Dict[str, Dict]: company_name -> existing DB record (id, name, identifier, etc.)
+        - Dict[str, Dict]: company_name -> position data (shares, invested, identifier, etc.)
+    """
+    from app.utils.identifier_normalization import normalize_identifier
+    from app.utils.identifier_mapping import get_preferred_identifier
+
+    logger.info("Processing snapshot positions (IBKR mode)")
+
+    company_positions = {}
+
+    for idx, row in df.iterrows():
+        company_name = row['holdingname']
+
+        if pd.isna(row['identifier']) or not str(row['identifier']).strip():
+            logger.warning(f"Skipping row {idx}: missing identifier for {company_name}")
+            continue
+
+        shares = round(float(row['shares']), 6)
+        if shares <= 0:
+            logger.info(f"Skipping {company_name}: zero or negative shares ({shares})")
+            continue
+
+        raw_identifier = row['identifier']
+
+        # Check for user's preferred identifier mapping first
+        preferred_identifier = get_preferred_identifier(account_id, raw_identifier)
+        if preferred_identifier:
+            identifier = preferred_identifier
+        else:
+            identifier = normalize_identifier(raw_identifier)
+
+        total_invested = float(row['total_invested']) if 'total_invested' in row and pd.notna(row['total_invested']) else 0.0
+        first_bought = row.get('first_bought_date') if 'first_bought_date' in row else None
+        investment_type = row.get('investment_type') if 'investment_type' in row else None
+        price = float(row['price']) if 'price' in row and pd.notna(row['price']) else None
+        currency = row.get('currency', 'USD') if 'currency' in row else 'USD'
+
+        # Aggregate if same company appears in multiple lots
+        if company_name in company_positions:
+            existing = company_positions[company_name]
+            existing['total_shares'] = round(existing['total_shares'] + shares, 6)
+            existing['total_invested'] = round(existing['total_invested'] + total_invested, 2)
+            # Keep earliest first_bought_date
+            if first_bought and (existing['first_bought_date'] is None or first_bought < existing['first_bought_date']):
+                existing['first_bought_date'] = first_bought
+            logger.info(f"Aggregated lot for {company_name}: +{shares} shares, total now {existing['total_shares']}")
+        else:
+            company_positions[company_name] = {
+                'identifier': identifier,
+                'total_shares': shares,
+                'total_invested': total_invested,
+                'first_bought_date': first_bought,
+                'investment_type': investment_type,
+                'price': price,
+                'currency': currency,
+            }
+
+    logger.info(f"Snapshot processing completed: {len(company_positions)} unique positions")
+
+    # Get existing companies for mapping
+    existing_companies = query_db(
+        'SELECT id, name, identifier, total_invested, portfolio_id FROM companies WHERE account_id = ?',
+        [account_id]
+    )
+    existing_company_map = {c['name']: c for c in existing_companies}
+
+    return existing_company_map, company_positions

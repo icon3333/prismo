@@ -136,12 +136,16 @@ def upload_csv_simple():
             flash(validation_message, 'error')
             return redirect(url_for('portfolio.enrich'))
         
+        # Get import mode (add or replace)
+        mode = request.form.get('mode', 'replace')
+        logger.info(f"Import mode: {mode}")
+
         # Start background processing
         logger.info("Starting background CSV processing...")
-        
+
         try:
             # Start background job and get job_id
-            job_id = start_csv_processing_job(account_id, file_content)
+            job_id = start_csv_processing_job(account_id, file_content, mode=mode)
             
             # Store job_id in session for progress tracking
             session['csv_upload_job_id'] = job_id

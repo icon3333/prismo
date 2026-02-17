@@ -130,7 +130,7 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
         }
 
 
-def _run_csv_job(app, account_id: int, file_content: str, job_id: str):
+def _run_csv_job(app, account_id: int, file_content: str, job_id: str, mode: str = 'replace'):
     """
     Background job to process a CSV file.
     This runs in a separate thread with Flask application context.
@@ -139,14 +139,14 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str):
     with app.app_context():
         try:
             logger.debug(f" _run_csv_job started in background thread for account_id: {account_id}, job_id: {job_id}")
-            logger.info(f"Starting background CSV processing for account_id: {account_id}, job_id: {job_id}")
-            
+            logger.info(f"Starting background CSV processing for account_id: {account_id}, job_id: {job_id}, mode: {mode}")
+
             # Import here to avoid circular imports
             from app.utils.portfolio_processing import process_csv_data_background
-            
+
             logger.debug(f" About to call process_csv_data_background with job_id: {job_id}")
             # Use the background version that doesn't depend on session
-            success, message, result = process_csv_data_background(account_id, file_content, job_id)
+            success, message, result = process_csv_data_background(account_id, file_content, job_id, mode=mode)
             
             if success:
                 logger.info(f"Background CSV processing completed successfully for account_id: {account_id}")
@@ -195,15 +195,15 @@ def _update_csv_job_final(job_id: str, progress: int, message: str, status: str 
         logger.error(f"Failed to finalize CSV job {job_id}: {e}")
 
 
-def start_csv_processing_job(account_id: int, file_content: str) -> str:
+def start_csv_processing_job(account_id: int, file_content: str, mode: str = 'replace') -> str:
     """
     Starts a background thread to process the uploaded CSV file.
     Returns job_id for tracking progress.
     """
     app = current_app._get_current_object()  # type: ignore
     job_id = str(uuid.uuid4())
-    
-    logger.info(f"Dispatching CSV processing to background thread for account {account_id}, job_id: {job_id}")
+
+    logger.info(f"Dispatching CSV processing to background thread for account {account_id}, job_id: {job_id}, mode: {mode}")
 
     try:
         # Create job record in database
@@ -219,8 +219,8 @@ def start_csv_processing_job(account_id: int, file_content: str) -> str:
         # Create and start the background thread
         logger.debug(f" Creating background thread for job_id: {job_id}")
         thread = threading.Thread(
-            target=_run_csv_job, 
-            args=(app, account_id, file_content, job_id),
+            target=_run_csv_job,
+            args=(app, account_id, file_content, job_id, mode),
             name=f"csv-processing-{account_id}-{job_id[:8]}"
         )
         thread.daemon = True

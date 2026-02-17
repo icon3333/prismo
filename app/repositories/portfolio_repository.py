@@ -782,7 +782,7 @@ class PortfolioRepository:
                     'custom_price_eur': float(row['custom_price_eur']) if row.get('custom_price_eur') is not None else None,
                     'is_custom_value': bool(row.get('is_custom_value', False)),
                     'custom_value_date': row.get('custom_value_date'),
-                    'source': row.get('source', 'csv'),  # 'csv' or 'manual'
+                    'source': row.get('source', 'parqet'),  # 'parqet', 'ibkr', or 'manual'
                     'first_bought_date': row.get('first_bought_date')
                 }
                 portfolio_data.append(item)
@@ -853,7 +853,7 @@ class PortfolioRepository:
             is_custom_value: Whether using custom value (no market price)
             custom_total_value: Custom total value (if is_custom_value)
             custom_price_eur: Custom price per share (if is_custom_value)
-            source: 'manual' or 'csv'
+            source: 'manual', 'parqet', or 'ibkr'
 
         Returns:
             New company ID

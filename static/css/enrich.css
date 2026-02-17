@@ -68,7 +68,8 @@
 
 /* Form element heights */
 #manage-portfolios-form .select select,
-#manage-portfolios-form .input {
+#manage-portfolios-form .input,
+#manage-portfolios-form .button {
   height: 2.5em;
 }
 
@@ -200,29 +201,13 @@
   font-family: inherit;
 }
 
-/* Metrics box - no shadow */
-.enrich-metrics-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: var(--space-sm) var(--space-md);
-  font-size: 0.875rem;
-}
-
-/* Group metrics with separators */
-.enrich-metrics-box .metric-value {
-  margin-right: var(--space-sm);
-  padding-right: var(--space-sm);
-  border-right: 1px solid var(--border-subtle);
-}
-
-.enrich-metrics-box .metric-value:last-child {
-  margin-right: 0;
-  padding-right: 0;
-  border-right: none;
+/* Summary card updated timestamp */
+.summary-updated {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-md);
+  font-size: 0.7rem;
+  color: var(--aqua-500);
 }
 
 /* ===== Controls and Metrics Row ===== */
@@ -547,29 +532,38 @@ td.col-currency {
     display: flex;
     align-items: center;
     gap: var(--space-sm);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    flex: 1;
+    min-width: 0;
 }
 
-/* Standardize control widths in bulk action bar */
+/* Flex-based sizing for form controls */
 .bulk-action-controls .select,
-.bulk-action-controls .select select,
 .bulk-action-controls .input {
-    min-width: 140px;
-    max-width: 180px;
+    flex: 1 1 0;
+    min-width: 100px;
+    max-width: 160px;
 }
 
-.bulk-action-controls .select select,
-.bulk-action-controls .input {
-    font-size: 0.875rem;
-    height: 2.25em;
-    border-radius: var(--radius-sm);
+.bulk-action-controls .select select {
+    width: 100%;
 }
 
+/* Consistent heights for all controls */
+.bulk-action-controls .select select,
+.bulk-action-controls .input,
 .bulk-action-controls .button {
     height: 2.25em;
     font-size: 0.875rem;
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
+    border-radius: var(--radius-sm);
+}
+
+/* Buttons keep natural width, no wrapping */
+.bulk-action-controls .button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
 }
 
 /* ===== Bulk Edit Styling ===== */
@@ -734,6 +728,7 @@ td.col-currency {
 /* ===== Portfolio Summary Card (with Cash) ===== */
 
 .portfolio-summary-card {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -741,14 +736,14 @@ td.col-currency {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
 }
 
 .portfolio-summary-card .summary-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-xs);
+  gap: 2px;
   min-width: 120px;
 }
 
@@ -761,13 +756,13 @@ td.col-currency {
 }
 
 .portfolio-summary-card .summary-value {
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .portfolio-summary-card .summary-operator {
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 300;
   color: var(--text-muted);
 }
@@ -777,7 +772,7 @@ td.col-currency {
 }
 
 .portfolio-summary-card .summary-item-editable {
-  min-width: 140px;
+  min-width: 110px;
 }
 
 .portfolio-summary-card .cash-input-wrapper {
@@ -791,14 +786,14 @@ td.col-currency {
 .portfolio-summary-card input.cash-input.is-small,
 .portfolio-summary-card input.input.is-small.cash-input,
 .portfolio-summary-card input.input.is-small.cash-input.sensitive-value {
-  width: 110px;
+  width: 95px;
   text-align: center;
-  font-size: 1.25rem !important;  /* Match summary-value size, override Bulma is-small */
+  font-size: 1rem !important;
   font-weight: 600;
   border-color: var(--primary);
   background-color: var(--bg-tertiary);
   height: auto;
-  padding: var(--space-xs) var(--space-sm);
+  padding: 2px var(--space-sm);
 }
 
 .portfolio-summary-card .cash-input:focus {
@@ -813,9 +808,9 @@ td.col-currency {
 /* Builder KPI Section */
 .portfolio-summary-card .summary-divider {
   width: 1px;
-  height: 40px;
+  height: 28px;
   background-color: var(--border-default);
-  margin: 0 var(--space-sm);
+  margin: 0 var(--space-xs);
 }
 
 .portfolio-summary-card .summary-item-builder {
@@ -856,7 +851,7 @@ td.col-currency {
 
 .portfolio-summary-card .builder-value {
   color: var(--aqua-500);
-  font-size: 1.25rem;  /* Match summary-value size */
+  font-size: 1rem;
 }
 
 .portfolio-summary-card .use-as-cash-btn {
@@ -888,12 +883,19 @@ td.col-currency {
   }
 
   .portfolio-summary-card .summary-value {
-    font-size: 1rem;
+    font-size: 0.875rem;
   }
 
   .portfolio-summary-card .cash-input {
-    width: 90px;
+    width: 80px;
     font-size: 0.875rem;
+  }
+
+  .summary-updated {
+    position: static;
+    width: 100%;
+    text-align: center;
+    order: -1;
   }
 
   .portfolio-summary-card .summary-divider {
@@ -927,6 +929,10 @@ td.col-currency {
 
 .manual-badge:hover {
   opacity: 0.9;
+}
+
+.manual-badge.ibkr-badge {
+  background: #E11D48;
 }
 
 /* ===== Identifier & Company Cell Wrappers ===== */

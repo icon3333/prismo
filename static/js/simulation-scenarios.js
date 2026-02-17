@@ -21,7 +21,10 @@ class AllocationSimulator {
     this.savedSimulations = [];        // List of saved simulations
     this.currentSimulationId = null;   // Currently loaded simulation ID
     this.currentSimulationName = null; // Currently loaded simulation name
-    this.saveAsMode = false;           // true when "Save As" was clicked
+    // Auto-save state
+    this.autoSaveStatus = 'idle';       // 'idle' | 'saving' | 'saved' | 'error'
+    this.autoSaveErrorCount = 0;
+    this.autoSaveStatusTimeout = null;
 
     // Investment targets from Builder (for "Remaining to Invest" display)
     this.investmentTargets = null;     // Investment target data from Builder
@@ -49,6 +52,13 @@ class AllocationSimulator {
 
     // Debounced chart update for real-time feedback
     this.debouncedChartUpdate = this.debounce(() => this.updateCharts(), 300);
+
+    // Cancellable debounced auto-save (800ms after last change)
+    this._autoSaveTimeoutId = null;
+    this.debouncedAutoSave = () => {
+      clearTimeout(this._autoSaveTimeoutId);
+      this._autoSaveTimeoutId = setTimeout(() => this.autoSave(), 800);
+    };
 
     // Initialize
     this.render();
@@ -128,7 +138,6 @@ class AllocationSimulator {
     if (this.scope === 'portfolio' && typeof PortfolioState !== 'undefined') {
       const globalPortfolioId = await PortfolioState.getSelectedPortfolio();
       if (globalPortfolioId) {
-        // Convert to number if the dropdown uses numeric IDs
         const numericId = parseInt(globalPortfolioId);
         if (!isNaN(numericId)) {
           this.portfolioId = numericId;
@@ -137,27 +146,25 @@ class AllocationSimulator {
     }
 
     // Update UI to reflect restored state
-    if (savedState || this.portfolioId) {
-      this.updateScopeUI();
-    }
+    this.updateScopeUI();
 
-    // Bind scope toggle events
-    const scopeRadios = document.querySelectorAll('input[name="simulator-scope"]');
-    scopeRadios.forEach(radio => {
-      radio.addEventListener('change', () => this.handleScopeChange(radio.value));
-    });
-
-    // Bind portfolio select event
+    // Bind portfolio select event (combined Global + portfolios dropdown)
     const portfolioSelect = document.getElementById('simulator-portfolio-select');
     if (portfolioSelect) {
       portfolioSelect.addEventListener('change', async () => {
-        this.portfolioId = portfolioSelect.value ? parseInt(portfolioSelect.value) : null;
+        const value = portfolioSelect.value;
+        if (value) {
+          this.scope = 'portfolio';
+          this.portfolioId = parseInt(value);
+        } else {
+          this.scope = 'global';
+          this.portfolioId = null;
+        }
         this.saveState();
         // Save to global state for cross-page persistence
         if (typeof PortfolioState !== 'undefined' && this.portfolioId) {
           await PortfolioState.setSelectedPortfolio(this.portfolioId);
         }
-        // Refresh portfolios list with latest values, then load allocations
         await this.refreshPortfolios();
         await this.loadPortfolioAllocations();
       });
@@ -168,7 +175,7 @@ class AllocationSimulator {
     const select = document.getElementById('simulator-portfolio-select');
     if (!select) return;
 
-    select.innerHTML = '<option value="">Select portfolio...</option>';
+    select.innerHTML = '<option value="">Global</option>';
     this.portfolios.forEach(p => {
       const option = document.createElement('option');
       option.value = p.id;
@@ -207,24 +214,6 @@ class AllocationSimulator {
   normalizeLabel(label) {
     if (!label || label === '—') return label;
     return label.toLowerCase().trim();
-  }
-
-  async handleScopeChange(scope) {
-    this.scope = scope;
-    const portfolioWrapper = document.getElementById('simulator-portfolio-select-wrapper');
-
-    if (scope === 'portfolio') {
-      portfolioWrapper.style.display = 'block';
-      if (this.portfolioId) {
-        await this.refreshPortfolios();
-        await this.loadPortfolioAllocations();
-      }
-    } else {
-      portfolioWrapper.style.display = 'none';
-      await this.refreshPortfolios();
-      await this.loadPortfolioAllocations();
-    }
-    this.saveState();
   }
 
   // ============================================================================
@@ -336,20 +325,14 @@ class AllocationSimulator {
     }
   }
 
-  updateSaveButtonVisibility() {
-    const saveBtn = document.getElementById('simulator-save-btn');
-    if (saveBtn) {
-      // Show Save button only when editing an existing simulation
-      saveBtn.style.display = this.currentSimulationId ? 'inline-flex' : 'none';
-    }
-  }
-
   async loadSimulation(simulationId) {
     if (!simulationId) {
       // "New Simulation" selected - reset
       this.resetSimulation();
       return;
     }
+
+    this.cancelPendingAutoSave();
 
     try {
       const response = await fetch(`/portfolio/api/simulator/simulations/${simulationId}`);
@@ -359,16 +342,12 @@ class AllocationSimulator {
         const simulation = result.data.simulation;
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
-        this.scope = simulation.scope || 'global';
-        this.portfolioId = simulation.portfolio_id;
+        // Don't override scope/portfolioId - keep user's current selection
         this.items = simulation.items || [];
 
-        // Update UI to reflect loaded simulation
-        this.updateScopeUI();
         this.renderTable();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
         this.saveState();
 
         this.showToast(`Loaded "${simulation.name}"`, 'success');
@@ -386,6 +365,8 @@ class AllocationSimulator {
   async loadSimulationSilent(simulationId) {
     if (!simulationId) return;
 
+    this.cancelPendingAutoSave();
+
     try {
       const response = await fetch(`/portfolio/api/simulator/simulations/${simulationId}`);
       const result = await response.json();
@@ -401,7 +382,6 @@ class AllocationSimulator {
         this.renderTable();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
       }
     } catch (error) {
       console.error('Error loading simulation:', error);
@@ -409,13 +389,14 @@ class AllocationSimulator {
   }
 
   resetSimulation() {
+    this.cancelPendingAutoSave();
+    this.setAutoSaveStatus('idle');
     this.currentSimulationId = null;
     this.currentSimulationName = null;
     this.items = [];
     this.renderTable();
     this.updateCharts();
     this.updateDeleteButtonVisibility();
-    this.updateSaveButtonVisibility();
     this.saveState();
 
     // Reset load dropdown
@@ -424,47 +405,20 @@ class AllocationSimulator {
   }
 
   updateScopeUI() {
-    // Update scope radio buttons
-    const scopeRadios = document.querySelectorAll('input[name="simulator-scope"]');
-    scopeRadios.forEach(radio => {
-      radio.checked = radio.value === this.scope;
-    });
-
-    // Update portfolio select visibility and value
-    const portfolioWrapper = document.getElementById('simulator-portfolio-select-wrapper');
     const portfolioSelect = document.getElementById('simulator-portfolio-select');
+    if (!portfolioSelect) return;
 
-    if (this.scope === 'portfolio') {
-      portfolioWrapper.style.display = 'block';
-      if (portfolioSelect && this.portfolioId) {
-        // Ensure string comparison for select value
-        portfolioSelect.value = String(this.portfolioId);
-      }
+    if (this.scope === 'portfolio' && this.portfolioId) {
+      portfolioSelect.value = String(this.portfolioId);
     } else {
-      portfolioWrapper.style.display = 'none';
+      portfolioSelect.value = '';
     }
-  }
-
-  /**
-   * Save changes to the current simulation (only available when editing existing)
-   */
-  saveSimulation() {
-    if (!this.currentSimulationId) return;  // Safety check
-
-    this.saveAsMode = false;
-    const modal = document.getElementById('save-simulation-modal');
-    const nameInput = document.getElementById('simulation-name-input');
-
-    nameInput.value = this.currentSimulationName;
-    modal.style.display = 'flex';
-    nameInput.focus();
   }
 
   /**
    * Save as a new simulation (creates a copy/fork)
    */
   saveAsSimulation() {
-    this.saveAsMode = true;
     const modal = document.getElementById('save-simulation-modal');
     const nameInput = document.getElementById('simulation-name-input');
 
@@ -496,23 +450,12 @@ class AllocationSimulator {
     };
 
     try {
-      let response;
-      // If editing existing AND NOT in saveAs mode → update existing
-      if (this.currentSimulationId && !this.saveAsMode) {
-        // Update existing simulation
-        response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(simulationData)
-        });
-      } else {
-        // Create new simulation
-        response = await fetch('/portfolio/api/simulator/simulations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(simulationData)
-        });
-      }
+      // Always create a new simulation (auto-save handles updates)
+      const response = await fetch('/portfolio/api/simulator/simulations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(simulationData)
+      });
 
       const result = await response.json();
 
@@ -532,7 +475,7 @@ class AllocationSimulator {
         if (select) select.value = simulation.id;
 
         this.updateDeleteButtonVisibility();
-        this.updateSaveButtonVisibility();
+        this.saveState();
         this.showToast(`Saved "${name}"`, 'success');
       } else {
         this.showToast(result.error || 'Failed to save simulation', 'danger');
@@ -566,6 +509,92 @@ class AllocationSimulator {
     } catch (error) {
       console.error('Error deleting simulation:', error);
       this.showToast('Failed to delete simulation', 'danger');
+    }
+  }
+
+  // ============================================================================
+  // Auto-Save
+  // ============================================================================
+
+  async autoSave() {
+    if (!this.currentSimulationId) return;
+
+    this.setAutoSaveStatus('saving');
+
+    try {
+      const response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: this.items })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        this.autoSaveErrorCount = 0;
+        this.setAutoSaveStatus('saved');
+      } else {
+        this.autoSaveErrorCount++;
+        this.setAutoSaveStatus('error');
+        if (this.autoSaveErrorCount >= 3) {
+          this.showToast('Auto-save failed repeatedly. Check your connection.', 'danger');
+          this.autoSaveErrorCount = 0;
+        }
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+      this.autoSaveErrorCount++;
+      this.setAutoSaveStatus('error');
+      if (this.autoSaveErrorCount >= 3) {
+        this.showToast('Auto-save failed repeatedly. Check your connection.', 'danger');
+        this.autoSaveErrorCount = 0;
+      }
+    }
+  }
+
+  triggerAutoSave() {
+    if (!this.currentSimulationId) return;
+    this.debouncedAutoSave();
+  }
+
+  cancelPendingAutoSave() {
+    clearTimeout(this._autoSaveTimeoutId);
+  }
+
+  setAutoSaveStatus(status) {
+    this.autoSaveStatus = status;
+    clearTimeout(this.autoSaveStatusTimeout);
+
+    const el = document.getElementById('simulator-autosave-status');
+    if (!el) return;
+
+    el.classList.remove('autosave-saving', 'autosave-saved', 'autosave-error');
+
+    if (status === 'idle') {
+      el.style.display = 'none';
+      return;
+    }
+
+    el.style.display = 'inline-flex';
+    el.style.opacity = '1';
+
+    if (status === 'saving') {
+      el.classList.add('autosave-saving');
+      el.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving';
+    } else if (status === 'saved') {
+      el.classList.add('autosave-saved');
+      el.innerHTML = '<i class="fas fa-check"></i> Saved';
+      this.autoSaveStatusTimeout = setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => { el.style.display = 'none'; }, 300);
+      }, 2000);
+    } else if (status === 'error') {
+      el.classList.add('autosave-error');
+      el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Save failed';
+      this.autoSaveStatusTimeout = setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => { el.style.display = 'none'; }, 300);
+      }, 4000);
     }
   }
 
@@ -635,8 +664,8 @@ class AllocationSimulator {
       </div>
 
       <!-- Data Table -->
-      <div class="simulator-table-wrapper">
-        <table class="unified-table simulator-table">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover unified-table simulator-table">
           <thead>
             <tr>
               <th class="col-ticker">Identifier</th>
@@ -786,11 +815,6 @@ class AllocationSimulator {
     const loadSelect = document.getElementById('simulator-load-select');
     if (loadSelect) {
       loadSelect.addEventListener('change', () => this.loadSimulation(loadSelect.value));
-    }
-
-    const saveBtn = document.getElementById('simulator-save-btn');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', () => this.saveSimulation());
     }
 
     const saveAsBtn = document.getElementById('simulator-saveas-btn');
@@ -1011,6 +1035,7 @@ class AllocationSimulator {
     this.items.push(item);
     this.renderTable();
     this.updateCharts();
+    this.triggerAutoSave();
 
     // Focus the value input for the new row
     setTimeout(() => {
@@ -1033,6 +1058,7 @@ class AllocationSimulator {
       this.items.splice(index, 1);
       this.renderTable();
       this.updateCharts();
+      this.triggerAutoSave();
     }
   }
 
@@ -1191,6 +1217,7 @@ class AllocationSimulator {
 
     this.renderTable();
     this.updateCharts();
+    this.triggerAutoSave();
   }
 
   handleTableBlur(e) {
@@ -1323,6 +1350,8 @@ class AllocationSimulator {
     // Visual feedback
     input.classList.add('cell-saved');
     setTimeout(() => input.classList.remove('cell-saved'), 500);
+
+    this.triggerAutoSave();
   }
 
   handleTableChange(e) {
@@ -1368,6 +1397,11 @@ class AllocationSimulator {
     const isOverTarget = currentValue > targetAmount;
     const projectedOverTarget = projectedValue > targetAmount;
 
+    // Segment percentages for legend
+    const clampedExisting = Math.min(100, percentComplete);
+    const simulatedPercent = targetAmount > 0 ? Math.min(100 - clampedExisting, (simulatedTotal / targetAmount) * 100) : 0;
+    const remainingPercent = Math.max(0, 100 - clampedExisting - simulatedPercent);
+
     // Determine scope label
     let scopeLabel = 'Global';
     let allocationInfo = '';
@@ -1402,15 +1436,28 @@ class AllocationSimulator {
             <div class="progress-simulated" style="left: ${Math.min(100, percentComplete).toFixed(1)}%; width: ${Math.min(100 - percentComplete, (simulatedTotal / targetAmount) * 100).toFixed(1)}%"></div>
           ` : ''}
         </div>
-        <div class="progress-labels">
-          <span class="percent-complete ${statusClass}">
-            ${isOverTarget
-              ? `${percentComplete.toFixed(1)}% — ${this.formatCurrency(currentValue - targetAmount)} over target`
-              : `${percentComplete.toFixed(1)}% complete`}
-          </span>
-          <span class="remaining-amount">
-            ${isOverTarget ? '' : `${this.formatCurrency(remaining)} remaining`}
-          </span>
+        <div class="progress-legend">
+          <div class="legend-item">
+            <span class="legend-swatch existing ${statusClass}"></span>
+            <span class="legend-text">Existing ${clampedExisting.toFixed(1)}%</span>
+          </div>
+          ${simulatedTotal > 0 && !isOverTarget ? `
+            <div class="legend-item">
+              <span class="legend-swatch simulated"></span>
+              <span class="legend-text">Simulated +${simulatedPercent.toFixed(1)}%</span>
+            </div>
+          ` : ''}
+          ${!isOverTarget && remainingPercent > 0 ? `
+            <div class="legend-item">
+              <span class="legend-swatch remaining"></span>
+              <span class="legend-text">Remaining ${remainingPercent.toFixed(1)}%</span>
+            </div>
+          ` : ''}
+          ${isOverTarget ? `
+            <div class="legend-item">
+              <span class="legend-text">${this.formatCurrency(currentValue - targetAmount)} over target</span>
+            </div>
+          ` : ''}
         </div>
       </div>
 
@@ -1505,8 +1552,8 @@ class AllocationSimulator {
     const baselineByThesis = {};
 
     // Add portfolio baseline data
-    // Use portfolio_total (includes cash) if available, fallback to total_value for backwards compatibility
-    const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
+    // Use total_value (holdings only, excludes cash) so percentages sum to 100%
+    const portfolioTotal = this.portfolioData?.total_value || 0;
 
     if (this.portfolioData) {
       // Store baseline for delta calculations (normalize labels to lowercase)

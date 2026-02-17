@@ -16,6 +16,7 @@
   --ocean-500: #64748B;
 
   /* Aqua/Cyan Accents */
+  --aqua-600: #0891B2;
   --aqua-500: #06B6D4;
   --aqua-400: #22D3EE;
   --aqua-300: #67E8F9;
@@ -3296,8 +3297,8 @@ th:has(.pnl-sort-toggle) {
   white-space: nowrap;
 }
 
-/* Bulma Modal */
-.modal {
+/* Bulma Modal - scoped to avoid conflict with Bootstrap modals (.fade) */
+.modal:not(.fade) {
   position: fixed;
   top: 0;
   left: 0;
@@ -3322,7 +3323,7 @@ th:has(.pnl-sort-toggle) {
   background: rgba(0, 0, 0, 0.5);
 }
 
-.modal-content {
+.modal:not(.fade) > .modal-content {
   position: relative;
   width: 100%;
   max-width: 640px;
@@ -4041,5 +4042,202 @@ th:has(.pnl-sort-toggle) {
     flex: 0 0 100%;
     max-width: 100%;
   }
+}
+
+/* ===================================================================
+   SHARED LOADING SPINNER
+   Used across multiple pages (rebalancer, simulator, etc.)
+   =================================================================== */
+
+.spinner-border {
+  display: block;
+  margin: var(--space-lg) auto;
+  width: 2rem;
+  height: 2rem;
+  border: 0.25rem solid var(--border-color);
+  border-right-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+/* ===================================================================
+   DARK THEME OVERRIDES FOR BOOTSTRAP TABLE CLASSES
+   Override Bootstrap's hardcoded light backgrounds for Ocean Depth theme
+   Must override Bootstrap's CSS variables for colored table rows
+   =================================================================== */
+
+/* Override Bootstrap CSS variables for table-warning */
+.table-warning,
+tr.table-warning,
+.table > :not(caption) > * > .table-warning {
+  --bs-table-bg: rgba(249, 115, 22, 0.15);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: rgba(249, 115, 22, 0.18);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: rgba(249, 115, 22, 0.25);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Override Bootstrap CSS variables for table-secondary */
+.table-secondary,
+tr.table-secondary,
+.table > :not(caption) > * > .table-secondary {
+  --bs-table-bg: var(--bg-tertiary);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--border-subtle);
+  --bs-table-striped-bg: var(--bg-tertiary);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: var(--primary-light);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+/* Override Bootstrap CSS variables for table-primary */
+.table-primary,
+tr.table-primary,
+.table > :not(caption) > * > .table-primary {
+  --bs-table-bg: rgba(6, 182, 212, 0.15);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--primary);
+  --bs-table-striped-bg: rgba(6, 182, 212, 0.18);
+  --bs-table-striped-color: var(--text-primary);
+  --bs-table-hover-bg: rgba(6, 182, 212, 0.25);
+  --bs-table-hover-color: var(--text-primary);
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--primary) !important;
+}
+
+/* Sector rows (table-secondary) - subtle dark background */
+.table-secondary td,
+.table-secondary th,
+tr.table-secondary td,
+tr.table-secondary th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.table-secondary:hover,
+tr.table-secondary:hover {
+  background-color: var(--primary-light) !important;
+}
+
+/* Missing positions row (table-warning) - muted warning style for dark theme */
+.table-warning td,
+.table-warning th,
+tr.table-warning td,
+tr.table-warning th {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-subtle) !important;
+}
+
+.table-warning:hover,
+tr.table-warning:hover {
+  background-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+/* Portfolio total row (table-primary) - accent color for dark theme */
+.table-primary td,
+.table-primary th,
+tr.table-primary td,
+tr.table-primary th {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.table-primary:hover,
+tr.table-primary:hover {
+  background-color: rgba(6, 182, 212, 0.25) !important;
+}
+
+/* Ensure table headers in these rows still look good */
+.table-secondary th,
+.table-warning th,
+.table-primary th,
+tr.table-secondary th,
+tr.table-warning th,
+tr.table-primary th {
+  font-weight: 600;
+}
+
+/* ===================================================================
+   GLOBAL OVERVIEW TABLE (unified-table) DARK THEME FIXES
+   More specific selectors for the striped/hover table in Global Overview
+   =================================================================== */
+
+/* Base table styling for unified-table */
+.unified-table,
+.unified-table tbody,
+.unified-table tbody tr {
+  background-color: var(--bg-secondary) !important;
+}
+
+.unified-table thead th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 2px solid var(--border-default) !important;
+}
+
+.unified-table tbody td {
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+
+/* Striped rows - alternate with subtle background difference */
+.unified-table.table-striped tbody tr:nth-child(odd) {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.unified-table.table-striped tbody tr:nth-child(even) {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Hover states */
+.unified-table.table-hover tbody tr:hover {
+  background-color: var(--primary-light) !important;
+}
+
+/* Warning rows in unified-table (position deficit warning) */
+.unified-table tbody tr.table-warning,
+.unified-table tbody tr.table-warning td,
+.unified-table.table-striped tbody tr.table-warning,
+.unified-table.table-striped tbody tr.table-warning:nth-child(odd),
+.unified-table.table-striped tbody tr.table-warning:nth-child(even) {
+  background-color: rgba(249, 115, 22, 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
+.unified-table tbody tr.table-warning:hover,
+.unified-table.table-striped tbody tr.table-warning:hover {
+  background-color: rgba(249, 115, 22, 0.25) !important;
+}
+
+/* Total row in unified-table */
+.unified-table tbody tr.total-row,
+.unified-table tbody tr.total-row td,
+.unified-table.table-striped tbody tr.total-row,
+.unified-table.table-striped tbody tr.total-row:nth-child(odd),
+.unified-table.table-striped tbody tr.total-row:nth-child(even) {
+  background-color: rgba(6, 182, 212, 0.15) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.unified-table tbody tr.total-row td {
+  border-top: 2px solid var(--primary) !important;
+}
+
+.unified-table tbody tr.total-row:hover,
+.unified-table.table-striped tbody tr.total-row:hover {
+  background-color: rgba(6, 182, 212, 0.25) !important;
 }
 

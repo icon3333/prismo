@@ -645,59 +645,60 @@ const UpdateSelectedHandler = {
 };
 
 const FileUploadHandler = {
+    importMode: null,
+
     init() {
-        const fileInput = document.querySelector('.file-input');
-        const fileLabel = document.querySelector('.file-name');
-        const uploadForm = document.querySelector('form[action*="upload"]');
+        const addBtn = document.getElementById('import-add-btn');
+        const replaceBtn = document.getElementById('import-replace-btn');
+        const fileInput = document.getElementById('csv_file');
         const uploadCard = document.getElementById('upload-card');
 
         debugLog('FileUploadHandler: Debugging elements found:');
+        debugLog('  addBtn:', addBtn);
+        debugLog('  replaceBtn:', replaceBtn);
         debugLog('  fileInput:', fileInput);
-        debugLog('  fileLabel:', fileLabel);
-        debugLog('  uploadForm:', uploadForm);
         debugLog('  uploadCard:', uploadCard);
 
-        if (!fileInput || !fileLabel || !uploadForm || !uploadCard) {
+        if (!addBtn || !replaceBtn || !fileInput || !uploadCard) {
             console.error('Required file upload elements not found');
-            console.error('Missing elements:', {
-                fileInput: !fileInput,
-                fileLabel: !fileLabel,
-                uploadForm: !uploadForm,
-                uploadCard: !uploadCard
-            });
             return;
         }
 
         debugLog('FileUploadHandler: Initializing CSV upload handler');
-        debugLog('Upload form action:', uploadForm.action);
-        debugLog('Upload form method:', uploadForm.method);
+
+        // Add button click - opens file dialog in add mode
+        addBtn.addEventListener('click', () => {
+            FileUploadHandler.importMode = 'add';
+            fileInput.value = '';  // Reset so same file can be re-selected
+            fileInput.click();
+        });
+
+        // Replace button click - opens file dialog in replace mode
+        replaceBtn.addEventListener('click', () => {
+            FileUploadHandler.importMode = 'replace';
+            fileInput.value = '';
+            fileInput.click();
+        });
 
         // File selection handler
         fileInput.addEventListener('change', function () {
             debugLog('File input change event triggered');
-            debugLog('Files length:', fileInput.files.length);
+            if (!fileInput.files.length) return;
 
-            if (fileInput.files.length > 0) {
-                const fileName = fileInput.files[0].name;
-                const fileSize = fileInput.files[0].size;
-                fileLabel.textContent = fileName;
-                debugLog(`File selected: ${fileName}, size: ${fileSize} bytes`);
+            const file = fileInput.files[0];
+            debugLog(`File selected: ${file.name}, size: ${file.size} bytes, mode: ${FileUploadHandler.importMode}`);
 
-                // Prevent multiple submissions by checking if already processing
-                if (uploadCard.classList.contains('is-processing')) {
-                    debugLog('Upload already in progress, ignoring duplicate event');
-                    return;
-                }
+            // Prevent multiple submissions
+            if (uploadCard.classList.contains('is-processing')) {
+                debugLog('Upload already in progress, ignoring');
+                return;
+            }
 
-                // Add a class to the card to indicate processing
-                uploadCard.classList.add('is-processing');
-                debugLog('Added is-processing class to upload card');
-
-                // Upload file using reliable AJAX method
-                FileUploadHandler.submitFile(fileInput.files[0], uploadForm);
+            if (FileUploadHandler.importMode === 'replace') {
+                FileUploadHandler.showReplaceConfirmation(file);
             } else {
-                fileLabel.textContent = 'No file selected';
-                debugLog('No file selected');
+                uploadCard.classList.add('is-processing');
+                FileUploadHandler.submitFile(file);
             }
         });
 
@@ -781,26 +782,43 @@ const FileUploadHandler = {
         } else {
             console.warn('Cancel upload button not found');
         }
+
+        // Replace confirmation modal handlers
+        const replaceModal = document.getElementById('replace-confirm-modal');
+        if (replaceModal) {
+            const closeModal = () => {
+                replaceModal.classList.remove('is-active');
+                fileInput.value = '';
+            };
+            document.getElementById('replace-modal-close').addEventListener('click', closeModal);
+            document.getElementById('replace-cancel-btn').addEventListener('click', closeModal);
+            replaceModal.querySelector('.modal-background').addEventListener('click', closeModal);
+            document.getElementById('replace-confirm-btn').addEventListener('click', () => {
+                replaceModal.classList.remove('is-active');
+                uploadCard.classList.add('is-processing');
+                FileUploadHandler.submitFile(fileInput.files[0]);
+            });
+        }
     },
 
-    async submitFile(file, form) {
+    showReplaceConfirmation(file) {
+        const modal = document.getElementById('replace-confirm-modal');
+        document.getElementById('replace-file-name').textContent = file.name;
+        modal.classList.add('is-active');
+    },
+
+    async submitFile(file) {
+        const uploadUrl = '/portfolio/upload';
         debugLog('Starting CSV file upload:', {
             fileName: file.name,
             fileSize: file.size,
-            actionUrl: form.action
+            mode: FileUploadHandler.importMode
         });
-        
-        // Fix for local development: ensure we use relative URLs
-        let uploadUrl = form.action;
-        if (uploadUrl.includes('rebalancer.nniiccoo.com')) {
-            // Replace production URL with relative path for local development
-            uploadUrl = '/portfolio/upload';
-            debugLog('Fixed upload URL for local development:', uploadUrl);
-        }
         
         try {
             const formData = new FormData();
             formData.append('csv_file', file);
+            formData.append('mode', FileUploadHandler.importMode || 'replace');
 
             debugLog('Uploading file via AJAX...');
             
@@ -1209,6 +1227,8 @@ class PortfolioTableApp {
                     bulkSector: '',
                     bulkThesis: '',
                     bulkCountry: '',
+                    bulkInvestmentType: '',
+                    lastCheckedIndex: null,
                     isBulkProcessing: false,
                     isUpdatingSelected: false,
                     // Track which items/fields are currently saving
@@ -2770,6 +2790,33 @@ class PortfolioTableApp {
                     this.bulkSector = '';
                     this.bulkThesis = '';
                     this.bulkCountry = '';
+                    this.bulkInvestmentType = '';
+                    this.lastCheckedIndex = null;
+                },
+
+                handleShiftClick(event, item) {
+                    const items = this.filteredPortfolioItems;
+                    const currentIndex = items.findIndex(i => i.id === item.id);
+
+                    if (event.shiftKey && this.lastCheckedIndex !== null) {
+                        const lastIdx = this.lastCheckedIndex;
+                        // Let v-model process the click first, then override with range selection
+                        this.$nextTick(() => {
+                            const start = Math.min(lastIdx, currentIndex);
+                            const end = Math.max(lastIdx, currentIndex);
+                            const rangeIds = items.slice(start, end + 1).map(i => i.id);
+
+                            const anchorId = items[lastIdx].id;
+                            const isSelecting = this.selectedItemIds.includes(anchorId);
+                            if (isSelecting) {
+                                this.selectedItemIds = [...new Set([...this.selectedItemIds, ...rangeIds])];
+                            } else {
+                                this.selectedItemIds = this.selectedItemIds.filter(id => !rangeIds.includes(id));
+                            }
+                        });
+                    }
+
+                    this.lastCheckedIndex = currentIndex;
                 },
 
                 async applyBulkChanges() {
@@ -2780,7 +2827,7 @@ class PortfolioTableApp {
                         return;
                     }
 
-                    if (!this.bulkPortfolio && !this.bulkSector && !this.bulkThesis && !this.bulkCountry) {
+                    if (!this.bulkPortfolio && !this.bulkSector && !this.bulkThesis && !this.bulkCountry && !this.bulkInvestmentType) {
                         if (typeof showNotification === 'function') {
                             showNotification('Please select a value to apply', 'is-warning');
                         }
@@ -2796,16 +2843,22 @@ class PortfolioTableApp {
                         );
 
                         // Prepare the bulk update data
-                        const updateData = selectedItems.map(item => ({
-                            id: item.id,
-                            company: item.company,
-                            portfolio: this.bulkPortfolio || item.portfolio,
-                            sector: this.bulkSector !== '' ? this.bulkSector : item.sector,
-                            thesis: this.bulkThesis !== '' ? this.bulkThesis : item.thesis,
-                            country: this.bulkCountry !== '' ? this.bulkCountry : item.effective_country,
-                            is_country_user_edit: this.bulkCountry !== '',
-                            identifier: item.identifier
-                        }));
+                        const updateData = selectedItems.map(item => {
+                            const update = {
+                                id: item.id,
+                                company: item.company,
+                                portfolio: this.bulkPortfolio || item.portfolio,
+                                sector: this.bulkSector !== '' ? this.bulkSector : item.sector,
+                                thesis: this.bulkThesis !== '' ? this.bulkThesis : item.thesis,
+                                country: this.bulkCountry !== '' ? this.bulkCountry : item.effective_country,
+                                is_country_user_edit: this.bulkCountry !== '',
+                                identifier: item.identifier
+                            };
+                            if (this.bulkInvestmentType) {
+                                update.investment_type = this.bulkInvestmentType;
+                            }
+                            return update;
+                        });
 
                         debugLog('Sending bulk update:', updateData);
 
@@ -2827,6 +2880,7 @@ class PortfolioTableApp {
                             if (this.bulkSector !== '') changesText.push(`sector to "${this.bulkSector}"`);
                             if (this.bulkThesis !== '') changesText.push(`thesis to "${this.bulkThesis}"`);
                             if (this.bulkCountry !== '') changesText.push(`country to "${this.bulkCountry}"`);
+                            if (this.bulkInvestmentType) changesText.push(`type to "${this.bulkInvestmentType}"`);
 
                             if (typeof showNotification === 'function') {
                                 showNotification(

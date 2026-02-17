@@ -1562,15 +1562,17 @@
                     sincePurchaseInfo = getSincePurchaseDateInfo(identifiers);
                     if (sincePurchaseInfo) {
                         const daysSince = (Date.now() - new Date(sincePurchaseInfo.earliestDate).getTime()) / 86400000;
-                        if (daysSince < 2) {
-                            // Dates are likely wrong (import timestamps) — fall back gracefully
-                            console.warn('Since Purchase: earliest date is today/yesterday, falling back to 5y');
+                        console.log(`[SincePurchase] earliestDate=${sincePurchaseInfo.earliestDate}, daysSince=${daysSince.toFixed(1)}, company=${sincePurchaseInfo.earliestCompany || 'unknown'}`);
+                        if (daysSince < 30) {
+                            // Less than 30 days - too short for a meaningful "Since Purchase" chart
+                            console.warn(`[SincePurchase] Only ${daysSince.toFixed(1)} days of history, falling back to 5y`);
                             sincePurchaseInfo = null;
                             effectivePeriod = '5y';
                         } else {
                             startDate = sincePurchaseInfo.earliestDate;
                         }
                     } else {
+                        console.warn('[SincePurchase] No purchase dates available, falling back to 5y');
                         effectivePeriod = '5y'; // Fallback when no dates available
                     }
                 }

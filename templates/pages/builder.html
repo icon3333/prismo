@@ -10,6 +10,8 @@
 {% block content %}
 <div class="container">
   <div id="allocation-builder" class="build-page" v-cloak>
+    <h1 class="page-title">Builder</h1>
+
     <!-- Budget Management Section -->
     <h2 class="section-title">Budget Management</h2>
     <div class="budget-card">
@@ -83,8 +85,8 @@
         <!-- Maximum % per Stock -->
         <div class="rule-item">
           <div class="rule-description">
-            <h4 class="rule-title">Maximum % per Stock</h4>
-            <p class="rule-subtitle">Limits the maximum percentage allocation for any single stock position</p>
+            <div class="rule-title">Maximum % per Stock</div>
+            <div class="rule-subtitle">Limits the maximum percentage allocation for any single stock position</div>
           </div>
           <div class="rule-input">
             <div class="field">
@@ -99,8 +101,8 @@
         <!-- Maximum % per ETF -->
         <div class="rule-item">
           <div class="rule-description">
-            <h4 class="rule-title">Maximum % per ETF</h4>
-            <p class="rule-subtitle">Limits the maximum percentage allocation for any single ETF position</p>
+            <div class="rule-title">Maximum % per ETF</div>
+            <div class="rule-subtitle">Limits the maximum percentage allocation for any single ETF position</div>
           </div>
           <div class="rule-input">
             <div class="field">
@@ -115,8 +117,8 @@
         <!-- Maximum % per Sector -->
         <div class="rule-item">
           <div class="rule-description">
-            <h4 class="rule-title">Maximum % per Sector</h4>
-            <p class="rule-subtitle">Limits the maximum percentage allocation for any single portfolio sector</p>
+            <div class="rule-title">Maximum % per Sector</div>
+            <div class="rule-subtitle">Limits the maximum percentage allocation for any single portfolio sector</div>
           </div>
           <div class="rule-input">
             <div class="field">
@@ -131,8 +133,8 @@
         <!-- Maximum % per Country -->
         <div class="rule-item">
           <div class="rule-description">
-            <h4 class="rule-title">Maximum % per Country</h4>
-            <p class="rule-subtitle">Limits the maximum percentage allocation for companies from any single country</p>
+            <div class="rule-title">Maximum % per Country</div>
+            <div class="rule-subtitle">Limits the maximum percentage allocation for companies from any single country</div>
           </div>
           <div class="rule-input">
             <div class="field">
@@ -256,8 +258,8 @@
             </div>
 
             <!-- Refined Positions Table -->
-            <div class="positions-table">
-              <table class="table is-fullwidth unified-table">
+            <div class="positions-table table-responsive">
+              <table class="table table-striped table-hover unified-table">
                 <thead>
                   <tr>
                     <th class="col-company">Company</th>
@@ -287,8 +289,8 @@
                         readonly>
                     </td>
                     <td class="col-checkbox has-text-centered">
-                      <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded"
-                        style="width: 36px; height: 36px; padding: 0;" @click="removePosition(index, pIndex)"
+                      <button v-if="!position.isPlaceholder" class="button is-danger is-small is-rounded btn-icon-square"
+                        @click="removePosition(index, pIndex)"
                         title="Remove position">
                         <i class="fas fa-times"></i>
                       </button>
@@ -343,7 +345,7 @@
 
     <!-- Summary Table -->
     <div class="table-responsive">
-      <table class="table is-fullwidth unified-table">
+      <table class="table table-striped table-hover unified-table">
         <thead>
           <tr>
             <th class="col-input-small">Portfolio</th>

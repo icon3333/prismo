@@ -53,6 +53,7 @@ logs/
 # Temporary files
 *.tmp
 temp/
+cookies.txt
 
 # Node modules (if any)
 node_modules/

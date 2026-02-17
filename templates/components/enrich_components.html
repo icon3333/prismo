@@ -11,58 +11,85 @@
 <div class="column is-6">
     <div id="upload-card" class="mb-5">
         <h3 class="subsection-title">Upload Portfolio Data</h3>
-        <div>
-            <form action="{{ url_for('portfolio.upload_csv') }}" method="post" enctype="multipart/form-data">
-                <div class="field">
-                    <label class="label">CSV File</label>
-                    <div class="file has-name is-fullwidth">
-                        <label class="file-label">
-                            <input class="file-input" type="file" name="csv_file" id="csv_file" accept=".csv">
-                            <span class="file-cta">
-                                <span class="file-icon">
-                                    <i class="fas fa-upload"></i>
-                                </span>
-                                <span class="file-label">
-                                    Choose a file…
-                                </span>
-                            </span>
-                            <span class="file-name">
-                                No file selected
-                            </span>
-                        </label>
-                    </div>
-                    <p class="help">Upload a CSV file with your portfolio data.</p>
-                </div>
+        <p class="help mb-4">Import from Parqet or IBKR Flex Query CSV. Format is auto-detected.</p>
 
-                <!-- Enhanced loading indicator with progress bar -->
-                <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
-                    <div class="loading-container">
-                        <!-- Progress header with percentage -->
-                        <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-                            <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
-                            <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
-                        </div>
-
-                        <!-- Visual progress bar -->
-                        <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
-
-                        <!-- Status message and controls -->
-                        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
-                            <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
-                            <button id="cancel-upload-btn"
-                                class="button is-small is-danger is-outlined"
-                                title="Cancel upload">
-                                <span class="icon is-small">
-                                    <i class="fas fa-times"></i>
-                                </span>
-                                <span>Cancel</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-            </form>
+        <!-- Add/Replace buttons side by side -->
+        <div class="columns is-variable is-2 mb-0">
+            <div class="column is-6">
+                <button id="import-add-btn" class="button is-info is-fullwidth is-medium">
+                    <span class="icon"><i class="fas fa-plus"></i></span>
+                    <span>Add</span>
+                </button>
+            </div>
+            <div class="column is-6">
+                <button id="import-replace-btn" class="button is-danger is-outlined is-fullwidth is-medium">
+                    <span class="icon"><i class="fas fa-sync-alt"></i></span>
+                    <span>Replace</span>
+                </button>
+            </div>
         </div>
+        <p class="help has-text-grey-light">
+            <strong>Add</strong>: merge new positions with existing.
+            <strong>Replace</strong>: remove missing positions from the same broker source.
+        </p>
+
+        <!-- Hidden file input (triggered by buttons) -->
+        <input type="file" id="csv_file" accept=".csv" style="display: none;">
+
+        <!-- Enhanced loading indicator with progress bar -->
+        <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
+            <div class="loading-container">
+                <!-- Progress header with percentage -->
+                <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+                    <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
+                    <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
+                </div>
+
+                <!-- Visual progress bar -->
+                <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
+
+                <!-- Status message and controls -->
+                <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
+                    <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
+                    <button id="cancel-upload-btn"
+                        class="button is-small is-danger is-outlined"
+                        title="Cancel upload">
+                        <span class="icon is-small">
+                            <i class="fas fa-times"></i>
+                        </span>
+                        <span>Cancel</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Replace Confirmation Modal -->
+<div class="modal" id="replace-confirm-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+        <header class="modal-card-head" style="background: var(--coral-500);">
+            <p class="modal-card-title has-text-white">
+                <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+                Replace Portfolio Data
+            </p>
+            <button class="delete" aria-label="close" id="replace-modal-close"></button>
+        </header>
+        <section class="modal-card-body">
+            <div class="notification is-danger is-light">
+                <p><strong>This will remove all positions from the same broker source</strong> that are not in the new CSV file.</p>
+                <p class="mt-2">Positions from other brokers and manually-added stocks will not be affected.</p>
+            </div>
+            <p class="mt-3">File: <strong id="replace-file-name"></strong></p>
+        </section>
+        <footer class="modal-card-foot is-justify-content-flex-end">
+            <button class="button" id="replace-cancel-btn">Cancel</button>
+            <button class="button is-danger" id="replace-confirm-btn">
+                <span class="icon"><i class="fas fa-trash-alt"></i></span>
+                <span>Replace</span>
+            </button>
+        </footer>
     </div>
 </div>
 {% endmacro %}
@@ -201,6 +228,11 @@
             <!-- Portfolio Summary Card with Cash -->
             <div v-if="!loading && filteredPortfolioItems.length > 0" class="portfolio-summary-card mb-4">
                 <div class="summary-item">
+                    <span class="summary-label">Positions</span>
+                    <span class="summary-value" v-text="metrics.total"></span>
+                </div>
+                <div class="summary-operator">|</div>
+                <div class="summary-item">
                     <span class="summary-label">Holdings</span>
                     <span class="summary-value" v-html="formatCurrency(metrics.totalValue)"></span>
                 </div>
@@ -223,7 +255,6 @@
                     </div>
                 </div>
                 <!-- Builder KPI Section (before equals sign) -->
-                <div class="summary-divider" v-if="builderData !== null || (builderDataLoaded && builderData === null)"></div>
                 <div class="summary-item summary-item-builder" v-if="builderData !== null">
                     <span class="summary-label">
                         <a href="/portfolio/builder" class="builder-link" title="Open Builder">
@@ -251,6 +282,7 @@
                     <span class="summary-label">Total</span>
                     <span class="summary-value" v-html="formatCurrency(portfolioTotal)"></span>
                 </div>
+                <span class="summary-updated" v-if="metrics.lastUpdate" v-text="'Updated ' + formatDateAgo(metrics.lastUpdate)"></span>
             </div>
             <div class="portfolio-controls-container mb-4">
                 <div class="enrich-main-controls">
@@ -323,15 +355,6 @@
                         </div>
                     </div>
 
-                    <!-- Metrics Box (Distant spacing from controls) -->
-                    <div v-if="!loading && filteredPortfolioItems.length > 0" class="enrich-metrics-box">
-                        <span class="metric-label">Total:</span>
-                        <span class="metric-value" v-text="metrics.total"></span>
-                        <span class="metric-label">Value:</span>
-                        <span class="metric-value" v-html="formatCurrency(metrics.totalValue)"></span>
-                        <span class="metric-label">Updated:</span>
-                        <span class="metric-value" v-text="formatDateAgo(metrics.lastUpdate)"></span>
-                    </div>
                 </div>
             </div>
 
@@ -375,10 +398,20 @@
                                 {% endfor %}
                             </select>
                         </div>
+                        <div class="select">
+                            <select v-model="bulkInvestmentType">
+                                <option value="">Select Type</option>
+                                <option value="Stock">Stock</option>
+                                <option value="ETF">ETF</option>
+                            </select>
+                        </div>
                         <button class="button is-primary" @click="applyBulkChanges"
-                            :disabled="(!bulkPortfolio && !bulkSector && !bulkThesis && !bulkCountry) || isBulkProcessing"
+                            :disabled="(!bulkPortfolio && !bulkSector && !bulkThesis && !bulkCountry && !bulkInvestmentType) || isBulkProcessing"
                             :class="{'is-loading': isBulkProcessing}">
                             Apply Changes
+                        </button>
+                        <button class="button is-primary" @click="clearSelection">
+                            Clear Selection
                         </button>
                         <button class="button is-danger" @click="deleteManualStocks"
                             v-if="selectedManualCount > 0"
@@ -388,9 +421,6 @@
                                 <i class="fas fa-trash"></i>
                             </span>
                             <span>Delete ({% raw %}{{ selectedManualCount }}{% endraw %})</span>
-                        </button>
-                        <button class="button" @click="clearSelection">
-                            Clear Selection
                         </button>
                     </div>
                 </div>
@@ -497,13 +527,15 @@
                             <tr v-for="item in filteredPortfolioItems" :key="item.id">
                                 <td class="col-checkbox">
                                     <label class="checkbox">
-                                        <input type="checkbox" :value="item.id" v-model="selectedItemIds">
+                                        <input type="checkbox" :value="item.id" v-model="selectedItemIds"
+                                               @click="handleShiftClick($event, item)">
                                     </label>
                                 </td>
                                 <td class="col-identifier">
                                     <div class="identifier-cell-wrapper">
-                                        <!-- Show "M" badge for manual stocks -->
+                                        <!-- Show source badge for non-Parqet stocks -->
                                         <span v-if="item.source === 'manual'" class="manual-badge" title="Manually added">M</span>
+                                        <span v-else-if="item.source === 'ibkr'" class="manual-badge ibkr-badge" title="Imported from IBKR">IB</span>
                                         <!-- Editable identifier for all stocks -->
                                         <div class="field has-addons mb-0" :class="{ 'has-revert': item.identifier_manually_edited }">
                                             <div class="control is-expanded">

@@ -20,7 +20,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   margin-bottom: var(--space-xl);
-  padding: var(--space-xl);
+  padding: var(--space-lg) var(--space-xl);
 }
 
 .budget-results {
@@ -44,11 +44,11 @@
 }
 
 /* Form field spacing and layout */
-.field {
+.build-page .field {
   margin-bottom: var(--space-md);
 }
 
-.label {
+.build-page .label {
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: var(--space-xs);
@@ -276,38 +276,12 @@
 }
 
 /* Positions Table */
-.positions-table {
-  /* Minimalist - no border or shadow */
-}
-
 .positions-table .table {
   margin: 0;
-  background-color: transparent;
-}
-
-.build-page .positions-table th {
-  background-color: transparent;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 2px solid var(--border-default);
-}
-
-.build-page .positions-table tfoot th {
-  background-color: transparent;
 }
 
 .positions-table td {
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
-}
-
-.positions-table tbody tr:hover {
-  background-color: var(--primary-light);
 }
 
 /* Open Positions Text */
@@ -317,8 +291,18 @@
   font-weight: 500;
 }
 
+/* Icon-only button (square, no padding) */
+.btn-icon-square {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Global Allocation Rules Card */
-.card {
+.build-page .card {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -351,7 +335,7 @@
 }
 
 .rule-title {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--space-xs);
@@ -487,21 +471,6 @@
 .remaining-positions-text {
   font-weight: 500;
   color: var(--primary);
-}
-
-/* Table Styling Overrides for Build Page */
-.table tr {
-  background-color: var(--bg-secondary);
-  transition: background-color var(--transition-fast);
-}
-
-.table tr:hover {
-  background-color: var(--primary-light);
-}
-
-.table th,
-.table td {
-  padding: var(--space-sm) var(--space-md);
 }
 
 .build-page .table-active {

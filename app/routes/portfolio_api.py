@@ -20,6 +20,7 @@ from app.utils.value_calculator import calculate_portfolio_total, calculate_item
 from app.utils.portfolio_totals import get_portfolio_totals
 from app.utils.identifier_mapping import store_identifier_mapping
 from app.utils.identifier_normalization import normalize_identifier
+from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis
 from app.services.allocation_service import AllocationService
 from app.cache import cache
 
@@ -56,6 +57,12 @@ def _apply_company_update(cursor, company_id, data, account_id):
     for key in data.keys():
         if key not in ALLOWED_FIELDS:
             logger.warning(f"Ignoring non-whitelisted field '{key}' in company update")
+
+    # Normalize text fields before processing
+    if 'sector' in data:
+        data['sector'] = normalize_sector(data.get('sector'))
+    if 'thesis' in data:
+        data['thesis'] = normalize_thesis(data.get('thesis'))
 
     portfolio_name = data.get('portfolio')
     if portfolio_name and portfolio_name != 'None':
@@ -285,7 +292,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
         if data.get('reset_country', False):
             # Reset country to yfinance data
             cursor.execute('''
-                UPDATE companies 
+                UPDATE companies
                 SET override_country = NULL,
                     country_manually_edited = 0,
                     country_manual_edit_date = NULL
@@ -293,7 +300,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
             ''', [company_id])
             logger.info(f"Reset country override for company {company_id}")
         elif 'country' in data:
-            country = data.get('country')
+            country = normalize_country(data.get('country'))
             is_user_edit = data.get('is_country_user_edit', False)
             
             if is_user_edit:
@@ -1948,9 +1955,13 @@ def upload_csv():
             logger.error(f"Failed to create database backup: {e}")
             raise DataIntegrityError('Failed to create database backup before processing')
 
+        # Get import mode (add or replace)
+        mode = request.form.get('mode', 'replace')
+        logger.info(f"Import mode: {mode}")
+
         # Dispatch processing to background thread
         try:
-            job_id = start_csv_processing_job(account_id, file_content)
+            job_id = start_csv_processing_job(account_id, file_content, mode=mode)
         except Exception as e:
             logger.error(f"Failed to start CSV processing job: {e}")
             raise CSVProcessingError(f'Failed to start CSV processing: {str(e)}')
@@ -2199,7 +2210,7 @@ def update_portfolio_api():
                 update_fields.append('identifier = ?')
                 update_values.append(new_identifier)
                 update_fields.append('sector = ?')
-                update_values.append(item.get('sector', ''))
+                update_values.append(normalize_sector(item.get('sector', '')))
                 update_fields.append('portfolio_id = ?')
                 update_values.append(portfolio_id)
 

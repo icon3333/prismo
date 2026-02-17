@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 14
+    LATEST_VERSION = 18
 
     try:
         # Get current schema version
@@ -681,6 +681,130 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 14, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 14 completed: first_bought_date column added to companies")
+
+        # Migration 15: Recover corrupted first_bought_date values
+        # Bug: parser.py column rename was inverted, causing dates to resolve to import timestamp
+        # This NULLs out any first_bought_date set within the last 30 days so the next
+        # CSV reimport (with the fixed parser) sets them correctly from actual transaction dates
+        if current_version < 15:
+            logger.info("Applying migration 15: Recovering corrupted first_bought_date values")
+            affected = cursor.execute(
+                "UPDATE companies SET first_bought_date = NULL WHERE first_bought_date > datetime('now', '-30 days')"
+            ).rowcount
+            logger.info(f"Migration 15: NULLed {affected} corrupted first_bought_date values")
+            cursor.execute("UPDATE schema_version SET version = 15, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 15 completed: corrupted first_bought_date values recovered")
+
+        # Migration 16: Extend source CHECK constraint for multi-broker support
+        # Rename 'csv' → 'parqet', add 'ibkr' as valid source
+        if current_version < 16:
+            logger.info("Applying migration 16: Extending source CHECK for multi-broker support")
+            cursor.execute('PRAGMA foreign_keys = OFF')
+            cursor.execute('''
+                CREATE TABLE companies_new (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    identifier TEXT,
+                    sector TEXT NOT NULL,
+                    thesis TEXT DEFAULT '',
+                    portfolio_id INTEGER,
+                    account_id INTEGER NOT NULL,
+                    total_invested REAL DEFAULT 0,
+                    override_country TEXT,
+                    country_manually_edited BOOLEAN DEFAULT 0,
+                    country_manual_edit_date DATETIME,
+                    custom_total_value REAL,
+                    custom_price_eur REAL,
+                    is_custom_value BOOLEAN DEFAULT 0,
+                    custom_value_date DATETIME,
+                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+                    override_identifier TEXT,
+                    identifier_manually_edited BOOLEAN DEFAULT 0,
+                    identifier_manual_edit_date DATETIME,
+                    source TEXT DEFAULT 'parqet' CHECK(source IN ('parqet', 'ibkr', 'manual')),
+                    first_bought_date DATETIME,
+                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id),
+                    UNIQUE (account_id, name)
+                )
+            ''')
+            cursor.execute('''
+                INSERT INTO companies_new
+                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
+                       total_invested, override_country, country_manually_edited,
+                       country_manual_edit_date, custom_total_value, custom_price_eur,
+                       is_custom_value, custom_value_date, investment_type,
+                       override_identifier, identifier_manually_edited,
+                       identifier_manual_edit_date,
+                       CASE WHEN source = 'csv' THEN 'parqet' ELSE source END,
+                       first_bought_date
+                FROM companies
+            ''')
+            cursor.execute('DROP TABLE companies')
+            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
+            # Recreate indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
+            cursor.execute('PRAGMA foreign_keys = ON')
+            cursor.execute("UPDATE schema_version SET version = 16, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 16 completed: source CHECK extended (csv→parqet, added ibkr)")
+
+        if current_version < 17:
+            # Migration 17: Normalize existing sector, override_country, and thesis values
+            # sector/override_country → Title Case, thesis → trimmed
+            cursor = db.cursor()
+            rows = cursor.execute(
+                'SELECT id, sector, override_country, thesis FROM companies'
+            ).fetchall()
+            for row in rows:
+                cid = row[0]
+                sector = row[1]
+                country = row[2]
+                thesis = row[3]
+                new_sector = sector.strip().title() if sector and sector.strip() else sector
+                new_country = country.strip().title() if country and country.strip() else country
+                new_thesis = thesis.strip().title() if thesis and thesis.strip() else thesis
+                if new_sector != sector or new_country != country or new_thesis != thesis:
+                    cursor.execute(
+                        'UPDATE companies SET sector = ?, override_country = ?, thesis = ? WHERE id = ?',
+                        [new_sector, new_country, new_thesis, cid]
+                    )
+            cursor.execute("UPDATE schema_version SET version = 17, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 17 completed: normalized sector/country to Title Case, trimmed thesis")
+
+        # Migration 18: Re-normalize thesis (and sector/country) to Title Case
+        # Migration 17 was first deployed with thesis only getting .strip() (no .title()).
+        # Since migration 17 already ran, existing thesis values were never Title Cased.
+        if current_version < 18:
+            logger.info("Applying migration 18: Re-normalizing sector/country/thesis to Title Case")
+            rows = cursor.execute(
+                'SELECT id, sector, override_country, thesis FROM companies'
+            ).fetchall()
+            updated = 0
+            for row in rows:
+                cid, sector, country, thesis = row[0], row[1], row[2], row[3]
+                new_sector = sector.strip().title() if sector and sector.strip() else sector
+                new_country = country.strip().title() if country and country.strip() else country
+                new_thesis = thesis.strip().title() if thesis and thesis.strip() else thesis
+                if new_sector != sector or new_country != country or new_thesis != thesis:
+                    cursor.execute(
+                        'UPDATE companies SET sector = ?, override_country = ?, thesis = ? WHERE id = ?',
+                        [new_sector, new_country, new_thesis, cid]
+                    )
+                    updated += 1
+            cursor.execute("UPDATE schema_version SET version = 18, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info(f"Migration 18 completed: re-normalized {updated} companies to Title Case")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

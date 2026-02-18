@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 18
+    LATEST_VERSION = 19
 
     try:
         # Get current schema version
@@ -805,6 +805,25 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 18, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info(f"Migration 18 completed: re-normalized {updated} companies to Title Case")
+
+        # Migration 19: Add type and clone tracking columns to simulations table
+        if current_version < 19:
+            logger.info("Applying migration 19: Adding type and clone columns to simulations")
+            cursor.execute(
+                "ALTER TABLE simulations ADD COLUMN type TEXT NOT NULL DEFAULT 'overlay' CHECK(type IN ('overlay', 'portfolio'))"
+            )
+            cursor.execute(
+                "ALTER TABLE simulations ADD COLUMN cloned_from_portfolio_id INTEGER"
+            )
+            cursor.execute(
+                "ALTER TABLE simulations ADD COLUMN cloned_from_name TEXT"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_simulations_type ON simulations(account_id, type)"
+            )
+            cursor.execute("UPDATE schema_version SET version = 19, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 19 completed: added type, cloned_from_portfolio_id, cloned_from_name to simulations")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

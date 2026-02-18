@@ -15,6 +15,7 @@ from app.routes.portfolio_api import (
     simulator_ticker_lookup, simulator_portfolio_allocations,
     simulator_simulations_list, simulator_simulation_create, simulator_simulation_get,
     simulator_simulation_update, simulator_simulation_delete,
+    simulator_search_investments, simulator_clone_portfolio,
     builder_investment_targets,
     get_account_cash, set_account_cash,
     add_company, validate_identifier, delete_manual_companies, get_portfolios_for_dropdown,
@@ -349,6 +350,10 @@ portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
                           view_func=simulator_simulation_update, methods=['PUT'])
 portfolio_bp.add_url_rule('/api/simulator/simulations/<int:simulation_id>',
                           view_func=simulator_simulation_delete, methods=['DELETE'])
+portfolio_bp.add_url_rule('/api/simulator/search-investments',
+                          view_func=simulator_search_investments, methods=['GET'])
+portfolio_bp.add_url_rule('/api/simulator/clone-portfolio',
+                          view_func=simulator_clone_portfolio, methods=['POST'])
 # Builder API (for cross-page integration)
 portfolio_bp.add_url_rule('/api/builder/investment-targets',
                           view_func=builder_investment_targets, methods=['GET'])

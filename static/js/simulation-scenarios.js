@@ -4,6 +4,10 @@
  * Shows portfolio allocation with simulated additions,
  * real-time percentage breakdowns by country and sector.
  * Supports saving/loading simulations and scope toggling.
+ *
+ * Two modes:
+ * - Overlay: Simulated positions layered on top of real portfolio data
+ * - Portfolio: Standalone simulated portfolio (no baseline)
  */
 
 class AllocationSimulator {
@@ -21,6 +25,8 @@ class AllocationSimulator {
     this.savedSimulations = [];        // List of saved simulations
     this.currentSimulationId = null;   // Currently loaded simulation ID
     this.currentSimulationName = null; // Currently loaded simulation name
+    this.currentSimulationType = null; // Currently loaded simulation type
+    this.currentClonedFromName = null; // Source portfolio name if cloned
     // Auto-save state
     this.autoSaveStatus = 'idle';       // 'idle' | 'saving' | 'saved' | 'error'
     this.autoSaveErrorCount = 0;
@@ -31,6 +37,7 @@ class AllocationSimulator {
     this.hasBuilderConfig = false;     // Whether Builder has been configured
 
     // Settings
+    this.mode = 'overlay';             // 'overlay' or 'portfolio'
     this.scope = 'global';             // 'global' or 'portfolio'
     this.portfolioId = null;           // Selected portfolio ID (if scope='portfolio')
 
@@ -60,6 +67,10 @@ class AllocationSimulator {
       this._autoSaveTimeoutId = setTimeout(() => this.autoSave(), 800);
     };
 
+    // Ticker autocomplete state
+    this._tickerSearchTimeout = null;
+    this._tickerDropdownVisible = false;
+
     // Initialize
     this.render();
     this.bindEvents();
@@ -87,6 +98,7 @@ class AllocationSimulator {
 
   saveState() {
     const state = {
+      mode: this.mode,
       scope: this.scope,
       portfolioId: this.portfolioId,
       simulationId: this.currentSimulationId
@@ -101,6 +113,92 @@ class AllocationSimulator {
     } catch (e) {
       console.error('Failed to load simulator state:', e);
       return null;
+    }
+  }
+
+  // ============================================================================
+  // Mode Management
+  // ============================================================================
+
+  isPortfolioMode() {
+    return this.mode === 'portfolio';
+  }
+
+  switchMode(newMode) {
+    if (newMode === this.mode) return;
+
+    // Flush any pending auto-save before switching
+    this.cancelPendingAutoSave();
+    if (this.currentSimulationId) {
+      this.autoSave();
+    }
+
+    this.mode = newMode;
+
+    // Reset simulation state
+    this.currentSimulationId = null;
+    this.currentSimulationName = null;
+    this.currentSimulationType = null;
+    this.currentClonedFromName = null;
+    this.items = [];
+    this.setAutoSaveStatus('idle');
+
+    // Update UI
+    this.updateModeUI();
+    this.saveState();
+
+    // Reload simulations filtered by new mode type
+    this.loadSavedSimulations();
+
+    // Reload data (portfolio mode doesn't need baseline, but we still load for reference)
+    this.renderTable();
+    this.updateCharts();
+    this.updateInvestmentProgress();
+  }
+
+  updateModeUI() {
+    // Update toggle buttons
+    const toggle = document.getElementById('simulator-mode-toggle');
+    if (toggle) {
+      toggle.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === this.mode);
+      });
+    }
+
+    // Show/hide portfolio scope dropdown (overlay mode only)
+    const portfolioControl = document.getElementById('simulator-portfolio-control');
+    if (portfolioControl) {
+      portfolioControl.style.visibility = this.isPortfolioMode() ? 'hidden' : 'visible';
+      portfolioControl.style.pointerEvents = this.isPortfolioMode() ? 'none' : 'auto';
+    }
+
+    // Show/hide clone button (portfolio mode only)
+    const cloneBtn = document.getElementById('simulator-clone-btn');
+    if (cloneBtn) {
+      cloneBtn.style.visibility = this.isPortfolioMode() ? 'visible' : 'hidden';
+      cloneBtn.style.pointerEvents = this.isPortfolioMode() ? 'auto' : 'none';
+    }
+
+    // Update cloned-from label
+    this.updateClonedFromLabel();
+
+    // Update delete button visibility
+    this.updateDeleteButtonVisibility();
+
+    // Reset simulation dropdown
+    const select = document.getElementById('simulator-load-select');
+    if (select) select.value = '';
+  }
+
+  updateClonedFromLabel() {
+    const label = document.getElementById('simulator-cloned-from');
+    if (!label) return;
+
+    if (this.currentClonedFromName && this.isPortfolioMode()) {
+      label.innerHTML = `<i class="fas fa-link"></i> Cloned from: ${this.escapeHtml(this.currentClonedFromName)}`;
+      label.style.display = 'inline-flex';
+    } else {
+      label.style.display = 'none';
     }
   }
 
@@ -124,8 +222,11 @@ class AllocationSimulator {
       console.error('Failed to load portfolios:', error);
     }
 
-    // Restore saved scope and portfolio selection
+    // Restore saved state
     if (savedState) {
+      if (savedState.mode && (savedState.mode === 'overlay' || savedState.mode === 'portfolio')) {
+        this.mode = savedState.mode;
+      }
       if (savedState.scope) {
         this.scope = savedState.scope;
       }
@@ -146,6 +247,7 @@ class AllocationSimulator {
     }
 
     // Update UI to reflect restored state
+    this.updateModeUI();
     this.updateScopeUI();
 
     // Bind portfolio select event (combined Global + portfolios dropdown)
@@ -167,6 +269,16 @@ class AllocationSimulator {
         }
         await this.refreshPortfolios();
         await this.loadPortfolioAllocations();
+      });
+    }
+
+    // Bind mode toggle
+    const modeToggle = document.getElementById('simulator-mode-toggle');
+    if (modeToggle) {
+      modeToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.toggle-btn');
+        if (!btn) return;
+        this.switchMode(btn.dataset.mode);
       });
     }
   }
@@ -275,7 +387,8 @@ class AllocationSimulator {
 
   async loadSavedSimulations() {
     try {
-      const response = await fetch('/portfolio/api/simulator/simulations');
+      const typeFilter = this.isPortfolioMode() ? 'portfolio' : 'overlay';
+      const response = await fetch(`/portfolio/api/simulator/simulations?type=${typeFilter}`);
       const result = await response.json();
 
       if (result.success) {
@@ -285,7 +398,7 @@ class AllocationSimulator {
         // Restore saved simulation from localStorage
         const savedState = this.loadState();
         if (savedState && savedState.simulationId) {
-          // Check if simulation still exists
+          // Check if simulation still exists in the filtered list
           const exists = this.savedSimulations.some(s => s.id === savedState.simulationId);
           if (exists) {
             // Update dropdown and load simulation (without showing toast)
@@ -342,12 +455,15 @@ class AllocationSimulator {
         const simulation = result.data.simulation;
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
+        this.currentSimulationType = simulation.type;
+        this.currentClonedFromName = simulation.cloned_from_name;
         // Don't override scope/portfolioId - keep user's current selection
         this.items = simulation.items || [];
 
         this.renderTable();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
+        this.updateClonedFromLabel();
         this.saveState();
 
         this.showToast(`Loaded "${simulation.name}"`, 'success');
@@ -375,6 +491,8 @@ class AllocationSimulator {
         const simulation = result.data.simulation;
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
+        this.currentSimulationType = simulation.type;
+        this.currentClonedFromName = simulation.cloned_from_name;
         // Don't override scope/portfolioId - keep user's current selection from localStorage
         this.items = simulation.items || [];
 
@@ -382,6 +500,7 @@ class AllocationSimulator {
         this.renderTable();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
+        this.updateClonedFromLabel();
       }
     } catch (error) {
       console.error('Error loading simulation:', error);
@@ -393,10 +512,13 @@ class AllocationSimulator {
     this.setAutoSaveStatus('idle');
     this.currentSimulationId = null;
     this.currentSimulationName = null;
+    this.currentSimulationType = null;
+    this.currentClonedFromName = null;
     this.items = [];
     this.renderTable();
     this.updateCharts();
     this.updateDeleteButtonVisibility();
+    this.updateClonedFromLabel();
     this.saveState();
 
     // Reset load dropdown
@@ -446,7 +568,8 @@ class AllocationSimulator {
       name: name,
       scope: this.scope,
       portfolio_id: this.scope === 'portfolio' ? this.portfolioId : null,
-      items: this.items
+      items: this.items,
+      type: this.isPortfolioMode() ? 'portfolio' : 'overlay'
     };
 
     try {
@@ -463,6 +586,7 @@ class AllocationSimulator {
         const simulation = result.data.simulation;
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
+        this.currentSimulationType = simulation.type;
 
         // Close modal
         document.getElementById('save-simulation-modal').style.display = 'none';
@@ -509,6 +633,117 @@ class AllocationSimulator {
     } catch (error) {
       console.error('Error deleting simulation:', error);
       this.showToast('Failed to delete simulation', 'danger');
+    }
+  }
+
+  // ============================================================================
+  // Clone Portfolio
+  // ============================================================================
+
+  openCloneModal() {
+    const modal = document.getElementById('clone-portfolio-modal');
+    const select = document.getElementById('clone-portfolio-select');
+    const nameInput = document.getElementById('clone-name-input');
+
+    // Populate portfolio dropdown
+    select.innerHTML = '';
+    this.portfolios.forEach(p => {
+      const option = document.createElement('option');
+      option.value = p.id;
+      option.textContent = p.name;
+      select.appendChild(option);
+    });
+
+    // Pre-fill name
+    if (this.portfolios.length > 0) {
+      nameInput.value = `Clone of ${this.portfolios[0].name}`;
+    }
+
+    // Update name when portfolio selection changes
+    select.onchange = () => {
+      const selected = this.portfolios.find(p => p.id == select.value);
+      if (selected) {
+        nameInput.value = `Clone of ${selected.name}`;
+      }
+    };
+
+    modal.style.display = 'flex';
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  async confirmClonePortfolio() {
+    const select = document.getElementById('clone-portfolio-select');
+    const nameInput = document.getElementById('clone-name-input');
+    const confirmBtn = document.getElementById('clone-portfolio-confirm');
+    const zeroValues = document.querySelector('input[name="clone-values"]:checked')?.value === 'zeroed';
+
+    const portfolioId = parseInt(select.value);
+    const name = nameInput.value.trim();
+
+    if (!portfolioId) {
+      this.showToast('Please select a portfolio', 'warning');
+      return;
+    }
+    if (!name) {
+      this.showToast('Please enter a simulation name', 'warning');
+      return;
+    }
+
+    // Show loading state
+    confirmBtn.querySelector('.btn-text').style.display = 'none';
+    confirmBtn.querySelector('.btn-spinner').style.display = 'inline';
+    confirmBtn.disabled = true;
+
+    try {
+      const response = await fetch('/portfolio/api/simulator/clone-portfolio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          portfolio_id: portfolioId,
+          name: name,
+          zero_values: zeroValues
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const simulation = result.data.simulation;
+        this.currentSimulationId = simulation.id;
+        this.currentSimulationName = simulation.name;
+        this.currentSimulationType = simulation.type;
+        this.currentClonedFromName = simulation.cloned_from_name;
+        this.items = simulation.items || [];
+
+        // Close modal
+        document.getElementById('clone-portfolio-modal').style.display = 'none';
+
+        // Refresh simulations list
+        await this.loadSavedSimulations();
+
+        // Update dropdown selection
+        const loadSelect = document.getElementById('simulator-load-select');
+        if (loadSelect) loadSelect.value = simulation.id;
+
+        this.renderTable();
+        this.updateCharts();
+        this.updateDeleteButtonVisibility();
+        this.updateClonedFromLabel();
+        this.saveState();
+
+        const posCount = this.items.length;
+        this.showToast(`Cloned "${simulation.cloned_from_name}" (${posCount} positions)`, 'success');
+      } else {
+        this.showToast(result.error || 'Failed to clone portfolio', 'danger');
+      }
+    } catch (error) {
+      console.error('Error cloning portfolio:', error);
+      this.showToast('Failed to clone portfolio', 'danger');
+    } finally {
+      confirmBtn.querySelector('.btn-text').style.display = 'inline';
+      confirmBtn.querySelector('.btn-spinner').style.display = 'none';
+      confirmBtn.disabled = false;
     }
   }
 
@@ -603,20 +838,26 @@ class AllocationSimulator {
   // ============================================================================
 
   render() {
+    const emptyStateMessage = this.isPortfolioMode()
+      ? 'Add positions to build a simulated portfolio.'
+      : 'No items added yet. Use the forms above to add positions.';
+    const emptyStateIcon = this.isPortfolioMode() ? 'fa-briefcase' : 'fa-chart-pie';
+
     this.container.innerHTML = `
       <!-- Input Forms -->
       <div class="simulator-input-forms">
         <div class="simulator-input-form">
           <label class="label">Add Identifier</label>
-          <div class="input-row">
+          <div class="input-row" style="position: relative;">
             <input type="text" class="input" id="simulator-ticker-input"
-                   placeholder="e.g., AAPL, MSFT">
+                   placeholder="e.g., AAPL, MSFT" autocomplete="off">
             <button class="button is-small" id="simulator-add-ticker-btn">
               <span class="btn-text">Add</span>
               <span class="btn-spinner" style="display: none;">
                 <i class="fas fa-spinner fa-spin"></i>
               </span>
             </button>
+            <div class="ticker-autocomplete-dropdown" id="simulator-ticker-dropdown"></div>
           </div>
         </div>
         <div class="simulator-input-form">
@@ -681,15 +922,15 @@ class AllocationSimulator {
           <tbody id="simulator-table-body">
             <tr class="empty-state-row">
               <td colspan="8" class="empty-state">
-                <i class="fas fa-chart-pie"></i>
-                <span>No items added yet. Use the forms above to add positions.</span>
+                <i class="fas ${emptyStateIcon}"></i>
+                <span>${emptyStateMessage}</span>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Investment Progress (Remaining to Invest from Builder) -->
+      <!-- Investment Progress (Remaining to Invest from Builder) - overlay mode only -->
       <div class="investment-progress-section" id="simulator-investment-progress">
         <div class="progress-loading">Loading investment targets...</div>
       </div>
@@ -734,7 +975,25 @@ class AllocationSimulator {
     if (tickerBtn && tickerInput) {
       tickerBtn.addEventListener('click', () => this.handleAddTicker());
       tickerInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') this.handleAddTicker();
+        if (e.key === 'Enter') {
+          this.hideTickerDropdown();
+          this.handleAddTicker();
+        }
+      });
+      // Ticker autocomplete
+      tickerInput.addEventListener('input', () => this.handleTickerSearch());
+      tickerInput.addEventListener('focus', () => {
+        if (tickerInput.value.trim().length >= 2) {
+          this.handleTickerSearch();
+        }
+      });
+      // Hide dropdown on click outside
+      document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('simulator-ticker-dropdown');
+        const inputRow = tickerInput.closest('.input-row');
+        if (dropdown && inputRow && !inputRow.contains(e.target)) {
+          this.hideTickerDropdown();
+        }
       });
     }
 
@@ -827,6 +1086,12 @@ class AllocationSimulator {
       deleteBtn.addEventListener('click', () => this.deleteSimulation());
     }
 
+    // Clone button
+    const cloneBtn = document.getElementById('simulator-clone-btn');
+    if (cloneBtn) {
+      cloneBtn.addEventListener('click', () => this.openCloneModal());
+    }
+
     // Save modal events
     const saveConfirmBtn = document.getElementById('save-simulation-confirm');
     const saveCancelBtn = document.getElementById('save-simulation-cancel');
@@ -864,6 +1129,117 @@ class AllocationSimulator {
       nameInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') this.confirmSaveSimulation();
       });
+    }
+
+    // Clone modal events
+    const cloneConfirmBtn = document.getElementById('clone-portfolio-confirm');
+    const cloneCancelBtn = document.getElementById('clone-portfolio-cancel');
+    const cloneCloseBtn = document.getElementById('clone-portfolio-close');
+    const cloneModal = document.getElementById('clone-portfolio-modal');
+
+    if (cloneConfirmBtn) {
+      cloneConfirmBtn.addEventListener('click', () => this.confirmClonePortfolio());
+    }
+
+    if (cloneCancelBtn) {
+      cloneCancelBtn.addEventListener('click', () => {
+        cloneModal.style.display = 'none';
+      });
+    }
+
+    if (cloneCloseBtn) {
+      cloneCloseBtn.addEventListener('click', () => {
+        cloneModal.style.display = 'none';
+      });
+    }
+
+    if (cloneModal) {
+      cloneModal.addEventListener('click', (e) => {
+        if (e.target === cloneModal) {
+          cloneModal.style.display = 'none';
+        }
+      });
+    }
+
+    // Enter key in clone modal
+    const cloneNameInput = document.getElementById('clone-name-input');
+    if (cloneNameInput) {
+      cloneNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.confirmClonePortfolio();
+      });
+    }
+  }
+
+  // ============================================================================
+  // Ticker Autocomplete
+  // ============================================================================
+
+  handleTickerSearch() {
+    const input = document.getElementById('simulator-ticker-input');
+    const query = input.value.trim();
+
+    clearTimeout(this._tickerSearchTimeout);
+
+    if (query.length < 2) {
+      this.hideTickerDropdown();
+      return;
+    }
+
+    this._tickerSearchTimeout = setTimeout(() => this.fetchTickerSuggestions(query), 300);
+  }
+
+  async fetchTickerSuggestions(query) {
+    try {
+      const response = await fetch(`/portfolio/api/simulator/search-investments?q=${encodeURIComponent(query)}&limit=10`);
+      const result = await response.json();
+
+      if (result.success) {
+        this.renderTickerDropdown(result.data.results);
+      }
+    } catch (error) {
+      console.error('Ticker search error:', error);
+    }
+  }
+
+  renderTickerDropdown(results) {
+    const dropdown = document.getElementById('simulator-ticker-dropdown');
+    if (!dropdown) return;
+
+    if (results.length === 0) {
+      dropdown.innerHTML = '<div class="ticker-autocomplete-empty">No matches — press Enter for yfinance lookup</div>';
+      dropdown.classList.add('show');
+      return;
+    }
+
+    dropdown.innerHTML = results.map(r => `
+      <div class="ticker-autocomplete-option" data-identifier="${this.escapeHtml(r.identifier || '')}">
+        <span class="ac-identifier">${this.escapeHtml(r.identifier || '—')}</span>
+        <span class="ac-name">${this.escapeHtml(r.name)}</span>
+        <span class="ac-portfolio">${this.escapeHtml(r.portfolio_name)}</span>
+        <span class="ac-value sensitive-value">€${this.formatValue(r.value)}</span>
+      </div>
+    `).join('');
+
+    // Bind click handlers
+    dropdown.querySelectorAll('.ticker-autocomplete-option').forEach(option => {
+      option.addEventListener('click', () => {
+        const identifier = option.dataset.identifier;
+        const input = document.getElementById('simulator-ticker-input');
+        if (input && identifier) {
+          input.value = identifier;
+        }
+        this.hideTickerDropdown();
+        this.handleAddTicker();
+      });
+    });
+
+    dropdown.classList.add('show');
+  }
+
+  hideTickerDropdown() {
+    const dropdown = document.getElementById('simulator-ticker-dropdown');
+    if (dropdown) {
+      dropdown.classList.remove('show');
     }
   }
 
@@ -1072,11 +1448,16 @@ class AllocationSimulator {
 
   renderTable() {
     if (this.items.length === 0) {
+      const emptyStateMessage = this.isPortfolioMode()
+        ? 'Add positions to build a simulated portfolio.'
+        : 'No items added yet. Use the forms above to add positions.';
+      const emptyStateIcon = this.isPortfolioMode() ? 'fa-briefcase' : 'fa-chart-pie';
+
       this.tableBody.innerHTML = `
         <tr class="empty-state-row">
           <td colspan="8" class="empty-state">
-            <i class="fas fa-chart-pie"></i>
-            <span>No items added yet. Use the forms above to add positions.</span>
+            <i class="fas ${emptyStateIcon}"></i>
+            <span>${emptyStateMessage}</span>
           </td>
         </tr>
       `;
@@ -1371,6 +1752,13 @@ class AllocationSimulator {
     const container = this.investmentProgressContainer;
     if (!container) return;
 
+    // Hide investment progress in portfolio mode
+    if (this.isPortfolioMode()) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = '';
+
     if (!this.hasBuilderConfig || !this.investmentTargets) {
       container.innerHTML = this.renderNoBuilderConfig();
       return;
@@ -1551,11 +1939,14 @@ class AllocationSimulator {
     const baselineBySector = {};
     const baselineByThesis = {};
 
-    // Add portfolio baseline data
-    // Use total_value (holdings only, excludes cash) so percentages sum to 100%
-    const portfolioTotal = this.portfolioData?.total_value || 0;
+    // In portfolio mode, don't include baseline data
+    const includeBaseline = !this.isPortfolioMode();
 
-    if (this.portfolioData) {
+    // Add portfolio baseline data (overlay mode only)
+    // Use total_value (holdings only, excludes cash) so percentages sum to 100%
+    const portfolioTotal = includeBaseline ? (this.portfolioData?.total_value || 0) : 0;
+
+    if (includeBaseline && this.portfolioData) {
       // Store baseline for delta calculations (normalize labels to lowercase)
       (this.portfolioData.countries || []).forEach(c => {
         const normalizedName = (c.name || 'unknown').toLowerCase().trim();
@@ -1576,11 +1967,11 @@ class AllocationSimulator {
       });
     }
 
-    // Add simulated items (only those matching selected portfolio when in portfolio scope)
+    // Add simulated items (only those matching selected portfolio when in overlay + portfolio scope)
     let simulatedTotal = 0;
     this.items.forEach(item => {
-      // Skip items that don't match the selected portfolio (when in portfolio scope)
-      if (this.scope === 'portfolio' && this.portfolioId) {
+      // In overlay mode with portfolio scope, skip items not matching selected portfolio
+      if (!this.isPortfolioMode() && this.scope === 'portfolio' && this.portfolioId) {
         if (item.portfolio_id !== this.portfolioId) {
           return; // Skip this item - not assigned to selected portfolio
         }
@@ -1623,7 +2014,10 @@ class AllocationSimulator {
 
   renderBarChart(container, data, total, baseline, baselineTotal, chartType) {
     if (total === 0 || Object.keys(data).length === 0) {
-      container.innerHTML = '<div class="chart-empty">No data to display</div>';
+      const emptyMsg = this.isPortfolioMode()
+        ? 'Add positions to see allocations'
+        : 'No data to display';
+      container.innerHTML = `<div class="chart-empty">${emptyMsg}</div>`;
       return;
     }
 
@@ -1634,21 +2028,26 @@ class AllocationSimulator {
     // Determine which bar is currently expanded for this chart type
     const expandedLabel = chartType === 'country' ? this.expandedCountryBar : this.expandedSectorBar;
 
+    // In portfolio mode, don't show delta indicators
+    const showDelta = !this.isPortfolioMode();
+
     container.innerHTML = sorted.map(([label, value]) => {
       const percentage = (value / total * 100).toFixed(1);
       const isUnknown = label === 'unknown';
       const isExpanded = label === expandedLabel;
 
-      // Calculate delta from baseline
-      const baselineValue = baseline?.[label] || 0;
-      const baselinePercentage = baselineTotal > 0 ? (baselineValue / baselineTotal * 100) : 0;
-      const deltaPercentage = parseFloat(percentage) - baselinePercentage;
-
+      // Calculate delta from baseline (overlay mode only)
       let deltaHtml = '';
-      if (Math.abs(deltaPercentage) >= 0.1) {
-        const deltaClass = deltaPercentage > 0 ? 'delta-positive' : 'delta-negative';
-        const deltaSign = deltaPercentage > 0 ? '+' : '';
-        deltaHtml = `<span class="delta-indicator ${deltaClass}">(${deltaSign}${deltaPercentage.toFixed(1)}%)</span>`;
+      if (showDelta) {
+        const baselineValue = baseline?.[label] || 0;
+        const baselinePercentage = baselineTotal > 0 ? (baselineValue / baselineTotal * 100) : 0;
+        const deltaPercentage = parseFloat(percentage) - baselinePercentage;
+
+        if (Math.abs(deltaPercentage) >= 0.1) {
+          const deltaClass = deltaPercentage > 0 ? 'delta-positive' : 'delta-negative';
+          const deltaSign = deltaPercentage > 0 ? '+' : '';
+          deltaHtml = `<span class="delta-indicator ${deltaClass}">(${deltaSign}${deltaPercentage.toFixed(1)}%)</span>`;
+        }
       }
 
       // Generate position details if expanded
@@ -1721,6 +2120,10 @@ class AllocationSimulator {
    * Used for global % calculation even when in portfolio scope
    */
   getGlobalTotal() {
+    if (this.isPortfolioMode()) {
+      // In portfolio mode, global total = simulated items total
+      return this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+    }
     // Sum up all portfolio values
     const portfolioSum = this.portfolios.reduce((sum, p) => sum + (parseFloat(p.total_value) || 0), 0);
     // Add simulated items (all of them, regardless of portfolio assignment)
@@ -1751,9 +2154,8 @@ class AllocationSimulator {
     const globalTotal = this.getGlobalTotal(); // All portfolios combined + all simulated
 
     // Determine which columns to show based on scope
-    // Global scope: segment % + global % (portfolio % would be redundant)
-    // Portfolio scope: segment % + portfolio % + global %
-    const isGlobalScope = this.scope === 'global';
+    // In portfolio mode or global scope: segment % + global % (portfolio % would be redundant)
+    const isGlobalScope = this.scope === 'global' || this.isPortfolioMode();
 
     const positionRows = positions.map(pos => {
       const percentOfSegment = segmentTotal > 0 ? ((pos.value / segmentTotal) * 100).toFixed(1) : '0.0';
@@ -1831,8 +2233,8 @@ class AllocationSimulator {
       }
     };
 
-    // Add portfolio positions
-    if (this.portfolioData && this.portfolioData.positions) {
+    // Add portfolio positions (overlay mode only)
+    if (!this.isPortfolioMode() && this.portfolioData && this.portfolioData.positions) {
       this.portfolioData.positions.forEach(pos => {
         const matchField = getMatchField(pos);
         const defaultVal = getDefaultValue();
@@ -1849,10 +2251,10 @@ class AllocationSimulator {
       });
     }
 
-    // Add simulated items (respecting portfolio scope)
+    // Add simulated items (respecting portfolio scope in overlay mode)
     this.items.forEach(item => {
-      // Skip items that don't match the selected portfolio (when in portfolio scope)
-      if (this.scope === 'portfolio' && this.portfolioId) {
+      // In overlay mode with portfolio scope, skip items not matching
+      if (!this.isPortfolioMode() && this.scope === 'portfolio' && this.portfolioId) {
         if (item.portfolio_id !== this.portfolioId) {
           return;
         }
@@ -2009,6 +2411,11 @@ class AllocationSimulator {
    * Used for percentage target calculations
    */
   getBaselineForItem(item) {
+    // In portfolio mode, there's no baseline
+    if (this.isPortfolioMode()) {
+      return { baselineValue: 0, baselineTotal: 0 };
+    }
+
     // Use portfolio_total (includes cash) for percentage calculations
     const portfolioTotal = this.portfolioData?.portfolio_total || this.portfolioData?.total_value || 0;
     let baselineValue = 0;

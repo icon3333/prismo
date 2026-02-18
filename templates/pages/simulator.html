@@ -10,10 +10,23 @@
 <div class="container">
   <h1 class="page-title">Simulator</h1>
   <div class="card" id="allocation-simulator-card" style="padding: var(--space-md);">
-    <!-- Simulator Header: Portfolio (left) & Simulation (right) -->
+    <!-- Simulator Header: Mode Toggle + Portfolio (left) & Simulation (right) -->
     <div class="simulator-header-bar">
       <div class="simulator-header-left">
+        <!-- Mode Toggle -->
         <div class="simulator-control">
+          <label class="simulator-control-label">Mode</label>
+          <div class="toggle-group" id="simulator-mode-toggle">
+            <button class="toggle-btn active" data-mode="overlay" title="Overlay simulated positions on real portfolio">
+              <i class="fas fa-layer-group"></i> Overlay
+            </button>
+            <button class="toggle-btn" data-mode="portfolio" title="Build a standalone portfolio from scratch">
+              <i class="fas fa-flask"></i> Sandbox
+            </button>
+          </div>
+        </div>
+        <!-- Portfolio Scope (overlay mode only) -->
+        <div class="simulator-control" id="simulator-portfolio-control">
           <label class="simulator-control-label" for="simulator-portfolio-select">Portfolio</label>
           <div class="select-wrapper">
             <select class="form-select simulator-select" id="simulator-portfolio-select">
@@ -23,6 +36,8 @@
         </div>
       </div>
       <div class="simulator-header-right">
+        <!-- Cloned-from label -->
+        <span class="cloned-from-label" id="simulator-cloned-from" style="display: none;"></span>
         <!-- Auto-save status indicator -->
         <span class="autosave-status" id="simulator-autosave-status" style="display: none;"></span>
         <div class="simulator-control">
@@ -33,6 +48,10 @@
             </select>
           </div>
         </div>
+        <!-- Clone button (portfolio mode only) -->
+        <button class="button is-small" id="simulator-clone-btn" style="visibility: hidden; pointer-events: none;" title="Clone a real portfolio">
+          <i class="fas fa-clone"></i> Clone...
+        </button>
         <!-- Save As button - always visible -->
         <button class="button is-primary is-small" id="simulator-saveas-btn" title="Save as new simulation">
           <i class="fas fa-copy"></i> Save As...
@@ -72,6 +91,48 @@
       <div class="modal-footer">
         <button class="button" id="save-simulation-cancel">Cancel</button>
         <button class="button is-primary" id="save-simulation-confirm">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clone Portfolio Modal -->
+  <div class="modal-overlay" id="clone-portfolio-modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Clone Portfolio</h3>
+        <button class="modal-close" id="clone-portfolio-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="label" for="clone-portfolio-select">Source Portfolio</label>
+          <div class="select-wrapper" style="width: 100%;">
+            <select class="form-select" id="clone-portfolio-select" style="width: 100%;"></select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label">Clone Values</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="clone-values" value="with-values" checked>
+              <span class="radio-label">With current values</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="clone-values" value="zeroed">
+              <span class="radio-label">With zeroed values</span>
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="label" for="clone-name-input">Simulation Name</label>
+          <input type="text" class="input" id="clone-name-input" placeholder="e.g., Clone of My Portfolio" maxlength="100">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="button" id="clone-portfolio-cancel">Cancel</button>
+        <button class="button is-primary" id="clone-portfolio-confirm">
+          <span class="btn-text">Clone</span>
+          <span class="btn-spinner" style="display: none;"><i class="fas fa-spinner fa-spin"></i></span>
+        </button>
       </div>
     </div>
   </div>

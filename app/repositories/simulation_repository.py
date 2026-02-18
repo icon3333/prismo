@@ -17,12 +17,13 @@ class SimulationRepository:
     """Data access layer for saved simulations"""
 
     @staticmethod
-    def get_all(account_id: int) -> List[Dict]:
+    def get_all(account_id: int, sim_type: Optional[str] = None) -> List[Dict]:
         """
-        Get all simulations for an account.
+        Get all simulations for an account, optionally filtered by type.
 
         Args:
             account_id: Account ID
+            sim_type: Optional filter: 'overlay' or 'portfolio'
 
         Returns:
             List of simulations (without full items data for list view)
@@ -33,16 +34,25 @@ class SimulationRepository:
                 s.name,
                 s.scope,
                 s.portfolio_id,
+                s.type,
+                s.cloned_from_portfolio_id,
+                s.cloned_from_name,
                 p.name as portfolio_name,
                 s.created_at,
                 s.updated_at
             FROM simulations s
             LEFT JOIN portfolios p ON s.portfolio_id = p.id
             WHERE s.account_id = ?
-            ORDER BY s.updated_at DESC
         '''
+        params = [account_id]
 
-        results = query_db(query, [account_id])
+        if sim_type:
+            query += ' AND s.type = ?'
+            params.append(sim_type)
+
+        query += ' ORDER BY s.updated_at DESC'
+
+        results = query_db(query, params)
         return results if results else []
 
     @staticmethod
@@ -63,6 +73,9 @@ class SimulationRepository:
                 s.name,
                 s.scope,
                 s.portfolio_id,
+                s.type,
+                s.cloned_from_portfolio_id,
+                s.cloned_from_name,
                 p.name as portfolio_name,
                 s.items,
                 s.created_at,
@@ -90,7 +103,10 @@ class SimulationRepository:
         name: str,
         scope: str,
         items: List[Dict],
-        portfolio_id: Optional[int] = None
+        portfolio_id: Optional[int] = None,
+        sim_type: str = 'overlay',
+        cloned_from_portfolio_id: Optional[int] = None,
+        cloned_from_name: Optional[str] = None
     ) -> int:
         """
         Create a new simulation.
@@ -101,6 +117,9 @@ class SimulationRepository:
             scope: 'global' or 'portfolio'
             items: List of simulation items
             portfolio_id: Portfolio ID (if scope='portfolio')
+            sim_type: 'overlay' or 'portfolio'
+            cloned_from_portfolio_id: Source portfolio ID (if cloned)
+            cloned_from_name: Source portfolio name (if cloned)
 
         Returns:
             New simulation ID
@@ -110,14 +129,15 @@ class SimulationRepository:
         db = get_db()
         cursor = db.execute(
             '''INSERT INTO simulations
-               (account_id, name, scope, portfolio_id, items)
-               VALUES (?, ?, ?, ?, ?)''',
-            [account_id, name, scope, portfolio_id, items_json]
+               (account_id, name, scope, portfolio_id, items, type, cloned_from_portfolio_id, cloned_from_name)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+            [account_id, name, scope, portfolio_id, items_json, sim_type,
+             cloned_from_portfolio_id, cloned_from_name]
         )
         simulation_id = cursor.lastrowid
         db.commit()
 
-        logger.info(f"Created simulation '{name}' (id={simulation_id}) for account {account_id}")
+        logger.info(f"Created simulation '{name}' (id={simulation_id}, type={sim_type}) for account {account_id}")
         return simulation_id
 
     @staticmethod

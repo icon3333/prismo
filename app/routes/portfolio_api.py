@@ -3004,6 +3004,8 @@ def simulator_simulations_list():
     List all saved simulations for the current user.
 
     GET /portfolio/api/simulator/simulations
+    Query params:
+        - type: Optional filter: 'overlay' or 'portfolio'
 
     Returns:
         List of simulations with id, name, scope, portfolio info, timestamps
@@ -3012,9 +3014,13 @@ def simulator_simulations_list():
         from app.repositories.simulation_repository import SimulationRepository
 
         account_id = g.account_id
-        simulations = SimulationRepository.get_all(account_id)
+        sim_type = request.args.get('type')
+        if sim_type and sim_type not in ('overlay', 'portfolio'):
+            sim_type = None
 
-        logger.info(f"Returning {len(simulations)} simulations for account {account_id}")
+        simulations = SimulationRepository.get_all(account_id, sim_type=sim_type)
+
+        logger.info(f"Returning {len(simulations)} simulations (type={sim_type}) for account {account_id}")
         return success_response({'simulations': simulations})
 
     except Exception as e:
@@ -3066,6 +3072,13 @@ def simulator_simulation_create():
         if not isinstance(items, list):
             return error_response('Items must be a list', 400)
 
+        sim_type = data.get('type', 'overlay')
+        if sim_type not in ('overlay', 'portfolio'):
+            return error_response("Type must be 'overlay' or 'portfolio'", 400)
+
+        cloned_from_portfolio_id = data.get('cloned_from_portfolio_id')
+        cloned_from_name = data.get('cloned_from_name')
+
         # Check for duplicate name
         if SimulationRepository.exists(name, account_id):
             return error_response(f'A simulation named "{name}" already exists', 409)
@@ -3076,13 +3089,16 @@ def simulator_simulation_create():
             name=name,
             scope=scope,
             items=items,
-            portfolio_id=portfolio_id if scope == 'portfolio' else None
+            portfolio_id=portfolio_id if scope == 'portfolio' else None,
+            sim_type=sim_type,
+            cloned_from_portfolio_id=cloned_from_portfolio_id,
+            cloned_from_name=cloned_from_name
         )
 
         # Fetch the created simulation
         simulation = SimulationRepository.get_by_id(simulation_id, account_id)
 
-        logger.info(f"Created simulation '{name}' (id={simulation_id})")
+        logger.info(f"Created simulation '{name}' (id={simulation_id}, type={sim_type})")
         return success_response({'simulation': simulation}, status=201)
 
     except Exception as e:
@@ -3223,6 +3239,190 @@ def simulator_simulation_delete(simulation_id: int):
     except Exception as e:
         logger.exception(f"Error deleting simulation {simulation_id}")
         return error_response('Failed to delete simulation', 500)
+
+
+@require_auth
+def simulator_search_investments():
+    """
+    Search existing account investments for autocomplete suggestions.
+
+    GET /portfolio/api/simulator/search-investments?q=<query>&limit=10
+
+    Returns:
+        List of matching investments with identifier, name, sector, thesis, country, value, portfolio info
+    """
+    try:
+        account_id = g.account_id
+        query_str = request.args.get('q', '').strip()
+        limit = min(request.args.get('limit', 10, type=int), 20)
+
+        if len(query_str) < 2:
+            return success_response({'results': []})
+
+        search_pattern = f'%{query_str}%'
+
+        results = query_db('''
+            SELECT
+                c.identifier,
+                c.name,
+                c.sector,
+                c.thesis,
+                COALESCE(c.override_country, mp.country) as country,
+                c.portfolio_id,
+                p.name as portfolio_name,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            LEFT JOIN portfolios p ON c.portfolio_id = p.id
+            WHERE c.account_id = ?
+            AND (
+                c.name LIKE ? COLLATE NOCASE
+                OR c.identifier LIKE ? COLLATE NOCASE
+            )
+            AND (
+                (COALESCE(cs.override_share, cs.shares, 0) > 0)
+                OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
+            )
+            ORDER BY value DESC
+            LIMIT ?
+        ''', [account_id, search_pattern, search_pattern, limit])
+
+        investments = []
+        for r in (results or []):
+            investments.append({
+                'identifier': r['identifier'],
+                'name': r['name'],
+                'sector': r['sector'] or 'Unknown',
+                'thesis': (r['thesis'] or '').strip() or 'Unassigned',
+                'country': r['country'] or 'Unknown',
+                'value': round(float(r['value'] or 0), 2),
+                'portfolio_name': r['portfolio_name'] or 'Unassigned',
+                'portfolio_id': r['portfolio_id']
+            })
+
+        return success_response({'results': investments})
+
+    except Exception as e:
+        logger.exception("Error searching investments")
+        return error_response('Failed to search investments', 500)
+
+
+@require_auth
+def simulator_clone_portfolio():
+    """
+    Clone a real portfolio into a simulated portfolio.
+
+    POST /portfolio/api/simulator/clone-portfolio
+    Body: {
+        "portfolio_id": 123,
+        "name": "Clone of My Portfolio",
+        "zero_values": false
+    }
+
+    Returns:
+        Created simulation with all positions from the source portfolio
+    """
+    try:
+        from app.repositories.simulation_repository import SimulationRepository
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return error_response('Request body is required', 400)
+
+        portfolio_id = data.get('portfolio_id')
+        if not portfolio_id:
+            return error_response('portfolio_id is required', 400)
+
+        name = data.get('name', '').strip()
+        if not name:
+            return error_response('Simulation name is required', 400)
+        if len(name) > 100:
+            return error_response('Simulation name too long (max 100 characters)', 400)
+
+        zero_values = data.get('zero_values', False)
+
+        # Check name uniqueness
+        if SimulationRepository.exists(name, account_id):
+            return error_response(f'A simulation named "{name}" already exists', 409)
+
+        # Get source portfolio name
+        portfolio = query_db(
+            'SELECT name FROM portfolios WHERE id = ? AND account_id = ?',
+            [portfolio_id, account_id], one=True
+        )
+        if not portfolio:
+            return not_found_response('Portfolio', portfolio_id)
+
+        portfolio_name = portfolio['name']
+
+        # Fetch all positions from the source portfolio
+        positions = query_db('''
+            SELECT
+                c.identifier,
+                c.name,
+                c.sector,
+                c.thesis,
+                COALESCE(c.override_country, mp.country) as country,
+                c.portfolio_id,
+                CASE
+                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
+                        THEN c.custom_total_value
+                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
+                END as value
+            FROM companies c
+            LEFT JOIN company_shares cs ON c.id = cs.company_id
+            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
+            WHERE c.account_id = ? AND c.portfolio_id = ?
+            AND (
+                (COALESCE(cs.override_share, cs.shares, 0) > 0)
+                OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
+            )
+            ORDER BY value DESC
+        ''', [account_id, portfolio_id])
+
+        # Transform positions into simulation items
+        items = []
+        for pos in (positions or []):
+            items.append({
+                'id': f'clone_{pos["identifier"] or pos["name"]}_{len(items)}',
+                'ticker': pos['identifier'] or '—',
+                'name': pos['name'] or '—',
+                'sector': (pos['sector'] or 'unknown').lower(),
+                'thesis': ((pos['thesis'] or '').strip() or 'unassigned').lower(),
+                'country': (pos['country'] or 'unknown').lower(),
+                'value': 0 if zero_values else round(float(pos['value'] or 0), 2),
+                'valueMode': 'absolute',
+                'source': 'ticker' if pos['identifier'] else 'sector',
+                'existsInPortfolio': True,
+                'portfolio_id': pos['portfolio_id']
+            })
+
+        # Create simulation
+        simulation_id = SimulationRepository.create(
+            account_id=account_id,
+            name=name,
+            scope='global',
+            items=items,
+            sim_type='portfolio',
+            cloned_from_portfolio_id=portfolio_id,
+            cloned_from_name=portfolio_name
+        )
+
+        simulation = SimulationRepository.get_by_id(simulation_id, account_id)
+
+        logger.info(f"Cloned portfolio '{portfolio_name}' (id={portfolio_id}) into simulation '{name}' (id={simulation_id}, {len(items)} positions)")
+        return success_response({'simulation': simulation}, status=201)
+
+    except Exception as e:
+        logger.exception("Error cloning portfolio")
+        return error_response('Failed to clone portfolio', 500)
 
 
 @require_auth

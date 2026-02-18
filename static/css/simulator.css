@@ -1,3 +1,8 @@
+/* Prevent layout shift from scrollbar appearing/disappearing between modes */
+html:has(#allocation-simulator-card) {
+  overflow-y: scroll;
+}
+
 /* ===================================================================
    ALLOCATION SIMULATOR (Sandbox Mode)
    =================================================================== */
@@ -151,6 +156,168 @@
   gap: var(--space-sm);
   padding: var(--space-md);
   border-top: 1px solid var(--border-color);
+}
+
+/* Mode Toggle in Header */
+.simulator-header-left .toggle-group {
+  height: 34px;
+}
+
+.simulator-header-left .toggle-btn {
+  height: 34px;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-size-sm);
+  gap: var(--space-xs);
+}
+
+.simulator-header-left .toggle-btn i {
+  font-size: var(--font-size-xs);
+}
+
+/* Clone Button */
+#simulator-clone-btn {
+  height: 34px;
+}
+
+/* Cloned-from Label */
+.cloned-from-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  height: 34px;
+  padding: 0 var(--space-sm);
+  white-space: nowrap;
+}
+
+.cloned-from-label i {
+  color: var(--primary);
+  font-size: var(--font-size-xs);
+}
+
+/* Radio Group (for clone modal) */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  transition: all var(--transition-base);
+}
+
+.radio-option:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.radio-option input[type="radio"] {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.radio-option .radio-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Ticker Autocomplete Dropdown */
+.ticker-autocomplete-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 60px;
+  max-height: 250px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  z-index: 100;
+  display: none;
+  margin-top: var(--space-xs);
+}
+
+.ticker-autocomplete-dropdown.show {
+  display: block;
+  animation: dropdownFadeIn 0.15s ease;
+}
+
+.ticker-autocomplete-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  transition: background var(--transition-base);
+  gap: var(--space-sm);
+}
+
+.ticker-autocomplete-option:hover {
+  background: var(--primary-light);
+}
+
+.ticker-autocomplete-option .ac-identifier {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--primary);
+  font-size: var(--font-size-sm);
+  min-width: 60px;
+}
+
+.ticker-autocomplete-option .ac-name {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticker-autocomplete-option .ac-portfolio {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ticker-autocomplete-option .ac-value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ticker-autocomplete-empty {
+  padding: var(--space-md);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
+/* Portfolio mode empty state */
+.portfolio-mode-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.portfolio-mode-empty i {
+  font-size: var(--font-size-xl);
+  opacity: 0.5;
 }
 
 /* Existing Position Badge */

@@ -2,9 +2,14 @@ import os
 import sys
 import secrets
 import shutil
+import warnings
 from pathlib import Path
 from app.main import create_app
 import argparse
+
+# Suppress Python 3.13+ semaphore leak warnings on shutdown
+# These are harmless and caused by Werkzeug's reloader using multiprocessing
+warnings.filterwarnings("ignore", message="resource_tracker:", module="multiprocessing")
 
 
 def generate_secret_key():

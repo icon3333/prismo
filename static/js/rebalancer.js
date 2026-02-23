@@ -303,6 +303,13 @@ document.addEventListener('DOMContentLoaded', function () {
         showError(message) {
             const container = document.getElementById('portfolio-table-container');
             if (container) {
+                // Remove the .card wrapper styling so only the alert is visible
+                const card = container.closest('.card');
+                if (card) {
+                    card.style.background = 'transparent';
+                    card.style.border = 'none';
+                    card.style.padding = '0';
+                }
                 container.innerHTML = `
                     <div class="alert alert-danger">
                         <i class="fas fa-exclamation-circle"></i> ${message}
@@ -365,7 +372,7 @@ document.addEventListener('DOMContentLoaded', function () {
             );
 
             if (filteredPortfolios.length === 0) {
-                this.showError('No portfolios with target allocations found. Please configure allocations in the Build page first.');
+                this.showError('No portfolios with target allocations found. Configure allocations in the <a href="/portfolio/builder" style="color: var(--primary);">Builder tab</a> first.');
                 return;
             }
 

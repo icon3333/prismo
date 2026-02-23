@@ -430,16 +430,29 @@
   background-color: var(--primary-light) !important;
 }
 
-/* Info alert styling for dark theme */
+/* Alert styling for dark theme */
+#portfolio-table-container .alert,
+#detailed-portfolio-container .alert {
+  background-color: transparent;
+}
+
+#portfolio-table-container .alert-info,
 #detailed-portfolio-container .alert-info {
   background-color: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-left: 3px solid var(--primary);
+  color: var(--text-primary);
+}
+
+#portfolio-table-container .alert-danger,
+#detailed-portfolio-container .alert-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--danger);
   color: var(--text-primary);
 }
 
 #detailed-portfolio-container .alert-warning {
   background-color: rgba(249, 115, 22, 0.1);
-  border: 1px solid rgba(249, 115, 22, 0.3);
+  border-left: 3px solid var(--warning);
   color: var(--text-primary);
 }
 

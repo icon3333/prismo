@@ -554,6 +554,10 @@ class PortfolioRepository:
             DatabaseError: If portfolio creation fails
         """
         from app.exceptions import DatabaseError
+        from app.utils.text_normalization import normalize_portfolio
+
+        # Normalize portfolio name to lowercase
+        portfolio_name = normalize_portfolio(portfolio_name) or portfolio_name
 
         # Try to get existing
         existing = query_db(

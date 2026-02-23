@@ -96,9 +96,8 @@
                             <h3 class="subtitle is-5 mb-2" id="performanceChartTitle">Returns</h3>
                             <div class="is-flex" style="gap: var(--space-sm, 8px); flex-wrap: wrap;">
                                 <div class="toggle-group" id="chartModeToggle">
-                                    <button class="toggle-btn" data-mode="individual">Individual</button>
-                                    <button class="toggle-btn" data-mode="both">Combined</button>
                                     <button class="toggle-btn active" data-mode="aggregate">Aggregate</button>
+                                    <button class="toggle-btn" data-mode="detail">Detail</button>
                                 </div>
                                 <div class="toggle-group" id="periodToggle">
                                     <button class="toggle-btn" data-period="3y">3Y</button>
@@ -216,7 +215,7 @@
 
             // Performance chart state
             let currentChartPeriod = '5y';
-            let currentChartMode = 'aggregate'; // 'individual', 'both', 'aggregate'
+            let currentChartMode = 'aggregate'; // 'aggregate', 'detail'
             let currentChartIdentifiers = [];
             let currentChartNames = [];
             let currentChartValues = [];
@@ -1669,25 +1668,27 @@
                 let displaySeries = [];
                 const mode = currentChartMode;
 
-                if (mode === 'individual' || mode === 'both') {
+                if (mode === 'detail') {
                     displaySeries = allSeries.map(s => ({
                         name: s.name,
                         data: s.data
                     }));
                 }
 
-                if (mode === 'aggregate' || mode === 'both') {
-                    const aggSeries = computeAggregate(allSeries, sincePurchaseInfo);
-                    if (aggSeries) {
-                        displaySeries.push(aggSeries);
-                    }
+                // Aggregate always present (solo in aggregate mode, reference line in detail)
+                const aggSeries = computeAggregate(allSeries, sincePurchaseInfo);
+                if (aggSeries) {
+                    displaySeries.push(aggSeries);
                 }
 
                 // Colors
+                // Colors — aggregate is yellow; individual lines use palette only (no colorMapping)
+                const palette = ChartConfig.oceanDepthColors.palette;
+                let paletteIdx = 0;
                 const colors = displaySeries.map(s => {
-                    if (s.name === 'Weighted Avg') return '#06b6d4'; // aqua-500
-                    return ChartConfig.colorMapping[s.name] || null;
-                }).map((c, i) => c || ChartConfig.oceanDepthColors.palette[i % ChartConfig.oceanDepthColors.palette.length]);
+                    if (s.name === 'Weighted Avg') return '#eab308'; // yellow — aggregate
+                    return palette[paletteIdx++ % palette.length];
+                });
 
                 // Stroke config
                 const strokeWidths = displaySeries.map(s => {
@@ -1762,17 +1763,7 @@
                             }
                         }
                     },
-                    legend: {
-                        show: displaySeries.length > 1,
-                        position: 'bottom',
-                        horizontalAlign: 'center',
-                        fontSize: '12px',
-                        labels: { colors: themeColors.textSecondary },
-                        markers: { size: 4 },
-                        formatter: function(seriesName) {
-                            return '<span class="sensitive-value">' + seriesName + '</span>';
-                        }
-                    },
+                    legend: { show: false },
                     annotations: {
                         yaxis: [{
                             y: 100,

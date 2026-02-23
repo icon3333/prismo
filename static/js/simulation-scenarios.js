@@ -65,6 +65,7 @@ class AllocationSimulator {
     this.historicalDataCache = new Map();  // cache key → API response
     this.chartAbortController = null;     // AbortController for canceling
     this.currentChartPeriod = '5y';       // Selected period
+    this.historicalChartMode = 'aggregate'; // 'aggregate' or 'detail'
     this.debouncedHistoricalUpdate = this.debounce(() => this.updateHistoricalChart(), 500);
 
     // Debounced chart update for real-time feedback
@@ -1091,26 +1092,6 @@ class AllocationSimulator {
         <div class="progress-loading">Loading investment targets...</div>
       </div>
 
-      <!-- Historical Performance Chart (sandbox mode only) -->
-      <div class="simulator-historical-section" id="simulator-historical-section" style="display: none;">
-        <div class="simulator-chart-header">
-          <h5 class="simulator-chart-label"><i class="fas fa-chart-line"></i> Historical Performance</h5>
-          <div class="toggle-group" id="simulator-period-toggle">
-            <button class="toggle-btn" data-period="3y">3Y</button>
-            <button class="toggle-btn active" data-period="5y">5Y</button>
-            <button class="toggle-btn" data-period="10y">10Y</button>
-            <button class="toggle-btn" data-period="max">MAX</button>
-          </div>
-        </div>
-        <div id="simulator-historical-chart" style="display: none;"></div>
-        <div id="simulator-historical-loading" style="display: none;" class="chart-empty">
-          <i class="fas fa-spinner fa-spin"></i>&nbsp; Loading historical data...
-        </div>
-        <div id="simulator-historical-empty" style="display: none;" class="chart-empty">
-          Add positions with tickers to see historical performance.
-        </div>
-      </div>
-
       <!-- Aggregation Charts -->
       <div class="simulator-charts">
         <div class="simulator-chart-panel">
@@ -1132,6 +1113,32 @@ class AllocationSimulator {
           <div class="chart-content" id="simulator-sector-chart">
             <div class="chart-empty">Loading portfolio data...</div>
           </div>
+        </div>
+      </div>
+
+      <!-- Historical Performance Chart (sandbox mode only) -->
+      <div class="simulator-historical-section" id="simulator-historical-section" style="display: none;">
+        <div class="simulator-chart-header">
+          <h5 class="simulator-chart-label"><i class="fas fa-chart-line"></i> Historical Performance</h5>
+          <div class="simulator-historical-controls">
+            <div class="toggle-group" id="simulator-chart-mode-toggle">
+              <button class="toggle-btn active" data-mode="aggregate">Aggregate</button>
+              <button class="toggle-btn" data-mode="detail">Detail</button>
+            </div>
+            <div class="toggle-group" id="simulator-period-toggle">
+              <button class="toggle-btn" data-period="3y">3Y</button>
+              <button class="toggle-btn active" data-period="5y">5Y</button>
+              <button class="toggle-btn" data-period="10y">10Y</button>
+              <button class="toggle-btn" data-period="max">MAX</button>
+            </div>
+          </div>
+        </div>
+        <div id="simulator-historical-chart" style="display: none;"></div>
+        <div id="simulator-historical-loading" style="display: none;" class="chart-empty">
+          <i class="fas fa-spinner fa-spin"></i>&nbsp; Loading historical data...
+        </div>
+        <div id="simulator-historical-empty" style="display: none;" class="chart-empty">
+          Add positions with tickers to see historical performance.
         </div>
       </div>
     `;
@@ -1280,6 +1287,24 @@ class AllocationSimulator {
         btn.classList.add('active');
 
         this.currentChartPeriod = period;
+        this.updateHistoricalChart();
+      });
+    }
+
+    // Historical chart mode toggle (aggregate vs detail)
+    const chartModeToggle = document.getElementById('simulator-chart-mode-toggle');
+    if (chartModeToggle) {
+      chartModeToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.toggle-btn');
+        if (!btn) return;
+
+        const mode = btn.dataset.mode;
+        if (mode === this.historicalChartMode) return;
+
+        chartModeToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        this.historicalChartMode = mode;
         this.updateHistoricalChart();
       });
     }
@@ -2314,20 +2339,25 @@ class AllocationSimulator {
       return;
     }
 
-    // Build display series: individual + aggregate (always combined)
-    const displaySeries = allSeries.map(s => ({ name: s.name, data: s.data }));
+    // Build display series based on mode
+    const displaySeries = [];
+    if (this.historicalChartMode === 'detail') {
+      allSeries.forEach(s => displaySeries.push({ name: s.name, data: s.data }));
+    }
 
-    // Compute aggregate
+    // Aggregate always present (solo in aggregate mode, reference line in detail)
     const aggSeries = this.computeSimulatorAggregate(allSeries);
     if (aggSeries) {
       displaySeries.push(aggSeries);
     }
 
-    // Colors
+    // Colors — aggregate is yellow; individual lines use palette only (no colorMapping)
+    const palette = ChartConfig.oceanDepthColors.palette;
+    let paletteIdx = 0;
     const colors = displaySeries.map(s => {
-      if (s.name === 'Weighted Avg') return '#06b6d4';
-      return ChartConfig.colorMapping[s.name] || null;
-    }).map((c, i) => c || ChartConfig.oceanDepthColors.palette[i % ChartConfig.oceanDepthColors.palette.length]);
+      if (s.name === 'Weighted Avg') return '#eab308'; // yellow — aggregate
+      return palette[paletteIdx++ % palette.length];
+    });
 
     // Stroke config
     const strokeWidths = displaySeries.map(s => {
@@ -2362,8 +2392,8 @@ class AllocationSimulator {
         dashArray: dashArray
       },
       fill: {
-        type: 'gradient',
-        opacity: 0.05,
+        type: this.historicalChartMode === 'aggregate' ? 'solid' : 'gradient',
+        opacity: this.historicalChartMode === 'aggregate' ? 0 : 0.05,
         gradient: {
           shade: 'light',
           type: 'vertical',
@@ -2405,17 +2435,7 @@ class AllocationSimulator {
           }
         }
       },
-      legend: {
-        show: displaySeries.length > 1,
-        position: 'bottom',
-        horizontalAlign: 'center',
-        fontSize: '12px',
-        labels: { colors: themeColors.textSecondary },
-        markers: { size: 4 },
-        formatter: function(seriesName) {
-          return '<span class="sensitive-value">' + seriesName + '</span>';
-        }
-      },
+      legend: { show: false },
       annotations: {
         yaxis: [{
           y: 100,
@@ -3235,10 +3255,10 @@ class AllocationSimulator {
         statusText = '✓ 100%';
       } else if (rounded > 100) {
         statusClass = 'allocation-over';
-        statusText = `${rounded}% (${(rounded - 100).toFixed(1)}% over)`;
+        statusText = `${rounded}%`;
       } else {
         statusClass = 'allocation-under';
-        statusText = `${rounded}% (${(100 - rounded).toFixed(1)}% left)`;
+        statusText = `${rounded}%`;
       }
 
       el.innerHTML = `<span class="${statusClass}">${statusText}</span>`;

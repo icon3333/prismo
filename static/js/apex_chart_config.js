@@ -46,18 +46,18 @@ const ChartConfig = {
         emerald: '#059669',   // Emerald 600
         amber: '#ca8a04',     // Yellow 600
 
-        // Chart palette - monochromatic cyan with coral accent
+        // Chart palette - monochromatic cyan/teal for consistent individual lines
         palette: [
             '#0891b2', // Cyan 600 (primary)
-            '#ea580c', // Coral (accent contrast)
+            '#0284c7', // Sky 600
             '#0e7490', // Cyan 700 (darker)
             '#0d9488', // Teal 600
             '#06b6d4', // Cyan 500 (lighter)
             '#0f766e', // Teal 700
             '#64748b', // Slate 500 (neutral)
-            '#0284c7', // Sky 600
+            '#0369a1', // Sky 700
             '#155e75', // Cyan 800 (darkest)
-            '#fb923c', // Coral light (accent variation)
+            '#14b8a6', // Teal 400 (lighter)
         ],
 
         // Text colors (will be dynamically set based on theme)
@@ -195,10 +195,10 @@ const ChartConfig = {
         'GME': '#f43f5e',     // Rose
         'value': '#3b82f6',   // Blue
 
-        // Fallback colors - monochromatic cyan with coral accent
+        // Fallback colors - monochromatic cyan/teal
         fallback: [
-            '#0891b2', '#ea580c', '#0e7490', '#0d9488', '#06b6d4',
-            '#0f766e', '#64748b', '#0284c7', '#155e75', '#fb923c'
+            '#0891b2', '#0284c7', '#0e7490', '#0d9488', '#06b6d4',
+            '#0f766e', '#64748b', '#0369a1', '#155e75', '#14b8a6'
         ]
     },
 

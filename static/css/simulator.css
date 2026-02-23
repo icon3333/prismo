@@ -401,10 +401,12 @@ html:has(#allocation-simulator-card) {
 /* Simulator Table */
 #allocation-simulator-container > .table-responsive {
   margin-bottom: var(--space-xl);
+  overflow-x: hidden;
 }
 
 .simulator-table {
   margin-bottom: 0;
+  table-layout: fixed;
 }
 
 .simulator-table thead th {
@@ -427,8 +429,13 @@ html:has(#allocation-simulator-card) {
 .simulator-table .col-sector { width: auto; min-width: 120px; }
 .simulator-table .col-thesis { width: auto; min-width: 120px; }
 .simulator-table .col-country { width: auto; min-width: 100px; }
-.simulator-table .col-value-eur { width: 100px; }
+.simulator-table .col-value-eur { width: 55px; }
 .simulator-table .col-value-pct { width: 100px; }
+.simulator-table .col-value-eur,
+.simulator-table .col-value-pct {
+  padding: var(--space-xs) var(--space-xs);
+  text-align: center;
+}
 .simulator-table .col-delete { width: 50px; text-align: center; }
 
 /* Portfolio select in table */
@@ -586,6 +593,12 @@ html:has(#allocation-simulator-card) {
 
 .simulator-historical-section .simulator-chart-label i {
   color: var(--primary);
+}
+
+.simulator-historical-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 .simulator-historical-section .toggle-group {
@@ -1189,13 +1202,13 @@ html:has(#allocation-simulator-card) {
 
 /* EUR column input */
 .simulator-table .value-eur-input {
-  text-align: right;
+  text-align: center;
   font-family: var(--font-mono);
 }
 
 /* % column input - accent color */
 .simulator-table .value-pct-input {
-  text-align: right;
+  text-align: center;
   font-family: var(--font-mono);
   color: var(--primary);
 }
@@ -1213,7 +1226,8 @@ html:has(#allocation-simulator-card) {
 /* Allocation summary in % column header */
 .simulator-table th .sandbox-allocation-summary {
   display: inline;
-  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  font-size: var(--font-size-2xs);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;

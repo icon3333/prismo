@@ -37,6 +37,8 @@ class SimulationRepository:
                 s.type,
                 s.cloned_from_portfolio_id,
                 s.cloned_from_name,
+                s.global_value_mode,
+                s.total_amount,
                 p.name as portfolio_name,
                 s.created_at,
                 s.updated_at
@@ -76,6 +78,8 @@ class SimulationRepository:
                 s.type,
                 s.cloned_from_portfolio_id,
                 s.cloned_from_name,
+                s.global_value_mode,
+                s.total_amount,
                 p.name as portfolio_name,
                 s.items,
                 s.created_at,
@@ -106,7 +110,9 @@ class SimulationRepository:
         portfolio_id: Optional[int] = None,
         sim_type: str = 'overlay',
         cloned_from_portfolio_id: Optional[int] = None,
-        cloned_from_name: Optional[str] = None
+        cloned_from_name: Optional[str] = None,
+        global_value_mode: str = 'euro',
+        total_amount: float = 0
     ) -> int:
         """
         Create a new simulation.
@@ -120,6 +126,8 @@ class SimulationRepository:
             sim_type: 'overlay' or 'portfolio'
             cloned_from_portfolio_id: Source portfolio ID (if cloned)
             cloned_from_name: Source portfolio name (if cloned)
+            global_value_mode: 'euro' or 'percent' (sandbox mode only)
+            total_amount: Total portfolio amount for percent mode
 
         Returns:
             New simulation ID
@@ -129,10 +137,13 @@ class SimulationRepository:
         db = get_db()
         cursor = db.execute(
             '''INSERT INTO simulations
-               (account_id, name, scope, portfolio_id, items, type, cloned_from_portfolio_id, cloned_from_name)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+               (account_id, name, scope, portfolio_id, items, type,
+                cloned_from_portfolio_id, cloned_from_name,
+                global_value_mode, total_amount)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             [account_id, name, scope, portfolio_id, items_json, sim_type,
-             cloned_from_portfolio_id, cloned_from_name]
+             cloned_from_portfolio_id, cloned_from_name,
+             global_value_mode, total_amount]
         )
         simulation_id = cursor.lastrowid
         db.commit()
@@ -147,7 +158,9 @@ class SimulationRepository:
         name: Optional[str] = None,
         scope: Optional[str] = None,
         items: Optional[List[Dict]] = None,
-        portfolio_id: Optional[int] = None
+        portfolio_id: Optional[int] = None,
+        global_value_mode: Optional[str] = None,
+        total_amount: Optional[float] = None
     ) -> bool:
         """
         Update an existing simulation.
@@ -159,6 +172,8 @@ class SimulationRepository:
             scope: New scope (optional)
             items: New items list (optional)
             portfolio_id: New portfolio ID (optional)
+            global_value_mode: 'euro' or 'percent' (optional)
+            total_amount: Total portfolio amount for percent mode (optional)
 
         Returns:
             True if successful
@@ -182,6 +197,14 @@ class SimulationRepository:
         if portfolio_id is not None:
             updates.append('portfolio_id = ?')
             params.append(portfolio_id)
+
+        if global_value_mode is not None:
+            updates.append('global_value_mode = ?')
+            params.append(global_value_mode)
+
+        if total_amount is not None:
+            updates.append('total_amount = ?')
+            params.append(total_amount)
 
         if not updates:
             return False

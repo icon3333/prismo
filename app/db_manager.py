@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 19
+    LATEST_VERSION = 20
 
     try:
         # Get current schema version
@@ -824,6 +824,16 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 19, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 19 completed: added type, cloned_from_portfolio_id, cloned_from_name to simulations")
+
+        # Migration 20: Add global_value_mode and total_amount columns to simulations
+        if current_version < 20:
+            logger.info("Applying migration 20: Adding global_value_mode and total_amount to simulations")
+            _safe_add_column(cursor, "simulations",
+                             "global_value_mode TEXT NOT NULL DEFAULT 'euro' CHECK(global_value_mode IN ('euro', 'percent'))")
+            _safe_add_column(cursor, "simulations", "total_amount REAL DEFAULT 0")
+            cursor.execute("UPDATE schema_version SET version = 20, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 20 completed: added global_value_mode and total_amount to simulations")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

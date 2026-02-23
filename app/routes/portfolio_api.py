@@ -3079,6 +3079,14 @@ def simulator_simulation_create():
         cloned_from_portfolio_id = data.get('cloned_from_portfolio_id')
         cloned_from_name = data.get('cloned_from_name')
 
+        global_value_mode = data.get('global_value_mode', 'euro')
+        if global_value_mode not in ('euro', 'percent'):
+            return error_response("global_value_mode must be 'euro' or 'percent'", 400)
+
+        total_amount = data.get('total_amount', 0)
+        if not isinstance(total_amount, (int, float)) or total_amount < 0:
+            total_amount = 0
+
         # Check for duplicate name
         if SimulationRepository.exists(name, account_id):
             return error_response(f'A simulation named "{name}" already exists', 409)
@@ -3092,7 +3100,9 @@ def simulator_simulation_create():
             portfolio_id=portfolio_id if scope == 'portfolio' else None,
             sim_type=sim_type,
             cloned_from_portfolio_id=cloned_from_portfolio_id,
-            cloned_from_name=cloned_from_name
+            cloned_from_name=cloned_from_name,
+            global_value_mode=global_value_mode,
+            total_amount=total_amount
         )
 
         # Fetch the created simulation
@@ -3184,6 +3194,16 @@ def simulator_simulation_update(simulation_id: int):
         if items is not None and not isinstance(items, list):
             return error_response('Items must be a list', 400)
 
+        # Validate global_value_mode if provided
+        global_value_mode = data.get('global_value_mode')
+        if global_value_mode is not None and global_value_mode not in ('euro', 'percent'):
+            return error_response("global_value_mode must be 'euro' or 'percent'", 400)
+
+        total_amount = data.get('total_amount')
+        if total_amount is not None:
+            if not isinstance(total_amount, (int, float)) or total_amount < 0:
+                total_amount = 0
+
         # Update simulation
         success = SimulationRepository.update(
             simulation_id=simulation_id,
@@ -3191,7 +3211,9 @@ def simulator_simulation_update(simulation_id: int):
             name=name,
             scope=scope,
             items=items,
-            portfolio_id=data.get('portfolio_id')
+            portfolio_id=data.get('portfolio_id'),
+            global_value_mode=global_value_mode,
+            total_amount=total_amount
         )
 
         if not success:

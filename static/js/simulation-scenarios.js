@@ -41,6 +41,9 @@ class AllocationSimulator {
     this.scope = 'global';             // 'global' or 'portfolio'
     this.portfolioId = null;           // Selected portfolio ID (if scope='portfolio')
 
+    // Sandbox total amount (portfolio mode only)
+    this.totalAmount = 0;              // Total portfolio amount for % calculations
+
     // DOM references (will be set after render)
     this.tableBody = null;
     this.countryChart = null;
@@ -140,11 +143,13 @@ class AllocationSimulator {
     this.currentSimulationName = null;
     this.currentSimulationType = null;
     this.currentClonedFromName = null;
+    this.totalAmount = 0;
     this.items = [];
     this.setAutoSaveStatus('idle');
 
     // Update UI
     this.updateModeUI();
+    this.updateSandboxControls();
     this.saveState();
 
     // Reload simulations filtered by new mode type
@@ -432,9 +437,14 @@ class AllocationSimulator {
   }
 
   updateDeleteButtonVisibility() {
+    const hasSimulation = !!this.currentSimulationId;
     const deleteBtn = document.getElementById('simulator-delete-btn');
     if (deleteBtn) {
-      deleteBtn.style.display = this.currentSimulationId ? 'inline-flex' : 'none';
+      deleteBtn.style.display = hasSimulation ? 'inline-flex' : 'none';
+    }
+    const renameBtn = document.getElementById('simulator-rename-btn');
+    if (renameBtn) {
+      renameBtn.style.display = hasSimulation ? 'inline-flex' : 'none';
     }
   }
 
@@ -457,10 +467,17 @@ class AllocationSimulator {
         this.currentSimulationName = simulation.name;
         this.currentSimulationType = simulation.type;
         this.currentClonedFromName = simulation.cloned_from_name;
+        this.totalAmount = simulation.total_amount || 0;
         // Don't override scope/portfolioId - keep user's current selection
         this.items = simulation.items || [];
 
+        // Ensure all sandbox items have targetPercent derived if missing
+        if (this.isPortfolioMode()) {
+          this.ensureItemPercentages();
+        }
+
         this.renderTable();
+        this.updateSandboxControls();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
         this.updateClonedFromLabel();
@@ -493,11 +510,18 @@ class AllocationSimulator {
         this.currentSimulationName = simulation.name;
         this.currentSimulationType = simulation.type;
         this.currentClonedFromName = simulation.cloned_from_name;
+        this.totalAmount = simulation.total_amount || 0;
         // Don't override scope/portfolioId - keep user's current selection from localStorage
         this.items = simulation.items || [];
 
+        // Ensure all sandbox items have targetPercent derived if missing
+        if (this.isPortfolioMode()) {
+          this.ensureItemPercentages();
+        }
+
         // Render table and load allocations (scope UI already set by initializeScope)
         this.renderTable();
+        this.updateSandboxControls();
         this.loadPortfolioAllocations();
         this.updateDeleteButtonVisibility();
         this.updateClonedFromLabel();
@@ -514,8 +538,10 @@ class AllocationSimulator {
     this.currentSimulationName = null;
     this.currentSimulationType = null;
     this.currentClonedFromName = null;
+    this.totalAmount = 0;
     this.items = [];
     this.renderTable();
+    this.updateSandboxControls();
     this.updateCharts();
     this.updateDeleteButtonVisibility();
     this.updateClonedFromLabel();
@@ -541,8 +567,10 @@ class AllocationSimulator {
    * Save as a new simulation (creates a copy/fork)
    */
   saveAsSimulation() {
+    this.isRenameMode = false;
     const modal = document.getElementById('save-simulation-modal');
     const nameInput = document.getElementById('simulation-name-input');
+    modal.querySelector('.modal-title').textContent = 'Save Simulation';
 
     // Suggest name based on current simulation
     const suggestedName = this.currentSimulationName
@@ -550,6 +578,22 @@ class AllocationSimulator {
       : '';
 
     nameInput.value = suggestedName;
+    modal.style.display = 'flex';
+    nameInput.focus();
+    nameInput.select();
+  }
+
+  /**
+   * Rename the currently loaded simulation
+   */
+  renameSimulation() {
+    if (!this.currentSimulationId) return;
+    this.isRenameMode = true;
+    const modal = document.getElementById('save-simulation-modal');
+    const nameInput = document.getElementById('simulation-name-input');
+    modal.querySelector('.modal-title').textContent = 'Rename Simulation';
+
+    nameInput.value = this.currentSimulationName || '';
     modal.style.display = 'flex';
     nameInput.focus();
     nameInput.select();
@@ -564,12 +608,47 @@ class AllocationSimulator {
       return;
     }
 
+    // Rename mode: PUT with name only
+    if (this.isRenameMode) {
+      try {
+        const response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          this.currentSimulationName = name;
+          document.getElementById('save-simulation-modal').style.display = 'none';
+          this.isRenameMode = false;
+
+          await this.loadSavedSimulations();
+          const select = document.getElementById('simulator-load-select');
+          if (select) select.value = this.currentSimulationId;
+
+          this.saveState();
+          this.showToast(`Renamed to "${name}"`, 'success');
+        } else {
+          this.showToast(result.error || 'Failed to rename simulation', 'danger');
+        }
+      } catch (error) {
+        console.error('Error renaming simulation:', error);
+        this.showToast('Failed to rename simulation', 'danger');
+      }
+      return;
+    }
+
+    // Save As mode: create new simulation
     const simulationData = {
       name: name,
       scope: this.scope,
       portfolio_id: this.scope === 'portfolio' ? this.portfolioId : null,
       items: this.items,
-      type: this.isPortfolioMode() ? 'portfolio' : 'overlay'
+      type: this.isPortfolioMode() ? 'portfolio' : 'overlay',
+      global_value_mode: 'euro',
+      total_amount: this.totalAmount
     };
 
     try {
@@ -716,6 +795,11 @@ class AllocationSimulator {
         this.currentClonedFromName = simulation.cloned_from_name;
         this.items = simulation.items || [];
 
+        // Derive targetPercent for cloned items
+        if (this.isPortfolioMode()) {
+          this.ensureItemPercentages();
+        }
+
         // Close modal
         document.getElementById('clone-portfolio-modal').style.display = 'none';
 
@@ -760,7 +844,11 @@ class AllocationSimulator {
       const response = await fetch(`/portfolio/api/simulator/simulations/${this.currentSimulationId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: this.items })
+        body: JSON.stringify({
+          items: this.items,
+          global_value_mode: 'euro',
+          total_amount: this.totalAmount
+        })
       });
 
       const result = await response.json();
@@ -907,7 +995,7 @@ class AllocationSimulator {
       <!-- Data Table -->
       <div class="table-responsive">
         <table class="table table-striped table-hover unified-table simulator-table">
-          <thead>
+          <thead id="simulator-table-head">
             <tr>
               <th class="col-ticker">Identifier</th>
               <th class="col-name">Name</th>
@@ -915,7 +1003,7 @@ class AllocationSimulator {
               <th class="col-sector">Sector</th>
               <th class="col-thesis">Thesis</th>
               <th class="col-country">Country</th>
-              <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
+              <th class="col-value" id="simulator-value-header">Value <span class="col-value-hint">(€ or %)</span></th>
               <th class="col-delete"></th>
             </tr>
           </thead>
@@ -1043,6 +1131,24 @@ class AllocationSimulator {
     this.tableBody.addEventListener('input', (e) => this.handleTableInput(e));
     this.tableBody.addEventListener('change', (e) => this.handleTableChange(e));
 
+    // Sandbox total amount input (in header)
+    const totalAmountInput = document.getElementById('sandbox-total-amount-input');
+    if (totalAmountInput) {
+      totalAmountInput.addEventListener('input', () => {
+        const oldTotal = this.totalAmount;
+        const newTotal = this.parseValue(totalAmountInput.value);
+        this.totalAmount = newTotal;
+        this.onTotalAmountChanged(oldTotal, newTotal);
+        this.updateTableValues();
+        this.debouncedChartUpdate();
+        this.renderAllocationSummary();
+        this.debouncedAutoSave();
+      });
+      totalAmountInput.addEventListener('blur', () => {
+        totalAmountInput.value = this.totalAmount > 0 ? this.formatValue(this.totalAmount) : '';
+      });
+    }
+
     // Category toggle (sector/thesis)
     const categoryToggle = document.getElementById('simulator-category-toggle');
     if (categoryToggle) {
@@ -1086,6 +1192,11 @@ class AllocationSimulator {
       deleteBtn.addEventListener('click', () => this.deleteSimulation());
     }
 
+    const renameBtn = document.getElementById('simulator-rename-btn');
+    if (renameBtn) {
+      renameBtn.addEventListener('click', () => this.renameSimulation());
+    }
+
     // Clone button
     const cloneBtn = document.getElementById('simulator-clone-btn');
     if (cloneBtn) {
@@ -1102,24 +1213,23 @@ class AllocationSimulator {
       saveConfirmBtn.addEventListener('click', () => this.confirmSaveSimulation());
     }
 
+    const dismissSaveModal = () => {
+      saveModal.style.display = 'none';
+      this.isRenameMode = false;
+    };
+
     if (saveCancelBtn) {
-      saveCancelBtn.addEventListener('click', () => {
-        saveModal.style.display = 'none';
-      });
+      saveCancelBtn.addEventListener('click', dismissSaveModal);
     }
 
     if (saveCloseBtn) {
-      saveCloseBtn.addEventListener('click', () => {
-        saveModal.style.display = 'none';
-      });
+      saveCloseBtn.addEventListener('click', dismissSaveModal);
     }
 
     // Close modal on overlay click
     if (saveModal) {
       saveModal.addEventListener('click', (e) => {
-        if (e.target === saveModal) {
-          saveModal.style.display = 'none';
-        }
+        if (e.target === saveModal) dismissSaveModal();
       });
     }
 
@@ -1408,14 +1518,22 @@ class AllocationSimulator {
   // ============================================================================
 
   addItem(item) {
+    // In sandbox mode, new items start at 0 with targetPercent 0
+    if (this.isPortfolioMode()) {
+      item.targetPercent = item.targetPercent || 0;
+    }
     this.items.push(item);
     this.renderTable();
     this.updateCharts();
+    if (this.isPortfolioMode()) {
+      this.renderAllocationSummary();
+    }
     this.triggerAutoSave();
 
-    // Focus the value input for the new row
+    // Focus the euro value input for the new row
     setTimeout(() => {
-      const valueInput = this.tableBody.querySelector(`[data-id="${item.id}"] .value-input`);
+      const valueInput = this.tableBody.querySelector(`[data-id="${item.id}"] .value-euro`) ||
+                         this.tableBody.querySelector(`[data-id="${item.id}"] .value-input`);
       if (valueInput) valueInput.focus();
     }, 50);
   }
@@ -1434,6 +1552,7 @@ class AllocationSimulator {
       this.items.splice(index, 1);
       this.renderTable();
       this.updateCharts();
+      this.renderAllocationSummary();
       this.triggerAutoSave();
     }
   }
@@ -1447,15 +1566,21 @@ class AllocationSimulator {
   // ============================================================================
 
   renderTable() {
+    const isSandbox = this.isPortfolioMode();
+
+    // Update table headers dynamically
+    this.updateTableHeaders(isSandbox);
+
     if (this.items.length === 0) {
-      const emptyStateMessage = this.isPortfolioMode()
+      const emptyStateMessage = isSandbox
         ? 'Add positions to build a simulated portfolio.'
         : 'No items added yet. Use the forms above to add positions.';
-      const emptyStateIcon = this.isPortfolioMode() ? 'fa-briefcase' : 'fa-chart-pie';
+      const emptyStateIcon = isSandbox ? 'fa-briefcase' : 'fa-chart-pie';
+      const colspan = isSandbox ? 9 : 8;
 
       this.tableBody.innerHTML = `
         <tr class="empty-state-row">
-          <td colspan="8" class="empty-state">
+          <td colspan="${colspan}" class="empty-state">
             <i class="fas ${emptyStateIcon}"></i>
             <span>${emptyStateMessage}</span>
           </td>
@@ -1465,34 +1590,15 @@ class AllocationSimulator {
     }
 
     this.tableBody.innerHTML = this.items.map(item => {
-      // Determine value mode display
-      const isPercentMode = item.valueMode === 'percentage';
-      const displayValue = isPercentMode ? (item.targetPercent || 0) : item.value;
-      const modeSymbol = isPercentMode ? '%' : '€';
-      const formattedValue = isPercentMode
-        ? (item.targetPercent || 0).toFixed(1)
-        : this.formatValue(item.value);
+      // Common cells
+      const tickerCell = item.source === 'ticker'
+        ? `<span class="ticker-badge">${item.ticker}</span>
+           ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
+        : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
+                 data-field="ticker" placeholder="—">`;
 
-      // Show calculated € value for percentage mode items
-      const calculatedHint = isPercentMode && item.value > 0
-        ? `<span class="value-calculated-hint sensitive-value" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
-        : '';
-
-      // Warning if target is below current
-      const warningHint = item.targetWarning
-        ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
-        : '';
-
-      return `
-        <tr data-id="${item.id}">
-          <td class="col-ticker">
-            ${item.source === 'ticker'
-              ? `<span class="ticker-badge">${item.ticker}</span>
-                 ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
-              : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
-                       data-field="ticker" placeholder="—">`
-            }
-          </td>
+      const commonCells = `
+          <td class="col-ticker">${tickerCell}</td>
           <td class="col-name">
             <span class="name-display">${this.escapeHtml(item.name || '—')}</span>
           </td>
@@ -1504,23 +1610,69 @@ class AllocationSimulator {
             </select>
           </td>
           <td class="col-sector">
-            <input type="text" class="editable-cell sector-input" value="${this.escapeHtml(item.sector === '—' ? item.sector : (item.sector || '').toLowerCase())}"
+            <input type="text" class="editable-cell sector-input${item.source === 'sector' ? ' source-highlight' : ''}" value="${this.escapeHtml(item.sector === '—' ? item.sector : (item.sector || '').toLowerCase())}"
                    data-field="sector" placeholder="—">
           </td>
           <td class="col-thesis">
-            <input type="text" class="editable-cell thesis-input" value="${this.escapeHtml(item.thesis === '—' ? item.thesis : (item.thesis || '').toLowerCase())}"
+            <input type="text" class="editable-cell thesis-input${item.source === 'thesis' ? ' source-highlight' : ''}" value="${this.escapeHtml(item.thesis === '—' ? item.thesis : (item.thesis || '').toLowerCase())}"
                    data-field="thesis" placeholder="—">
           </td>
           <td class="col-country">
-            <input type="text" class="editable-cell country-input" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
+            <input type="text" class="editable-cell country-input${item.source === 'country' ? ' source-highlight' : ''}" value="${this.escapeHtml(item.country === '—' ? item.country : (item.country || '').toLowerCase())}"
                    data-field="country" placeholder="—">
+          </td>`;
+
+      if (isSandbox) {
+        // Dual columns: € and %
+        const euroValue = this.formatValue(item.value);
+        const percentValue = (item.targetPercent || 0).toFixed(1);
+
+        return `
+        <tr data-id="${item.id}">
+          ${commonCells}
+          <td class="col-euro">
+            <input type="text" class="editable-cell value-input value-euro sensitive-value"
+                   value="${euroValue}"
+                   data-field="value-euro" placeholder="0">
           </td>
+          <td class="col-percent">
+            <input type="text" class="editable-cell value-input value-percent"
+                   value="${percentValue}"
+                   data-field="value-percent" placeholder="0">
+          </td>
+          <td class="col-delete">
+            <button class="btn-delete" title="Remove">
+              <i class="fas fa-times"></i>
+            </button>
+          </td>
+        </tr>`;
+      } else {
+        // Overlay mode: single value column with per-item toggle
+        const isPercentMode = item.valueMode === 'percentage';
+        const modeSymbol = isPercentMode ? '%' : '€';
+        const formattedValue = isPercentMode
+          ? (item.targetPercent || 0).toFixed(1)
+          : this.formatValue(item.value);
+
+        const calculatedHint = isPercentMode && item.value > 0
+          ? `<span class="value-calculated-hint sensitive-value" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
+          : '';
+
+        const warningHint = item.targetWarning
+          ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
+          : '';
+
+        const toggleButton = `<button class="value-mode-toggle ${isPercentMode ? 'mode-percent' : 'mode-euro'}"
+                  data-field="valueMode" title="Toggle between € amount and % target">
+            ${modeSymbol}
+          </button>`;
+
+        return `
+        <tr data-id="${item.id}">
+          ${commonCells}
           <td class="col-value">
             <div class="value-input-wrapper">
-              <button class="value-mode-toggle ${isPercentMode ? 'mode-percent' : 'mode-euro'}"
-                      data-field="valueMode" title="Toggle between € amount and % target">
-                ${modeSymbol}
-              </button>
+              ${toggleButton}
               <input type="text" class="editable-cell value-input sensitive-value ${isPercentMode ? 'percent-mode' : ''}"
                      value="${formattedValue}"
                      data-field="value" placeholder="0">
@@ -1533,9 +1685,64 @@ class AllocationSimulator {
               <i class="fas fa-times"></i>
             </button>
           </td>
-        </tr>
-      `;
+        </tr>`;
+      }
     }).join('');
+  }
+
+  updateTableHeaders(isSandbox) {
+    const thead = document.getElementById('simulator-table-head');
+    if (!thead) return;
+
+    if (isSandbox) {
+      thead.innerHTML = `
+        <tr>
+          <th class="col-ticker">Identifier</th>
+          <th class="col-name">Name</th>
+          <th class="col-portfolio">Portfolio</th>
+          <th class="col-sector">Sector</th>
+          <th class="col-thesis">Thesis</th>
+          <th class="col-country">Country</th>
+          <th class="col-euro">€</th>
+          <th class="col-percent">%</th>
+          <th class="col-delete"></th>
+        </tr>`;
+    } else {
+      thead.innerHTML = `
+        <tr>
+          <th class="col-ticker">Identifier</th>
+          <th class="col-name">Name</th>
+          <th class="col-portfolio">Portfolio</th>
+          <th class="col-sector">Sector</th>
+          <th class="col-thesis">Thesis</th>
+          <th class="col-country">Country</th>
+          <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
+          <th class="col-delete"></th>
+        </tr>`;
+    }
+  }
+
+  /**
+   * Update € and % input values in-place without rebuilding the table DOM.
+   * Used when totalAmount changes to avoid expensive full re-render.
+   */
+  updateTableValues() {
+    if (!this.tableBody) return;
+
+    this.items.forEach(item => {
+      const row = this.tableBody.querySelector(`[data-id="${item.id}"]`);
+      if (!row) return;
+
+      const euroInput = row.querySelector('.value-euro');
+      const percentInput = row.querySelector('.value-percent');
+
+      if (euroInput && document.activeElement !== euroInput) {
+        euroInput.value = this.formatValue(item.value);
+      }
+      if (percentInput && document.activeElement !== percentInput) {
+        percentInput.value = (item.targetPercent || 0).toFixed(1);
+      }
+    });
   }
 
   // ============================================================================
@@ -1619,7 +1826,15 @@ class AllocationSimulator {
         const field = e.target.dataset.field;
         const item = this.items.find(i => i.id === id);
         if (item) {
-          e.target.value = field === 'value' ? this.formatValue(item[field]) : item[field];
+          if (field === 'value-euro') {
+            e.target.value = this.formatValue(item.value);
+          } else if (field === 'value-percent') {
+            e.target.value = (item.targetPercent || 0).toFixed(1);
+          } else if (field === 'value') {
+            e.target.value = this.formatValue(item.value);
+          } else {
+            e.target.value = item[field];
+          }
         }
         e.target.blur();
       }
@@ -1636,29 +1851,63 @@ class AllocationSimulator {
       e.target.setSelectionRange(cursorPos, cursorPos);
     }
 
-    // Real-time chart updates with debounce (only for value inputs)
+    // Real-time chart updates with debounce (for value inputs)
     if (e.target.classList.contains('value-input')) {
       const row = e.target.closest('tr');
       if (!row) return;
 
       const id = row.dataset.id;
       const item = this.items.find(i => i.id === id);
-      if (item) {
-        if (item.valueMode === 'percentage') {
-          // For percentage mode, update target percent and recalculate
-          const cleanedValue = e.target.value.replace('%', '').trim();
-          const percentValue = parseFloat(cleanedValue);
-          if (!isNaN(percentValue)) {
-            item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
-            this.recalculatePercentageItem(item);
+      if (!item) return;
+
+      const field = e.target.dataset.field;
+
+      if (field === 'value-euro') {
+        // Sandbox mode: typing in € column
+        const newValue = this.parseValue(e.target.value);
+        item.value = newValue;
+        // Auto-grow total if sum exceeds it, then refresh all rows
+        if (this.enforceMinTotal()) {
+          this.updateTableValues();
+        } else if (this.totalAmount > 0) {
+          // Total unchanged — just update this row's %
+          item.targetPercent = parseFloat((newValue / this.totalAmount * 100).toFixed(1));
+          const percentInput = row.querySelector('.value-percent');
+          if (percentInput) {
+            percentInput.value = item.targetPercent.toFixed(1);
           }
-        } else {
-          // For absolute mode, update value directly
-          const newValue = this.parseValue(e.target.value);
-          item.value = newValue;
         }
-        this.debouncedChartUpdate();
+        this.renderAllocationSummary();
+      } else if (field === 'value-percent') {
+        // Sandbox mode: typing in % column
+        const cleanedValue = e.target.value.replace('%', '').trim();
+        const percentValue = parseFloat(cleanedValue);
+        if (!isNaN(percentValue)) {
+          item.targetPercent = Math.min(Math.max(0, percentValue), 999);
+          // Derive € from % if totalAmount is set
+          if (this.totalAmount > 0) {
+            item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
+            const euroInput = row.querySelector('.value-euro');
+            if (euroInput) {
+              euroInput.value = this.formatValue(item.value);
+            }
+          }
+          this.renderAllocationSummary();
+        }
+      } else if (item.valueMode === 'percentage') {
+        // Overlay mode: percentage item
+        const cleanedValue = e.target.value.replace('%', '').trim();
+        const percentValue = parseFloat(cleanedValue);
+        if (!isNaN(percentValue)) {
+          item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
+          this.recalculatePercentageItem(item);
+        }
+      } else {
+        // Overlay mode: absolute euro value
+        const newValue = this.parseValue(e.target.value);
+        item.value = newValue;
       }
+      this.debouncedChartUpdate();
     }
   }
 
@@ -1671,22 +1920,53 @@ class AllocationSimulator {
     let value = input.value.trim();
     const item = this.items.find(i => i.id === id);
 
-    if (field === 'value') {
-      // Check if item is in percentage mode
+    if (field === 'value-euro') {
+      // Sandbox mode: € column blur
+      const euroValue = this.parseValue(value);
+      item.value = euroValue;
+      input.value = this.formatValue(euroValue);
+      // Auto-grow total if sum exceeds it, then refresh all rows
+      if (this.enforceMinTotal()) {
+        this.updateTableValues();
+      } else if (this.totalAmount > 0) {
+        // Total unchanged — just update this row's %
+        item.targetPercent = parseFloat((euroValue / this.totalAmount * 100).toFixed(1));
+        const row = input.closest('tr');
+        const percentInput = row?.querySelector('.value-percent');
+        if (percentInput) {
+          percentInput.value = item.targetPercent.toFixed(1);
+        }
+      }
+      this.renderAllocationSummary();
+    } else if (field === 'value-percent') {
+      // Sandbox mode: % column blur
+      const cleanedValue = value.replace('%', '').trim();
+      const percentValue = parseFloat(cleanedValue);
+      if (!isNaN(percentValue)) {
+        item.targetPercent = Math.min(Math.max(0, percentValue), 999);
+        input.value = item.targetPercent.toFixed(1);
+        // Derive € if totalAmount is set
+        if (this.totalAmount > 0) {
+          item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
+          const row = input.closest('tr');
+          const euroInput = row?.querySelector('.value-euro');
+          if (euroInput) {
+            euroInput.value = this.formatValue(item.value);
+          }
+        }
+      }
+      this.renderAllocationSummary();
+    } else if (field === 'value') {
+      // Overlay mode
       if (item && item.valueMode === 'percentage') {
-        // Parse as percentage target
         const cleanedValue = value.replace('%', '').trim();
         const percentValue = parseFloat(cleanedValue);
-
         if (!isNaN(percentValue)) {
           item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
           input.value = item.targetPercent.toFixed(1);
-
-          // Recalculate the € value needed
           this.recalculatePercentageItem(item);
         }
       } else {
-        // Parse numeric euro value
         value = this.parseValue(value);
         input.value = this.formatValue(value);
         this.updateItem(id, 'value', value);
@@ -1721,8 +2001,8 @@ class AllocationSimulator {
       this.updateItem(id, field, value);
     }
 
-    // Re-render table to show calculated values
-    if (item && item.valueMode === 'percentage') {
+    // Re-render table to show calculated values (overlay percentage mode)
+    if (item && item.valueMode === 'percentage' && !this.isPortfolioMode()) {
       this.renderTable();
     }
 
@@ -1739,7 +2019,6 @@ class AllocationSimulator {
     // Handle select element changes (e.g., portfolio dropdown)
     if (e.target.classList.contains('portfolio-select')) {
       this.saveCell(e.target);
-      // Explicitly update charts when portfolio assignment changes
       this.updateCharts();
     }
   }
@@ -1993,7 +2272,9 @@ class AllocationSimulator {
       byThesis[thesis] = (byThesis[thesis] || 0) + value;
     });
 
-    const combinedTotal = portfolioTotal + simulatedTotal;
+    // In sandbox mode with totalAmount set, use totalAmount as the denominator for chart percentages
+    const isSandboxWithTotal = this.isPortfolioMode() && this.totalAmount > 0;
+    const combinedTotal = isSandboxWithTotal ? this.totalAmount : (portfolioTotal + simulatedTotal);
 
     // Return data for both sector and thesis (the chart renderer will choose based on categoryMode)
     return {
@@ -2121,6 +2402,10 @@ class AllocationSimulator {
    */
   getGlobalTotal() {
     if (this.isPortfolioMode()) {
+      // In sandbox mode with totalAmount, use it as the denominator
+      if (this.totalAmount > 0) {
+        return this.totalAmount;
+      }
       // In portfolio mode, global total = simulated items total
       return this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
     }
@@ -2523,6 +2808,145 @@ class AllocationSimulator {
         this.recalculatePercentageItem(item);
       }
     });
+  }
+
+  // ============================================================================
+  // Sandbox Controls
+  // ============================================================================
+
+  /**
+   * Update sandbox controls visibility and state
+   */
+  updateSandboxControls() {
+    const isPortfolio = this.isPortfolioMode();
+
+    // Show/hide total amount control in header (only in sandbox mode)
+    const totalAmountControl = document.getElementById('simulator-total-amount-control');
+    if (totalAmountControl) {
+      totalAmountControl.style.display = isPortfolio ? '' : 'none';
+    }
+
+    // Update total amount input value
+    const totalInput = document.getElementById('sandbox-total-amount-input');
+    if (totalInput) {
+      totalInput.value = this.totalAmount > 0 ? this.formatValue(this.totalAmount) : '';
+    }
+
+    this.renderAllocationSummary();
+  }
+
+  /**
+   * Handle total amount changing. When going from 0→non-zero, derive %
+   * from existing € values first. Otherwise, derive € from %.
+   */
+  onTotalAmountChanged(oldTotal, newTotal) {
+    if (oldTotal === 0 && newTotal > 0) {
+      // Transition 0→non-zero: derive % from existing € values
+      this.items.forEach(item => {
+        const euroVal = parseFloat(item.value) || 0;
+        item.targetPercent = euroVal > 0
+          ? parseFloat((euroVal / newTotal * 100).toFixed(1))
+          : (parseFloat(item.targetPercent) || 0);
+      });
+    } else if (newTotal > 0) {
+      // Normal: derive € from %
+      this.items.forEach(item => {
+        const pct = parseFloat(item.targetPercent) || 0;
+        item.value = Math.round((pct / 100) * newTotal * 100) / 100;
+      });
+    }
+    // When newTotal === 0: keep € values as-is, % values as-is
+  }
+
+  /**
+   * Auto-grow totalAmount when sum of € values exceeds it.
+   * Called only from € column input paths — never from % or Total input.
+   * Returns true if total was adjusted.
+   */
+  enforceMinTotal() {
+    const sum = this.items.reduce((s, item) => s + (parseFloat(item.value) || 0), 0);
+    if (sum > this.totalAmount) {
+      this.totalAmount = sum;
+      const totalInput = document.getElementById('sandbox-total-amount-input');
+      if (totalInput && document.activeElement !== totalInput) {
+        totalInput.value = this.formatValue(sum);
+      }
+      // Recompute all percentages from € values
+      this.items.forEach(item => {
+        const val = parseFloat(item.value) || 0;
+        item.targetPercent = sum > 0 ? parseFloat((val / sum * 100).toFixed(1)) : 0;
+      });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Ensure all items have targetPercent derived from their EUR values.
+   * Called when loading saved simulations to handle backward compatibility.
+   */
+  ensureItemPercentages() {
+    // If totalAmount is set, derive from it. Otherwise derive from sum of values.
+    const denominator = this.totalAmount > 0
+      ? this.totalAmount
+      : this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+
+    this.items.forEach(item => {
+      if (item.targetPercent === undefined || item.targetPercent === null) {
+        const val = parseFloat(item.value) || 0;
+        item.targetPercent = denominator > 0
+          ? parseFloat((val / denominator * 100).toFixed(1))
+          : 0;
+      }
+    });
+
+    // Ensure total accommodates loaded € values (e.g. after clone)
+    this.enforceMinTotal();
+  }
+
+  /**
+   * Render the allocation summary (X% allocated / Y% remaining)
+   */
+  renderAllocationSummary() {
+    const el = document.getElementById('sandbox-allocation-summary');
+    if (!el) return;
+
+    if (!this.isPortfolioMode()) {
+      el.innerHTML = '';
+      return;
+    }
+
+    if (this.totalAmount <= 0) {
+      if (this.items.length > 0) {
+        // Show total from sum of EUR values
+        const totalEuro = this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+        if (totalEuro > 0) {
+          el.innerHTML = `<span class="allocation-under">Σ €${this.formatValue(totalEuro)}</span>`;
+        } else {
+          el.innerHTML = '';
+        }
+      } else {
+        el.innerHTML = '';
+      }
+      return;
+    }
+
+    const totalPercent = this.items.reduce((sum, item) => sum + (parseFloat(item.targetPercent) || 0), 0);
+    const rounded = Math.round(totalPercent * 10) / 10;
+
+    let statusClass, statusText;
+    if (rounded === 100) {
+      statusClass = 'allocation-full';
+      statusText = '✓ 100%';
+    } else if (rounded > 100) {
+      statusClass = 'allocation-over';
+      statusText = `${rounded}% (${(rounded - 100).toFixed(1)}% over)`;
+    } else {
+      statusClass = 'allocation-under';
+      statusText = `${rounded}% (${(100 - rounded).toFixed(1)}% left)`;
+    }
+
+    el.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
   }
 
   formatValue(value) {

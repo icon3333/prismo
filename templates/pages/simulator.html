@@ -25,6 +25,15 @@
             </button>
           </div>
         </div>
+        <!-- Total Amount (sandbox only, hidden by default) -->
+        <div class="simulator-control" id="simulator-total-amount-control" style="display: none;">
+          <label class="simulator-control-label">Total <span class="sandbox-allocation-summary" id="sandbox-allocation-summary"></span></label>
+          <div class="sandbox-total-input-wrapper">
+            <span class="sandbox-total-prefix">€</span>
+            <input type="text" class="input sandbox-total-input" id="sandbox-total-amount-input"
+                   placeholder="0" value="0">
+          </div>
+        </div>
         <!-- Portfolio Scope (overlay mode only) -->
         <div class="simulator-control" id="simulator-portfolio-control">
           <label class="simulator-control-label" for="simulator-portfolio-select">Portfolio</label>
@@ -54,7 +63,11 @@
         </button>
         <!-- Save As button - always visible -->
         <button class="button is-primary is-small" id="simulator-saveas-btn" title="Save as new simulation">
-          <i class="fas fa-copy"></i> Save As...
+          <i class="fas fa-copy"></i>
+        </button>
+        <!-- Rename button -->
+        <button class="button is-small" id="simulator-rename-btn" style="display: none;" title="Rename simulation">
+          <i class="fas fa-pen"></i>
         </button>
         <!-- Delete button - pushed to far right -->
         <button class="button is-danger is-outlined is-small" id="simulator-delete-btn" style="display: none;" title="Delete simulation">

@@ -491,7 +491,7 @@ def import_data():
             imported_portfolio_names = []  # Track names for verification
             if 'portfolios' in data and data['portfolios']:
                 for portfolio in data['portfolios']:
-                    name = portfolio['name']
+                    name = portfolio['name'].strip().lower() if portfolio['name'] else portfolio['name']
                     db.execute('''
                         INSERT INTO portfolios (name, account_id)
                         VALUES (?, ?)

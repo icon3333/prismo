@@ -1208,6 +1208,11 @@ input[type="number"] {
   color: var(--text-primary);
 }
 
+.alert-danger {
+  border-color: var(--error);
+  color: var(--text-primary);
+}
+
 /* ========================================
    State Boxes - Colored Containers
    ======================================== */

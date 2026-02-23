@@ -20,7 +20,7 @@ from app.utils.value_calculator import calculate_portfolio_total, calculate_item
 from app.utils.portfolio_totals import get_portfolio_totals
 from app.utils.identifier_mapping import store_identifier_mapping
 from app.utils.identifier_normalization import normalize_identifier
-from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis
+from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis, normalize_portfolio
 from app.services.allocation_service import AllocationService
 from app.cache import cache
 
@@ -64,7 +64,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
     if 'thesis' in data:
         data['thesis'] = normalize_thesis(data.get('thesis'))
 
-    portfolio_name = data.get('portfolio')
+    portfolio_name = normalize_portfolio(data.get('portfolio'))
     if portfolio_name and portfolio_name != 'None':
         portfolio = query_db(
             'SELECT id FROM portfolios WHERE name = ? AND account_id = ?',
@@ -2181,7 +2181,7 @@ def update_portfolio_api():
                 new_identifier = item.get('identifier', '')
 
                 # Handle portfolio assignment
-                portfolio_name = item.get('portfolio')
+                portfolio_name = normalize_portfolio(item.get('portfolio'))
                 if portfolio_name and portfolio_name != 'None':
                     portfolio_id = portfolio_map.get(portfolio_name)
                     if portfolio_id is None:
@@ -2363,7 +2363,7 @@ def manage_portfolios():
         backup_database()
 
         if action == 'add':
-            portfolio_name = request.form.get('add_portfolio_name', '').strip()
+            portfolio_name = normalize_portfolio(request.form.get('add_portfolio_name', ''))
             if not portfolio_name:
                 flash('Portfolio name cannot be empty', 'error')
                 return redirect(url_for('portfolio.enrich'))
@@ -2389,8 +2389,8 @@ def manage_portfolios():
                 f'Portfolio "{portfolio_name}" added successfully', 'success')
 
         elif action == 'rename':
-            old_name = request.form.get('old_name', '').strip()
-            new_name = request.form.get('new_name', '').strip()
+            old_name = normalize_portfolio(request.form.get('old_name', ''))
+            new_name = normalize_portfolio(request.form.get('new_name', ''))
 
             if not old_name or not new_name:
                 flash('Both old and new portfolio names are required', 'error')
@@ -3014,13 +3014,10 @@ def simulator_simulations_list():
         from app.repositories.simulation_repository import SimulationRepository
 
         account_id = g.account_id
-        sim_type = request.args.get('type')
-        if sim_type and sim_type not in ('overlay', 'portfolio'):
-            sim_type = None
 
-        simulations = SimulationRepository.get_all(account_id, sim_type=sim_type)
+        simulations = SimulationRepository.get_all(account_id)
 
-        logger.info(f"Returning {len(simulations)} simulations (type={sim_type}) for account {account_id}")
+        logger.info(f"Returning {len(simulations)} simulations for account {account_id}")
         return success_response({'simulations': simulations})
 
     except Exception as e:

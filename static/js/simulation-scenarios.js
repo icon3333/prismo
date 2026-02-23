@@ -60,6 +60,13 @@ class AllocationSimulator {
     this.pendingExpandSector = null;
     this.pendingExpandCountry = null;
 
+    // Historical performance chart (sandbox mode only)
+    this.historicalChartInstance = null;   // ApexCharts instance
+    this.historicalDataCache = new Map();  // cache key → API response
+    this.chartAbortController = null;     // AbortController for canceling
+    this.currentChartPeriod = '5y';       // Selected period
+    this.debouncedHistoricalUpdate = this.debounce(() => this.updateHistoricalChart(), 500);
+
     // Debounced chart update for real-time feedback
     this.debouncedChartUpdate = this.debounce(() => this.updateCharts(), 300);
 
@@ -100,12 +107,18 @@ class AllocationSimulator {
   // ============================================================================
 
   saveState() {
+    // Build state with per-mode simulation IDs
+    const existing = this.loadState() || {};
+    const modeKey = this.mode === 'portfolio' ? 'portfolioSimulationId' : 'overlaySimulationId';
     const state = {
       mode: this.mode,
       scope: this.scope,
       portfolioId: this.portfolioId,
-      simulationId: this.currentSimulationId
+      // Persist simulation ID for the current mode; preserve the other mode's ID
+      overlaySimulationId: existing.overlaySimulationId || null,
+      portfolioSimulationId: existing.portfolioSimulationId || null,
     };
+    state[modeKey] = this.currentSimulationId;
     localStorage.setItem('simulator_state', JSON.stringify(state));
   }
 
@@ -136,6 +149,15 @@ class AllocationSimulator {
       this.autoSave();
     }
 
+    // Save current mode's simulation ID before switching
+    this.saveState();
+
+    // Read the target mode's saved simulation ID
+    const savedState = this.loadState();
+    const targetSimId = newMode === 'portfolio'
+      ? (savedState && savedState.portfolioSimulationId)
+      : (savedState && savedState.overlaySimulationId);
+
     this.mode = newMode;
 
     // Reset simulation state
@@ -147,15 +169,33 @@ class AllocationSimulator {
     this.items = [];
     this.setAutoSaveStatus('idle');
 
+    // Cleanup historical chart
+    if (this.historicalChartInstance) {
+      this.historicalChartInstance.destroy();
+      this.historicalChartInstance = null;
+    }
+    this.historicalDataCache.clear();
+
     // Update UI
     this.updateModeUI();
     this.updateSandboxControls();
     this.saveState();
 
-    // Reload simulations filtered by new mode type
-    this.loadSavedSimulations();
+    // Refresh dropdown (all simulations already loaded, no re-fetch needed)
+    this.populateSimulationsDropdown();
 
-    // Reload data (portfolio mode doesn't need baseline, but we still load for reference)
+    // Restore target mode's simulation if one was previously selected
+    if (targetSimId) {
+      const exists = this.savedSimulations.some(s => s.id === targetSimId);
+      if (exists) {
+        const select = document.getElementById('simulator-load-select');
+        if (select) select.value = targetSimId;
+        this.loadSimulationSilent(targetSimId);
+        return; // loadSimulationSilent will handle rendering
+      }
+    }
+
+    // No saved simulation for this mode — render empty state
     this.renderTable();
     this.updateCharts();
     this.updateInvestmentProgress();
@@ -182,6 +222,11 @@ class AllocationSimulator {
     if (cloneBtn) {
       cloneBtn.style.visibility = this.isPortfolioMode() ? 'visible' : 'hidden';
       cloneBtn.style.pointerEvents = this.isPortfolioMode() ? 'auto' : 'none';
+    }
+
+    // Show/hide historical chart section (portfolio/sandbox mode only)
+    if (this.historicalSection) {
+      this.historicalSection.style.display = this.isPortfolioMode() ? '' : 'none';
     }
 
     // Update cloned-from label
@@ -392,24 +437,27 @@ class AllocationSimulator {
 
   async loadSavedSimulations() {
     try {
-      const typeFilter = this.isPortfolioMode() ? 'portfolio' : 'overlay';
-      const response = await fetch(`/portfolio/api/simulator/simulations?type=${typeFilter}`);
+      const response = await fetch('/portfolio/api/simulator/simulations');
       const result = await response.json();
 
       if (result.success) {
         this.savedSimulations = result.data.simulations || [];
         this.populateSimulationsDropdown();
 
-        // Restore saved simulation from localStorage
+        // Restore saved simulation from localStorage (per-mode key)
         const savedState = this.loadState();
-        if (savedState && savedState.simulationId) {
-          // Check if simulation still exists in the filtered list
-          const exists = this.savedSimulations.some(s => s.id === savedState.simulationId);
-          if (exists) {
-            // Update dropdown and load simulation (without showing toast)
-            const select = document.getElementById('simulator-load-select');
-            if (select) select.value = savedState.simulationId;
-            await this.loadSimulationSilent(savedState.simulationId);
+        if (savedState) {
+          // Per-mode keys; fall back to legacy `simulationId` for backward compat
+          const simId = this.mode === 'portfolio'
+            ? (savedState.portfolioSimulationId || null)
+            : (savedState.overlaySimulationId || savedState.simulationId || null);
+          if (simId) {
+            const exists = this.savedSimulations.some(s => s.id === simId);
+            if (exists) {
+              const select = document.getElementById('simulator-load-select');
+              if (select) select.value = simId;
+              await this.loadSimulationSilent(simId);
+            }
           }
         }
       }
@@ -428,7 +476,8 @@ class AllocationSimulator {
     this.savedSimulations.forEach(sim => {
       const option = document.createElement('option');
       option.value = sim.id;
-      option.textContent = sim.name;
+      const typeLabel = sim.type === 'portfolio' ? '[Sandbox]' : '[Overlay]';
+      option.textContent = `${sim.name}  ${typeLabel}`;
       select.appendChild(option);
     });
 
@@ -463,6 +512,16 @@ class AllocationSimulator {
 
       if (result.success) {
         const simulation = result.data.simulation;
+
+        // Auto-switch mode if simulation type doesn't match current mode
+        const targetMode = simulation.type === 'portfolio' ? 'portfolio' : 'overlay';
+        if (targetMode !== this.mode) {
+          this.mode = targetMode;
+          this.updateModeUI();
+          this.updateSandboxControls();
+          this.saveState();
+        }
+
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
         this.currentSimulationType = simulation.type;
@@ -506,6 +565,16 @@ class AllocationSimulator {
 
       if (result.success) {
         const simulation = result.data.simulation;
+
+        // Auto-switch mode if simulation type doesn't match current mode
+        const targetMode = simulation.type === 'portfolio' ? 'portfolio' : 'overlay';
+        if (targetMode !== this.mode) {
+          this.mode = targetMode;
+          this.updateModeUI();
+          this.updateSandboxControls();
+          this.saveState();
+        }
+
         this.currentSimulationId = simulation.id;
         this.currentSimulationName = simulation.name;
         this.currentSimulationType = simulation.type;
@@ -926,10 +995,8 @@ class AllocationSimulator {
   // ============================================================================
 
   render() {
-    const emptyStateMessage = this.isPortfolioMode()
-      ? 'Add positions to build a simulated portfolio.'
-      : 'No items added yet. Use the forms above to add positions.';
-    const emptyStateIcon = this.isPortfolioMode() ? 'fa-briefcase' : 'fa-chart-pie';
+    const emptyStateMessage = 'Add positions to build a simulated portfolio.';
+    const emptyStateIcon = 'fa-briefcase';
 
     this.container.innerHTML = `
       <!-- Input Forms -->
@@ -994,7 +1061,7 @@ class AllocationSimulator {
 
       <!-- Data Table -->
       <div class="table-responsive">
-        <table class="table table-striped table-hover unified-table simulator-table">
+        <table class="table table-hover unified-table simulator-table">
           <thead id="simulator-table-head">
             <tr>
               <th class="col-ticker">Identifier</th>
@@ -1003,13 +1070,14 @@ class AllocationSimulator {
               <th class="col-sector">Sector</th>
               <th class="col-thesis">Thesis</th>
               <th class="col-country">Country</th>
-              <th class="col-value" id="simulator-value-header">Value <span class="col-value-hint">(€ or %)</span></th>
+              <th class="col-value-eur">€</th>
+              <th class="col-value-pct">% <span class="sandbox-allocation-summary" id="sandbox-allocation-summary"></span></th>
               <th class="col-delete"></th>
             </tr>
           </thead>
           <tbody id="simulator-table-body">
             <tr class="empty-state-row">
-              <td colspan="8" class="empty-state">
+              <td colspan="9" class="empty-state">
                 <i class="fas ${emptyStateIcon}"></i>
                 <span>${emptyStateMessage}</span>
               </td>
@@ -1021,6 +1089,26 @@ class AllocationSimulator {
       <!-- Investment Progress (Remaining to Invest from Builder) - overlay mode only -->
       <div class="investment-progress-section" id="simulator-investment-progress">
         <div class="progress-loading">Loading investment targets...</div>
+      </div>
+
+      <!-- Historical Performance Chart (sandbox mode only) -->
+      <div class="simulator-historical-section" id="simulator-historical-section" style="display: none;">
+        <div class="simulator-chart-header">
+          <h5 class="simulator-chart-label"><i class="fas fa-chart-line"></i> Historical Performance</h5>
+          <div class="toggle-group" id="simulator-period-toggle">
+            <button class="toggle-btn" data-period="3y">3Y</button>
+            <button class="toggle-btn active" data-period="5y">5Y</button>
+            <button class="toggle-btn" data-period="10y">10Y</button>
+            <button class="toggle-btn" data-period="max">MAX</button>
+          </div>
+        </div>
+        <div id="simulator-historical-chart" style="display: none;"></div>
+        <div id="simulator-historical-loading" style="display: none;" class="chart-empty">
+          <i class="fas fa-spinner fa-spin"></i>&nbsp; Loading historical data...
+        </div>
+        <div id="simulator-historical-empty" style="display: none;" class="chart-empty">
+          Add positions with tickers to see historical performance.
+        </div>
       </div>
 
       <!-- Aggregation Charts -->
@@ -1053,6 +1141,8 @@ class AllocationSimulator {
     this.countryChart = document.getElementById('simulator-country-chart');
     this.sectorChart = document.getElementById('simulator-sector-chart');
     this.investmentProgressContainer = document.getElementById('simulator-investment-progress');
+    this.historicalSection = document.getElementById('simulator-historical-section');
+    this.historicalChartEl = document.getElementById('simulator-historical-chart');
   }
 
   bindEvents() {
@@ -1173,6 +1263,24 @@ class AllocationSimulator {
         this.categoryMode = mode;
         this.expandedSectorBar = null; // Reset expanded bar when switching modes
         this.updateCharts();
+      });
+    }
+
+    // Historical performance period toggle
+    const periodToggle = document.getElementById('simulator-period-toggle');
+    if (periodToggle) {
+      periodToggle.addEventListener('click', (e) => {
+        const btn = e.target.closest('.toggle-btn');
+        if (!btn) return;
+
+        const period = btn.dataset.period;
+        if (period === this.currentChartPeriod) return;
+
+        periodToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        this.currentChartPeriod = period;
+        this.updateHistoricalChart();
       });
     }
 
@@ -1390,7 +1498,7 @@ class AllocationSimulator {
           thesis: this.normalizeLabel(data.thesis) || '—',
           country: this.normalizeLabel(data.country) || '—',
           value: 0,
-          valueMode: 'absolute', // Default to absolute mode
+          targetPercent: 0,
           source: 'ticker',
           name: data.name,
           existsInPortfolio: data.existsInPortfolio || false,
@@ -1436,7 +1544,7 @@ class AllocationSimulator {
       thesis: '—',
       country: '—',
       value: 0,
-      valueMode: 'absolute', // Default to absolute mode
+      targetPercent: 0,
       source: 'sector',
       portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
@@ -1470,7 +1578,7 @@ class AllocationSimulator {
       thesis: normalizedThesis,
       country: '—',
       value: 0,
-      valueMode: 'absolute', // Default to absolute mode
+      targetPercent: 0,
       source: 'thesis',
       portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
@@ -1502,7 +1610,7 @@ class AllocationSimulator {
       thesis: '—',
       country: normalizedCountry,
       value: 0,
-      valueMode: 'absolute', // Default to absolute mode
+      targetPercent: 0,
       source: 'country',
       portfolio_id: (this.scope === 'portfolio' && this.portfolioId) ? this.portfolioId : null
     });
@@ -1525,16 +1633,13 @@ class AllocationSimulator {
     this.items.push(item);
     this.renderTable();
     this.updateCharts();
-    if (this.isPortfolioMode()) {
-      this.renderAllocationSummary();
-    }
+    this.renderAllocationSummary();
     this.triggerAutoSave();
 
     // Focus the euro value input for the new row
     setTimeout(() => {
-      const valueInput = this.tableBody.querySelector(`[data-id="${item.id}"] .value-euro`) ||
-                         this.tableBody.querySelector(`[data-id="${item.id}"] .value-input`);
-      if (valueInput) valueInput.focus();
+      const eurInput = this.tableBody.querySelector(`[data-id="${item.id}"] .value-eur-input`);
+      if (eurInput) eurInput.focus();
     }, 50);
   }
 
@@ -1572,15 +1677,11 @@ class AllocationSimulator {
     this.updateTableHeaders(isSandbox);
 
     if (this.items.length === 0) {
-      const emptyStateMessage = isSandbox
-        ? 'Add positions to build a simulated portfolio.'
-        : 'No items added yet. Use the forms above to add positions.';
-      const emptyStateIcon = isSandbox ? 'fa-briefcase' : 'fa-chart-pie';
-      const colspan = isSandbox ? 9 : 8;
-
+      const emptyStateMessage = 'Add positions to build a simulated portfolio.';
+      const emptyStateIcon = 'fa-briefcase';
       this.tableBody.innerHTML = `
         <tr class="empty-state-row">
-          <td colspan="${colspan}" class="empty-state">
+          <td colspan="9" class="empty-state">
             <i class="fas ${emptyStateIcon}"></i>
             <span>${emptyStateMessage}</span>
           </td>
@@ -1592,15 +1693,14 @@ class AllocationSimulator {
     this.tableBody.innerHTML = this.items.map(item => {
       // Common cells
       const tickerCell = item.source === 'ticker'
-        ? `<span class="ticker-badge">${item.ticker}</span>
-           ${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}`
+        ? `<div class="ticker-cell-stack"><span class="ticker-badge">${item.ticker}</span>${item.existsInPortfolio ? '<span class="existing-badge" title="Exists in portfolio"><i class="fas fa-check"></i> Existing</span>' : ''}</div>`
         : `<input type="text" class="editable-cell ticker-input" value="${this.escapeHtml(item.ticker)}"
                  data-field="ticker" placeholder="—">`;
 
       const commonCells = `
           <td class="col-ticker">${tickerCell}</td>
           <td class="col-name">
-            <span class="name-display">${this.escapeHtml(item.name || '—')}</span>
+            <span class="name-display" title="${this.escapeHtml(item.name || '')}">${this.escapeHtml(item.name || '—')}</span>
           </td>
           <td class="col-portfolio">
             <select class="editable-cell portfolio-select" data-field="portfolio_id">
@@ -1622,108 +1722,39 @@ class AllocationSimulator {
                    data-field="country" placeholder="—">
           </td>`;
 
-      if (isSandbox) {
-        // Dual columns: € and %
-        const euroValue = this.formatValue(item.value);
-        const percentValue = (item.targetPercent || 0).toFixed(1);
+      const warningHint = item.targetWarning
+        ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
+        : '';
 
-        return `
-        <tr data-id="${item.id}">
-          ${commonCells}
-          <td class="col-euro">
-            <input type="text" class="editable-cell value-input value-euro sensitive-value"
-                   value="${euroValue}"
-                   data-field="value-euro" placeholder="0">
-          </td>
-          <td class="col-percent">
-            <input type="text" class="editable-cell value-input value-percent"
-                   value="${percentValue}"
-                   data-field="value-percent" placeholder="0">
-          </td>
-          <td class="col-delete">
-            <button class="btn-delete" title="Remove">
-              <i class="fas fa-times"></i>
-            </button>
-          </td>
-        </tr>`;
-      } else {
-        // Overlay mode: single value column with per-item toggle
-        const isPercentMode = item.valueMode === 'percentage';
-        const modeSymbol = isPercentMode ? '%' : '€';
-        const formattedValue = isPercentMode
-          ? (item.targetPercent || 0).toFixed(1)
-          : this.formatValue(item.value);
-
-        const calculatedHint = isPercentMode && item.value > 0
-          ? `<span class="value-calculated-hint sensitive-value" title="Calculated amount to reach target">= €${this.formatValue(item.value)}</span>`
-          : '';
-
-        const warningHint = item.targetWarning
-          ? `<span class="value-warning-hint" title="${this.escapeHtml(item.targetWarning)}"><i class="fas fa-exclamation-triangle"></i></span>`
-          : '';
-
-        const toggleButton = `<button class="value-mode-toggle ${isPercentMode ? 'mode-percent' : 'mode-euro'}"
-                  data-field="valueMode" title="Toggle between € amount and % target">
-            ${modeSymbol}
-          </button>`;
-
-        return `
-        <tr data-id="${item.id}">
-          ${commonCells}
-          <td class="col-value">
-            <div class="value-input-wrapper">
-              ${toggleButton}
-              <input type="text" class="editable-cell value-input sensitive-value ${isPercentMode ? 'percent-mode' : ''}"
-                     value="${formattedValue}"
-                     data-field="value" placeholder="0">
-              ${calculatedHint}
-              ${warningHint}
-            </div>
-          </td>
-          <td class="col-delete">
-            <button class="btn-delete" title="Remove">
-              <i class="fas fa-times"></i>
-            </button>
-          </td>
-        </tr>`;
-      }
+      return `
+      <tr data-id="${item.id}">
+        ${commonCells}
+        <td class="col-value-eur">
+          <input type="text" class="editable-cell value-input value-eur-input sensitive-value"
+                 value="${this.formatValue(item.value)}"
+                 data-field="value-eur" placeholder="0">
+        </td>
+        <td class="col-value-pct">
+          <input type="text" class="editable-cell value-input value-pct-input"
+                 value="${(item.targetPercent || 0).toFixed(1)}"
+                 data-field="value-pct" placeholder="0">
+          ${warningHint}
+        </td>
+        <td class="col-delete">
+          <button class="btn-delete" title="Remove">
+            <i class="fas fa-times"></i>
+          </button>
+        </td>
+      </tr>`;
     }).join('');
   }
 
-  updateTableHeaders(isSandbox) {
-    const thead = document.getElementById('simulator-table-head');
-    if (!thead) return;
-
-    if (isSandbox) {
-      thead.innerHTML = `
-        <tr>
-          <th class="col-ticker">Identifier</th>
-          <th class="col-name">Name</th>
-          <th class="col-portfolio">Portfolio</th>
-          <th class="col-sector">Sector</th>
-          <th class="col-thesis">Thesis</th>
-          <th class="col-country">Country</th>
-          <th class="col-euro">€</th>
-          <th class="col-percent">%</th>
-          <th class="col-delete"></th>
-        </tr>`;
-    } else {
-      thead.innerHTML = `
-        <tr>
-          <th class="col-ticker">Identifier</th>
-          <th class="col-name">Name</th>
-          <th class="col-portfolio">Portfolio</th>
-          <th class="col-sector">Sector</th>
-          <th class="col-thesis">Thesis</th>
-          <th class="col-country">Country</th>
-          <th class="col-value">Value <span class="col-value-hint">(€ or %)</span></th>
-          <th class="col-delete"></th>
-        </tr>`;
-    }
+  updateTableHeaders() {
+    // Headers are static in the HTML — no dynamic update needed
   }
 
   /**
-   * Update € and % input values in-place without rebuilding the table DOM.
+   * Update value input fields in-place without rebuilding the table DOM.
    * Used when totalAmount changes to avoid expensive full re-render.
    */
   updateTableValues() {
@@ -1733,14 +1764,14 @@ class AllocationSimulator {
       const row = this.tableBody.querySelector(`[data-id="${item.id}"]`);
       if (!row) return;
 
-      const euroInput = row.querySelector('.value-euro');
-      const percentInput = row.querySelector('.value-percent');
-
-      if (euroInput && document.activeElement !== euroInput) {
-        euroInput.value = this.formatValue(item.value);
+      const eurInput = row.querySelector('.value-eur-input');
+      if (eurInput && document.activeElement !== eurInput) {
+        eurInput.value = this.formatValue(item.value);
       }
-      if (percentInput && document.activeElement !== percentInput) {
-        percentInput.value = (item.targetPercent || 0).toFixed(1);
+
+      const pctInput = row.querySelector('.value-pct-input');
+      if (pctInput && document.activeElement !== pctInput) {
+        pctInput.value = (item.targetPercent || 0).toFixed(1);
       }
     });
   }
@@ -1763,49 +1794,6 @@ class AllocationSimulator {
       return;
     }
 
-    // Value mode toggle button
-    if (e.target.closest('.value-mode-toggle')) {
-      const row = e.target.closest('tr');
-      if (row) {
-        const id = row.dataset.id;
-        this.toggleValueMode(id);
-      }
-    }
-  }
-
-  toggleValueMode(id) {
-    const item = this.items.find(i => i.id === id);
-    if (!item) return;
-
-    const wasPercentMode = item.valueMode === 'percentage';
-
-    if (wasPercentMode) {
-      // Switching to absolute euro mode
-      item.valueMode = 'absolute';
-      // Keep the calculated value as the new absolute value
-    } else {
-      // Switching to percentage mode
-      item.valueMode = 'percentage';
-      // Calculate target percentage based on current value
-      const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
-      const combinedTotal = baselineTotal + item.value;
-      if (combinedTotal > 0) {
-        // Current allocation would be: (baselineValue + item.value) / combinedTotal * 100
-        const currentPercent = ((baselineValue + item.value) / combinedTotal) * 100;
-        item.targetPercent = parseFloat(currentPercent.toFixed(1));
-      } else {
-        item.targetPercent = 0;
-      }
-    }
-
-    // Recalculate if now in percentage mode
-    if (item.valueMode === 'percentage') {
-      this.recalculatePercentageItem(item);
-    }
-
-    this.renderTable();
-    this.updateCharts();
-    this.triggerAutoSave();
   }
 
   handleTableBlur(e) {
@@ -1826,12 +1814,10 @@ class AllocationSimulator {
         const field = e.target.dataset.field;
         const item = this.items.find(i => i.id === id);
         if (item) {
-          if (field === 'value-euro') {
+          if (field === 'value-eur') {
             e.target.value = this.formatValue(item.value);
-          } else if (field === 'value-percent') {
+          } else if (field === 'value-pct') {
             e.target.value = (item.targetPercent || 0).toFixed(1);
-          } else if (field === 'value') {
-            e.target.value = this.formatValue(item.value);
           } else {
             e.target.value = item[field];
           }
@@ -1862,52 +1848,41 @@ class AllocationSimulator {
 
       const field = e.target.dataset.field;
 
-      if (field === 'value-euro') {
-        // Sandbox mode: typing in € column
-        const newValue = this.parseValue(e.target.value);
-        item.value = newValue;
-        // Auto-grow total if sum exceeds it, then refresh all rows
-        if (this.enforceMinTotal()) {
-          this.updateTableValues();
-        } else if (this.totalAmount > 0) {
-          // Total unchanged — just update this row's %
-          item.targetPercent = parseFloat((newValue / this.totalAmount * 100).toFixed(1));
-          const percentInput = row.querySelector('.value-percent');
-          if (percentInput) {
-            percentInput.value = item.targetPercent.toFixed(1);
-          }
-        }
-        this.renderAllocationSummary();
-      } else if (field === 'value-percent') {
-        // Sandbox mode: typing in % column
+      if (field === 'value-pct') {
         const cleanedValue = e.target.value.replace('%', '').trim();
         const percentValue = parseFloat(cleanedValue);
         if (!isNaN(percentValue)) {
           item.targetPercent = Math.min(Math.max(0, percentValue), 999);
-          // Derive € from % if totalAmount is set
-          if (this.totalAmount > 0) {
-            item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
-            const euroInput = row.querySelector('.value-euro');
-            if (euroInput) {
-              euroInput.value = this.formatValue(item.value);
+          // Derive EUR from %
+          if (this.isPortfolioMode()) {
+            if (this.totalAmount > 0) {
+              item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
             }
+          } else {
+            this.recalculatePercentageItem(item);
           }
-          this.renderAllocationSummary();
+          // Update EUR input in-place
+          const eurInput = row.querySelector('.value-eur-input');
+          if (eurInput && document.activeElement !== eurInput) {
+            eurInput.value = this.formatValue(item.value);
+          }
         }
-      } else if (item.valueMode === 'percentage') {
-        // Overlay mode: percentage item
-        const cleanedValue = e.target.value.replace('%', '').trim();
-        const percentValue = parseFloat(cleanedValue);
-        if (!isNaN(percentValue)) {
-          item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
-          this.recalculatePercentageItem(item);
-        }
-      } else {
-        // Overlay mode: absolute euro value
+      } else if (field === 'value-eur') {
         const newValue = this.parseValue(e.target.value);
         item.value = newValue;
+        // Derive % from EUR
+        const denominator = this.getPercentDenominator();
+        if (denominator > 0) {
+          item.targetPercent = parseFloat((newValue / denominator * 100).toFixed(1));
+        }
+        // Update % input in-place
+        const pctInput = row.querySelector('.value-pct-input');
+        if (pctInput && document.activeElement !== pctInput) {
+          pctInput.value = (item.targetPercent || 0).toFixed(1);
+        }
       }
       this.debouncedChartUpdate();
+      this.renderAllocationSummary();
     }
   }
 
@@ -1920,56 +1895,47 @@ class AllocationSimulator {
     let value = input.value.trim();
     const item = this.items.find(i => i.id === id);
 
-    if (field === 'value-euro') {
-      // Sandbox mode: € column blur
-      const euroValue = this.parseValue(value);
-      item.value = euroValue;
-      input.value = this.formatValue(euroValue);
-      // Auto-grow total if sum exceeds it, then refresh all rows
-      if (this.enforceMinTotal()) {
-        this.updateTableValues();
-      } else if (this.totalAmount > 0) {
-        // Total unchanged — just update this row's %
-        item.targetPercent = parseFloat((euroValue / this.totalAmount * 100).toFixed(1));
-        const row = input.closest('tr');
-        const percentInput = row?.querySelector('.value-percent');
-        if (percentInput) {
-          percentInput.value = item.targetPercent.toFixed(1);
-        }
+    if (field === 'value-eur') {
+      value = this.parseValue(value);
+      input.value = this.formatValue(value);
+      this.updateItem(id, 'value', value);
+
+      // Derive % from EUR
+      const denominator = this.getPercentDenominator();
+      if (denominator > 0) {
+        item.targetPercent = parseFloat((value / denominator * 100).toFixed(1));
       }
-      this.renderAllocationSummary();
-    } else if (field === 'value-percent') {
-      // Sandbox mode: % column blur
+
+      // Update % input in-place
+      const row = input.closest('tr');
+      const pctInput = row ? row.querySelector('.value-pct-input') : null;
+      if (pctInput && document.activeElement !== pctInput) {
+        pctInput.value = (item.targetPercent || 0).toFixed(1);
+      }
+    } else if (field === 'value-pct') {
       const cleanedValue = value.replace('%', '').trim();
       const percentValue = parseFloat(cleanedValue);
       if (!isNaN(percentValue)) {
         item.targetPercent = Math.min(Math.max(0, percentValue), 999);
         input.value = item.targetPercent.toFixed(1);
-        // Derive € if totalAmount is set
-        if (this.totalAmount > 0) {
-          item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
-          const row = input.closest('tr');
-          const euroInput = row?.querySelector('.value-euro');
-          if (euroInput) {
-            euroInput.value = this.formatValue(item.value);
+
+        // Derive EUR from %
+        if (this.isPortfolioMode()) {
+          if (this.totalAmount > 0) {
+            item.value = Math.round((item.targetPercent / 100) * this.totalAmount * 100) / 100;
           }
-        }
-      }
-      this.renderAllocationSummary();
-    } else if (field === 'value') {
-      // Overlay mode
-      if (item && item.valueMode === 'percentage') {
-        const cleanedValue = value.replace('%', '').trim();
-        const percentValue = parseFloat(cleanedValue);
-        if (!isNaN(percentValue)) {
-          item.targetPercent = Math.min(Math.max(0, percentValue), 99.9);
-          input.value = item.targetPercent.toFixed(1);
+          // If totalAmount === 0, can't derive EUR — just store %
+        } else {
+          // Overlay: use existing recalculate logic
           this.recalculatePercentageItem(item);
         }
-      } else {
-        value = this.parseValue(value);
-        input.value = this.formatValue(value);
-        this.updateItem(id, 'value', value);
+
+        // Update EUR input in-place
+        const row = input.closest('tr');
+        const eurInput = row ? row.querySelector('.value-eur-input') : null;
+        if (eurInput && document.activeElement !== eurInput) {
+          eurInput.value = this.formatValue(item.value);
+        }
       }
     } else if (field === 'portfolio_id') {
       // Parse portfolio_id as number or null
@@ -1988,22 +1954,26 @@ class AllocationSimulator {
       }
       this.updateItem(id, field, value);
 
-      // If sector, thesis, or country changes, recalculate percentage items
-      if (item && item.valueMode === 'percentage') {
+      // If sector, thesis, or country changes in overlay mode, recalculate
+      // (baseline depends on the dimension values)
+      if (item && !this.isPortfolioMode()) {
         this.recalculatePercentageItem(item);
+        // Update both inputs in-place
+        const row = input.closest('tr');
+        if (row) {
+          const eurInput = row.querySelector('.value-eur-input');
+          if (eurInput && document.activeElement !== eurInput) eurInput.value = this.formatValue(item.value);
+          const pctInput = row.querySelector('.value-pct-input');
+          if (pctInput && document.activeElement !== pctInput) pctInput.value = (item.targetPercent || 0).toFixed(1);
+        }
       }
     } else {
       // Update if value is empty, set to placeholder
-      if (value === '' && field !== 'value' && field !== 'portfolio_id') {
+      if (value === '' && field !== 'value-eur' && field !== 'value-pct' && field !== 'portfolio_id') {
         value = '—';
         input.value = '—';
       }
       this.updateItem(id, field, value);
-    }
-
-    // Re-render table to show calculated values (overlay percentage mode)
-    if (item && item.valueMode === 'percentage' && !this.isPortfolioMode()) {
-      this.renderTable();
     }
 
     this.updateCharts();
@@ -2183,6 +2153,327 @@ class AllocationSimulator {
 
     // Update investment progress (simulated items impact remaining-to-invest)
     this.updateInvestmentProgress();
+
+    // Update historical performance chart (sandbox mode, debounced)
+    this.debouncedHistoricalUpdate();
+  }
+
+  // ============================================================================
+  // Historical Performance Chart (Sandbox Mode)
+  // ============================================================================
+
+  getChartIdentifiers() {
+    const tickerMap = new Map(); // ticker → { weight, names[] }
+
+    for (const item of this.items) {
+      const ticker = (item.ticker || '').trim();
+      if (!ticker) continue;
+
+      // Calculate weight: use EUR value, or convert from % if totalAmount is set
+      let weight = parseFloat(item.value) || 0;
+      if (weight === 0 && this.totalAmount > 0 && item.targetPercent) {
+        weight = (parseFloat(item.targetPercent) || 0) * this.totalAmount / 100;
+      }
+
+      if (tickerMap.has(ticker)) {
+        const existing = tickerMap.get(ticker);
+        existing.weight += weight;
+        if (!existing.names.includes(item.name || ticker)) {
+          existing.names.push(item.name || ticker);
+        }
+      } else {
+        tickerMap.set(ticker, {
+          weight: weight,
+          names: [item.name || ticker]
+        });
+      }
+    }
+
+    const identifiers = [];
+    const weights = [];
+    const names = [];
+
+    for (const [ticker, info] of tickerMap) {
+      identifiers.push(ticker);
+      weights.push(info.weight);
+      names.push(info.names[0]); // Use first name for display
+    }
+
+    return { identifiers, weights, names };
+  }
+
+  async updateHistoricalChart() {
+    if (!this.isPortfolioMode()) {
+      if (this.historicalSection) this.historicalSection.style.display = 'none';
+      return;
+    }
+
+    const { identifiers, weights, names } = this.getChartIdentifiers();
+
+    const chartEl = this.historicalChartEl;
+    const loadingEl = document.getElementById('simulator-historical-loading');
+    const emptyEl = document.getElementById('simulator-historical-empty');
+
+    if (identifiers.length === 0) {
+      if (this.historicalSection) this.historicalSection.style.display = '';
+      if (chartEl) chartEl.style.display = 'none';
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = '';
+      return;
+    }
+
+    // Show section
+    if (this.historicalSection) this.historicalSection.style.display = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Check cache
+    const sortedIds = [...identifiers].sort();
+    const cacheKey = sortedIds.join(',') + '|' + this.currentChartPeriod;
+
+    if (this.historicalDataCache.has(cacheKey)) {
+      this.renderHistoricalChart(this.historicalDataCache.get(cacheKey), identifiers, weights, names);
+      return;
+    }
+
+    // Show loading
+    if (chartEl) chartEl.style.display = 'none';
+    if (loadingEl) loadingEl.style.display = '';
+
+    // Abort previous in-flight request
+    if (this.chartAbortController) {
+      this.chartAbortController.abort();
+    }
+    this.chartAbortController = new AbortController();
+
+    try {
+      const params = new URLSearchParams({
+        identifiers: identifiers.join(','),
+        period: this.currentChartPeriod
+      });
+      const response = await fetch(`/portfolio/api/historical_prices?${params}`, {
+        signal: this.chartAbortController.signal
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      this.historicalDataCache.set(cacheKey, data);
+      this.renderHistoricalChart(data, identifiers, weights, names);
+    } catch (err) {
+      if (err.name === 'AbortError') return; // Cancelled, ignore
+      console.error('Failed to fetch historical prices:', err);
+      if (chartEl) chartEl.style.display = 'none';
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (emptyEl) {
+        emptyEl.textContent = 'Failed to load historical data.';
+        emptyEl.style.display = '';
+      }
+    }
+  }
+
+  renderHistoricalChart(data, identifiers, weights, names) {
+    const chartEl = this.historicalChartEl;
+    const loadingEl = document.getElementById('simulator-historical-loading');
+    const emptyEl = document.getElementById('simulator-historical-empty');
+
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    const seriesData = data.series || {};
+    const themeColors = ChartConfig.getThemeColors();
+
+    // Build series: normalize each to base 100
+    const allSeries = [];
+
+    for (let i = 0; i < identifiers.length; i++) {
+      const id = identifiers[i];
+      const name = names[i] || id;
+      const points = seriesData[id];
+      if (!points || points.length === 0) continue;
+
+      const basePrice = points[0].close;
+      if (basePrice === 0) continue;
+
+      allSeries.push({
+        name: name,
+        identifier: id,
+        value: (weights && weights[i]) || 0,
+        data: points.map(p => ({
+          x: new Date(p.date).getTime(),
+          y: parseFloat(((p.close / basePrice) * 100).toFixed(2))
+        }))
+      });
+    }
+
+    if (allSeries.length === 0) {
+      if (chartEl) chartEl.style.display = 'none';
+      if (emptyEl) {
+        emptyEl.textContent = 'No historical data available for these positions.';
+        emptyEl.style.display = '';
+      }
+      return;
+    }
+
+    // Build display series: individual + aggregate (always combined)
+    const displaySeries = allSeries.map(s => ({ name: s.name, data: s.data }));
+
+    // Compute aggregate
+    const aggSeries = this.computeSimulatorAggregate(allSeries);
+    if (aggSeries) {
+      displaySeries.push(aggSeries);
+    }
+
+    // Colors
+    const colors = displaySeries.map(s => {
+      if (s.name === 'Weighted Avg') return '#06b6d4';
+      return ChartConfig.colorMapping[s.name] || null;
+    }).map((c, i) => c || ChartConfig.oceanDepthColors.palette[i % ChartConfig.oceanDepthColors.palette.length]);
+
+    // Stroke config
+    const strokeWidths = displaySeries.map(s => {
+      if (s.name === 'Weighted Avg') return 3;
+      return displaySeries.length > 8 ? 1.5 : 2;
+    });
+    const dashArray = displaySeries.map(s => s.name === 'Weighted Avg' ? 5 : 0);
+
+    // Destroy previous instance
+    if (this.historicalChartInstance) {
+      this.historicalChartInstance.destroy();
+      this.historicalChartInstance = null;
+    }
+
+    if (chartEl) chartEl.style.display = '';
+
+    const options = {
+      series: displaySeries,
+      chart: {
+        type: 'area',
+        height: 350,
+        fontFamily: 'Inter, system-ui, -apple-system, sans-serif',
+        toolbar: { show: false },
+        zoom: { enabled: false },
+        background: 'transparent',
+        animations: { enabled: false }
+      },
+      colors: colors,
+      stroke: {
+        width: strokeWidths,
+        curve: 'smooth',
+        dashArray: dashArray
+      },
+      fill: {
+        type: 'gradient',
+        opacity: 0.05,
+        gradient: {
+          shade: 'light',
+          type: 'vertical',
+          opacityFrom: 0.08,
+          opacityTo: 0.01
+        }
+      },
+      dataLabels: { enabled: false },
+      grid: {
+        show: true,
+        borderColor: themeColors.textMuted + '20',
+        strokeDashArray: 4,
+        xaxis: { lines: { show: false } },
+        yaxis: { lines: { show: true } }
+      },
+      xaxis: {
+        type: 'datetime',
+        labels: {
+          style: { colors: themeColors.textTertiary, fontSize: '11px' }
+        },
+        axisBorder: { show: false },
+        axisTicks: { show: false }
+      },
+      yaxis: {
+        labels: {
+          style: { colors: themeColors.textTertiary, fontSize: '11px' },
+          formatter: v => v.toFixed(0),
+          offsetX: -8
+        }
+      },
+      tooltip: {
+        theme: themeColors.tooltipTheme,
+        x: { format: 'MMM yyyy' },
+        y: {
+          formatter: function(val) {
+            const change = val - 100;
+            const sign = change >= 0 ? '+' : '';
+            return val.toFixed(1) + ' (' + sign + change.toFixed(1) + '%)';
+          }
+        }
+      },
+      legend: {
+        show: displaySeries.length > 1,
+        position: 'bottom',
+        horizontalAlign: 'center',
+        fontSize: '12px',
+        labels: { colors: themeColors.textSecondary },
+        markers: { size: 4 },
+        formatter: function(seriesName) {
+          return '<span class="sensitive-value">' + seriesName + '</span>';
+        }
+      },
+      annotations: {
+        yaxis: [{
+          y: 100,
+          borderColor: themeColors.textMuted + '40',
+          strokeDashArray: 2,
+          label: { show: false }
+        }]
+      }
+    };
+
+    this.historicalChartInstance = new ApexCharts(chartEl, options);
+    this.historicalChartInstance.render();
+  }
+
+  computeSimulatorAggregate(allSeries) {
+    if (allSeries.length === 0) return null;
+
+    // Weighted average by item value/weight
+    const totalValue = allSeries.reduce((sum, s) => sum + (s.value || 1), 0);
+    const seriesWeights = allSeries.map(s => totalValue > 0 ? (s.value || 1) / totalValue : 1 / allSeries.length);
+
+    // Collect all unique dates across all series
+    const dateMap = new Map();
+    allSeries.forEach((s, idx) => {
+      s.data.forEach(point => {
+        if (!dateMap.has(point.x)) {
+          dateMap.set(point.x, new Array(allSeries.length).fill(null));
+        }
+        dateMap.get(point.x)[idx] = point.y;
+      });
+    });
+
+    const sortedDates = Array.from(dateMap.keys()).sort((a, b) => a - b);
+
+    // Forward-fill and compute weighted average
+    const lastKnown = new Array(allSeries.length).fill(100);
+    const hasData = new Array(allSeries.length).fill(false);
+    const aggData = [];
+
+    for (const date of sortedDates) {
+      const vals = dateMap.get(date);
+      let weightedSum = 0;
+      let weightSum = 0;
+
+      for (let i = 0; i < vals.length; i++) {
+        if (vals[i] !== null) { lastKnown[i] = vals[i]; hasData[i] = true; }
+        if (!hasData[i]) continue;
+        weightedSum += lastKnown[i] * seriesWeights[i];
+        weightSum += seriesWeights[i];
+      }
+
+      aggData.push({
+        x: date,
+        y: parseFloat((weightedSum / weightSum).toFixed(2))
+      });
+    }
+
+    return { name: 'Weighted Avg', data: aggData };
   }
 
   /**
@@ -2745,12 +3036,26 @@ class AllocationSimulator {
    * X * (1 - targetPercent / 100) = (targetPercent / 100) * total - baseline
    * X = ((targetPercent / 100) * total - baseline) / (1 - targetPercent / 100)
    */
+  /**
+   * Recalculate item values for overlay mode (% → EUR derivation).
+   * In overlay mode, % represents target allocation of (baseline + addition),
+   * so EUR is the required addition to reach that target.
+   */
   recalculatePercentageItem(item) {
-    if (item.valueMode !== 'percentage' || !item.targetPercent) {
+    if (!item.targetPercent) {
+      item.targetWarning = null;
       return;
     }
 
     const targetPercent = item.targetPercent;
+
+    // Sandbox mode: handled by saveCell/handleTableInput directly
+    if (this.isPortfolioMode()) {
+      item.targetWarning = null;
+      return;
+    }
+
+    // Overlay mode: calculate required addition against portfolio baseline
     const { baselineValue, baselineTotal } = this.getBaselineForItem(item);
 
     // Edge cases
@@ -2803,10 +3108,11 @@ class AllocationSimulator {
    * Called when portfolio baseline changes
    */
   recalculateAllPercentageItems() {
+    // Portfolio/sandbox mode uses totalAmount-based derivation, not baseline overlay
+    if (this.isPortfolioMode()) return;
+
     this.items.forEach(item => {
-      if (item.valueMode === 'percentage') {
-        this.recalculatePercentageItem(item);
-      }
+      this.recalculatePercentageItem(item);
     });
   }
 
@@ -2859,29 +3165,6 @@ class AllocationSimulator {
   }
 
   /**
-   * Auto-grow totalAmount when sum of € values exceeds it.
-   * Called only from € column input paths — never from % or Total input.
-   * Returns true if total was adjusted.
-   */
-  enforceMinTotal() {
-    const sum = this.items.reduce((s, item) => s + (parseFloat(item.value) || 0), 0);
-    if (sum > this.totalAmount) {
-      this.totalAmount = sum;
-      const totalInput = document.getElementById('sandbox-total-amount-input');
-      if (totalInput && document.activeElement !== totalInput) {
-        totalInput.value = this.formatValue(sum);
-      }
-      // Recompute all percentages from € values
-      this.items.forEach(item => {
-        const val = parseFloat(item.value) || 0;
-        item.targetPercent = sum > 0 ? parseFloat((val / sum * 100).toFixed(1)) : 0;
-      });
-      return true;
-    }
-    return false;
-  }
-
-  /**
    * Ensure all items have targetPercent derived from their EUR values.
    * Called when loading saved simulations to handle backward compatibility.
    */
@@ -2900,53 +3183,80 @@ class AllocationSimulator {
       }
     });
 
-    // Ensure total accommodates loaded € values (e.g. after clone)
-    this.enforceMinTotal();
+  }
+
+  /**
+   * Get the denominator for EUR → % calculations.
+   * In sandbox with totalAmount: use totalAmount.
+   * Otherwise: sum of all EUR values.
+   */
+  getPercentDenominator() {
+    if (this.isPortfolioMode() && this.totalAmount > 0) {
+      return this.totalAmount;
+    }
+    // Fallback: sum of all EUR values
+    return this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
   }
 
   /**
    * Render the allocation summary (X% allocated / Y% remaining)
+   * Now renders into the % column header instead of the header bar.
    */
   renderAllocationSummary() {
     const el = document.getElementById('sandbox-allocation-summary');
     if (!el) return;
 
-    if (!this.isPortfolioMode()) {
+    if (this.items.length === 0) {
       el.innerHTML = '';
       return;
     }
 
-    if (this.totalAmount <= 0) {
-      if (this.items.length > 0) {
+    if (this.isPortfolioMode()) {
+      if (this.totalAmount <= 0) {
         // Show total from sum of EUR values
         const totalEuro = this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
         if (totalEuro > 0) {
-          el.innerHTML = `<span class="allocation-under">Σ €${this.formatValue(totalEuro)}</span>`;
+          el.innerHTML = `<span class="allocation-full">Σ €${this.formatValue(totalEuro)}</span>`;
         } else {
           el.innerHTML = '';
         }
+        // Clear over-budget when no total is set
+        const totalWrapper = document.querySelector('.sandbox-total-input-wrapper');
+        if (totalWrapper) totalWrapper.classList.remove('over-budget');
+        return;
+      }
+
+      const totalPercent = this.items.reduce((sum, item) => sum + (parseFloat(item.targetPercent) || 0), 0);
+      const rounded = Math.round(totalPercent * 10) / 10;
+
+      let statusClass, statusText;
+      if (rounded === 100) {
+        statusClass = 'allocation-full';
+        statusText = '✓ 100%';
+      } else if (rounded > 100) {
+        statusClass = 'allocation-over';
+        statusText = `${rounded}% (${(rounded - 100).toFixed(1)}% over)`;
+      } else {
+        statusClass = 'allocation-under';
+        statusText = `${rounded}% (${(100 - rounded).toFixed(1)}% left)`;
+      }
+
+      el.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
+
+      // Toggle over-budget styling on the total input wrapper
+      const totalWrapper = document.querySelector('.sandbox-total-input-wrapper');
+      if (totalWrapper) {
+        totalWrapper.classList.toggle('over-budget', rounded > 100);
+      }
+    } else {
+      // Overlay mode: show total simulated amount
+      const totalSimulated = this.items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+      if (totalSimulated > 0) {
+        el.innerHTML = `<span class="allocation-full">Σ €${this.formatValue(totalSimulated)}</span>`;
       } else {
         el.innerHTML = '';
       }
-      return;
     }
-
-    const totalPercent = this.items.reduce((sum, item) => sum + (parseFloat(item.targetPercent) || 0), 0);
-    const rounded = Math.round(totalPercent * 10) / 10;
-
-    let statusClass, statusText;
-    if (rounded === 100) {
-      statusClass = 'allocation-full';
-      statusText = '✓ 100%';
-    } else if (rounded > 100) {
-      statusClass = 'allocation-over';
-      statusText = `${rounded}% (${(rounded - 100).toFixed(1)}% over)`;
-    } else {
-      statusClass = 'allocation-under';
-      statusText = `${rounded}% (${(100 - rounded).toFixed(1)}% left)`;
-    }
-
-    el.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
   }
 
   formatValue(value) {

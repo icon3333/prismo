@@ -333,7 +333,14 @@ html:has(#allocation-simulator-card) {
   background: var(--success-light);
   border: 1px solid var(--success-border-light);
   border-radius: var(--radius-sm);
-  margin-left: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+/* Stack ticker badge + existing badge vertically in table cells */
+.ticker-cell-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .existing-badge i {
@@ -360,7 +367,7 @@ html:has(#allocation-simulator-card) {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-xl);
 }
 
 .simulator-input-form {
@@ -392,6 +399,10 @@ html:has(#allocation-simulator-card) {
 }
 
 /* Simulator Table */
+#allocation-simulator-container > .table-responsive {
+  margin-bottom: var(--space-xl);
+}
+
 .simulator-table {
   margin-bottom: 0;
 }
@@ -410,15 +421,14 @@ html:has(#allocation-simulator-card) {
 }
 
 /* Column widths */
-.simulator-table .col-ticker { width: 100px; }
-.simulator-table .col-name { width: auto; min-width: 180px; }
+.simulator-table .col-ticker { width: 140px; }
+.simulator-table .col-name { width: auto; min-width: 180px; max-width: 220px; }
 .simulator-table .col-portfolio { width: 140px; }
 .simulator-table .col-sector { width: auto; min-width: 120px; }
 .simulator-table .col-thesis { width: auto; min-width: 120px; }
 .simulator-table .col-country { width: auto; min-width: 100px; }
-.simulator-table .col-value { width: 130px; }
-.simulator-table .col-euro { width: 100px; }
-.simulator-table .col-percent { width: 90px; }
+.simulator-table .col-value-eur { width: 100px; }
+.simulator-table .col-value-pct { width: 100px; }
 .simulator-table .col-delete { width: 50px; text-align: center; }
 
 /* Portfolio select in table */
@@ -450,6 +460,11 @@ html:has(#allocation-simulator-card) {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Ticker badge (for fetched tickers) */
@@ -470,6 +485,13 @@ html:has(#allocation-simulator-card) {
   background: var(--primary-light) !important;
   border-color: var(--primary-border-light) !important;
   font-weight: 600;
+}
+
+/* Force lowercase on dimension cells */
+.simulator-table .col-sector .editable-cell,
+.simulator-table .col-thesis .editable-cell,
+.simulator-table .col-country .editable-cell {
+  text-transform: lowercase;
 }
 
 /* Editable cells */
@@ -498,24 +520,6 @@ html:has(#allocation-simulator-card) {
 
 .editable-cell.cell-saved {
   background: var(--success-light);
-}
-
-/* Value input wrapper */
-.value-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.value-input-wrapper .currency-symbol {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.value-input-wrapper .value-input {
-  text-align: right;
-  font-family: var(--font-mono);
 }
 
 /* Delete button */
@@ -556,6 +560,42 @@ html:has(#allocation-simulator-card) {
 .empty-state i {
   font-size: var(--font-size-xl);
   opacity: 0.5;
+}
+
+/* Historical Performance Section (sandbox mode) */
+.simulator-historical-section {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.simulator-historical-section .simulator-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.simulator-historical-section .simulator-chart-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.simulator-historical-section .simulator-chart-label i {
+  color: var(--primary);
+}
+
+.simulator-historical-section .toggle-group {
+  height: 30px;
+}
+
+.simulator-historical-section .toggle-btn {
+  height: 30px;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-size-xs);
 }
 
 /* Charts Section */
@@ -1144,63 +1184,20 @@ html:has(#allocation-simulator-card) {
 }
 
 /* ===================================================================
-   VALUE MODE TOGGLE STYLES
-   Toggle between € amount and % target modes
+   DUAL VALUE COLUMNS (€ + %) STYLES
    =================================================================== */
 
-.col-value-hint {
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--text-muted);
-  text-transform: none;
-  letter-spacing: 0;
+/* EUR column input */
+.simulator-table .value-eur-input {
+  text-align: right;
+  font-family: var(--font-mono);
 }
 
-.value-mode-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  flex-shrink: 0;
-}
-
-.value-mode-toggle:hover {
-  border-color: var(--primary);
+/* % column input - accent color */
+.simulator-table .value-pct-input {
+  text-align: right;
+  font-family: var(--font-mono);
   color: var(--primary);
-  background: var(--primary-light);
-}
-
-.value-mode-toggle.mode-euro {
-  color: var(--text-muted);
-}
-
-.value-mode-toggle.mode-percent {
-  color: var(--primary);
-  background: var(--primary-light);
-  border-color: var(--primary);
-}
-
-/* Percentage mode input styling */
-.value-input.percent-mode {
-  color: var(--primary);
-}
-
-/* Calculated hint (shows € equivalent for % mode) */
-.value-calculated-hint {
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  margin-left: var(--space-xs);
 }
 
 /* Warning hint (target below current) */
@@ -1213,17 +1210,14 @@ html:has(#allocation-simulator-card) {
   font-size: var(--font-size-xs);
 }
 
-/* Update value input wrapper for mode toggle */
-.value-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-}
-
-.value-input-wrapper .value-input {
-  flex: 1;
-  min-width: 60px;
+/* Allocation summary in % column header */
+.simulator-table th .sandbox-allocation-summary {
+  display: inline;
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: var(--space-xs);
 }
 
 /* ===================================================================
@@ -1268,15 +1262,6 @@ html:has(#allocation-simulator-card) {
     max-height: 200px;
   }
 
-  .value-mode-toggle {
-    width: 24px;
-    height: 24px;
-    font-size: var(--font-size-xs);
-  }
-
-  .value-calculated-hint {
-    display: none;
-  }
 }
 
 @media (max-width: 576px) {
@@ -1303,7 +1288,7 @@ html:has(#allocation-simulator-card) {
   background: transparent;
   border-radius: 0;
   padding: var(--space-md) 0;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-xl);
   border: none;
 }
 
@@ -1520,6 +1505,16 @@ html:has(#allocation-simulator-card) {
   border-radius: var(--radius-sm);
   overflow: hidden;
   height: 34px;
+  transition: border-color 0.2s ease;
+}
+
+.sandbox-total-input-wrapper.over-budget {
+  border-color: var(--warning);
+}
+
+.sandbox-total-input-wrapper.over-budget .sandbox-total-prefix,
+.sandbox-total-input-wrapper.over-budget .sandbox-total-input {
+  color: var(--warning);
 }
 
 .sandbox-total-prefix {

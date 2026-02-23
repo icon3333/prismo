@@ -25,3 +25,10 @@ def normalize_thesis(value):
     if not value:
         return ''
     return value.strip().title()
+
+
+def normalize_portfolio(value):
+    """Normalize portfolio name to lowercase. Returns '' for empty/None."""
+    if not value:
+        return ''
+    return value.strip().lower()

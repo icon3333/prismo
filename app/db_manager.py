@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 20
+    LATEST_VERSION = 21
 
     try:
         # Get current schema version
@@ -834,6 +834,45 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 20, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 20 completed: added global_value_mode and total_amount to simulations")
+
+        # Migration 21: Lowercase all portfolio names
+        if current_version < 21:
+            logger.info("Applying migration 21: Lowercasing all portfolio names")
+
+            # Find collisions: portfolios that would have the same lowercase name
+            collisions = cursor.execute('''
+                SELECT account_id, LOWER(name) as lower_name, GROUP_CONCAT(id) as ids, COUNT(*) as cnt
+                FROM portfolios
+                GROUP BY account_id, LOWER(name)
+                HAVING cnt > 1
+            ''').fetchall()
+
+            for collision in collisions:
+                ids = [int(x) for x in collision['ids'].split(',')]
+                keep_id = ids[0]
+                duplicate_ids = ids[1:]
+                logger.info(f"Collision: '{collision['lower_name']}' account={collision['account_id']}, keeping ID {keep_id}, merging {duplicate_ids}")
+
+                # Move companies from duplicate portfolios to the kept one
+                for dup_id in duplicate_ids:
+                    cursor.execute(
+                        'UPDATE companies SET portfolio_id = ? WHERE portfolio_id = ?',
+                        [keep_id, dup_id]
+                    )
+                    cursor.execute('DELETE FROM portfolios WHERE id = ?', [dup_id])
+
+            # Lowercase all portfolio names
+            cursor.execute('UPDATE portfolios SET name = LOWER(name)')
+
+            # Lowercase cloned_from_name in simulations
+            cursor.execute('''
+                UPDATE simulations SET cloned_from_name = LOWER(cloned_from_name)
+                WHERE cloned_from_name IS NOT NULL
+            ''')
+
+            cursor.execute("UPDATE schema_version SET version = 21, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 21 completed: lowercased all portfolio names")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

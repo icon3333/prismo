@@ -78,6 +78,13 @@ class AllocationSimulator {
       this._autoSaveTimeoutId = setTimeout(() => this.autoSave(), 800);
     };
 
+    // Deploy section state (DCA calculator)
+    this.deployManualMode = false;
+    this.deployLumpSum = 0;
+    this.deployMonthly = 0;
+    this.deployMonths = 1;
+    this.deployManualItems = [];
+
     // Ticker autocomplete state
     this._tickerSearchTimeout = null;
     this._tickerDropdownVisible = false;
@@ -531,6 +538,9 @@ class AllocationSimulator {
         // Don't override scope/portfolioId - keep user's current selection
         this.items = simulation.items || [];
 
+        // Restore deploy data
+        this.loadDeployData(simulation);
+
         // Ensure all sandbox items have targetPercent derived if missing
         if (this.isPortfolioMode()) {
           this.ensureItemPercentages();
@@ -584,6 +594,9 @@ class AllocationSimulator {
         // Don't override scope/portfolioId - keep user's current selection from localStorage
         this.items = simulation.items || [];
 
+        // Restore deploy data
+        this.loadDeployData(simulation);
+
         // Ensure all sandbox items have targetPercent derived if missing
         if (this.isPortfolioMode()) {
           this.ensureItemPercentages();
@@ -610,6 +623,7 @@ class AllocationSimulator {
     this.currentClonedFromName = null;
     this.totalAmount = 0;
     this.items = [];
+    this.resetDeployData();
     this.renderTable();
     this.updateSandboxControls();
     this.updateCharts();
@@ -718,7 +732,8 @@ class AllocationSimulator {
       items: this.items,
       type: this.isPortfolioMode() ? 'portfolio' : 'overlay',
       global_value_mode: 'euro',
-      total_amount: this.totalAmount
+      total_amount: this.totalAmount,
+      ...this.getDeployDataForSave()
     };
 
     try {
@@ -917,7 +932,8 @@ class AllocationSimulator {
         body: JSON.stringify({
           items: this.items,
           global_value_mode: 'euro',
-          total_amount: this.totalAmount
+          total_amount: this.totalAmount,
+          ...this.getDeployDataForSave()
         })
       });
 
@@ -1141,6 +1157,9 @@ class AllocationSimulator {
           Add positions with tickers to see historical performance.
         </div>
       </div>
+
+      <!-- Deploy Section (DCA Calculator - sandbox mode only) -->
+      <div id="simulator-deploy-section"></div>
     `;
 
     // Store DOM references
@@ -1150,6 +1169,7 @@ class AllocationSimulator {
     this.investmentProgressContainer = document.getElementById('simulator-investment-progress');
     this.historicalSection = document.getElementById('simulator-historical-section');
     this.historicalChartEl = document.getElementById('simulator-historical-chart');
+    this.deployContainer = document.getElementById('simulator-deploy-section');
   }
 
   bindEvents() {
@@ -1772,6 +1792,9 @@ class AllocationSimulator {
         </td>
       </tr>`;
     }).join('');
+
+    // Re-render deploy section (reacts to sandbox item changes)
+    this.renderDeploySection();
   }
 
   updateTableHeaders() {
@@ -3277,6 +3300,297 @@ class AllocationSimulator {
         el.innerHTML = '';
       }
     }
+  }
+
+  // ============================================================================
+  // Deploy Section (DCA Calculator)
+  // ============================================================================
+
+  renderDeploySection() {
+    if (!this.deployContainer) return;
+
+    // Only show in portfolio/sandbox mode with a loaded simulation
+    if (!this.isPortfolioMode() || !this.currentSimulationId) {
+      this.deployContainer.innerHTML = '';
+      return;
+    }
+
+    // Auto mode: sync lump sum from sandbox totalAmount
+    if (!this.deployManualMode) {
+      this.deployLumpSum = this.totalAmount;
+    }
+
+    const dca = this.calculateDCA();
+    const positions = this.getDeployPositions();
+    const hasParams = this.deployLumpSum > 0 || this.deployMonthly > 0;
+
+    this.deployContainer.innerHTML = `
+      <div class="deploy-section">
+        <div class="simulator-chart-header">
+          <h5 class="simulator-chart-label"><i class="fas fa-rocket"></i> Deploy</h5>
+          <div class="deploy-controls">
+            <div class="toggle-group">
+              <button class="toggle-btn${!this.deployManualMode ? ' active' : ''}" data-deploy-mode="auto">Auto</button>
+              <button class="toggle-btn${this.deployManualMode ? ' active' : ''}" data-deploy-mode="manual">Manual</button>
+            </div>
+          </div>
+        </div>
+        ${this.renderDeployParams()}
+        ${hasParams ? this.renderDeploySummary(dca) : '<div class="deploy-empty-hint">Enter a lump sum or monthly savings to calculate your deployment schedule.</div>'}
+        ${hasParams && positions.length > 0 ? this.renderDeployPositionsTable(positions, dca) : ''}
+      </div>
+    `;
+
+    this.bindDeployEvents();
+  }
+
+  calculateDCA() {
+    const months = Math.max(1, this.deployMonths);
+    const lumpPortion = this.deployLumpSum / months;
+    const monthlyInvestment = lumpPortion + this.deployMonthly;
+    const totalDeployed = monthlyInvestment * months;
+    return { lumpPortion, monthlyInvestment, totalDeployed, months };
+  }
+
+  getDeployPositions() {
+    if (this.deployManualMode && this.deployManualItems.length > 0) {
+      return this.deployManualItems;
+    }
+    // Auto mode: derive from sandbox items
+    return this.items
+      .filter(item => (parseFloat(item.targetPercent) || 0) > 0)
+      .map(item => ({
+        name: item.name || item.ticker || '—',
+        ticker: item.ticker || '',
+        percent: parseFloat(item.targetPercent) || 0
+      }));
+  }
+
+  renderDeployParams() {
+    const isAuto = !this.deployManualMode;
+    return `
+      <div class="deploy-params">
+        <div class="deploy-param-group">
+          <label>Lump Sum</label>
+          <input type="text" id="deploy-lump-sum" class="sensitive-value"
+                 value="${this.deployLumpSum > 0 ? this.formatValue(this.deployLumpSum) : ''}"
+                 placeholder="0"${isAuto ? ' readonly' : ''}>
+        </div>
+        <div class="deploy-param-group">
+          <label>Monthly Savings</label>
+          <input type="text" id="deploy-monthly" class="sensitive-value"
+                 value="${this.deployMonthly > 0 ? this.formatValue(this.deployMonthly) : ''}"
+                 placeholder="0">
+        </div>
+        <div class="deploy-param-group">
+          <label>Months</label>
+          <input type="number" id="deploy-months"
+                 value="${this.deployMonths}"
+                 min="1" max="120" step="1">
+        </div>
+      </div>
+    `;
+  }
+
+  renderDeploySummary(dca) {
+    return `
+      <div class="deploy-summary">
+        <div class="deploy-hero-block">
+          <div class="deploy-hero-label">Monthly Investment</div>
+          <div class="deploy-hero-value sensitive-value">€${this.formatValue(dca.monthlyInvestment)}</div>
+        </div>
+        <div class="deploy-details">
+          <div class="deploy-detail-row">
+            <span class="detail-label">Lump portion</span>
+            <span class="detail-value sensitive-value">€${this.formatValue(dca.lumpPortion)}/mo</span>
+          </div>
+          <div class="deploy-detail-row">
+            <span class="detail-label">Monthly savings</span>
+            <span class="detail-value sensitive-value">€${this.formatValue(this.deployMonthly)}/mo</span>
+          </div>
+          <div class="deploy-detail-row">
+            <span class="detail-label">Total deployed (${dca.months} months)</span>
+            <span class="detail-value sensitive-value">€${this.formatValue(dca.totalDeployed)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  renderDeployPositionsTable(positions, dca) {
+    const totalPercent = positions.reduce((sum, p) => sum + p.percent, 0);
+    const rows = positions.map(pos => {
+      const eurPerMonth = totalPercent > 0 ? dca.monthlyInvestment * (pos.percent / totalPercent) : 0;
+      return `
+        <tr>
+          <td>${this.escapeHtml(pos.name)}</td>
+          <td class="col-weight">${pos.percent.toFixed(1)}%</td>
+          <td class="col-eur-mo sensitive-value">€${this.formatValue(eurPerMonth)}</td>
+          ${this.deployManualMode ? `<td class="col-delete"><button class="btn-delete" data-deploy-remove="${this.escapeHtml(pos.name)}" title="Remove"><i class="fas fa-times"></i></button></td>` : ''}
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <table class="deploy-positions-table">
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th class="col-weight">Weight</th>
+            <th class="col-eur-mo">EUR/mo</th>
+            ${this.deployManualMode ? '<th class="col-delete"></th>' : ''}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${this.deployManualMode ? this.renderDeployAddRow() : ''}
+    `;
+  }
+
+  renderDeployAddRow() {
+    return `
+      <div class="deploy-add-row">
+        <input type="text" id="deploy-add-name" placeholder="Position name">
+        <input type="number" id="deploy-add-percent" placeholder="%" min="0" max="100" step="0.1" style="max-width: 80px;">
+        <button id="deploy-add-btn">Add</button>
+      </div>
+    `;
+  }
+
+  bindDeployEvents() {
+    // Mode toggle
+    const modeButtons = this.deployContainer.querySelectorAll('[data-deploy-mode]');
+    modeButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const newMode = btn.dataset.deployMode === 'manual';
+        if (newMode === this.deployManualMode) return;
+        this.toggleDeployManualMode(newMode);
+      });
+    });
+
+    // Parameter inputs
+    const lumpInput = document.getElementById('deploy-lump-sum');
+    const monthlyInput = document.getElementById('deploy-monthly');
+    const monthsInput = document.getElementById('deploy-months');
+
+    if (lumpInput && !lumpInput.readOnly) {
+      lumpInput.addEventListener('blur', (e) => {
+        this.deployLumpSum = this.parseValue(e.target.value);
+        e.target.value = this.deployLumpSum > 0 ? this.formatValue(this.deployLumpSum) : '';
+        this.renderDeploySection();
+        this.triggerAutoSave();
+      });
+      lumpInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') e.target.blur();
+      });
+    }
+
+    if (monthlyInput) {
+      monthlyInput.addEventListener('blur', (e) => {
+        this.deployMonthly = this.parseValue(e.target.value);
+        e.target.value = this.deployMonthly > 0 ? this.formatValue(this.deployMonthly) : '';
+        this.renderDeploySection();
+        this.triggerAutoSave();
+      });
+      monthlyInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') e.target.blur();
+      });
+    }
+
+    if (monthsInput) {
+      monthsInput.addEventListener('blur', (e) => {
+        let val = parseInt(e.target.value) || 1;
+        val = Math.max(1, Math.min(120, val));
+        this.deployMonths = val;
+        e.target.value = val;
+        this.renderDeploySection();
+        this.triggerAutoSave();
+      });
+      monthsInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') e.target.blur();
+      });
+    }
+
+    // Manual mode: remove position
+    this.deployContainer.querySelectorAll('[data-deploy-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.deployRemove;
+        this.deployManualItems = this.deployManualItems.filter(item => item.name !== name);
+        this.renderDeploySection();
+        this.triggerAutoSave();
+      });
+    });
+
+    // Manual mode: add position
+    const addBtn = document.getElementById('deploy-add-btn');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => this.addDeployManualItem());
+    }
+    const addNameInput = document.getElementById('deploy-add-name');
+    if (addNameInput) {
+      addNameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') this.addDeployManualItem();
+      });
+    }
+  }
+
+  toggleDeployManualMode(manual) {
+    if (manual && !this.deployManualMode) {
+      // Switching to manual: copy current positions
+      if (this.deployManualItems.length === 0) {
+        this.deployManualItems = this.getDeployPositions().map(p => ({ ...p }));
+      }
+    } else if (!manual && this.deployManualMode) {
+      // Switching to auto: discard manual items if they exist
+      if (this.deployManualItems.length > 0) {
+        this.deployManualItems = [];
+      }
+    }
+    this.deployManualMode = manual;
+    this.renderDeploySection();
+    this.triggerAutoSave();
+  }
+
+  addDeployManualItem() {
+    const nameInput = document.getElementById('deploy-add-name');
+    const pctInput = document.getElementById('deploy-add-percent');
+    if (!nameInput) return;
+
+    const name = nameInput.value.trim();
+    const percent = parseFloat(pctInput?.value) || 0;
+
+    if (!name) return;
+
+    this.deployManualItems.push({ name, ticker: '', percent });
+    this.renderDeploySection();
+    this.triggerAutoSave();
+  }
+
+  getDeployDataForSave() {
+    return {
+      deploy_lump_sum: this.deployLumpSum,
+      deploy_monthly: this.deployMonthly,
+      deploy_months: this.deployMonths,
+      deploy_manual_mode: this.deployManualMode ? 1 : 0,
+      deploy_manual_items: this.deployManualMode ? this.deployManualItems : null
+    };
+  }
+
+  loadDeployData(simulation) {
+    this.deployLumpSum = simulation.deploy_lump_sum || 0;
+    this.deployMonthly = simulation.deploy_monthly || 0;
+    this.deployMonths = simulation.deploy_months || 1;
+    this.deployManualMode = !!simulation.deploy_manual_mode;
+    this.deployManualItems = simulation.deploy_manual_items || [];
+  }
+
+  resetDeployData() {
+    this.deployLumpSum = 0;
+    this.deployMonthly = 0;
+    this.deployMonths = 1;
+    this.deployManualMode = false;
+    this.deployManualItems = [];
   }
 
   formatValue(value) {

@@ -3084,6 +3084,25 @@ def simulator_simulation_create():
         if not isinstance(total_amount, (int, float)) or total_amount < 0:
             total_amount = 0
 
+        # Deploy parameters
+        deploy_lump_sum = data.get('deploy_lump_sum', 0)
+        if not isinstance(deploy_lump_sum, (int, float)) or deploy_lump_sum < 0:
+            deploy_lump_sum = 0
+
+        deploy_monthly = data.get('deploy_monthly', 0)
+        if not isinstance(deploy_monthly, (int, float)) or deploy_monthly < 0:
+            deploy_monthly = 0
+
+        deploy_months = data.get('deploy_months', 1)
+        if not isinstance(deploy_months, int) or deploy_months < 1 or deploy_months > 120:
+            deploy_months = 1
+
+        deploy_manual_mode = 1 if data.get('deploy_manual_mode') else 0
+
+        deploy_manual_items = data.get('deploy_manual_items')
+        if deploy_manual_items is not None and not isinstance(deploy_manual_items, list):
+            deploy_manual_items = None
+
         # Check for duplicate name
         if SimulationRepository.exists(name, account_id):
             return error_response(f'A simulation named "{name}" already exists', 409)
@@ -3099,7 +3118,12 @@ def simulator_simulation_create():
             cloned_from_portfolio_id=cloned_from_portfolio_id,
             cloned_from_name=cloned_from_name,
             global_value_mode=global_value_mode,
-            total_amount=total_amount
+            total_amount=total_amount,
+            deploy_lump_sum=deploy_lump_sum,
+            deploy_monthly=deploy_monthly,
+            deploy_months=deploy_months,
+            deploy_manual_mode=deploy_manual_mode,
+            deploy_manual_items=deploy_manual_items
         )
 
         # Fetch the created simulation
@@ -3201,6 +3225,30 @@ def simulator_simulation_update(simulation_id: int):
             if not isinstance(total_amount, (int, float)) or total_amount < 0:
                 total_amount = 0
 
+        # Deploy parameters
+        deploy_lump_sum = data.get('deploy_lump_sum')
+        if deploy_lump_sum is not None:
+            if not isinstance(deploy_lump_sum, (int, float)) or deploy_lump_sum < 0:
+                deploy_lump_sum = 0
+
+        deploy_monthly = data.get('deploy_monthly')
+        if deploy_monthly is not None:
+            if not isinstance(deploy_monthly, (int, float)) or deploy_monthly < 0:
+                deploy_monthly = 0
+
+        deploy_months = data.get('deploy_months')
+        if deploy_months is not None:
+            if not isinstance(deploy_months, int) or deploy_months < 1 or deploy_months > 120:
+                deploy_months = 1
+
+        deploy_manual_mode = data.get('deploy_manual_mode')
+        if deploy_manual_mode is not None:
+            deploy_manual_mode = 1 if deploy_manual_mode else 0
+
+        deploy_manual_items = data.get('deploy_manual_items')
+        if deploy_manual_items is not None and not isinstance(deploy_manual_items, list):
+            deploy_manual_items = None
+
         # Update simulation
         success = SimulationRepository.update(
             simulation_id=simulation_id,
@@ -3210,7 +3258,12 @@ def simulator_simulation_update(simulation_id: int):
             items=items,
             portfolio_id=data.get('portfolio_id'),
             global_value_mode=global_value_mode,
-            total_amount=total_amount
+            total_amount=total_amount,
+            deploy_lump_sum=deploy_lump_sum,
+            deploy_monthly=deploy_monthly,
+            deploy_months=deploy_months,
+            deploy_manual_mode=deploy_manual_mode,
+            deploy_manual_items=deploy_manual_items
         )
 
         if not success:

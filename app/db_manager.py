@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 21
+    LATEST_VERSION = 22
 
     try:
         # Get current schema version
@@ -873,6 +873,18 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 21, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 21 completed: lowercased all portfolio names")
+
+        # Migration 22: Add deploy columns to simulations table
+        if current_version < 22:
+            logger.info("Applying migration 22: Adding deploy columns to simulations table")
+            _safe_add_column(cursor, "simulations", "deploy_lump_sum REAL DEFAULT 0")
+            _safe_add_column(cursor, "simulations", "deploy_monthly REAL DEFAULT 0")
+            _safe_add_column(cursor, "simulations", "deploy_months INTEGER DEFAULT 1")
+            _safe_add_column(cursor, "simulations", "deploy_manual_mode INTEGER DEFAULT 0")
+            _safe_add_column(cursor, "simulations", "deploy_manual_items TEXT")
+            cursor.execute("UPDATE schema_version SET version = 22, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 22 completed: added deploy columns to simulations")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

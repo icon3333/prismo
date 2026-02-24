@@ -1581,6 +1581,257 @@ html:has(#allocation-simulator-card) {
   font-style: italic;
 }
 
+/* ===================================================================
+   DEPLOY SECTION (DCA Calculator within Sandbox)
+   =================================================================== */
+
+/* Collapsible container */
+.deploy-section {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.deploy-section .simulator-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.deploy-section .simulator-chart-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.deploy-section .simulator-chart-label i {
+  color: var(--primary);
+}
+
+.deploy-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.deploy-section .toggle-group {
+  height: 30px;
+}
+
+.deploy-section .toggle-btn {
+  height: 30px;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-size-xs);
+}
+
+/* 3-column parameter grid */
+.deploy-params {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.deploy-param-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xxs);
+}
+
+.deploy-param-group label {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.deploy-param-group input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.deploy-param-group input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.deploy-param-group input[readonly] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Summary card */
+.deploy-summary {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.deploy-hero-block {
+  text-align: center;
+  min-width: 160px;
+}
+
+.deploy-hero-label {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-xxs);
+}
+
+.deploy-hero-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.deploy-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  flex: 1;
+}
+
+.deploy-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+
+.deploy-detail-row .detail-label {
+  color: var(--text-muted);
+}
+
+.deploy-detail-row .detail-value {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Positions table */
+.deploy-positions-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: var(--space-md);
+  font-size: var(--font-size-sm);
+}
+
+.deploy-positions-table th {
+  text-align: left;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.deploy-positions-table th:last-child,
+.deploy-positions-table td:last-child {
+  text-align: right;
+}
+
+.deploy-positions-table td {
+  padding: var(--space-xs) var(--space-sm);
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.05));
+  color: var(--text-secondary);
+}
+
+.deploy-positions-table .col-weight {
+  width: 80px;
+  text-align: right;
+}
+
+.deploy-positions-table .col-eur-mo {
+  width: 120px;
+  text-align: right;
+  font-weight: 500;
+}
+
+.deploy-positions-table .col-delete {
+  width: 40px;
+  text-align: center;
+}
+
+.deploy-positions-table .btn-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: var(--space-xxs);
+  font-size: var(--font-size-sm);
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.deploy-positions-table .btn-delete:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
+/* Manual mode add row */
+.deploy-add-row {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.deploy-add-row input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  flex: 1;
+}
+
+.deploy-add-row input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.deploy-add-row button {
+  background: var(--primary);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deploy-add-row button:hover {
+  background: var(--primary-hover);
+}
+
+/* Empty state for deploy when no params */
+.deploy-empty-hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+  padding: var(--space-md) 0;
+}
+
 /* Responsive adjustments */
 @media (max-width: 576px) {
   .progress-header {
@@ -1593,6 +1844,15 @@ html:has(#allocation-simulator-card) {
   }
 
   .simulated-impact {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .deploy-params {
+    grid-template-columns: 1fr;
+  }
+
+  .deploy-summary {
     flex-direction: column;
     align-items: flex-start;
   }

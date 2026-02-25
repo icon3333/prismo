@@ -474,6 +474,41 @@ const ProgressManager = {
     }
 };
 
+// Shared completion polling for price update handlers
+function startCompletionPolling(successMessage) {
+    const intervalId = setInterval(async () => {
+        try {
+            const progressResponse = await fetch('/portfolio/api/price_fetch_progress');
+            if (progressResponse.ok) {
+                const progressData = await progressResponse.json();
+
+                if (progressData.status === 'completed' || progressData.percentage >= 100) {
+                    clearInterval(intervalId);
+                    ProgressManager.stopTracking();
+                    ProgressManager.complete();
+
+                    if (typeof showNotification === 'function') {
+                        showNotification(successMessage, 'is-success');
+                    }
+
+                    setTimeout(async () => {
+                        if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
+                            await window.portfolioTableApp.loadData();
+                            debugLog('Portfolio data reloaded after update completion');
+                        } else {
+                            console.warn('portfolioTableApp.loadData is not available, reloading page instead');
+                            window.location.reload();
+                        }
+                    }, 1000);
+                }
+            }
+        } catch (error) {
+            console.error('Error checking completion status:', error);
+        }
+    }, 1000);
+    return intervalId;
+}
+
 // DOM Elements and Utility Functions
 const UpdateAllDataHandler = {
     async run() {
@@ -511,39 +546,8 @@ const UpdateAllDataHandler = {
                 debugLog('Starting progress tracking for price fetch...');
                 ProgressManager.startTracking('price_fetch', 500);
 
-                // Set up completion handler - check for completion status
-                const completionCheckInterval = setInterval(async () => {
-                    try {
-                        const progressResponse = await fetch('/portfolio/api/price_fetch_progress');
-                        if (progressResponse.ok) {
-                            const progressData = await progressResponse.json();
-
-                            if (progressData.status === 'completed' || progressData.percentage >= 100) {
-                                clearInterval(completionCheckInterval);
-                                ProgressManager.stopTracking();
-                                ProgressManager.complete();
-
-                                // Show completion notification
-                                if (typeof showNotification === 'function') {
-                                    showNotification('Price update complete! Updated all companies successfully.', 'is-success');
-                                }
-
-                                // Reload the data
-                                setTimeout(async () => {
-                                    if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
-                                        await window.portfolioTableApp.loadData();
-                                        debugLog('Portfolio data reloaded after price update completion');
-                                    } else {
-                                        console.warn('portfolioTableApp.loadData is not available, reloading page instead');
-                                        window.location.reload();
-                                    }
-                                }, 1000);
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error checking completion status:', error);
-                    }
-                }, 1000);
+                // Set up completion handler
+                startCompletionPolling('Price update complete! Updated all companies successfully.');
             } else {
                 ProgressManager.error();
                 throw new Error(result.message || 'Failed to start price update');
@@ -597,39 +601,8 @@ const UpdateSelectedHandler = {
                 debugLog('Starting progress tracking for selected price fetch...');
                 ProgressManager.startTracking('selected_price_fetch', 500);
 
-                // Set up completion handler - check for completion status
-                const completionCheckInterval = setInterval(async () => {
-                    try {
-                        const progressResponse = await fetch('/portfolio/api/price_fetch_progress');
-                        if (progressResponse.ok) {
-                            const progressData = await progressResponse.json();
-
-                            if (progressData.status === 'completed' || progressData.percentage >= 100) {
-                                clearInterval(completionCheckInterval);
-                                ProgressManager.stopTracking();
-                                ProgressManager.complete();
-
-                                // Show completion notification
-                                if (typeof showNotification === 'function') {
-                                    showNotification(`Selected companies update complete! Updated ${progressData.current || 0} companies successfully.`, 'is-success');
-                                }
-
-                                // Reload the data
-                                setTimeout(async () => {
-                                    if (window.portfolioTableApp && typeof window.portfolioTableApp.loadData === 'function') {
-                                        await window.portfolioTableApp.loadData();
-                                        debugLog('Portfolio data reloaded after selected update completion');
-                                    } else {
-                                        console.warn('portfolioTableApp.loadData is not available, reloading page instead');
-                                        window.location.reload();
-                                    }
-                                }, 1000);
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error checking completion status:', error);
-                    }
-                }, 1000);
+                // Set up completion handler
+                startCompletionPolling('Selected companies update complete!');
             } else {
                 ProgressManager.error();
                 throw new Error(result.error || 'Failed to start selected price update');
@@ -645,61 +618,44 @@ const UpdateSelectedHandler = {
 };
 
 const FileUploadHandler = {
-    importMode: null,
-
     init() {
-        const addBtn = document.getElementById('import-add-btn');
-        const replaceBtn = document.getElementById('import-replace-btn');
+        const syncBtn = document.getElementById('import-sync-btn');
         const fileInput = document.getElementById('csv_file');
         const uploadCard = document.getElementById('upload-card');
 
         debugLog('FileUploadHandler: Debugging elements found:');
-        debugLog('  addBtn:', addBtn);
-        debugLog('  replaceBtn:', replaceBtn);
+        debugLog('  syncBtn:', syncBtn);
         debugLog('  fileInput:', fileInput);
         debugLog('  uploadCard:', uploadCard);
 
-        if (!addBtn || !replaceBtn || !fileInput || !uploadCard) {
+        if (!syncBtn || !fileInput) {
             console.error('Required file upload elements not found');
             return;
         }
 
         debugLog('FileUploadHandler: Initializing CSV upload handler');
 
-        // Add button click - opens file dialog in add mode
-        addBtn.addEventListener('click', () => {
-            FileUploadHandler.importMode = 'add';
-            fileInput.value = '';  // Reset so same file can be re-selected
-            fileInput.click();
-        });
-
-        // Replace button click - opens file dialog in replace mode
-        replaceBtn.addEventListener('click', () => {
-            FileUploadHandler.importMode = 'replace';
+        // Sync button click - opens file dialog
+        syncBtn.addEventListener('click', () => {
             fileInput.value = '';
             fileInput.click();
         });
 
-        // File selection handler
+        // File selection handler - always show sync confirmation
         fileInput.addEventListener('change', function () {
             debugLog('File input change event triggered');
             if (!fileInput.files.length) return;
 
             const file = fileInput.files[0];
-            debugLog(`File selected: ${file.name}, size: ${file.size} bytes, mode: ${FileUploadHandler.importMode}`);
+            debugLog(`File selected: ${file.name}, size: ${file.size} bytes`);
 
             // Prevent multiple submissions
-            if (uploadCard.classList.contains('is-processing')) {
+            if (uploadCard && uploadCard.classList.contains('is-processing')) {
                 debugLog('Upload already in progress, ignoring');
                 return;
             }
 
-            if (FileUploadHandler.importMode === 'replace') {
-                FileUploadHandler.showReplaceConfirmation(file);
-            } else {
-                uploadCard.classList.add('is-processing');
-                FileUploadHandler.submitFile(file);
-            }
+            FileUploadHandler.showSyncConfirmation(file);
         });
 
         // Hide indicator on page load in case of back navigation
@@ -707,7 +663,7 @@ const FileUploadHandler = {
             // If the page is reloaded from cache, hide the indicator
             if (event.persisted) {
                 ProgressManager.hide();
-                uploadCard.classList.remove('is-processing');
+                if (uploadCard) uploadCard.classList.remove('is-processing');
             }
         });
 
@@ -783,27 +739,35 @@ const FileUploadHandler = {
             console.warn('Cancel upload button not found');
         }
 
-        // Replace confirmation modal handlers
-        const replaceModal = document.getElementById('replace-confirm-modal');
-        if (replaceModal) {
+        // Sync confirmation modal handlers
+        const syncModal = document.getElementById('sync-confirm-modal');
+        if (syncModal) {
             const closeModal = () => {
-                replaceModal.classList.remove('is-active');
+                syncModal.classList.remove('is-active');
                 fileInput.value = '';
             };
-            document.getElementById('replace-modal-close').addEventListener('click', closeModal);
-            document.getElementById('replace-cancel-btn').addEventListener('click', closeModal);
-            replaceModal.querySelector('.modal-background').addEventListener('click', closeModal);
-            document.getElementById('replace-confirm-btn').addEventListener('click', () => {
-                replaceModal.classList.remove('is-active');
-                uploadCard.classList.add('is-processing');
+            document.getElementById('sync-modal-close').addEventListener('click', closeModal);
+            document.getElementById('sync-cancel-btn').addEventListener('click', closeModal);
+            syncModal.querySelector('.modal-background').addEventListener('click', closeModal);
+            document.getElementById('sync-confirm-btn').addEventListener('click', () => {
+                syncModal.classList.remove('is-active');
+                if (uploadCard) uploadCard.classList.add('is-processing');
                 FileUploadHandler.submitFile(fileInput.files[0]);
+            });
+        }
+
+        // Add Position button bridge (outside Vue mount point)
+        const addPositionTopBtn = document.getElementById('add-position-top-btn');
+        if (addPositionTopBtn) {
+            addPositionTopBtn.addEventListener('click', () => {
+                document.dispatchEvent(new CustomEvent('open-add-position-modal'));
             });
         }
     },
 
-    showReplaceConfirmation(file) {
-        const modal = document.getElementById('replace-confirm-modal');
-        document.getElementById('replace-file-name').textContent = file.name;
+    showSyncConfirmation(file) {
+        const modal = document.getElementById('sync-confirm-modal');
+        document.getElementById('sync-file-name').textContent = file.name;
         modal.classList.add('is-active');
     },
 
@@ -812,13 +776,13 @@ const FileUploadHandler = {
         debugLog('Starting CSV file upload:', {
             fileName: file.name,
             fileSize: file.size,
-            mode: FileUploadHandler.importMode
+            mode: 'replace'
         });
-        
+
         try {
             const formData = new FormData();
             formData.append('csv_file', file);
-            formData.append('mode', FileUploadHandler.importMode || 'replace');
+            formData.append('mode', 'replace');
 
             debugLog('Uploading file via AJAX...');
             
@@ -1056,10 +1020,11 @@ const FileUploadHandler = {
         // Create a simple error notification
         const notification = document.createElement('div');
         notification.className = 'notification is-danger is-light';
-        notification.innerHTML = `
-            <button class="delete" onclick="this.parentElement.remove()"></button>
-            ${message}
-        `;
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete';
+        deleteBtn.addEventListener('click', () => notification.remove());
+        notification.appendChild(deleteBtn);
+        notification.appendChild(document.createTextNode(message));
 
         // Insert at the top of the page
         const container = document.querySelector('.container') || document.body;
@@ -1115,20 +1080,20 @@ const PortfolioManager = {
             const action = this.value;
 
             // Hide all fields first
-            addFields.classList.add('is-hidden');
-            renameFields.classList.add('is-hidden');
-            deleteFields.classList.add('is-hidden');
+            addFields.style.display = 'none';
+            renameFields.style.display = 'none';
+            deleteFields.style.display = 'none';
 
             // Enable/disable action button
             actionButton.disabled = !action;
 
-            // Show relevant fields based on action
+            // Show relevant fields based on action (inline flex for horizontal layout)
             if (action === 'add') {
-                addFields.classList.remove('is-hidden');
+                addFields.style.display = 'flex';
             } else if (action === 'rename') {
-                renameFields.classList.remove('is-hidden');
+                renameFields.style.display = 'flex';
             } else if (action === 'delete') {
-                deleteFields.classList.remove('is-hidden');
+                deleteFields.style.display = 'flex';
             }
         });
 
@@ -1245,11 +1210,11 @@ class PortfolioTableApp {
                     builderData: null,
                     builderDataLoaded: false,
                     // Country options now server-rendered like portfolios
-                    // Add Stock Modal
-                    showAddStockModal: false,
-                    isAddingStock: false,
-                    addStockError: null,
-                    addStockForm: {
+                    // Add Position Modal
+                    showAddPositionModal: false,
+                    isAddingPosition: false,
+                    addPositionError: null,
+                    addPositionForm: {
                         identifier: '',
                         name: '',
                         portfolio_id: null,
@@ -1257,10 +1222,11 @@ class PortfolioTableApp {
                         investment_type: null,
                         country: '',
                         shares: '',
-                        total_value: ''
+                        total_value: '',
+                        total_invested: ''
                     },
-                    addStockErrors: {},
-                    addStockPortfolios: [],
+                    addPositionErrors: {},
+                    addPositionPortfolios: [],
                     identifierValidation: {
                         loading: false,
                         status: null,  // null, 'valid', 'invalid'
@@ -1394,7 +1360,7 @@ class PortfolioTableApp {
                 investmentTypeHealthPercentage() {
                     if (this.filteredPortfolioItems.length === 0) return 0;
                     const filledCount = this.filteredPortfolioItems.filter(item =>
-                        item.investment_type && (item.investment_type === 'Stock' || item.investment_type === 'ETF')
+                        item.investment_type && (item.investment_type === 'Stock' || item.investment_type === 'ETF' || item.investment_type === 'Crypto')
                     ).length;
                     return Math.round((filledCount / this.filteredPortfolioItems.length) * 100);
                 },
@@ -1449,8 +1415,8 @@ class PortfolioTableApp {
                 },
                 // Show total value field when identifier is empty or invalid
                 showTotalValueField() {
-                    return !this.addStockForm.identifier ||
-                           this.addStockForm.identifier.trim() === '' ||
+                    return !this.addPositionForm.identifier ||
+                           this.addPositionForm.identifier.trim() === '' ||
                            this.identifierValidation.status === 'invalid';
                 },
                 // Count of selected items that are manual stocks
@@ -1630,10 +1596,23 @@ class PortfolioTableApp {
                                 this.builderData = null;
                                 debugLog('Builder data exists but no budget.availableToInvest');
                             }
-                        } else if (response.status === 404 || response.status === 400) {
-                            // Builder not configured or incomplete
+                        } else if (response.status === 400) {
+                            // Builder incomplete but may have partial budget data
+                            const result = await response.json();
+                            debugLog('Builder incomplete response:', result);
+                            const partial = result.partialData;
+                            if (partial && partial.budget && partial.budget.availableToInvest !== undefined) {
+                                this.builderData = {
+                                    availableToInvest: partial.budget.availableToInvest
+                                };
+                                debugLog('Loaded partial builder data:', this.builderData);
+                            } else {
+                                this.builderData = null;
+                            }
+                        } else if (response.status === 404) {
+                            // Builder not configured at all
                             this.builderData = null;
-                            debugLog('Builder not configured or incomplete:', response.status);
+                            debugLog('Builder not configured:', response.status);
                         } else {
                             this.builderData = null;
                             debugLog('Builder API error:', response.status);
@@ -1686,6 +1665,11 @@ class PortfolioTableApp {
                     } finally {
                         this.isSavingCash = false;
                     }
+                },
+
+                getBuilderCashTitle() {
+                    if (!this.builderData) return '';
+                    return 'Use ' + this.formatCurrencyRaw(this.builderData.availableToInvest) + ' as Cash';
                 },
 
                 downloadCSV() {
@@ -3097,29 +3081,29 @@ class PortfolioTableApp {
                 },
 
                 // =============================================================================
-                // Add Stock Modal Methods
+                // Add Position Modal Methods
                 // =============================================================================
 
-                async openAddStockModal() {
-                    debugLog('Opening Add Stock modal');
-                    this.resetAddStockForm();
-                    this.showAddStockModal = true;
+                async openAddPositionModal() {
+                    debugLog('Opening Add Position modal');
+                    this.resetAddPositionForm();
+                    this.showAddPositionModal = true;
 
                     // Fetch portfolios for dropdown
                     try {
                         const response = await fetch('/portfolio/api/portfolios_dropdown');
                         const result = await response.json();
                         if (result.success) {
-                            this.addStockPortfolios = result.portfolios;
-                            debugLog('Loaded portfolios for dropdown:', this.addStockPortfolios);
+                            this.addPositionPortfolios = result.portfolios;
+                            debugLog('Loaded portfolios for dropdown:', this.addPositionPortfolios);
 
                             // Pre-select current portfolio filter if one is selected
                             if (this.selectedPortfolio) {
-                                const matchingPortfolio = this.addStockPortfolios.find(
+                                const matchingPortfolio = this.addPositionPortfolios.find(
                                     p => p.name === this.selectedPortfolio
                                 );
                                 if (matchingPortfolio) {
-                                    this.addStockForm.portfolio_id = matchingPortfolio.id;
+                                    this.addPositionForm.portfolio_id = matchingPortfolio.id;
                                 }
                             }
                         }
@@ -3128,13 +3112,13 @@ class PortfolioTableApp {
                     }
                 },
 
-                closeAddStockModal() {
-                    this.showAddStockModal = false;
-                    this.resetAddStockForm();
+                closeAddPositionModal() {
+                    this.showAddPositionModal = false;
+                    this.resetAddPositionForm();
                 },
 
-                resetAddStockForm() {
-                    this.addStockForm = {
+                resetAddPositionForm() {
+                    this.addPositionForm = {
                         identifier: '',
                         name: '',
                         portfolio_id: null,
@@ -3142,10 +3126,11 @@ class PortfolioTableApp {
                         investment_type: null,
                         country: '',
                         shares: '',
-                        total_value: ''
+                        total_value: '',
+                        total_invested: ''
                     };
-                    this.addStockErrors = {};
-                    this.addStockError = null;
+                    this.addPositionErrors = {};
+                    this.addPositionError = null;
                     this.identifierValidation = {
                         loading: false,
                         status: null,
@@ -3154,7 +3139,7 @@ class PortfolioTableApp {
                 },
 
                 async validateIdentifier() {
-                    const identifier = this.addStockForm.identifier.trim();
+                    const identifier = this.addPositionForm.identifier.trim();
 
                     // Reset validation state if identifier is empty
                     if (!identifier) {
@@ -3179,9 +3164,20 @@ class PortfolioTableApp {
                             this.identifierValidation.status = 'valid';
                             this.identifierValidation.priceData = result.price_data;
 
-                            // Auto-fill country if available
-                            if (result.price_data && result.price_data.country && !this.addStockForm.country) {
-                                this.addStockForm.country = result.price_data.country;
+                            // Auto-fill fields from validation response (only if currently empty)
+                            if (result.price_data) {
+                                if (result.price_data.name && !this.addPositionForm.name) {
+                                    this.addPositionForm.name = result.price_data.name;
+                                }
+                                if (result.price_data.sector && !this.addPositionForm.sector) {
+                                    this.addPositionForm.sector = result.price_data.sector;
+                                }
+                                if (result.price_data.investment_type && !this.addPositionForm.investment_type) {
+                                    this.addPositionForm.investment_type = result.price_data.investment_type;
+                                }
+                                if (result.price_data.country && !this.addPositionForm.country) {
+                                    this.addPositionForm.country = result.price_data.country;
+                                }
                             }
 
                             debugLog('Identifier validated successfully:', result.price_data);
@@ -3199,61 +3195,66 @@ class PortfolioTableApp {
                     }
                 },
 
-                validateAddStockForm() {
-                    this.addStockErrors = {};
+                validateAddPositionForm() {
+                    this.addPositionErrors = {};
 
                     // Validate name
-                    if (!this.addStockForm.name || !this.addStockForm.name.trim()) {
-                        this.addStockErrors.name = 'Company name is required';
+                    if (!this.addPositionForm.name || !this.addPositionForm.name.trim()) {
+                        this.addPositionErrors.name = 'Company name is required';
                     }
 
                     // Validate sector
-                    if (!this.addStockForm.sector || !this.addStockForm.sector.trim()) {
-                        this.addStockErrors.sector = 'Sector is required';
+                    if (!this.addPositionForm.sector || !this.addPositionForm.sector.trim()) {
+                        this.addPositionErrors.sector = 'Sector is required';
                     }
 
                     // Validate shares
-                    const shares = parseGermanNumber(this.addStockForm.shares);
+                    const shares = parseGermanNumber(this.addPositionForm.shares);
                     if (isNaN(shares) || shares <= 0) {
-                        this.addStockErrors.shares = 'Shares must be greater than 0';
+                        this.addPositionErrors.shares = 'Shares must be greater than 0';
                     }
 
                     // Validate total_value if required
                     if (this.showTotalValueField) {
-                        const totalValue = parseGermanNumber(this.addStockForm.total_value);
+                        const totalValue = parseGermanNumber(this.addPositionForm.total_value);
                         if (isNaN(totalValue) || totalValue <= 0) {
-                            this.addStockErrors.total_value = 'Total value is required and must be greater than 0';
+                            this.addPositionErrors.total_value = 'Total value is required and must be greater than 0';
                         }
                     }
 
-                    return Object.keys(this.addStockErrors).length === 0;
+                    return Object.keys(this.addPositionErrors).length === 0;
                 },
 
-                async submitAddStock() {
-                    if (!this.validateAddStockForm()) {
+                async submitAddPosition() {
+                    if (!this.validateAddPositionForm()) {
                         return;
                     }
 
-                    this.isAddingStock = true;
-                    this.addStockError = null;
+                    this.isAddingPosition = true;
+                    this.addPositionError = null;
 
                     try {
                         const payload = {
-                            name: this.addStockForm.name.trim(),
-                            identifier: this.addStockForm.identifier.trim() || null,
-                            portfolio_id: this.addStockForm.portfolio_id,
-                            sector: this.addStockForm.sector.trim(),
-                            investment_type: this.addStockForm.investment_type,
-                            country: this.addStockForm.country || null,
-                            shares: parseGermanNumber(this.addStockForm.shares)
+                            name: this.addPositionForm.name.trim(),
+                            identifier: this.addPositionForm.identifier.trim() || null,
+                            portfolio_id: this.addPositionForm.portfolio_id,
+                            sector: this.addPositionForm.sector.trim(),
+                            investment_type: this.addPositionForm.investment_type,
+                            country: this.addPositionForm.country || null,
+                            shares: parseGermanNumber(this.addPositionForm.shares)
                         };
 
                         // Add total_value if needed
                         if (this.showTotalValueField) {
-                            payload.total_value = parseGermanNumber(this.addStockForm.total_value);
+                            payload.total_value = parseGermanNumber(this.addPositionForm.total_value);
                         }
 
-                        debugLog('Submitting add stock:', payload);
+                        // Add total_invested if provided
+                        if (this.addPositionForm.total_invested.trim()) {
+                            payload.total_invested = parseGermanNumber(this.addPositionForm.total_invested);
+                        }
+
+                        debugLog('Submitting add position:', payload);
 
                         const response = await fetch('/portfolio/api/add_company', {
                             method: 'POST',
@@ -3266,25 +3267,25 @@ class PortfolioTableApp {
                         const result = await response.json();
 
                         if (result.success) {
-                            debugLog('Stock added successfully:', result);
-                            this.closeAddStockModal();
+                            debugLog('Position added successfully:', result);
+                            this.closeAddPositionModal();
 
                             // Refresh portfolio data
                             await this.loadData();
 
                             if (typeof showNotification === 'function') {
-                                showNotification(result.message || 'Stock added successfully', 'is-success');
+                                showNotification(result.message || 'Position added successfully', 'is-success');
                             }
                         } else if (result.error === 'duplicate') {
-                            this.addStockError = `A company named "${result.existing.name}" already exists in portfolio "${result.existing.portfolio_name}". Please edit the existing entry instead.`;
+                            this.addPositionError = `A company named "${result.existing.name}" already exists in portfolio "${result.existing.portfolio_name}". Please edit the existing entry instead.`;
                         } else {
-                            this.addStockError = result.error || 'Failed to add stock';
+                            this.addPositionError = result.error || 'Failed to add position';
                         }
                     } catch (error) {
-                        console.error('Add stock error:', error);
-                        this.addStockError = 'An unexpected error occurred. Please try again.';
+                        console.error('Add position error:', error);
+                        this.addPositionError = 'An unexpected error occurred. Please try again.';
                     } finally {
-                        this.isAddingStock = false;
+                        this.isAddingPosition = false;
                     }
                 },
 
@@ -3392,7 +3393,12 @@ class PortfolioTableApp {
             mounted() {
                 // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)
                 this.syncUIWithVueModel();
-                
+
+                // Listen for Add Position event from outside Vue (the top-level button)
+                document.addEventListener('open-add-position-modal', () => {
+                    this.openAddPositionModal();
+                });
+
                 debugLog('Vue component mounted. Methods available:', Object.keys(this.$options.methods).join(', '));
                 debugLog('Initial portfolio options:', this.portfolioOptions);
 

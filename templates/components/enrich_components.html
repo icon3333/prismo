@@ -7,208 +7,119 @@
 <h1 class="page-title">Enrich Portfolio Data</h1>
 {% endmacro %}
 
-{% macro upload_section(url_for) %}
-<div class="column is-6">
-    <div id="upload-card" class="mb-5">
-        <h3 class="subsection-title">Upload Portfolio Data</h3>
-        <p class="help mb-4">Import from Parqet or IBKR Flex Query CSV. Format is auto-detected.</p>
+{% macro data_management_section(url_for, portfolios) %}
+<div class="data-management-bar">
+    <!-- Left: Action buttons -->
+    <div class="dm-actions">
+        <span class="dm-section-label">Data</span>
+        <button id="import-sync-btn" class="button is-info dm-action-btn">
+            <span class="icon"><i class="fas fa-sync-alt"></i></span>
+            <span>Sync (CSV)</span>
+        </button>
+        <button id="add-position-top-btn" class="button is-info dm-action-btn">
+            <span class="icon"><i class="fas fa-plus"></i></span>
+            <span>Add Position</span>
+        </button>
+    </div>
 
-        <!-- Add/Replace buttons side by side -->
-        <div class="columns is-variable is-2 mb-0">
-            <div class="column is-6">
-                <button id="import-add-btn" class="button is-info is-fullwidth is-medium">
-                    <span class="icon"><i class="fas fa-plus"></i></span>
-                    <span>Add</span>
-                </button>
-            </div>
-            <div class="column is-6">
-                <button id="import-replace-btn" class="button is-danger is-outlined is-fullwidth is-medium">
-                    <span class="icon"><i class="fas fa-sync-alt"></i></span>
-                    <span>Replace</span>
-                </button>
-            </div>
+    <!-- Right: Portfolio management inline -->
+    <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form" class="dm-portfolio-mgmt">
+        <span class="dm-section-label">Portfolios</span>
+        <div class="select dm-select">
+            <select name="action" id="portfolio-action">
+                <option value="">Portfolio action...</option>
+                <option value="add">Add Portfolio</option>
+                <option value="rename">Rename Portfolio</option>
+                <option value="delete">Delete Portfolio</option>
+            </select>
         </div>
-        <p class="help has-text-grey-light">
-            <strong>Add</strong>: merge new positions with existing.
-            <strong>Replace</strong>: remove missing positions from the same broker source.
-        </p>
 
-        <!-- Hidden file input (triggered by buttons) -->
-        <input type="file" id="csv_file" accept=".csv" style="display: none;">
+        <!-- Add Portfolio field -->
+        <div id="add-portfolio-fields" class="dm-dynamic-field" style="display: none;">
+            <input class="input dm-input" type="text" name="add_portfolio_name" placeholder="Portfolio name">
+        </div>
 
-        <!-- Enhanced loading indicator with progress bar -->
-        <div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
-            <div class="loading-container">
-                <!-- Progress header with percentage -->
-                <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-                    <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
-                    <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
-                </div>
-
-                <!-- Visual progress bar -->
-                <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
-
-                <!-- Status message and controls -->
-                <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
-                    <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
-                    <button id="cancel-upload-btn"
-                        class="button is-small is-danger is-outlined"
-                        title="Cancel upload">
-                        <span class="icon is-small">
-                            <i class="fas fa-times"></i>
-                        </span>
-                        <span>Cancel</span>
-                    </button>
-                </div>
+        <!-- Rename Portfolio fields -->
+        <div id="rename-portfolio-fields" class="dm-dynamic-field" style="display: none;">
+            <div class="select dm-select">
+                <select name="old_name">
+                    <option value="">Select portfolio</option>
+                    {% for portfolio in portfolios %}
+                    <option value="{{ portfolio }}">{{ portfolio }}</option>
+                    {% endfor %}
+                </select>
             </div>
+            <input class="input dm-input" type="text" name="new_name" placeholder="New name">
+        </div>
+
+        <!-- Delete Portfolio fields -->
+        <div id="delete-portfolio-fields" class="dm-dynamic-field" style="display: none;">
+            <div class="select dm-select">
+                <select name="delete_portfolio_name">
+                    <option value="">Select portfolio</option>
+                    {% for portfolio in portfolios %}
+                    <option value="{{ portfolio }}">{{ portfolio }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <span class="dm-warning-text">Must be empty</span>
+        </div>
+
+        <button type="submit" class="button is-info dm-action-btn" id="portfolio-action-btn" disabled>
+            <span class="icon"><i class="fas fa-check"></i></span>
+            <span>Apply</span>
+        </button>
+    </form>
+</div>
+
+<!-- Hidden file input (triggered by buttons) -->
+<input type="file" id="csv_file" accept=".csv" style="display: none;">
+
+<!-- Upload progress indicator -->
+<div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
+    <div class="loading-container">
+        <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
+            <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
+            <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
+        </div>
+        <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
+        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
+            <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
+            <button id="cancel-upload-btn"
+                class="button is-small is-danger is-outlined"
+                title="Cancel upload">
+                <span class="icon is-small"><i class="fas fa-times"></i></span>
+                <span>Cancel</span>
+            </button>
         </div>
     </div>
 </div>
 
-<!-- Replace Confirmation Modal -->
-<div class="modal" id="replace-confirm-modal">
+<!-- Sync Confirmation Modal -->
+<div class="modal" id="sync-confirm-modal">
     <div class="modal-background"></div>
     <div class="modal-card">
-        <header class="modal-card-head" style="background: var(--coral-500);">
-            <p class="modal-card-title has-text-white">
-                <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
-                Replace Portfolio Data
+        <header class="modal-card-head">
+            <p class="modal-card-title">
+                <span class="icon"><i class="fas fa-sync-alt"></i></span>
+                Sync Portfolio Data
             </p>
-            <button class="delete" aria-label="close" id="replace-modal-close"></button>
+            <button class="delete" aria-label="close" id="sync-modal-close"></button>
         </header>
         <section class="modal-card-body">
-            <div class="notification is-danger is-light">
-                <p><strong>This will remove all positions from the same broker source</strong> that are not in the new CSV file.</p>
-                <p class="mt-2">Positions from other brokers and manually-added stocks will not be affected.</p>
+            <div class="notification is-info is-light">
+                <p>New positions will be added, existing ones updated, and sold positions removed.</p>
+                <p class="mt-2"><strong>Manual positions are never affected.</strong></p>
             </div>
-            <p class="mt-3">File: <strong id="replace-file-name"></strong></p>
+            <p class="mt-3">File: <strong id="sync-file-name"></strong></p>
         </section>
         <footer class="modal-card-foot is-justify-content-flex-end">
-            <button class="button" id="replace-cancel-btn">Cancel</button>
-            <button class="button is-danger" id="replace-confirm-btn">
-                <span class="icon"><i class="fas fa-trash-alt"></i></span>
-                <span>Replace</span>
+            <button class="button" id="sync-cancel-btn">Cancel</button>
+            <button class="button is-info" id="sync-confirm-btn">
+                <span class="icon"><i class="fas fa-sync-alt"></i></span>
+                <span>Sync Now</span>
             </button>
         </footer>
-    </div>
-</div>
-{% endmacro %}
-
-{% macro portfolio_management(url_for, portfolios) %}
-<div class="column is-6">
-    <div class="mb-5">
-        <h3 class="subsection-title">Portfolio Management</h3>
-        <div>
-            <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form">
-                <!-- Row 1: Action dropdown and all dynamic fields in columns -->
-                <div class="columns is-variable is-2 mb-4">
-                    <!-- Action Column -->
-                    <div class="column is-4">
-                        <div class="field">
-                            <label class="label">Action</label>
-                            <div class="control">
-                                <div class="select is-fullwidth">
-                                    <select name="action" id="portfolio-action">
-                                        <option value="">Select action</option>
-                                        <option value="add">Add Portfolio</option>
-                                        <option value="rename">Rename Portfolio</option>
-                                        <option value="delete">Delete Portfolio</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <div class="control">
-                                <button type="submit" class="button is-info is-fullwidth" id="portfolio-action-btn" disabled>
-                                    <span class="icon">
-                                        <i class="fas fa-check"></i>
-                                    </span>
-                                    <span>Apply</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Dynamic fields column -->
-                    <div class="column is-8">
-                        <div id="portfolio-action-fields">
-                            <!-- Add Portfolio fields -->
-                            <div id="add-portfolio-fields" class="is-hidden">
-                                <div class="field">
-                                    <label class="label">Portfolio Name</label>
-                                    <div class="control">
-                                        <input class="input" type="text" name="add_portfolio_name"
-                                            placeholder="Enter portfolio name">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Rename Portfolio fields -->
-                            <div id="rename-portfolio-fields" class="is-hidden">
-                                <div class="columns is-variable is-2">
-                                    <div class="column is-half">
-                                        <div class="field">
-                                            <label class="label">Select Portfolio</label>
-                                            <div class="control">
-                                                <div class="select is-fullwidth">
-                                                    <select name="old_name">
-                                                        <option value="">Select portfolio</option>
-                                                        {% for portfolio in portfolios %}
-                                                        <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="column is-half">
-                                        <div class="field">
-                                            <label class="label">New Name</label>
-                                            <div class="control">
-                                                <input class="input" type="text" name="new_name"
-                                                    placeholder="Enter new name">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Delete Portfolio fields -->
-                            <div id="delete-portfolio-fields" class="is-hidden">
-                                <div class="columns is-variable is-2">
-                                    <div class="column">
-                                        <div class="field">
-                                            <label class="label">Select Portfolio</label>
-                                            <div class="control">
-                                                <div class="select is-fullwidth">
-                                                    <select name="delete_portfolio_name">
-                                                        <option value="">Select portfolio</option>
-                                                        {% for portfolio in portfolios %}
-                                                        <option value="{{ portfolio }}">{{ portfolio }}</option>
-                                                        {% endfor %}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="column">
-                                        <div class="field">
-                                            <label class="label" style="visibility: hidden;">Placeholder</label>
-                                            <div class="notification is-warning is-light py-2 px-3"
-                                                style="height: 2.5em; display: flex; align-items: center; margin: 0;">
-                                                <p class="is-size-7 has-text-weight-medium" style="margin: 0;">
-                                                    Portfolio must be empty to delete.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </form>
-        </div>
     </div>
 </div>
 {% endmacro %}
@@ -225,66 +136,67 @@
 
         <!-- Vue.js component will be mounted here -->
         <div id="portfolio-table-app" v-cloak>
-            <!-- Portfolio Summary Card with Cash -->
-            <div v-if="!loading && filteredPortfolioItems.length > 0" class="portfolio-summary-card mb-4">
-                <div class="summary-item">
-                    <span class="summary-label">Positions</span>
-                    <span class="summary-value" v-text="metrics.total"></span>
-                </div>
-                <div class="summary-operator">|</div>
-                <div class="summary-item">
-                    <span class="summary-label">Holdings</span>
-                    <span class="summary-value" v-html="formatCurrency(metrics.totalValue)"></span>
-                </div>
-                <div class="summary-operator">+</div>
-                <div class="summary-item summary-item-editable">
-                    <span class="summary-label">Cash</span>
-                    <div class="cash-input-wrapper">
-                        <input
-                            type="text"
-                            class="input is-small cash-input sensitive-value"
-                            :value="formatCurrencyRaw(cashBalance)"
-                            @focus="trackOriginalCash"
-                            @blur="commitCash($event)"
-                            @keydown.enter="commitCash($event); $event.target.blur()"
-                            @dblclick="$event.target.select()"
-                            placeholder="€0,00">
-                        <span v-if="isSavingCash" class="icon is-small saving-indicator">
-                            <i class="fas fa-spinner fa-pulse"></i>
+            <!-- Portfolio Header Bar: Summary + Controls unified -->
+            <div v-if="!loading && filteredPortfolioItems.length > 0" class="portfolio-header-bar mb-4">
+                <div class="portfolio-header-summary">
+                    <div class="summary-item">
+                        <span class="summary-label">Positions</span>
+                        <span class="summary-value" v-text="metrics.total"></span>
+                    </div>
+                    <div class="summary-operator">|</div>
+                    <div class="summary-item">
+                        <span class="summary-label">Holdings</span>
+                        <span class="summary-value" v-html="formatCurrency(metrics.totalValue)"></span>
+                    </div>
+                    <div class="summary-operator">+</div>
+                    <div class="summary-item summary-item-editable">
+                        <span class="summary-label">
+                            Cash
+                            <a v-if="builderDataLoaded && builderData === null"
+                               href="/portfolio/builder" class="cash-builder-hint"
+                               title="Set up Builder to calculate your available investment budget">
+                                <i class="fas fa-hammer"></i>
+                            </a>
+                            <span v-if="builderData !== null" class="cash-builder-icons">
+                                <a key="builder-link"
+                                   class="cash-builder-hint cash-builder-hint--active"
+                                   href="/portfolio/builder"
+                                   title="Open Builder">
+                                    <i class="fas fa-hammer"></i>
+                                </a>
+                                <button key="builder-cash"
+                                        type="button"
+                                        class="cash-builder-hint cash-builder-hint--active"
+                                        @click="useBuilderAsCash"
+                                        :title="getBuilderCashTitle()"
+                                        :class="{ 'is-loading': isSavingCash }">
+                                    <i class="fas fa-coins"></i>
+                                </button>
+                            </span>
                         </span>
+                        <div class="cash-input-wrapper">
+                            <input
+                                type="text"
+                                class="input is-small cash-input sensitive-value"
+                                :value="formatCurrencyRaw(cashBalance)"
+                                @focus="trackOriginalCash"
+                                @blur="commitCash($event)"
+                                @keydown.enter="commitCash($event); $event.target.blur()"
+                                @dblclick="$event.target.select()"
+                                placeholder="€0,00">
+                            <span v-if="isSavingCash" class="icon is-small saving-indicator">
+                                <i class="fas fa-spinner fa-pulse"></i>
+                            </span>
+                        </div>
                     </div>
-                </div>
-                <!-- Builder KPI Section (before equals sign) -->
-                <div class="summary-item summary-item-builder" v-if="builderData !== null">
-                    <span class="summary-label">
-                        <a href="/portfolio/builder" class="builder-link" title="Open Builder">
-                            <i class="fas fa-hammer"></i>Available to Invest
-                        </a>
-                    </span>
-                    <div class="builder-value-wrapper">
-                        <span class="summary-value builder-value" v-html="formatCurrency(builderData.availableToInvest)"></span>
-                        <button class="button is-small is-primary is-outlined use-as-cash-btn"
-                                @click="useBuilderAsCash" :disabled="isSavingCash">
-                            <span class="icon is-small"><i class="fas fa-arrow-left"></i></span>
-                            <span>Use</span>
-                        </button>
+                    <div class="summary-operator">=</div>
+                    <div class="summary-item summary-item-total">
+                        <span class="summary-label">Total</span>
+                        <span class="summary-value" v-html="formatCurrency(portfolioTotal)"></span>
                     </div>
+                    <span class="summary-updated" v-if="metrics.lastUpdate" v-text="'Updated ' + formatDateAgo(metrics.lastUpdate)"></span>
                 </div>
-                <div class="summary-item summary-item-builder" v-else-if="builderDataLoaded && builderData === null">
-                    <span class="summary-label">
-                        <a href="/portfolio/builder" class="builder-link-configure" title="Configure Builder">
-                            <i class="fas fa-hammer"></i>Configure Builder
-                        </a>
-                    </span>
-                </div>
-                <div class="summary-operator">=</div>
-                <div class="summary-item summary-item-total">
-                    <span class="summary-label">Total</span>
-                    <span class="summary-value" v-html="formatCurrency(portfolioTotal)"></span>
-                </div>
-                <span class="summary-updated" v-if="metrics.lastUpdate" v-text="'Updated ' + formatDateAgo(metrics.lastUpdate)"></span>
-            </div>
-            <div class="portfolio-controls-container mb-4">
+                <div class="portfolio-header-controls">
                 <div class="enrich-main-controls">
                     <!-- Left side controls with unified styling -->
                     <div class="enrich-controls-left">
@@ -341,12 +253,6 @@
                                 </span>
                                 <span>Download as CSV</span>
                             </button>
-                            <button class="button is-success" @click="openAddStockModal">
-                                <span class="icon is-small">
-                                    <i class="fas fa-plus"></i>
-                                </span>
-                                <span>Add Stock</span>
-                            </button>
                         </div>
 
                         <!-- Hidden controls for Vue binding -->
@@ -356,6 +262,7 @@
                     </div>
 
                 </div>
+            </div>
             </div>
 
             <!-- Loading and empty states -->
@@ -403,6 +310,7 @@
                                 <option value="">Select Type</option>
                                 <option value="Stock">Stock</option>
                                 <option value="ETF">ETF</option>
+                                <option value="Crypto">Crypto</option>
                             </select>
                         </div>
                         <button class="button is-primary" @click="applyBulkChanges"
@@ -649,6 +557,7 @@
                                             <option :value="null">-</option>
                                             <option value="Stock">Stock</option>
                                             <option value="ETF">ETF</option>
+                                            <option value="Crypto">Crypto</option>
                                         </select>
                                     </div>
                                 </td>
@@ -759,13 +668,13 @@
                 </div>
             </div>
 
-            <!-- Add Stock Modal -->
-            <div class="modal" :class="{ 'is-active': showAddStockModal }">
-                <div class="modal-background" @click="closeAddStockModal"></div>
+            <!-- Add Position Modal -->
+            <div class="modal" :class="{ 'is-active': showAddPositionModal }">
+                <div class="modal-background" @click="closeAddPositionModal"></div>
                 <div class="modal-card">
                     <header class="modal-card-head">
-                        <p class="modal-card-title">Add Stock</p>
-                        <button class="delete" aria-label="close" @click="closeAddStockModal"></button>
+                        <p class="modal-card-title">Add Position</p>
+                        <button class="delete" aria-label="close" @click="closeAddPositionModal"></button>
                     </header>
                     <section class="modal-card-body">
                         <!-- Identifier Field (Optional) -->
@@ -773,7 +682,7 @@
                             <label class="label">Identifier (optional)</label>
                             <div class="control has-icons-right">
                                 <input class="input" type="text"
-                                       v-model="addStockForm.identifier"
+                                       v-model="addPositionForm.identifier"
                                        @blur="validateIdentifier"
                                        placeholder="e.g., AAPL, MSFT, BTC-USD"
                                        :class="{
@@ -794,7 +703,7 @@
                             <!-- Price Preview -->
                             <div v-if="identifierValidation.status === 'valid' && identifierValidation.priceData" class="notification is-success is-light mt-2 py-2 px-3">
                                 <span class="has-text-weight-semibold">Price found:</span>
-                                {% raw %}{{ formatCurrency(identifierValidation.priceData.price_eur) }}{% endraw %}
+                                <span v-html="formatCurrency(identifierValidation.priceData.price_eur)"></span>
                                 <span v-if="identifierValidation.priceData.country" class="ml-2">
                                     ({% raw %}{{ identifierValidation.priceData.country }}{% endraw %})
                                 </span>
@@ -809,11 +718,11 @@
                             <label class="label">Company Name *</label>
                             <div class="control">
                                 <input class="input" type="text"
-                                       v-model="addStockForm.name"
+                                       v-model="addPositionForm.name"
                                        placeholder="e.g., Apple Inc."
-                                       :class="{ 'is-danger': addStockErrors.name }">
+                                       :class="{ 'is-danger': addPositionErrors.name }">
                             </div>
-                            <p class="help is-danger" v-if="addStockErrors.name">{% raw %}{{ addStockErrors.name }}{% endraw %}</p>
+                            <p class="help is-danger" v-if="addPositionErrors.name">{% raw %}{{ addPositionErrors.name }}{% endraw %}</p>
                         </div>
 
                         <!-- Portfolio and Sector Row -->
@@ -823,9 +732,9 @@
                                     <label class="label">Portfolio</label>
                                     <div class="control">
                                         <div class="select is-fullwidth">
-                                            <select v-model="addStockForm.portfolio_id">
+                                            <select v-model="addPositionForm.portfolio_id">
                                                 <option :value="null">Unassigned</option>
-                                                <option v-for="p in addStockPortfolios" :key="p.id" :value="p.id">
+                                                <option v-for="p in addPositionPortfolios" :key="p.id" :value="p.id">
                                                     {% raw %}{{ p.name }}{% endraw %}
                                                 </option>
                                             </select>
@@ -838,11 +747,11 @@
                                     <label class="label">Sector *</label>
                                     <div class="control">
                                         <input class="input" type="text"
-                                               v-model="addStockForm.sector"
+                                               v-model="addPositionForm.sector"
                                                placeholder="e.g., Technology"
-                                               :class="{ 'is-danger': addStockErrors.sector }">
+                                               :class="{ 'is-danger': addPositionErrors.sector }">
                                     </div>
-                                    <p class="help is-danger" v-if="addStockErrors.sector">{% raw %}{{ addStockErrors.sector }}{% endraw %}</p>
+                                    <p class="help is-danger" v-if="addPositionErrors.sector">{% raw %}{{ addPositionErrors.sector }}{% endraw %}</p>
                                 </div>
                             </div>
                         </div>
@@ -854,10 +763,11 @@
                                     <label class="label">Type</label>
                                     <div class="control">
                                         <div class="select is-fullwidth">
-                                            <select v-model="addStockForm.investment_type">
+                                            <select v-model="addPositionForm.investment_type">
                                                 <option :value="null">-</option>
                                                 <option value="Stock">Stock</option>
                                                 <option value="ETF">ETF</option>
+                                                <option value="Crypto">Crypto</option>
                                             </select>
                                         </div>
                                     </div>
@@ -868,7 +778,7 @@
                                     <label class="label">Country</label>
                                     <div class="control">
                                         <div class="select is-fullwidth">
-                                            <select v-model="addStockForm.country">
+                                            <select v-model="addPositionForm.country">
                                                 <option value="">Select Country</option>
                                                 {% for country in countries %}
                                                 <option value="{{ country }}">{{ country }}</option>
@@ -887,11 +797,11 @@
                                     <label class="label">Shares *</label>
                                     <div class="control">
                                         <input class="input" type="text"
-                                               v-model="addStockForm.shares"
+                                               v-model="addPositionForm.shares"
                                                placeholder="e.g., 10"
-                                               :class="{ 'is-danger': addStockErrors.shares }">
+                                               :class="{ 'is-danger': addPositionErrors.shares }">
                                     </div>
-                                    <p class="help is-danger" v-if="addStockErrors.shares">{% raw %}{{ addStockErrors.shares }}{% endraw %}</p>
+                                    <p class="help is-danger" v-if="addPositionErrors.shares">{% raw %}{{ addPositionErrors.shares }}{% endraw %}</p>
                                 </div>
                             </div>
                             <div class="column" v-if="showTotalValueField">
@@ -899,29 +809,44 @@
                                     <label class="label">Total Value (EUR) *</label>
                                     <div class="control">
                                         <input class="input" type="text"
-                                               v-model="addStockForm.total_value"
+                                               v-model="addPositionForm.total_value"
                                                placeholder="e.g., 1500.00"
-                                               :class="{ 'is-danger': addStockErrors.total_value }">
+                                               :class="{ 'is-danger': addPositionErrors.total_value }">
                                     </div>
-                                    <p class="help is-danger" v-if="addStockErrors.total_value">{% raw %}{{ addStockErrors.total_value }}{% endraw %}</p>
+                                    <p class="help is-danger" v-if="addPositionErrors.total_value">{% raw %}{{ addPositionErrors.total_value }}{% endraw %}</p>
                                     <p class="help">Required when identifier is not provided or not found</p>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- Total Invested Row -->
+                        <div class="columns">
+                            <div class="column">
+                                <div class="field">
+                                    <label class="label">Total Invested (EUR)</label>
+                                    <div class="control">
+                                        <input class="input" type="text"
+                                               v-model="addPositionForm.total_invested"
+                                               placeholder="e.g., 1500.00">
+                                    </div>
+                                    <p class="help">Optional — enables P&L tracking on the Performance page</p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Error Message -->
-                        <div v-if="addStockError" class="notification is-danger is-light">
-                            <button class="delete" @click="addStockError = null"></button>
-                            {% raw %}{{ addStockError }}{% endraw %}
+                        <div v-if="addPositionError" class="notification is-danger is-light">
+                            <button class="delete" @click="addPositionError = null"></button>
+                            {% raw %}{{ addPositionError }}{% endraw %}
                         </div>
                     </section>
                     <footer class="modal-card-foot">
-                        <button class="button" @click="closeAddStockModal">Cancel</button>
+                        <button class="button" @click="closeAddPositionModal">Cancel</button>
                         <button class="button is-success"
-                                @click="submitAddStock"
-                                :class="{ 'is-loading': isAddingStock }"
-                                :disabled="isAddingStock">
-                            Add Stock
+                                @click="submitAddPosition"
+                                :class="{ 'is-loading': isAddingPosition }"
+                                :disabled="isAddingPosition">
+                            Add Position
                         </button>
                     </footer>
                 </div>

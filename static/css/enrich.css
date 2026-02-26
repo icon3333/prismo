@@ -48,29 +48,12 @@
   padding: var(--space-sm);
 }
 
-/* Portfolio management form alignment */
-#manage-portfolios-form > .columns:first-child {
-  margin-top: 0;
-}
-
-#manage-portfolios-form > .columns:first-child > .column {
-  padding-top: 0;
-}
-
-#manage-portfolios-form .columns .columns {
-  margin-top: 0;
-}
-
-#manage-portfolios-form .columns .columns > .column,
-#portfolio-action-fields .columns > .column {
-  padding-top: 0;
-}
-
-/* Form element heights */
+/* Portfolio management form compact sizing */
 #manage-portfolios-form .select select,
 #manage-portfolios-form .input,
 #manage-portfolios-form .button {
-  height: 2.5em;
+  height: 2.25em;
+  font-size: 0.875rem;
 }
 
 /* ===== Form Elements ===== */
@@ -148,15 +131,18 @@
   padding: 0;
 }
 
-.portfolio-controls-container {
+/* ===== Portfolio Header Bar (Summary + Controls unified) ===== */
+
+.portfolio-header-bar {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
   flex-shrink: 0;
-  background-color: var(--bg-primary);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  border-bottom: 1px solid var(--border-default);
-  padding: var(--space-md);
-  margin-bottom: 0;
+}
+
+.portfolio-header-controls {
+  padding: var(--space-sm) var(--space-md);
 }
 
 .portfolio-table-container {
@@ -201,13 +187,12 @@
   font-family: inherit;
 }
 
-/* Summary card updated timestamp */
+/* Summary updated timestamp - flex item pushed to right */
 .summary-updated {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-md);
+  margin-left: auto;
   font-size: 0.7rem;
   color: var(--aqua-500);
+  white-space: nowrap;
 }
 
 /* ===== Controls and Metrics Row ===== */
@@ -725,21 +710,19 @@ td.col-currency {
   }
 }
 
-/* ===== Portfolio Summary Card (with Cash) ===== */
+/* ===== Portfolio Header Summary Row ===== */
 
-.portfolio-summary-card {
-  position: relative;
+.portfolio-header-summary {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-lg);
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  position: relative;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.portfolio-summary-card .summary-item {
+.portfolio-header-summary .summary-item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -747,7 +730,7 @@ td.col-currency {
   min-width: 120px;
 }
 
-.portfolio-summary-card .summary-label {
+.portfolio-header-summary .summary-label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -755,37 +738,37 @@ td.col-currency {
   font-weight: 500;
 }
 
-.portfolio-summary-card .summary-value {
+.portfolio-header-summary .summary-value {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.portfolio-summary-card .summary-operator {
+.portfolio-header-summary .summary-operator {
   font-size: 1rem;
   font-weight: 300;
   color: var(--text-muted);
 }
 
-.portfolio-summary-card .summary-item-total .summary-value {
+.portfolio-header-summary .summary-item-total .summary-value {
   color: var(--primary);
 }
 
-.portfolio-summary-card .summary-item-editable {
+.portfolio-header-summary .summary-item-editable {
   min-width: 110px;
 }
 
-.portfolio-summary-card .cash-input-wrapper {
+.portfolio-header-summary .cash-input-wrapper {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
 }
 
-.portfolio-summary-card .cash-input,
-.portfolio-summary-card .cash-input.is-small,
-.portfolio-summary-card input.cash-input.is-small,
-.portfolio-summary-card input.input.is-small.cash-input,
-.portfolio-summary-card input.input.is-small.cash-input.sensitive-value {
+.portfolio-header-summary .cash-input,
+.portfolio-header-summary .cash-input.is-small,
+.portfolio-header-summary input.cash-input.is-small,
+.portfolio-header-summary input.input.is-small.cash-input,
+.portfolio-header-summary input.input.is-small.cash-input.sensitive-value {
   width: 95px;
   text-align: center;
   font-size: 1rem !important;
@@ -796,35 +779,24 @@ td.col-currency {
   padding: 2px var(--space-sm);
 }
 
-.portfolio-summary-card .cash-input:focus {
+.portfolio-header-summary .cash-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
 }
 
-.portfolio-summary-card .saving-indicator {
+.portfolio-header-summary .saving-indicator {
   color: var(--primary);
 }
 
 /* Builder KPI Section */
-.portfolio-summary-card .summary-divider {
+.portfolio-header-summary .summary-divider {
   width: 1px;
   height: 28px;
   background-color: var(--border-default);
   margin: 0 var(--space-xs);
 }
 
-.portfolio-summary-card .summary-item-builder {
-  min-width: 160px;
-}
-
-.portfolio-summary-card .summary-item-builder .summary-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.portfolio-summary-card .builder-link,
-.portfolio-summary-card .builder-link-configure {
+.portfolio-header-summary .builder-link-configure {
   color: var(--aqua-500);
   text-decoration: none;
   display: inline-flex;
@@ -833,81 +805,89 @@ td.col-currency {
   transition: color var(--transition-base);
 }
 
-.portfolio-summary-card .builder-link:hover,
-.portfolio-summary-card .builder-link-configure:hover {
+.cash-builder-hint {
+  color: var(--aqua-500);
+  font-size: 0.65rem;
+  opacity: 0.6;
+  margin-left: 0.25rem;
+  transition: opacity 0.2s;
+}
+
+.cash-builder-hint:hover {
+  opacity: 1;
   color: var(--aqua-400);
 }
 
-.portfolio-summary-card .builder-link-configure {
-  font-size: 0.75rem;
-  opacity: 0.8;
+.cash-builder-hint--active {
+  opacity: 0.7;
 }
 
-.portfolio-summary-card .builder-value-wrapper {
-  display: flex;
+.cash-builder-hint--active:hover {
+  opacity: 1;
+}
+
+.cash-builder-icons {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-sm);
 }
 
-.portfolio-summary-card .builder-value {
+button.cash-builder-hint {
+  all: unset;
+  cursor: pointer;
   color: var(--aqua-500);
-  font-size: 1rem;
+  font-size: 0.65rem;
+  margin-left: 0.25rem;
+  transition: opacity 0.2s;
 }
 
-.portfolio-summary-card .use-as-cash-btn {
-  padding: 0 var(--space-sm);
-  height: 1.75em;
-  font-size: 0.75rem;
-  border-radius: var(--radius-sm);
+button.cash-builder-hint.cash-builder-hint--active {
+  opacity: 0.7;
 }
 
-.portfolio-summary-card .use-as-cash-btn .icon {
-  margin-right: var(--space-xs);
+button.cash-builder-hint.cash-builder-hint--active:hover {
+  opacity: 1;
+  color: var(--aqua-400);
 }
 
-/* Responsive adjustments for summary card */
+/* Responsive adjustments for portfolio header bar */
 @media screen and (max-width: 768px) {
-  .portfolio-summary-card {
+  .portfolio-header-summary {
     flex-wrap: wrap;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md);
   }
 
-  .portfolio-summary-card .summary-item {
+  .portfolio-header-summary .summary-item {
     min-width: auto;
     flex: 1;
   }
 
-  .portfolio-summary-card .summary-operator {
+  .portfolio-header-summary .summary-operator {
     font-size: 1rem;
   }
 
-  .portfolio-summary-card .summary-value {
+  .portfolio-header-summary .summary-value {
     font-size: 0.875rem;
   }
 
-  .portfolio-summary-card .cash-input {
+  .portfolio-header-summary .cash-input {
     width: 80px;
     font-size: 0.875rem;
   }
 
   .summary-updated {
-    position: static;
     width: 100%;
     text-align: center;
     order: -1;
+    margin-left: 0;
   }
 
-  .portfolio-summary-card .summary-divider {
+  .portfolio-header-summary .summary-divider {
     display: none;
   }
 
-  .portfolio-summary-card .summary-item-builder {
-    min-width: 100%;
-    flex-direction: row;
-    justify-content: center;
-    padding-top: var(--space-sm);
-    border-top: 1px solid var(--border-subtle);
+  .portfolio-header-controls {
+    padding: var(--space-xs) var(--space-sm);
   }
 }
 
@@ -1023,6 +1003,105 @@ td.col-currency {
 .enrich-page .table td .field.has-addons.has-revert .select select {
   padding-right: 24px;
 }
+
+/* ===== Data Management Bar ===== */
+
+.data-management-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.dm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.dm-action-btn,
+.dm-action-btn.button {
+  height: 2.25em;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-md);
+  white-space: nowrap;
+}
+
+.dm-portfolio-mgmt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--space-sm);
+  padding-left: var(--space-md);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.dm-portfolio-mgmt .dm-select select,
+.dm-portfolio-mgmt .dm-input {
+  height: 2.25em;
+  font-size: 0.875rem;
+  border-radius: var(--radius-sm);
+}
+
+.dm-portfolio-mgmt .dm-select {
+  flex-shrink: 0;
+}
+
+.dm-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dm-dynamic-field {
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.dm-dynamic-field .dm-input {
+  width: 160px;
+}
+
+.dm-dynamic-field .dm-select select {
+  min-width: 140px;
+}
+
+.dm-warning-text {
+  font-size: 0.75rem;
+  color: var(--warning);
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 768px) {
+  .data-management-bar {
+    flex-wrap: wrap;
+  }
+
+  .dm-portfolio-mgmt {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--border-subtle);
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+
 
 /* ===== Add Stock Modal ===== */
 .modal-card {

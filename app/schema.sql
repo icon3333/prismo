@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS companies (
  custom_price_eur REAL,
  is_custom_value BOOLEAN DEFAULT 0,
  custom_value_date DATETIME,
- investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+ investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
  override_identifier TEXT,
  identifier_manually_edited BOOLEAN DEFAULT 0,
  identifier_manual_edit_date DATETIME,

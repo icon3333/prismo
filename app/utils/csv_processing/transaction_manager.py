@@ -20,7 +20,8 @@ def apply_share_changes(
     companies_to_remove: Set[str],
     cursor,
     progress_callback=None,
-    source: str = 'parqet'
+    source: str = 'parqet',
+    force_remove_all: bool = False
 ) -> Dict[str, List[str]]:
     """
     Apply share changes to database within a transaction.
@@ -42,6 +43,7 @@ def apply_share_changes(
         cursor: Database cursor for operations
         progress_callback: Optional callback(current, total, message, status)
         source: Import source ('parqet' or 'ibkr') for new companies and scoped deletion
+        force_remove_all: When True, bypass manual and broker-scoped protection during removal
 
     Returns:
         Dict with 'added', 'updated', 'removed' lists of company names, and 'protected_identifiers_count'
@@ -164,14 +166,16 @@ def apply_share_changes(
 
     # Remove companies not in CSV or with zero shares
     # Broker-scoped: only remove companies matching the import source
+    # force_remove_all: bypass all protections (manual + broker-scoped)
     manual_protected_count = 0
     source_protected_count = 0
     for company_name in companies_to_remove:
         result = _remove_company(
             company_name, existing_company_map, account_id, cursor,
-            shared_identifiers, manual_company_ids,
-            company_source_map=company_source_map,
-            import_source=source
+            shared_identifiers,
+            manual_company_ids=None if force_remove_all else manual_company_ids,
+            company_source_map=None if force_remove_all else company_source_map,
+            import_source=None if force_remove_all else source
         )
         if result == 'removed':
             positions_removed.append(company_name)

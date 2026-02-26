@@ -136,8 +136,10 @@ def upload_csv_simple():
             flash(validation_message, 'error')
             return redirect(url_for('portfolio.enrich'))
         
-        # Get import mode (add or replace)
+        # Get import mode (add, replace, or replace_all)
         mode = request.form.get('mode', 'replace')
+        if mode not in ('add', 'replace', 'replace_all'):
+            mode = 'replace'
         logger.info(f"Import mode: {mode}")
 
         # Start background processing

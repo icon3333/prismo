@@ -341,7 +341,7 @@ def auto_categorize_investment_type(identifier: str) -> Optional[str]:
     Uses yfinance quoteType field which is highly reliable for most securities:
     - "EQUITY" → Stock
     - "ETF" → ETF
-    - "CRYPTOCURRENCY" → Stock (per user requirement)
+    - "CRYPTOCURRENCY" → Crypto
     - Other/Missing → None (requires manual categorization)
 
     Args:
@@ -370,7 +370,7 @@ def auto_categorize_investment_type(identifier: str) -> Optional[str]:
         type_mapping = {
             'EQUITY': 'Stock',
             'ETF': 'ETF',
-            'CRYPTOCURRENCY': 'Stock',
+            'CRYPTOCURRENCY': 'Crypto',
         }
 
         investment_type = type_mapping.get(quote_type)

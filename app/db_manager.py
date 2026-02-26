@@ -444,7 +444,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 22
+    LATEST_VERSION = 23
 
     try:
         # Get current schema version
@@ -624,7 +624,7 @@ def migrate_database():
                     custom_price_eur REAL,
                     is_custom_value BOOLEAN DEFAULT 0,
                     custom_value_date DATETIME,
-                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
                     override_identifier TEXT,
                     identifier_manually_edited BOOLEAN DEFAULT 0,
                     identifier_manual_edit_date DATETIME,
@@ -718,7 +718,7 @@ def migrate_database():
                     custom_price_eur REAL,
                     is_custom_value BOOLEAN DEFAULT 0,
                     custom_value_date DATETIME,
-                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF')),
+                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
                     override_identifier TEXT,
                     identifier_manually_edited BOOLEAN DEFAULT 0,
                     identifier_manual_edit_date DATETIME,
@@ -885,6 +885,73 @@ def migrate_database():
             cursor.execute("UPDATE schema_version SET version = 22, applied_at = CURRENT_TIMESTAMP")
             db.commit()
             logger.info("Migration 22 completed: added deploy columns to simulations")
+
+        # Migration 23: Add 'Crypto' to investment_type CHECK constraint
+        if current_version < 23:
+            logger.info("Applying migration 23: Adding 'Crypto' to investment_type CHECK constraint")
+            cursor.execute('PRAGMA foreign_keys = OFF')
+            cursor.execute('''
+                CREATE TABLE companies_new (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    identifier TEXT,
+                    sector TEXT NOT NULL,
+                    thesis TEXT DEFAULT '',
+                    portfolio_id INTEGER,
+                    account_id INTEGER NOT NULL,
+                    total_invested REAL DEFAULT 0,
+                    override_country TEXT,
+                    country_manually_edited BOOLEAN DEFAULT 0,
+                    country_manual_edit_date DATETIME,
+                    custom_total_value REAL,
+                    custom_price_eur REAL,
+                    is_custom_value BOOLEAN DEFAULT 0,
+                    custom_value_date DATETIME,
+                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
+                    override_identifier TEXT,
+                    identifier_manually_edited BOOLEAN DEFAULT 0,
+                    identifier_manual_edit_date DATETIME,
+                    source TEXT DEFAULT 'parqet' CHECK(source IN ('parqet', 'ibkr', 'manual')),
+                    first_bought_date DATETIME,
+                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
+                    FOREIGN KEY (account_id) REFERENCES accounts (id),
+                    UNIQUE (account_id, name)
+                )
+            ''')
+            cursor.execute('''
+                INSERT INTO companies_new
+                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
+                       total_invested, override_country, country_manually_edited,
+                       country_manual_edit_date, custom_total_value, custom_price_eur,
+                       is_custom_value, custom_value_date, investment_type,
+                       override_identifier, identifier_manually_edited,
+                       identifier_manual_edit_date, source, first_bought_date
+                FROM companies
+            ''')
+            cursor.execute('DROP TABLE companies')
+            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
+            # Auto-migrate existing crypto positions (common yfinance patterns like BTC-USD)
+            migrated = cursor.execute('''
+                UPDATE companies SET investment_type = 'Crypto'
+                WHERE investment_type = 'Stock'
+                AND (identifier LIKE '%-USD' OR identifier LIKE '%-EUR' OR identifier LIKE '%-GBP')
+            ''').rowcount
+            if migrated > 0:
+                logger.info(f"Migration 23: Auto-migrated {migrated} crypto positions from 'Stock' to 'Crypto'")
+            # Recreate indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
+            cursor.execute('PRAGMA foreign_keys = ON')
+            cursor.execute("UPDATE schema_version SET version = 23, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 23 completed: added 'Crypto' to investment_type CHECK constraint")
 
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 

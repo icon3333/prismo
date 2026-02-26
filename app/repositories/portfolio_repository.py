@@ -840,7 +840,8 @@ class PortfolioRepository:
         is_custom_value: bool,
         custom_total_value: Optional[float],
         custom_price_eur: Optional[float],
-        source: str = 'manual'
+        source: str = 'manual',
+        total_invested: float = 0
     ) -> int:
         """
         Create a manually-added company.
@@ -858,6 +859,7 @@ class PortfolioRepository:
             custom_total_value: Custom total value (if is_custom_value)
             custom_price_eur: Custom price per share (if is_custom_value)
             source: 'manual', 'parqet', or 'ibkr'
+            total_invested: Total amount invested (for P&L tracking)
 
         Returns:
             New company ID
@@ -873,13 +875,13 @@ class PortfolioRepository:
                 custom_value_date, source, total_invested
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,
-                      ?, 0)
+                      ?, ?)
         ''', [
             account_id, portfolio_id, name, identifier, sector,
             investment_type, country, 1 if country else 0,
             1 if is_custom_value else 0, custom_total_value, custom_price_eur,
             is_custom_value,  # for the CASE statement
-            source
+            source, total_invested
         ])
 
         company_id = cursor.lastrowid

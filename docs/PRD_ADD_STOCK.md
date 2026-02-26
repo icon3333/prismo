@@ -1,4 +1,4 @@
-# PRD: Manual Stock Addition on Enrich Page
+# PRD: Manual Position Addition on Enrich Page
 
 ## Executive Summary
 
@@ -38,20 +38,20 @@ Enable users to manually add securities on the Enrich page with two flows:
 > "As an investor who just bought AAPL shares, I want to add them immediately so I can see my updated allocation without waiting for my broker's next export."
 
 **Flow:**
-1. Click "Add Stock" button
+1. Click "Add Position" button
 2. Enter "AAPL" in identifier field
 3. System auto-validates, shows price preview
 4. Fill in shares, sector
-5. Submit → Stock appears in Enrich table with "Manual" badge
+5. Submit → Position appears in Enrich table with "Manual" badge
 
 ### US-2: Adding a Private Holding
 > "As an investor with pre-IPO equity, I want to add my private company shares to track total portfolio allocation."
 
 **Flow:**
-1. Click "Add Stock" button
+1. Click "Add Position" button
 2. Leave identifier blank
 3. Enter company name, shares, total value (EUR)
-4. Submit → Stock appears with custom value indicator + "Manual" badge
+4. Submit → Position appears with custom value indicator + "Manual" badge
 
 ### US-3: Deleting a Manual Stock
 > "As a user, I want to remove a manually-added stock that I no longer hold."
@@ -65,13 +65,13 @@ Enable users to manually add securities on the Enrich page with two flows:
 
 ## Functional Requirements
 
-### FR-1: Add Stock Button
+### FR-1: Add Position Button
 
 - **Location**: Top controls row, after "Download CSV" button
-- **Style**: Primary button with `fa-plus` icon, text "Add Stock"
+- **Style**: Primary button with `fa-plus` icon, text "Add Position"
 - **Action**: Opens modal dialog
 
-### FR-2: Add Stock Modal
+### FR-2: Add Position Modal
 
 **Form Fields:**
 
@@ -81,7 +81,7 @@ Enable users to manually add securities on the Enrich page with two flows:
 | Company Name | Text input | Yes | 1-200 characters |
 | Portfolio | Dropdown | No | Default: "Unassigned" or current filter |
 | Sector | Text input | Yes | 1-100 characters |
-| Investment Type | Dropdown | No | Stock / ETF / (blank) |
+| Investment Type | Dropdown | No | Stock / ETF / Crypto / (blank) |
 | Country | Dropdown | No | Auto-filled if identifier valid |
 | Shares | Number input | Yes | Must be >0, up to 6 decimals |
 | Total Value (EUR) | Currency input | Conditional | Required if identifier blank or lookup failed |
@@ -137,7 +137,7 @@ Enable users to manually add securities on the Enrich page with two flows:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Add Stock                                              [X] │
+│  Add Position                                           [X] │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  Identifier (optional)                                      │

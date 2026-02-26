@@ -733,7 +733,8 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
         account_id: Account ID for this import
         file_content: Raw CSV file content
         progress_callback: Optional callback(current, total, message, status)
-        mode: Import mode - 'add' (no deletions) or 'replace' (delete missing positions)
+        mode: Import mode - 'add' (no deletions), 'replace' (delete missing positions),
+              or 'replace_all' (full wipe - delete ALL positions before importing)
 
     Returns:
         Tuple[bool, str, dict]: (success, message, details)
@@ -820,6 +821,10 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
         if mode == 'add':
             companies_to_remove = set()
             logger.info("Add mode: skipping company removal")
+        elif mode == 'replace_all':
+            # Full wipe: mark ALL existing companies for removal
+            companies_to_remove = set(existing_company_map.keys())
+            logger.info(f"Replace All mode: marking all {len(companies_to_remove)} existing companies for removal")
         else:
             csv_company_names = set(df['holdingname'])
             db_company_names = {company['name'] for company in existing_company_map.values()}
@@ -842,7 +847,8 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
             companies_to_remove=companies_to_remove,
             cursor=cursor,
             progress_callback=progress_callback,
-            source=source
+            source=source,
+            force_remove_all=(mode == 'replace_all')
         )
 
         # Seed market prices from IBKR data for immediate display

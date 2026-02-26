@@ -114,6 +114,22 @@
           </div>
         </div>
 
+        <!-- Maximum % per Crypto -->
+        <div class="rule-item">
+          <div class="rule-description">
+            <div class="rule-title">Maximum % per Crypto</div>
+            <div class="rule-subtitle">Limits the maximum percentage allocation for any single crypto position</div>
+          </div>
+          <div class="rule-input">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="number" min="0" max="100" placeholder="Enter max %"
+                  v-model.number="rules.maxPerCrypto">
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Maximum % per Sector -->
         <div class="rule-item">
           <div class="rule-description">

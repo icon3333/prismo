@@ -1359,12 +1359,16 @@ document.addEventListener('DOMContentLoaded', function () {
                             } else if (position.investment_type === 'ETF') {
                                 typeIcon = '<i class="fas fa-layer-group me-1" style="color: #10b981;"></i>';
                                 typeDisplay = typeIcon + 'ETF';
+                            } else if (position.investment_type === 'Crypto') {
+                                typeIcon = '<i class="fab fa-bitcoin me-1" style="color: #f59e0b;"></i>';
+                                typeDisplay = typeIcon + 'Crypto';
                             }
 
                             // Check if position is capped and build target allocation display
                             let targetAllocationDisplay = this.formatPercentage(displayAllocation);
                             if (position.is_capped) {
-                                const rule = position.applicable_rule === 'maxPerStock' ? 'Stock' : 'ETF';
+                                const ruleMap = { maxPerStock: 'Stock', maxPerETF: 'ETF', maxPerCrypto: 'Crypto' };
+                                const rule = ruleMap[position.applicable_rule] || position.applicable_rule;
                                 const unconstrainedPct = (position.unconstrained_target_value / portfolioTargetValue) * 100;
                                 targetAllocationDisplay = `
                                     <span class="text-warning" title="Capped by max ${rule} rule. Unconstrained: ${this.formatPercentage(unconstrainedPct)}">

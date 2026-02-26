@@ -125,7 +125,7 @@ Database (SQLite with proper indexing)
 - `portfolios`: Portfolio definitions
 - `companies`: Holdings (securities/positions) with:
   - Custom value support (`custom_total_value`, `custom_price_eur`, `is_custom_value`, `custom_value_date`)
-  - Investment type classification (`investment_type`: Stock or ETF)
+  - Investment type classification (`investment_type`: Stock, ETF, or Crypto)
   - Country override capabilities (`override_country`, `country_manually_edited`)
   - Identifier protection (`override_identifier`, `identifier_manually_edited`, `identifier_manual_edit_date`)
   - Total invested tracking (for P&L calculations)
@@ -146,7 +146,7 @@ Database (SQLite with proper indexing)
   - `items` (JSON): Serialized allocation items
   - `created_at`, `updated_at` timestamps
 - Schema in `app/schema.sql` (automatically applied on startup)
-- **Database migrations** handle schema evolution (14 migrations currently implemented in `db_manager.py`):
+- **Database migrations** handle schema evolution (23 migrations currently implemented in `db_manager.py`):
   1. User-edited shares tracking columns
   2. Country override columns
   3. Custom value columns
@@ -161,6 +161,8 @@ Database (SQLite with proper indexing)
   12. Make identifier and portfolio_id nullable in companies table
   13. Rename page_name values (analyse→performance, build→builder)
   14. First bought date column for "Since Purchase" performance tracking
+  15-22. Various migrations (see db_manager.py for details)
+  23. Add 'Crypto' to investment_type CHECK constraint + auto-migrate crypto positions
 
 ## Caching Strategy
 
@@ -211,7 +213,7 @@ CSV processing is modular (`app/utils/csv_processing/`):
 **Recent Improvements**:
 - Timezone-aware date comparison for manual share edits
 - Proper handling of zero-share and negative-share positions (auto-removal)
-- Investment type (Stock/ETF) detection and tracking
+- Investment type (Stock/ETF/Crypto) detection and tracking
 - Protected identifier edits (manual changes preserved across CSV reimports)
 - Total invested tracking for P&L calculations
 
@@ -247,8 +249,8 @@ Use structured exceptions (`app/exceptions.py`):
 ## Recent Features & Improvements
 
 ### Major Features Added
-- **Manual Stock Addition** (In Progress - see `docs/PRD_ADD_STOCK.md`):
-  - Add stocks manually via Enrich page without CSV import
+- **Manual Position Addition** (see `docs/PRD_ADD_STOCK.md`):
+  - Add positions manually via Enrich page without CSV import
   - Two flows: with identifier (auto-fetch prices) or without (custom values)
   - `CompanyService` handles business logic with duplicate detection
   - Manual stocks protected from CSV import deletion
@@ -352,7 +354,7 @@ Pragmatic test coverage (50-60% on critical paths):
 5. **Database backups**: Auto-backup every 6 hours to `instance/backups/`
 6. **No authentication system**: Session-based account selection (no passwords)
 7. **Custom values**: Enrich page allows setting custom total values for positions not available via yfinance
-8. **Position types**: Holdings are classified as Stock or ETF for allocation constraint purposes
+8. **Position types**: Holdings are classified as Stock, ETF, or Crypto for allocation constraint purposes
 9. **P&L tracking**: Automatically calculated from `total_invested` and current value for each position
 10. **Protected edits**: Manual edits to identifiers, shares, and countries are preserved across CSV reimports
 11. **Editable positions**: Build page allows direct editing of desired position counts with min/max validation
@@ -361,7 +363,7 @@ Pragmatic test coverage (50-60% on critical paths):
 14. **Cash tracking**: Track available cash for investment alongside portfolio positions
 15. **Thesis tracking**: Document investment rationale per holding with bulk edit support
 16. **Investment targets**: Set budget goals and portfolio allocation targets via BuilderService
-17. **Manual stock addition**: Add stocks manually without CSV import (see `docs/PRD_ADD_STOCK.md`)
+17. **Manual position addition**: Add positions manually without CSV import (see `docs/PRD_ADD_STOCK.md`)
 18. **Source tracking**: Distinguishes CSV-imported vs manually-added stocks to prevent accidental deletion
 
 ## Common Tasks
@@ -392,7 +394,7 @@ Pragmatic test coverage (50-60% on critical paths):
 ```
 app/
 ├── main.py                  # Flask app factory
-├── db_manager.py           # Database connections and migrations (14 migrations)
+├── db_manager.py           # Database connections and migrations (23 migrations)
 ├── schema.sql              # Database schema (auto-applied)
 ├── cache.py                # Cache instance (prevents circular imports)
 ├── validation.py           # Input validation utilities

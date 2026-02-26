@@ -151,9 +151,6 @@
         </section>
     </div>
 
-    <!-- Include Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-
     <!-- Include chart components -->
     {% include "components/performance_components.html" %}
 
@@ -1505,10 +1502,16 @@
 
             function getChartCacheKey(identifiers) {
                 // Compute a consistent cache key that accounts for since_purchase mode
+                // Must match the key format used in loadPerformanceChart
                 let keyPart = currentChartPeriod;
                 if (currentChartPeriod === 'since_purchase') {
                     const info = getSincePurchaseDateInfo(identifiers);
-                    keyPart = info ? ('sd:' + info.earliestDate) : 'max';
+                    if (info) {
+                        const daysSince = (Date.now() - new Date(info.earliestDate).getTime()) / 86400000;
+                        keyPart = daysSince < 30 ? '5y' : ('sd:' + info.earliestDate);
+                    } else {
+                        keyPart = '5y'; // Match loadPerformanceChart fallback
+                    }
                 }
                 return identifiers.slice().sort().join(',') + '|' + keyPart;
             }
@@ -1576,8 +1579,9 @@
                     }
                 }
 
-                // Check frontend cache
-                const cacheKey = identifiers.slice().sort().join(',') + '|' + (startDate || effectivePeriod);
+                // Check frontend cache (use sd: prefix for since_purchase to match getChartCacheKey)
+                const cacheKeyPart = startDate ? ('sd:' + startDate) : effectivePeriod;
+                const cacheKey = identifiers.slice().sort().join(',') + '|' + cacheKeyPart;
                 if (historicalDataCache.has(cacheKey)) {
                     hideChartLoading();
                     renderPerformanceChart(historicalDataCache.get(cacheKey), names, groupName, values, sincePurchaseInfo);
@@ -1675,10 +1679,19 @@
                     }));
                 }
 
-                // Aggregate always present (solo in aggregate mode, reference line in detail)
-                const aggSeries = computeAggregate(allSeries, sincePurchaseInfo);
-                if (aggSeries) {
-                    displaySeries.push(aggSeries);
+                // Aggregate: solo line in aggregate mode, reference line in detail mode
+                // Skip when only 1 series (aggregate would be identical to the stock itself)
+                if (allSeries.length > 1) {
+                    const aggSeries = computeAggregate(allSeries, sincePurchaseInfo);
+                    if (aggSeries) {
+                        displaySeries.push(aggSeries);
+                    }
+                } else if (mode === 'aggregate') {
+                    // Single stock - just show it directly
+                    displaySeries.push({
+                        name: allSeries[0].name,
+                        data: allSeries[0].data
+                    });
                 }
 
                 // Colors
@@ -1763,7 +1776,15 @@
                             }
                         }
                     },
-                    legend: { show: false },
+                    legend: {
+                        show: mode === 'detail' && displaySeries.length > 1,
+                        position: 'top',
+                        horizontalAlign: 'left',
+                        labels: { colors: themeColors.textSecondary },
+                        fontSize: '11px',
+                        markers: { size: 4 },
+                        itemMargin: { horizontal: 8 }
+                    },
                     annotations: {
                         yaxis: [{
                             y: 100,

@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', function () {
       rules: {
         maxPerStock: 5,
         maxPerETF: 10,
+        maxPerCrypto: 5,
         maxPerCategory: 25,
         maxPerCountry: 10
       },

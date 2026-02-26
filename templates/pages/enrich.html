@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% from "components/enrich_components.html" import head_extras, upload_section, portfolio_management,
+{% from "components/enrich_components.html" import head_extras, data_management_section,
 portfolio_data_section %}
 
 {% block title %}Enrich Portfolio Data - Prismo{% endblock %}
@@ -14,12 +14,8 @@ portfolio_data_section %}
 <div class="enrich-page">
 <h1 class="page-title">Enrich</h1>
 
-<!-- Upload and Management Section -->
-<h2 class="section-title">Data Management</h2>
-<div class="columns">
-    {{ upload_section(url_for) }}
-    {{ portfolio_management(url_for, portfolios) }}
-</div>
+<!-- Data Management Section -->
+{{ data_management_section(url_for, portfolios) }}
 
 <!-- Portfolio Data Section -->
 <h2 class="section-title">Portfolio Data</h2>

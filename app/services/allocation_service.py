@@ -22,7 +22,8 @@ def _apply_type_constraints_recursive(
     max_etf_pct: float,
     portfolio_name: str,
     iteration: int = 0,
-    max_iterations: int = 100
+    max_iterations: int = 100,
+    max_crypto_pct: float = 5.0
 ) -> List[Dict]:
     """
     Apply type constraints with recursive redistribution.
@@ -41,6 +42,7 @@ def _apply_type_constraints_recursive(
         portfolio_name: Portfolio name (for logging)
         iteration: Current iteration count (for recursion tracking)
         max_iterations: Maximum recursion depth
+        max_crypto_pct: Max percentage for Crypto positions
 
     Returns:
         List of positions with capping metadata
@@ -104,6 +106,9 @@ def _apply_type_constraints_recursive(
         elif investment_type == 'ETF':
             cap_pct = max_etf_pct
             cap_rule = 'maxPerETF'
+        elif investment_type == 'Crypto':
+            cap_pct = max_crypto_pct
+            cap_rule = 'maxPerCrypto'
         else:
             # NULL or unknown type - skip this position
             logger.warning(f"Position {pos['name']} has unknown investment_type: {investment_type}")
@@ -163,7 +168,8 @@ def _apply_type_constraints_recursive(
             max_etf_pct=max_etf_pct,
             portfolio_name=portfolio_name,
             iteration=iteration + 1,
-            max_iterations=max_iterations
+            max_iterations=max_iterations,
+            max_crypto_pct=max_crypto_pct
         )
 
     # No positions capped this iteration - we've converged
@@ -455,6 +461,7 @@ class AllocationService:
         # Extract default weights from rules
         default_stock_weight = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
         default_etf_weight = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
+        default_crypto_weight = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
 
         # Build mapping of company names to investment types from portfolio_data
         company_investment_types = {}
@@ -473,8 +480,10 @@ class AllocationService:
                 return default_stock_weight
             elif investment_type == 'ETF':
                 return default_etf_weight
+            elif investment_type == 'Crypto':
+                return default_crypto_weight
             else:
-                # For other types (Crypto, etc.), return 0 (no default)
+                # For unknown types, return 0 (no default)
                 return 0.0
 
         # Create position target weights map
@@ -572,11 +581,13 @@ class AllocationService:
                             # Priority: placeholder weight > type-based default
                             if use_placeholder_weight and placeholder_weight_value:
                                 target_weight = float(placeholder_weight_value)
-                            elif row.get('investment_type') in ['Stock', 'ETF']:
+                            elif row.get('investment_type') in ['Stock', 'ETF', 'Crypto']:
                                 if row.get('investment_type') == 'Stock':
                                     target_weight = default_stock_weight
                                 elif row.get('investment_type') == 'ETF':
                                     target_weight = default_etf_weight
+                                elif row.get('investment_type') == 'Crypto':
+                                    target_weight = default_crypto_weight
 
                         position_data = {
                             'name': row['company_name'],
@@ -756,6 +767,7 @@ class AllocationService:
         # Parse rules - use consistent defaults matching get_portfolio_positions
         max_stock_pct = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
         max_etf_pct = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
+        max_crypto_pct = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
 
         # First calculate unconstrained targets (same as regular allocation)
         portfolios = AllocationService.calculate_allocation_targets(
@@ -807,7 +819,8 @@ class AllocationService:
                 portfolio_target_value=portfolio_target_value,
                 max_stock_pct=max_stock_pct,
                 max_etf_pct=max_etf_pct,
-                portfolio_name=portfolio['name']
+                portfolio_name=portfolio['name'],
+                max_crypto_pct=max_crypto_pct
             )
 
             # Update positions with capping metadata

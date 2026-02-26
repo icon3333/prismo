@@ -470,6 +470,15 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
     else:
         df['total_invested'] = 0.0
 
+    # Convert CostBasisMoney from position currency to base currency (EUR) using fxratetobase
+    if 'total_invested' in df.columns and 'fxratetobase' in df.columns:
+        df['fxratetobase'] = df['fxratetobase'].apply(lambda x: _convert_numeric(x, 'fxratetobase'))
+        mask = df['fxratetobase'].notna() & (df['fxratetobase'] > 0)
+        df.loc[mask, 'total_invested'] = (
+            df.loc[mask, 'total_invested'] * df.loc[mask, 'fxratetobase']
+        ).round(2)
+        logger.info("Converted CostBasisMoney to EUR using FXRateToBase")
+
     if 'price' in df.columns:
         df['price'] = df['price'].apply(lambda x: _convert_numeric(x, 'price'))
     elif 'positionvalue' in df.columns:
@@ -525,4 +534,6 @@ def _map_ibkr_asset_type(category) -> str:
         return 'ETF'
     elif cat in ('stk', 'stock', 'stocks'):
         return 'Stock'
+    elif cat in ('crypto', 'cryptocurrency'):
+        return 'Crypto'
     return None

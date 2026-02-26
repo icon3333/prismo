@@ -165,7 +165,7 @@ def _apply_company_update(cursor, company_id, data, account_id):
     if 'investment_type' in data:
         investment_type = data.get('investment_type')
         # Validate investment_type value - allow Stock, ETF, or NULL
-        if investment_type in ('Stock', 'ETF'):
+        if investment_type in ('Stock', 'ETF', 'Crypto'):
             set_clause_parts.append('investment_type = ?')
             params.append(investment_type)
         elif investment_type is None or investment_type == '':
@@ -1376,36 +1376,28 @@ def get_sector_capacity_data():
     logger.info(f"Getting sector capacity data for account_id: {account_id}")
 
     try:
-        # Get budget settings from expanded_state (from build page)
-        budget_data = query_db('''
-            SELECT variable_value
+        # Get budget and rules settings from expanded_state in single query
+        state_data = query_db('''
+            SELECT variable_name, variable_value
             FROM expanded_state
-            WHERE account_id = ? AND page_name = ? AND variable_name = ?
-        ''', [account_id, 'build', 'budgetData'], one=True)
-
-        rules_data = query_db('''
-            SELECT variable_value
-            FROM expanded_state
-            WHERE account_id = ? AND page_name = ? AND variable_name = ?
-        ''', [account_id, 'build', 'rules'], one=True)
+            WHERE account_id = ? AND page_name = ? AND variable_name IN (?, ?)
+        ''', [account_id, 'build', 'budgetData', 'rules'])
 
         # Parse budget and rules data
         total_investable_capital = 0
         max_per_sector = 25  # Default value
 
-        if budget_data and isinstance(budget_data, dict):
+        for row in state_data:
+            var_name = row.get('variable_name')
+            var_value = row.get('variable_value', '{}')
             try:
-                budget_json = json.loads(budget_data.get('variable_value', '{}'))
-                total_investable_capital = float(budget_json.get('totalInvestableCapital', 0))
+                parsed_json = json.loads(var_value)
+                if var_name == 'budgetData':
+                    total_investable_capital = float(parsed_json.get('totalInvestableCapital', 0))
+                elif var_name == 'rules':
+                    max_per_sector = float(parsed_json.get('maxPerSector', 25))
             except (json.JSONDecodeError, ValueError) as e:
-                logger.warning(f"Failed to parse budget data: {e}")
-
-        if rules_data and isinstance(rules_data, dict):
-            try:
-                rules_json = json.loads(rules_data.get('variable_value', '{}'))
-                max_per_sector = float(rules_json.get('maxPerSector', 25))
-            except (json.JSONDecodeError, ValueError) as e:
-                logger.warning(f"Failed to parse rules data: {e}")
+                logger.warning(f"Failed to parse {var_name} data: {e}")
 
         logger.info(f"Budget settings - Total Investable Capital: {total_investable_capital}, Max Per Sector: {max_per_sector}%")
 
@@ -2218,7 +2210,7 @@ def update_portfolio_api():
                 if 'investment_type' in item:
                     investment_type = item.get('investment_type')
                     # Validate investment_type value
-                    if investment_type and investment_type in ('Stock', 'ETF'):
+                    if investment_type and investment_type in ('Stock', 'ETF', 'Crypto'):
                         update_fields.append('investment_type = ?')
                         update_values.append(investment_type)
                     elif investment_type is None or investment_type == '':
@@ -2228,7 +2220,7 @@ def update_portfolio_api():
                         # Reject invalid investment_type values
                         logger.warning(f"Invalid investment_type value: {investment_type}")
                         return error_response(
-                            f"Invalid investment_type: '{investment_type}'. Must be 'Stock', 'ETF', or empty.",
+                            f"Invalid investment_type: '{investment_type}'. Must be 'Stock', 'ETF', 'Crypto', or empty.",
                             status=400
                         )
 
@@ -3326,10 +3318,13 @@ def simulator_search_investments():
     try:
         account_id = g.account_id
         query_str = request.args.get('q', '').strip()
-        limit = min(request.args.get('limit', 10, type=int), 20)
+        limit = max(1, min(request.args.get('limit', 10, type=int), 20))
 
         if len(query_str) < 2:
             return success_response({'results': []})
+
+        if len(query_str) > 200:
+            return error_response('Search query too long', 400)
 
         search_pattern = f'%{query_str}%'
 
@@ -3644,7 +3639,7 @@ def add_company():
         "identifier": "AAPL",  // Optional - leave blank for private holdings
         "portfolio_id": 1,     // Optional - null for unassigned
         "sector": "Technology",
-        "investment_type": "Stock",  // Optional: Stock, ETF, or null
+        "investment_type": "Stock",  // Optional: Stock, ETF, Crypto, or null
         "country": "US",       // Optional
         "shares": 10.5,
         "total_value": 1623.00  // Required if no identifier or price lookup fails

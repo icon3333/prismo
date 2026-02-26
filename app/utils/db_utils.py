@@ -163,28 +163,16 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         try:
             from app.utils.yfinance_utils import auto_categorize_investment_type
 
-            # Check if any companies with this identifier have NULL investment_type
-            cursor.execute('''
-                SELECT COUNT(*) as count
-                FROM companies
-                WHERE identifier = ? AND investment_type IS NULL
-            ''', [identifier])
-            row = cursor.fetchone()
-            uncategorized_count = row[0] if row else 0
-
-            if uncategorized_count > 0:
-                investment_type = auto_categorize_investment_type(identifier)
-
-                if investment_type:
-                    cursor.execute('''
-                        UPDATE companies
-                        SET investment_type = ?
-                        WHERE identifier = ? AND investment_type IS NULL
-                    ''', [investment_type, identifier])
+            investment_type = auto_categorize_investment_type(identifier)
+            if investment_type:
+                cursor.execute('''
+                    UPDATE companies
+                    SET investment_type = ?
+                    WHERE identifier = ? AND investment_type IS NULL
+                ''', [investment_type, identifier])
+                if cursor.rowcount > 0:
                     conn.commit()
-                    logger.info(f"✅ Auto-categorized {cursor.rowcount} companies with identifier {identifier} as {investment_type}")
-                else:
-                    logger.debug(f"Could not auto-categorize {identifier} - requires manual categorization")
+                    logger.info(f"Auto-categorized {cursor.rowcount} companies with identifier {identifier} as {investment_type}")
         except Exception as e:
             # Don't fail the entire price update if auto-categorization fails
             logger.warning(f"Auto-categorization failed for {identifier}: {e}")

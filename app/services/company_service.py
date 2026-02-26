@@ -51,9 +51,10 @@ class CompanyService:
         country = normalize_country(data.get('country'))
         shares = float(data.get('shares', 0))
         total_value = data.get('total_value')
+        total_invested = data.get('total_invested')
 
         # Validate investment_type if provided
-        if investment_type and investment_type not in ('Stock', 'ETF'):
+        if investment_type and investment_type not in ('Stock', 'ETF', 'Crypto'):
             investment_type = None
 
         # 2. Check for duplicates (block completely per PRD)
@@ -91,6 +92,10 @@ class CompanyService:
                 }
             custom_total_value = float(total_value)
             custom_price_eur = custom_total_value / shares if shares > 0 else 0
+        else:
+            # Auto-populate total_invested for identifier-based stocks if not provided
+            if total_invested is None and price_data and price_data.get('price_eur'):
+                total_invested = price_data['price_eur'] * shares
 
         # Use country from price data if not provided and available
         if not country and price_data:
@@ -110,7 +115,8 @@ class CompanyService:
                 is_custom_value=is_custom,
                 custom_total_value=custom_total_value,
                 custom_price_eur=custom_price_eur,
-                source='manual'
+                source='manual',
+                total_invested=float(total_invested) if total_invested else 0
             )
         except Exception as e:
             logger.error(f"Failed to create company: {e}")
@@ -181,16 +187,17 @@ class CompanyService:
     @staticmethod
     def _fetch_identifier_price(identifier: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch price data from yfinance for an identifier.
+        Fetch price data and metadata from yfinance for an identifier.
 
         Args:
             identifier: Ticker symbol or ISIN
 
         Returns:
-            dict with price, currency, price_eur, country or None if not found
+            dict with price, currency, price_eur, country, name, sector,
+            investment_type, resolved_identifier or None if not found
         """
         try:
-            from app.utils.yfinance_utils import get_isin_data
+            from app.utils.yfinance_utils import get_isin_data, get_yfinance_info, auto_categorize_investment_type
             from app.utils.identifier_normalization import normalize_identifier
 
             # Normalize the identifier
@@ -198,18 +205,34 @@ class CompanyService:
             if not normalized:
                 normalized = identifier
 
-            # Fetch data from yfinance
+            # Fetch price data from yfinance
             result = get_isin_data(normalized)
 
-            if result and result.get('price_eur'):
-                return {
-                    'price': result.get('price'),
-                    'currency': result.get('currency', 'EUR'),
-                    'price_eur': result.get('price_eur'),
-                    'country': result.get('country')
-                }
+            if not result or not result.get('success'):
+                return None
 
-            return None
+            data = result.get('data', {})
+            if not data.get('priceEUR'):
+                return None
+
+            effective_id = result.get('modified_identifier', normalized)
+
+            # Fetch additional metadata (name, sector, quoteType)
+            info = get_yfinance_info(effective_id)
+            name = info.get('shortName') or info.get('longName')
+            sector = info.get('sector')
+            investment_type = auto_categorize_investment_type(effective_id)
+
+            return {
+                'price': data.get('currentPrice'),
+                'currency': data.get('currency', 'EUR'),
+                'price_eur': data.get('priceEUR'),
+                'country': data.get('country'),
+                'name': name,
+                'sector': sector,
+                'investment_type': investment_type,
+                'resolved_identifier': effective_id,
+            }
 
         except Exception as e:
             logger.warning(f"Failed to fetch price for {identifier}: {e}")
@@ -241,7 +264,7 @@ class CompanyService:
         else:
             return {
                 'success': False,
-                'error': 'Identifier not found in yfinance'
+                'error': 'Could not find data for this identifier. Try using a ticker symbol (e.g., GME) or ISIN (e.g., US36467W1099).'
             }
 
     @staticmethod

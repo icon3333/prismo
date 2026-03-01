@@ -2346,9 +2346,31 @@ def update_portfolio_api():
 
 @require_auth
 def manage_portfolios():
-    """Add, rename, or delete portfolios"""
+    """Add, rename, or delete portfolios. Returns JSON for AJAX requests, redirect otherwise."""
     account_id = g.account_id
     action = request.form.get('action')
+    is_ajax = request.accept_mimetypes.best == 'application/json'
+
+    def _get_portfolio_names():
+        """Get current portfolio names for the account."""
+        rows = query_db(
+            'SELECT name FROM portfolios WHERE account_id = ? ORDER BY name',
+            [account_id]
+        )
+        return [r['name'] if isinstance(r, dict) else r[0] for r in rows] if rows else []
+
+    def _error(msg):
+        if is_ajax:
+            return jsonify({'success': False, 'message': msg}), 400
+        flash(msg, 'error')
+        return redirect(url_for('portfolio.enrich'))
+
+    def _success(msg):
+        if is_ajax:
+            invalidate_portfolio_cache(account_id)
+            return jsonify({'success': True, 'message': msg, 'portfolios': _get_portfolio_names()})
+        flash(msg, 'success')
+        return None  # Continue to end of function
 
     try:
         # Create backup
@@ -2357,66 +2379,53 @@ def manage_portfolios():
         if action == 'add':
             portfolio_name = normalize_portfolio(request.form.get('add_portfolio_name', ''))
             if not portfolio_name:
-                flash('Portfolio name cannot be empty', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error('Portfolio name cannot be empty')
 
-            # Check if portfolio already exists
             existing = query_db(
                 'SELECT 1 FROM portfolios WHERE name = ? AND account_id = ?',
                 [portfolio_name, account_id],
                 one=True
             )
-
             if existing:
-                flash(f'Portfolio "{portfolio_name}" already exists', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error(f'Portfolio "{portfolio_name}" already exists')
 
-            # Add new portfolio
             execute_db(
                 'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
                 [portfolio_name, account_id]
             )
-
-            flash(
-                f'Portfolio "{portfolio_name}" added successfully', 'success')
+            result = _success(f'Portfolio "{portfolio_name}" added successfully')
+            if result:
+                return result
 
         elif action == 'rename':
             old_name = normalize_portfolio(request.form.get('old_name', ''))
             new_name = normalize_portfolio(request.form.get('new_name', ''))
 
             if not old_name or not new_name:
-                flash('Both old and new portfolio names are required', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error('Both old and new portfolio names are required')
 
-            # Check if new name already exists
             existing = query_db(
                 'SELECT 1 FROM portfolios WHERE name = ? AND account_id = ?',
                 [new_name, account_id],
                 one=True
             )
-
             if existing:
-                flash(f'Portfolio "{new_name}" already exists', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error(f'Portfolio "{new_name}" already exists')
 
-            # Rename portfolio
             execute_db(
                 'UPDATE portfolios SET name = ? WHERE name = ? AND account_id = ?',
                 [new_name, old_name, account_id]
             )
-
-            flash(
-                f'Portfolio renamed from "{old_name}" to "{new_name}"', 'success')
+            result = _success(f'Portfolio renamed from "{old_name}" to "{new_name}"')
+            if result:
+                return result
 
         elif action == 'delete':
-            portfolio_name = request.form.get(
-                'delete_portfolio_name', '').strip()
+            portfolio_name = request.form.get('delete_portfolio_name', '').strip()
 
             if not portfolio_name:
-                flash('Portfolio name is required', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error('Portfolio name is required')
 
-            # Check if portfolio is empty
             companies = query_db('''
                 SELECT COUNT(*) as count FROM companies c
                 JOIN portfolios p ON c.portfolio_id = p.id
@@ -2424,23 +2433,24 @@ def manage_portfolios():
             ''', [portfolio_name, account_id], one=True)
 
             if companies and isinstance(companies, dict) and companies.get('count', 0) > 0:
-                flash(
-                    f'Cannot delete portfolio "{portfolio_name}" because it contains companies', 'error')
-                return redirect(url_for('portfolio.enrich'))
+                return _error(f'Cannot delete portfolio "{portfolio_name}" because it contains companies')
 
-            # Delete portfolio
             execute_db(
                 'DELETE FROM portfolios WHERE name = ? AND account_id = ?',
                 [portfolio_name, account_id]
             )
-
-            flash(
-                f'Portfolio "{portfolio_name}" deleted successfully', 'success')
+            result = _success(f'Portfolio "{portfolio_name}" deleted successfully')
+            if result:
+                return result
 
     except (DataIntegrityError, ValidationError) as e:
+        if is_ajax:
+            return jsonify({'success': False, 'message': str(e)}), 400
         flash(f'Error managing portfolios: {str(e)}', 'error')
     except Exception as e:
-        logger.exception(f"Unexpected error managing portfolios")
+        logger.exception("Unexpected error managing portfolios")
+        if is_ajax:
+            return jsonify({'success': False, 'message': 'An unexpected error occurred'}), 500
         flash('An unexpected error occurred while managing portfolios', 'error')
 
     # Invalidate cache after portfolio modifications

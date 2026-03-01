@@ -619,27 +619,19 @@ const UpdateSelectedHandler = {
 
 const FileUploadHandler = {
     init() {
-        const syncBtn = document.getElementById('import-sync-btn');
         const fileInput = document.getElementById('csv_file');
         const uploadCard = document.getElementById('upload-card');
 
         debugLog('FileUploadHandler: Debugging elements found:');
-        debugLog('  syncBtn:', syncBtn);
         debugLog('  fileInput:', fileInput);
         debugLog('  uploadCard:', uploadCard);
 
-        if (!syncBtn || !fileInput) {
+        if (!fileInput) {
             console.error('Required file upload elements not found');
             return;
         }
 
         debugLog('FileUploadHandler: Initializing CSV upload handler');
-
-        // Sync button click - opens file dialog
-        syncBtn.addEventListener('click', () => {
-            fileInput.value = '';
-            fileInput.click();
-        });
 
         // File selection handler - always show sync confirmation
         fileInput.addEventListener('change', function () {
@@ -756,13 +748,6 @@ const FileUploadHandler = {
             });
         }
 
-        // Add Position button bridge (outside Vue mount point)
-        const addPositionTopBtn = document.getElementById('add-position-top-btn');
-        if (addPositionTopBtn) {
-            addPositionTopBtn.addEventListener('click', () => {
-                document.dispatchEvent(new CustomEvent('open-add-position-modal'));
-            });
-        }
     },
 
     showSyncConfirmation(file) {
@@ -1061,71 +1046,7 @@ const FileUploadHandler = {
     }
 };
 
-const PortfolioManager = {
-    init() {
-        const actionSelect = document.getElementById('portfolio-action');
-        const actionButton = document.getElementById('portfolio-action-btn');
-        const addFields = document.getElementById('add-portfolio-fields');
-        const renameFields = document.getElementById('rename-portfolio-fields');
-        const deleteFields = document.getElementById('delete-portfolio-fields');
-        const portfolioForm = document.getElementById('manage-portfolios-form');
-
-        if (!actionSelect || !actionButton) {
-            console.error('Required portfolio management elements not found');
-            return;
-        }
-
-        // Action selection handler
-        actionSelect.addEventListener('change', function () {
-            const action = this.value;
-
-            // Hide all fields first
-            addFields.style.display = 'none';
-            renameFields.style.display = 'none';
-            deleteFields.style.display = 'none';
-
-            // Enable/disable action button
-            actionButton.disabled = !action;
-
-            // Show relevant fields based on action (inline flex for horizontal layout)
-            if (action === 'add') {
-                addFields.style.display = 'flex';
-            } else if (action === 'rename') {
-                renameFields.style.display = 'flex';
-            } else if (action === 'delete') {
-                deleteFields.style.display = 'flex';
-            }
-        });
-
-        // Form validation before submit
-        if (portfolioForm) {
-            portfolioForm.addEventListener('submit', function (e) {
-                const action = actionSelect.value;
-
-                if (action === 'add') {
-                    const addNameField = document.querySelector('input[name="add_portfolio_name"]');
-                    if (!addNameField.value.trim()) {
-                        e.preventDefault();
-                        alert('Portfolio name cannot be empty');
-                    }
-                } else if (action === 'rename') {
-                    const oldName = document.querySelector('select[name="old_name"]').value;
-                    const newName = document.querySelector('input[name="new_name"]').value.trim();
-                    if (!oldName || !newName) {
-                        e.preventDefault();
-                        alert('Both old and new portfolio names are required');
-                    }
-                } else if (action === 'delete') {
-                    const deleteNameField = document.querySelector('select[name="delete_portfolio_name"]');
-                    if (!deleteNameField.value) {
-                        e.preventDefault();
-                        alert('Please select a portfolio to delete');
-                    }
-                }
-            });
-        }
-    }
-};
+// PortfolioManager removed — portfolio CRUD is now handled by Vue methods in the portfolio table app
 
 const LayoutManager = {
     adjustCardHeights() {
@@ -1233,7 +1154,16 @@ class PortfolioTableApp {
                         priceData: null
                     },
                     // Delete stocks
-                    isDeletingStocks: false
+                    isDeletingStocks: false,
+                    // Portfolio management (footer)
+                    portfolioAction: '',
+                    portfolioActionName: '',
+                    portfolioOldName: '',
+                    portfolioNewName: '',
+                    portfolioDeleteName: '',
+                    portfolioActionMessage: '',
+                    portfolioActionSuccess: false,
+                    isApplyingPortfolioAction: false
                 };
             },
             computed: {
@@ -1247,6 +1177,13 @@ class PortfolioTableApp {
                 // Total portfolio value including cash
                 portfolioTotal() {
                     return (this.metrics.totalValue || 0) + (this.cashBalance || 0);
+                },
+                canApplyPortfolioAction() {
+                    if (!this.portfolioAction) return false;
+                    if (this.portfolioAction === 'add') return !!this.portfolioActionName.trim();
+                    if (this.portfolioAction === 'rename') return !!this.portfolioOldName && !!this.portfolioNewName.trim();
+                    if (this.portfolioAction === 'delete') return !!this.portfolioDeleteName;
+                    return false;
                 },
                 filteredPortfolioItems() {
                     debugLog(`Computing filtered items with portfolio=${this.selectedPortfolio}, companySearch=${this.companySearchQuery}`);
@@ -1439,6 +1376,80 @@ class PortfolioTableApp {
                 }
             },
             methods: {
+                // Trigger CSV file selection dialog
+                triggerSync() {
+                    const fileInput = document.getElementById('csv_file');
+                    if (fileInput) {
+                        fileInput.value = '';
+                        fileInput.click();
+                    }
+                },
+
+                // AJAX portfolio management
+                async applyPortfolioAction() {
+                    if (!this.canApplyPortfolioAction || this.isApplyingPortfolioAction) return;
+
+                    this.isApplyingPortfolioAction = true;
+                    this.portfolioActionMessage = '';
+
+                    const formData = new FormData();
+                    formData.append('action', this.portfolioAction);
+
+                    if (this.portfolioAction === 'add') {
+                        formData.append('add_portfolio_name', this.portfolioActionName.trim());
+                    } else if (this.portfolioAction === 'rename') {
+                        formData.append('old_name', this.portfolioOldName);
+                        formData.append('new_name', this.portfolioNewName.trim());
+                    } else if (this.portfolioAction === 'delete') {
+                        formData.append('delete_portfolio_name', this.portfolioDeleteName);
+                    }
+
+                    try {
+                        const response = await fetch('/portfolio/manage_portfolios', {
+                            method: 'POST',
+                            body: formData,
+                            credentials: 'include',
+                            headers: { 'Accept': 'application/json' }
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.portfolioActionSuccess = true;
+                            this.portfolioActionMessage = result.message;
+
+                            // Refresh portfolio list
+                            if (result.portfolios) {
+                                this.portfolioOptions = result.portfolios;
+                            }
+
+                            // Reset fields
+                            this.portfolioAction = '';
+                            this.portfolioActionName = '';
+                            this.portfolioOldName = '';
+                            this.portfolioNewName = '';
+                            this.portfolioDeleteName = '';
+
+                            // Refresh table data to reflect portfolio changes
+                            this.loadData();
+                        } else {
+                            this.portfolioActionSuccess = false;
+                            this.portfolioActionMessage = result.message || 'Action failed';
+                        }
+                    } catch (error) {
+                        console.error('Portfolio action error:', error);
+                        this.portfolioActionSuccess = false;
+                        this.portfolioActionMessage = 'An error occurred';
+                    } finally {
+                        this.isApplyingPortfolioAction = false;
+
+                        // Clear message after delay
+                        setTimeout(() => {
+                            this.portfolioActionMessage = '';
+                        }, 4000);
+                    }
+                },
+
                 // Sync UI controls with Vue model for two-way binding
                 syncUIWithVueModel() {
                     // Use a more robust approach with a setTimeout to ensure DOM is fully loaded
@@ -3394,11 +3405,6 @@ class PortfolioTableApp {
                 // Link DOM elements to Vue model for two-way binding (moved from duplicate mounted)
                 this.syncUIWithVueModel();
 
-                // Listen for Add Position event from outside Vue (the top-level button)
-                document.addEventListener('open-add-position-modal', () => {
-                    this.openAddPositionModal();
-                });
-
                 debugLog('Vue component mounted. Methods available:', Object.keys(this.$options.methods).join(', '));
                 debugLog('Initial portfolio options:', this.portfolioOptions);
 
@@ -3584,7 +3590,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize components that are outside of the Vue controlled area first
     FileUploadHandler.init();
-    PortfolioManager.init();
     LayoutManager.init();
     ModalPortfolioManager.init();
 

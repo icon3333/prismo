@@ -7,123 +7,6 @@
 <h1 class="page-title">Enrich Portfolio Data</h1>
 {% endmacro %}
 
-{% macro data_management_section(url_for, portfolios) %}
-<div class="data-management-bar">
-    <!-- Left: Action buttons -->
-    <div class="dm-actions">
-        <span class="dm-section-label">Data</span>
-        <button id="import-sync-btn" class="button is-info dm-action-btn">
-            <span class="icon"><i class="fas fa-sync-alt"></i></span>
-            <span>Sync (CSV)</span>
-        </button>
-        <button id="add-position-top-btn" class="button is-info dm-action-btn">
-            <span class="icon"><i class="fas fa-plus"></i></span>
-            <span>Add Position</span>
-        </button>
-    </div>
-
-    <!-- Right: Portfolio management inline -->
-    <form action="{{ url_for('portfolio.manage_portfolios') }}" method="post" id="manage-portfolios-form" class="dm-portfolio-mgmt">
-        <span class="dm-section-label">Portfolios</span>
-        <div class="select dm-select">
-            <select name="action" id="portfolio-action">
-                <option value="">Portfolio action...</option>
-                <option value="add">Add Portfolio</option>
-                <option value="rename">Rename Portfolio</option>
-                <option value="delete">Delete Portfolio</option>
-            </select>
-        </div>
-
-        <!-- Add Portfolio field -->
-        <div id="add-portfolio-fields" class="dm-dynamic-field" style="display: none;">
-            <input class="input dm-input" type="text" name="add_portfolio_name" placeholder="Portfolio name">
-        </div>
-
-        <!-- Rename Portfolio fields -->
-        <div id="rename-portfolio-fields" class="dm-dynamic-field" style="display: none;">
-            <div class="select dm-select">
-                <select name="old_name">
-                    <option value="">Select portfolio</option>
-                    {% for portfolio in portfolios %}
-                    <option value="{{ portfolio }}">{{ portfolio }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <input class="input dm-input" type="text" name="new_name" placeholder="New name">
-        </div>
-
-        <!-- Delete Portfolio fields -->
-        <div id="delete-portfolio-fields" class="dm-dynamic-field" style="display: none;">
-            <div class="select dm-select">
-                <select name="delete_portfolio_name">
-                    <option value="">Select portfolio</option>
-                    {% for portfolio in portfolios %}
-                    <option value="{{ portfolio }}">{{ portfolio }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <span class="dm-warning-text">Must be empty</span>
-        </div>
-
-        <button type="submit" class="button is-info dm-action-btn" id="portfolio-action-btn" disabled>
-            <span class="icon"><i class="fas fa-check"></i></span>
-            <span>Apply</span>
-        </button>
-    </form>
-</div>
-
-<!-- Hidden file input (triggered by buttons) -->
-<input type="file" id="csv_file" accept=".csv" style="display: none;">
-
-<!-- Upload progress indicator -->
-<div id="csv-upload-indicator" style="display: none;" class="has-text-centered mt-4">
-    <div class="loading-container">
-        <div class="is-flex is-justify-content-space-between is-align-items-center mb-3">
-            <span class="is-size-6 has-text-weight-medium">Upload Progress</span>
-            <span id="upload-percentage" class="is-size-6 has-text-weight-semibold has-text-primary">0%</span>
-        </div>
-        <progress id="upload-progress-bar" class="progress is-primary is-medium mb-3" value="0" max="100">0%</progress>
-        <div class="is-flex is-justify-content-center is-align-items-center" style="gap: var(--space-sm);">
-            <p id="upload-status-message" class="is-size-7 has-text-grey mb-0">Processing file, please wait...</p>
-            <button id="cancel-upload-btn"
-                class="button is-small is-danger is-outlined"
-                title="Cancel upload">
-                <span class="icon is-small"><i class="fas fa-times"></i></span>
-                <span>Cancel</span>
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Sync Confirmation Modal -->
-<div class="modal" id="sync-confirm-modal">
-    <div class="modal-background"></div>
-    <div class="modal-card">
-        <header class="modal-card-head">
-            <p class="modal-card-title">
-                <span class="icon"><i class="fas fa-sync-alt"></i></span>
-                Sync Portfolio Data
-            </p>
-            <button class="delete" aria-label="close" id="sync-modal-close"></button>
-        </header>
-        <section class="modal-card-body">
-            <div class="notification is-info is-light">
-                <p>New positions will be added, existing ones updated, and sold positions removed.</p>
-                <p class="mt-2"><strong>Manual positions are never affected.</strong></p>
-            </div>
-            <p class="mt-3">File: <strong id="sync-file-name"></strong></p>
-        </section>
-        <footer class="modal-card-foot is-justify-content-flex-end">
-            <button class="button" id="sync-cancel-btn">Cancel</button>
-            <button class="button is-info" id="sync-confirm-btn">
-                <span class="icon"><i class="fas fa-sync-alt"></i></span>
-                <span>Sync Now</span>
-            </button>
-        </footer>
-    </div>
-</div>
-{% endmacro %}
-
 {% macro portfolio_data_section(portfolios, countries) %}
 <div class="mb-5">
     <div id="portfolio-editor" class="portfolio-editor">
@@ -200,7 +83,28 @@
                 <div class="enrich-main-controls">
                     <!-- Left side controls with unified styling -->
                     <div class="enrich-controls-left">
-                        <!-- Group 1: Portfolio Filter and Company Search (Close spacing) -->
+                        <!-- Row 1: Import actions -->
+                        <div class="enrich-control-group-labeled">
+                            <span class="control-group-label">Import</span>
+                            <div class="enrich-control-group-close">
+                                <button class="button is-info" @click="triggerSync">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </span>
+                                    <span>Sync (CSV)</span>
+                                </button>
+                                <button class="button is-info" @click="showAddPositionModal = true">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-plus"></i>
+                                    </span>
+                                    <span>Add Position</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Filter + Data -->
+                        <div class="enrich-control-group-labeled">
+                            <span class="control-group-label">Filter</span>
                         <div class="enrich-control-group-close">
                             <!-- Portfolio Filter -->
                             <div class="control">
@@ -230,29 +134,32 @@
                                 </div>
                             </div>
                         </div>
+                        </div>
 
-                        <!-- Group 2: All Action Buttons (Close spacing within group) -->
-                        <div class="enrich-control-group-close">
-                            <button class="button is-primary" id="update-all-data-btn" @click="updateAllData">
-                                <span class="icon is-small">
-                                    <i class="fas fa-sync-alt"></i>
-                                </span>
-                                <span>Update all data</span>
-                            </button>
-                            <button class="button is-warning" @click="updateSelected"
-                                :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
-                                :class="{'is-loading': isUpdatingSelected}">
-                                <span class="icon is-small">
-                                    <i class="fas fa-sync"></i>
-                                </span>
-                                <span>Update Selected ({% raw %}{{ selectedItemIds.length }}{% endraw %})</span>
-                            </button>
-                            <button class="button is-info" @click="downloadCSV">
-                                <span class="icon is-small">
-                                    <i class="fas fa-download"></i>
-                                </span>
-                                <span>Download as CSV</span>
-                            </button>
+                        <div class="enrich-control-group-labeled">
+                            <span class="control-group-label">Data</span>
+                            <div class="enrich-control-group-close">
+                                <button class="button is-primary" id="update-all-data-btn" @click="updateAllData">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </span>
+                                    <span>Update all data</span>
+                                </button>
+                                <button class="button is-warning" @click="updateSelected"
+                                    :disabled="selectedItemIds.length === 0 || isUpdatingSelected"
+                                    :class="{'is-loading': isUpdatingSelected}">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-sync"></i>
+                                    </span>
+                                    <span>Update Selected ({% raw %}{{ selectedItemIds.length }}{% endraw %})</span>
+                                </button>
+                                <button class="button is-info" @click="downloadCSV">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-download"></i>
+                                    </span>
+                                    <span>Download as CSV</span>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Hidden controls for Vue binding -->
@@ -274,7 +181,17 @@
             </div>
 
             <div v-else-if="filteredPortfolioItems.length === 0" class="notification is-warning">
-                <p>No portfolio data available. Please upload a CSV file to get started.</p>
+                <p>No portfolio data available. Import a CSV or add positions manually to get started.</p>
+                <div class="buttons mt-3">
+                    <button class="button is-info" @click="triggerSync">
+                        <span class="icon is-small"><i class="fas fa-sync-alt"></i></span>
+                        <span>Sync (CSV)</span>
+                    </button>
+                    <button class="button is-info" @click="showAddPositionModal = true">
+                        <span class="icon is-small"><i class="fas fa-plus"></i></span>
+                        <span>Add Position</span>
+                    </button>
+                </div>
             </div>
 
             <!-- Bulk Edit Controls -->
@@ -665,6 +582,56 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Portfolio Management Footer -->
+            <div class="portfolio-mgmt-footer" v-if="!loading">
+                <div class="portfolio-mgmt-row">
+                    <div class="select is-small">
+                        <select v-model="portfolioAction">
+                            <option value="">Portfolio action...</option>
+                            <option value="add">Add Portfolio</option>
+                            <option value="rename">Rename Portfolio</option>
+                            <option value="delete">Delete Portfolio</option>
+                        </select>
+                    </div>
+
+                    <template v-if="portfolioAction === 'add'">
+                        <input class="input is-small" type="text" v-model="portfolioActionName"
+                               placeholder="Portfolio name" @keydown.enter="applyPortfolioAction">
+                    </template>
+                    <template v-if="portfolioAction === 'rename'">
+                        <div class="select is-small">
+                            <select v-model="portfolioOldName">
+                                <option value="">Select portfolio</option>
+                                <option v-for="p in portfolioOptions" :key="p" :value="p" v-text="p"></option>
+                            </select>
+                        </div>
+                        <input class="input is-small" type="text" v-model="portfolioNewName"
+                               placeholder="New name" @keydown.enter="applyPortfolioAction">
+                    </template>
+                    <template v-if="portfolioAction === 'delete'">
+                        <div class="select is-small">
+                            <select v-model="portfolioDeleteName">
+                                <option value="">Select portfolio</option>
+                                <option v-for="p in portfolioOptions" :key="p" :value="p" v-text="p"></option>
+                            </select>
+                        </div>
+                        <span class="portfolio-mgmt-warning">Must be empty</span>
+                    </template>
+
+                    <button class="button is-small is-info" @click="applyPortfolioAction"
+                            :disabled="!canApplyPortfolioAction || isApplyingPortfolioAction"
+                            :class="{'is-loading': isApplyingPortfolioAction}"
+                            v-if="portfolioAction">
+                        <span class="icon is-small"><i class="fas fa-check"></i></span>
+                        <span>Apply</span>
+                    </button>
+
+                    <span v-if="portfolioActionMessage" class="is-size-7"
+                          :class="portfolioActionSuccess ? 'has-text-success' : 'has-text-danger'"
+                          v-text="portfolioActionMessage"></span>
                 </div>
             </div>
 

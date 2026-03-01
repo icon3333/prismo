@@ -48,13 +48,7 @@
   padding: var(--space-sm);
 }
 
-/* Portfolio management form compact sizing */
-#manage-portfolios-form .select select,
-#manage-portfolios-form .input,
-#manage-portfolios-form .button {
-  height: 2.25em;
-  font-size: 0.875rem;
-}
+/* (Portfolio management form now uses Vue footer styling) */
 
 /* ===== Form Elements ===== */
 
@@ -168,15 +162,44 @@
 
 .enrich-controls-left {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
-  gap: var(--space-lg);
+  gap: var(--space-md);
+}
+
+/* Import group spans full width → forces Filter+Data to wrap to row 2 */
+.enrich-controls-left > .enrich-control-group-labeled:first-child {
+  width: 100%;
 }
 
 .enrich-control-group-close {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+/* Labeled control group with small title above */
+.enrich-control-group-labeled {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control-group-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+/* Vertical separator between control groups */
+.controls-separator {
+  width: 1px;
+  align-self: stretch;
+  background-color: var(--border-subtle);
+  margin: 0 var(--space-xs);
 }
 
 /* Consistent font for control elements */
@@ -1004,101 +1027,39 @@ button.cash-builder-hint.cash-builder-hint--active:hover {
   padding-right: 24px;
 }
 
-/* ===== Data Management Bar ===== */
+/* ===== Portfolio Management Footer ===== */
 
-.data-management-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+.portfolio-mgmt-footer {
   padding: var(--space-sm) var(--space-md);
-  margin-bottom: var(--space-lg);
+  border-top: 1px solid var(--border-subtle);
+  background-color: var(--bg-secondary);
 }
 
-.dm-actions {
+.portfolio-mgmt-row {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
-.dm-action-btn,
-.dm-action-btn.button {
-  height: 2.25em;
-  font-size: 0.875rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-md);
-  white-space: nowrap;
+.portfolio-mgmt-footer .select select,
+.portfolio-mgmt-footer .input,
+.portfolio-mgmt-footer .button {
+  font-size: 0.8rem;
 }
 
-.dm-portfolio-mgmt {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex: 1;
-  min-width: 0;
-  margin-left: var(--space-sm);
-  padding-left: var(--space-md);
-  border-left: 1px solid var(--border-subtle);
-}
-
-.dm-portfolio-mgmt .dm-select select,
-.dm-portfolio-mgmt .dm-input {
-  height: 2.25em;
-  font-size: 0.875rem;
-  border-radius: var(--radius-sm);
-}
-
-.dm-portfolio-mgmt .dm-select {
-  flex-shrink: 0;
-}
-
-.dm-section-label {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.dm-dynamic-field {
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.dm-dynamic-field .dm-input {
+.portfolio-mgmt-footer .input {
   width: 160px;
 }
 
-.dm-dynamic-field .dm-select select {
+.portfolio-mgmt-footer .select select {
   min-width: 140px;
 }
 
-.dm-warning-text {
+.portfolio-mgmt-warning {
   font-size: 0.75rem;
   color: var(--warning);
   white-space: nowrap;
-}
-
-@media screen and (max-width: 768px) {
-  .data-management-bar {
-    flex-wrap: wrap;
-  }
-
-  .dm-portfolio-mgmt {
-    margin-left: 0;
-    padding-left: 0;
-    border-left: none;
-    padding-top: var(--space-sm);
-    border-top: 1px solid var(--border-subtle);
-    width: 100%;
-    flex-wrap: wrap;
-  }
 }
 
 

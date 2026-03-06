@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Cache timeout constants (in seconds)
 CACHE_TIMEOUT_EXCHANGE_RATES = 3600  # 1 hour - exchange rates change infrequently
 CACHE_TIMEOUT_STOCK_PRICES = 900      # 15 minutes - balance between freshness and API usage
+CACHE_TIMEOUT_FAILED_LOOKUP = 300     # 5 minutes - prevent retry storms for invalid tickers
 
 # --- Helper Functions ---
 
@@ -161,6 +162,13 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         logger.debug(f"Cache HIT for {identifier}")
         return cached
 
+    # Check negative cache (short TTL to prevent retry storms for invalid tickers)
+    neg_cache_key = f"isin_fail_{identifier}"
+    cached_fail = cache.get(neg_cache_key)
+    if cached_fail:
+        logger.debug(f"Negative cache HIT for {identifier}")
+        return cached_fail
+
     logger.info(f"📥 get_isin_data called for: {identifier} (cache miss)")
 
     try:
@@ -170,8 +178,9 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         if not data:
             error_msg = f"Cascade returned empty data for identifier {identifier}"
             logger.error(f"❌ {error_msg}")
-            # NOT caching failed result - allows immediate retry
-            return {'success': False, 'error': error_msg}
+            fail_result = {'success': False, 'error': error_msg}
+            cache.set(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+            return fail_result
 
         logger.debug(f"Cascade returned data keys: {list(data.keys())}")
 
@@ -217,8 +226,9 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
     except Exception as e:
         error_msg = f"Exception in get_isin_data for {identifier}: {str(e)}"
         logger.exception(error_msg)
-        # NOT caching failed result - allows immediate retry
-        return {'success': False, 'error': error_msg}
+        fail_result = {'success': False, 'error': error_msg}
+        cache.set(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        return fail_result
 
 
 def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
@@ -305,12 +315,6 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
         logger.exception(f"Unexpected error in yfinance lookup for '{identifier}'")
         return None
 
-
-def _fetch_yfinance_data(identifier: str) -> Optional[Dict[str, Any]]:
-    """
-    Legacy function - redirects to robust implementation.
-    """
-    return _fetch_yfinance_data_robust(identifier)
 
 # --- Other Utility Functions (can be expanded) ---
 
@@ -523,8 +527,9 @@ def clear_price_cache(identifier: str = None):
         clear_price_cache()        # Clear all price caches
     """
     if identifier:
-        # Clear specific identifier - both manual cache key and memoized
+        # Clear specific identifier - both manual cache key, negative cache, and memoized
         cache.delete(f"isin_data_{identifier}")
+        cache.delete(f"isin_fail_{identifier}")
         cache.delete_memoized(get_yfinance_info, identifier)
         logger.info(f"✓ Cleared price cache for: {identifier}")
     else:
@@ -533,20 +538,3 @@ def clear_price_cache(identifier: str = None):
         logger.info(f"✓ Cleared entire price cache")
 
 
-def clear_identifier_cache(identifier: str = None):
-    """
-    Clear cached price data for specific identifier or entire cache.
-
-    Useful for testing and debugging when an identifier's cached failure
-    prevents retrying after code fixes.
-
-    Args:
-        identifier: If provided, clear cache for this identifier only.
-                   If None, clear entire cache.
-
-    Example:
-        clear_identifier_cache("TNK")  # Clear TNK's cache
-        clear_identifier_cache()       # Clear all price caches
-    """
-    # Delegate to clear_price_cache for consistency
-    clear_price_cache(identifier)

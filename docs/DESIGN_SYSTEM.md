@@ -51,8 +51,8 @@ This document serves as a comprehensive reference for LLM design/coding agents t
 
 ### Font Stack
 ```css
---font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
---font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+--font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+--font-mono: 'Geist Mono', 'Fira Code', monospace;
 ```
 
 ### Type Scale
@@ -1599,7 +1599,7 @@ When applying this design to new components:
 - [ ] Ensure clickable elements have `cursor: pointer`
 
 ### Typography
-- [ ] Use Inter font family
+- [ ] Use Geist font family
 - [ ] Apply correct font weights (400 body, 500 labels, 600-700 headings)
 - [ ] Use appropriate text colors (`--text-primary`, `--text-secondary`, `--text-muted`)
 

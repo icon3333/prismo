@@ -57,12 +57,17 @@ cookies.txt
 
 # Node modules (if any)
 node_modules/
+frontend/node_modules/
 
 # Build artifacts
 build/
 dist/
 *.egg-info/
+.next/
+frontend/.next/
+frontend/out/
 
 # Test coverage
 .coverage
 htmlcov/
+.gitnexus

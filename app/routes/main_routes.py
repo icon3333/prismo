@@ -221,6 +221,32 @@ def select_account(account_id):
     return redirect(url_for('main.index'))
 
 
+@main_bp.route('/api/accounts')
+def api_accounts():
+    """JSON API: list available accounts"""
+    accounts = query_db(
+        'SELECT id, username FROM accounts WHERE username != "_global" ORDER BY username')
+    current = session.get('account_id')
+    return jsonify({
+        'accounts': [dict(a) for a in accounts] if accounts else [],
+        'current_account_id': current,
+    })
+
+
+@main_bp.route('/api/select_account/<int:account_id>', methods=['POST'])
+def api_select_account(account_id):
+    """JSON API: select an account"""
+    account = query_db('SELECT * FROM accounts WHERE id = ?',
+                       [account_id], one=True)
+    if account and isinstance(account, dict):
+        session.permanent = True
+        session['account_id'] = account_id
+        session['username'] = account['username']
+        session.modified = True
+        return jsonify({'ok': True, 'username': account['username']})
+    return jsonify({'ok': False, 'error': 'Account not found'}), 404
+
+
 @main_bp.route('/clear_account')
 def clear_account():
     """Clear the selected account from session"""

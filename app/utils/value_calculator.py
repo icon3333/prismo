@@ -222,48 +222,15 @@ def get_value_calculation_sql() -> str:
         ...     LEFT JOIN market_prices mp ON c.identifier = mp.identifier
         ... '''
     """
+    # Note: Uses price_eur (pre-computed during price fetch) rather than joining
+    # exchange_rates table. This stays in sync because price_eur is updated every
+    # time prices are refreshed. Minor drift possible between refreshes if exchange
+    # rates change independently, but acceptable for daily-refresh homeserver use.
     return """CASE
             WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
             THEN c.custom_total_value
             ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
         END"""
-
-
-def has_price_or_custom_value(item: Dict[str, Any]) -> bool:
-    """
-    Check if an item has either a market price or a custom value.
-
-    This is useful for filtering items that have some form of valuation.
-
-    Args:
-        item: Portfolio item dict
-
-    Returns:
-        bool: True if item has price or custom value, False otherwise
-
-    Examples:
-        >>> has_price_or_custom_value({'price': 100, 'currency': 'USD'})
-        True
-        >>> has_price_or_custom_value({'price_eur': 100})
-        True
-        >>> has_price_or_custom_value({'is_custom_value': True, 'custom_total_value': 1000})
-        True
-        >>> has_price_or_custom_value({})
-        False
-    """
-    # Has custom value
-    if item.get('is_custom_value') and item.get('custom_total_value') is not None:
-        return True
-
-    # Has native currency price
-    if item.get('price') is not None and item.get('price') > 0 and item.get('currency'):
-        return True
-
-    # Has legacy EUR price (fallback)
-    if item.get('price_eur') is not None and item.get('price_eur') > 0:
-        return True
-
-    return False
 
 
 def get_value_source(item: Dict[str, Any]) -> str:
@@ -297,3 +264,28 @@ def get_value_source(item: Dict[str, Any]) -> str:
         return 'market'
     else:
         return 'none'
+
+
+def has_price_or_custom_value(item: Dict[str, Any]) -> bool:
+    """
+    Check if an item has either a market price or a custom value.
+
+    This is useful for filtering items that have some form of valuation.
+
+    Args:
+        item: Portfolio item dict
+
+    Returns:
+        bool: True if item has price or custom value, False otherwise
+
+    Examples:
+        >>> has_price_or_custom_value({'price': 100, 'currency': 'USD'})
+        True
+        >>> has_price_or_custom_value({'price_eur': 100})
+        True
+        >>> has_price_or_custom_value({'is_custom_value': True, 'custom_total_value': 1000})
+        True
+        >>> has_price_or_custom_value({})
+        False
+    """
+    return get_value_source(item) != 'none'

@@ -65,8 +65,7 @@ def _apply_type_constraints_recursive(
     if iteration == 0:
         logger.debug(f"Starting type constraint application for portfolio {portfolio_name} with {len(positions)} positions")
 
-    # Initialize metadata on first iteration
-    if iteration == 0:
+        # Initialize metadata on first iteration
         for pos in positions:
             pos['unconstrained_target_value'] = pos.get('targetValue', 0)
             pos['constrained_target_value'] = pos.get('targetValue', 0)
@@ -121,11 +120,11 @@ def _apply_type_constraints_recursive(
         # Check if exceeds cap
         if target_pct > cap_pct:
             # Cap this position
-            capped_value = (cap_pct / 100) * portfolio_target_value
-            excess = pos['constrained_target_value'] - capped_value
+            cap_value = (cap_pct / 100) * portfolio_target_value
+            excess = pos['constrained_target_value'] - cap_value
 
             pos['is_capped'] = True
-            pos['constrained_target_value'] = capped_value
+            pos['constrained_target_value'] = cap_value
             pos['applicable_rule'] = cap_rule
 
             logger.debug(
@@ -581,13 +580,8 @@ class AllocationService:
                             # Priority: placeholder weight > type-based default
                             if use_placeholder_weight and placeholder_weight_value:
                                 target_weight = float(placeholder_weight_value)
-                            elif row.get('investment_type') in ['Stock', 'ETF', 'Crypto']:
-                                if row.get('investment_type') == 'Stock':
-                                    target_weight = default_stock_weight
-                                elif row.get('investment_type') == 'ETF':
-                                    target_weight = default_etf_weight
-                                elif row.get('investment_type') == 'Crypto':
-                                    target_weight = default_crypto_weight
+                            else:
+                                target_weight = get_default_weight(row['company_name'])
 
                         position_data = {
                             'name': row['company_name'],
@@ -806,8 +800,11 @@ class AllocationService:
             ]
 
             if skipped_positions:
-                logger.info(
-                    f"Skipping {len(skipped_positions)} positions without investment_type in portfolio {portfolio['name']}")
+                skipped_names = [pos.get('name', '?') for pos in skipped_positions]
+                logger.warning(
+                    f"Skipping {len(skipped_positions)} positions without investment_type in portfolio "
+                    f"{portfolio['name']}: {skipped_names}")
+                portfolio['excluded_positions'] = skipped_names
 
             if not valid_positions:
                 logger.warning(f"No valid positions with investment_type in portfolio {portfolio['name']}")

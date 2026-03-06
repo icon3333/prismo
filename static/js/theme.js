@@ -176,37 +176,6 @@ function createPieChart(canvasId, labels, data, title) {
   });
 }
 
-/**
- * Initialize charts on portfolio page
- */
-function initializeCharts() {
-  // Check if we're on portfolio page and chartData exists
-  if (typeof chartData === 'undefined' || !chartData) {
-    console.log('No chart data available');
-    return;
-  }
-
-  // Ticker allocation chart
-  if (chartData.ticker_allocation && Object.keys(chartData.ticker_allocation).length > 0) {
-    const labels = Object.keys(chartData.ticker_allocation);
-    const values = Object.values(chartData.ticker_allocation);
-    if (labels.length > 0 && document.getElementById('tickerChart')) {
-      createPieChart('tickerChart', labels, values, 'Allocation by Ticker');
-    }
-  }
-
-  // Sector allocation chart
-  if (chartData.sector_allocation && Object.keys(chartData.sector_allocation).length > 0) {
-    const labels = Object.keys(chartData.sector_allocation);
-    const values = Object.values(chartData.sector_allocation);
-    if (labels.length > 0 && document.getElementById('sectorChart')) {
-      createPieChart('sectorChart', labels, values, 'Allocation by Sector');
-    }
-  }
-}
-
-// Initialize charts when DOM is ready
-document.addEventListener('DOMContentLoaded', initializeCharts);
 
 // =============================================================================
 // Position Form Allocation Type Toggle
@@ -382,47 +351,30 @@ function formatPercentage(value) {
   return value.toFixed(2) + '%';
 }
 
-/**
- * Debounce function for input validation
- */
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
 // =============================================================================
 // Dark/Light Mode Toggle
 // =============================================================================
 
 /**
+ * Apply theme to the document (shared by toggle, init, and system listener)
+ */
+function _applyTheme(theme) {
+  const html = document.documentElement;
+  html.setAttribute('data-theme', theme);
+  html.style.backgroundColor = theme === 'dark' ? '#020617' : '#F8FAFC';
+  const floatingBtn = document.getElementById('floating-theme-toggle');
+  const themeIcon = floatingBtn?.querySelector('.icon-theme');
+  if (themeIcon) themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  if (floatingBtn) floatingBtn.title = `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`;
+}
+
+/**
  * Toggle between light and dark theme
  */
 function toggleTheme() {
-  const html = document.documentElement;
-  const floatingBtn = document.getElementById('floating-theme-toggle');
-  const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
-  const currentTheme = html.getAttribute('data-theme');
-
-  if (currentTheme === 'dark') {
-    html.setAttribute('data-theme', 'light');
-    html.style.backgroundColor = '#F8FAFC';
-    if (themeIcon) themeIcon.textContent = '🌙';
-    if (floatingBtn) floatingBtn.title = 'Switch to dark theme';
-    localStorage.setItem('theme', 'light');
-  } else {
-    html.setAttribute('data-theme', 'dark');
-    html.style.backgroundColor = '#020617';
-    if (themeIcon) themeIcon.textContent = '☀️';
-    if (floatingBtn) floatingBtn.title = 'Switch to light theme';
-    localStorage.setItem('theme', 'dark');
-  }
+  const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  _applyTheme(newTheme);
+  localStorage.setItem('theme', newTheme);
 }
 
 /**
@@ -430,11 +382,7 @@ function toggleTheme() {
  */
 function initializeTheme() {
   const savedTheme = localStorage.getItem('theme');
-  const html = document.documentElement;
-  const floatingBtn = document.getElementById('floating-theme-toggle');
-  const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
 
-  // Determine current theme
   let theme;
   if (savedTheme) {
     theme = savedTheme;
@@ -444,15 +392,10 @@ function initializeTheme() {
     localStorage.setItem('theme', theme);
   }
 
-  // Update icon and button state
-  if (themeIcon) {
-    themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
-  }
-  if (floatingBtn) {
-    floatingBtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
-    // Attach click handler
-    floatingBtn.addEventListener('click', toggleTheme);
-  }
+  _applyTheme(theme);
+
+  const floatingBtn = document.getElementById('floating-theme-toggle');
+  if (floatingBtn) floatingBtn.addEventListener('click', toggleTheme);
 }
 
 // Initialize theme icon when DOM is ready
@@ -460,21 +403,8 @@ document.addEventListener('DOMContentLoaded', initializeTheme);
 
 // Listen for system theme changes
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-  // Only auto-switch if user hasn't manually set a preference
   if (!localStorage.getItem('theme')) {
-    const theme = e.matches ? 'dark' : 'light';
-    const html = document.documentElement;
-    html.setAttribute('data-theme', theme);
-    html.style.backgroundColor = theme === 'dark' ? '#020617' : '#F8FAFC';
-
-    const floatingBtn = document.getElementById('floating-theme-toggle');
-    const themeIcon = floatingBtn ? floatingBtn.querySelector('.icon-theme') : null;
-    if (themeIcon) {
-      themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
-    }
-    if (floatingBtn) {
-      floatingBtn.title = theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
-    }
+    _applyTheme(e.matches ? 'dark' : 'light');
   }
 });
 

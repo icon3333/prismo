@@ -3,19 +3,6 @@
  * This file handles the portfolio allocation calculation based on user input.
  */
 
-// Debounce function to limit how often a function can be called
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
-
 // Format number with commas and decimals
 function formatNumber(number) {
     return number.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -556,18 +543,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 const allocationAfterAction = newTotalValue > 0 ? (valueAfterAction / newTotalValue) * 100 : 0;
 
                 // Determine action styling and text
-                let actionClass = "actions-neutral";
-                let actionText = "No action";
-
-                if (portfolio.action > 0.01) {
-                    actionClass = "actions-positive";
-                    actionText = `Buy ${this.formatCurrency(portfolio.action)}`;
-                    totalBuys += portfolio.action;
-                } else if (portfolio.action < -0.01) {
-                    actionClass = "actions-negative";
-                    actionText = `Sell ${this.formatCurrency(Math.abs(portfolio.action))}`;
-                    totalSells += Math.abs(portfolio.action);
-                }
+                const { class: actionClass, text: actionText } = this._formatAction(portfolio.action);
+                if (portfolio.action > 0.01) totalBuys += portfolio.action;
+                else if (portfolio.action < -0.01) totalSells += Math.abs(portfolio.action);
 
                 // Check for position deficits
                 const currentPositions = this.countCurrentPositions(portfolio);
@@ -671,62 +649,59 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         toggleSectorExpand(sectorId) {
-            console.log(`Toggling sector: ${sectorId}`);
             if (this.sectorsExpanded.has(sectorId)) {
                 this.sectorsExpanded.delete(sectorId);
-                console.log(`Collapsed: ${sectorId}`);
             } else {
                 this.sectorsExpanded.add(sectorId);
-                console.log(`Expanded: ${sectorId}`);
             }
             this.renderDetailedView();
         }
 
-        expandAllSectors() {
+        _toggleAllSectors(expand) {
             if (!this.selectedPortfolio || !this.portfolioData) return;
 
             const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
-            if (!portfolio || !portfolio.sectors) return;
+            if (!portfolio?.sectors) return;
 
-            // Add all sector IDs to the expanded set
             portfolio.sectors.forEach((sector, sectorIndex) => {
-                if (sector.positions && sector.positions.length > 0) {
+                if (sector.positions?.length > 0) {
                     const sectorId = sector.name === 'Missing Positions'
                         ? `${portfolio.name}-Missing-Positions`
                         : `${portfolio.name}-${sector.name}-${sectorIndex}`;
-                    this.sectorsExpanded.add(sectorId);
+                    expand ? this.sectorsExpanded.add(sectorId) : this.sectorsExpanded.delete(sectorId);
                 }
             });
 
-            console.log('Expanded all sectors:', Array.from(this.sectorsExpanded));
             this.renderDetailedView();
         }
 
-        collapseAllSectors() {
-            if (!this.selectedPortfolio || !this.portfolioData) return;
-
-            const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
-            if (!portfolio || !portfolio.sectors) return;
-
-            // Remove all sector IDs for this portfolio from the expanded set
-            portfolio.sectors.forEach((sector, sectorIndex) => {
-                if (sector.positions && sector.positions.length > 0) {
-                    const sectorId = sector.name === 'Missing Positions'
-                        ? `${portfolio.name}-Missing-Positions`
-                        : `${portfolio.name}-${sector.name}-${sectorIndex}`;
-                    this.sectorsExpanded.delete(sectorId);
-                }
-            });
-
-            console.log('Collapsed all sectors:', Array.from(this.sectorsExpanded));
-            this.renderDetailedView();
-        }
+        expandAllSectors() { this._toggleAllSectors(true); }
+        collapseAllSectors() { this._toggleAllSectors(false); }
 
         showExpandCollapseButtons() {
             const expandBtn = document.getElementById('expand-all-btn');
             const collapseBtn = document.getElementById('collapse-all-btn');
             if (expandBtn) expandBtn.style.display = 'inline-block';
             if (collapseBtn) collapseBtn.style.display = 'inline-block';
+        }
+
+        _formatAction(amount) {
+            if (amount > 0.01) {
+                return { class: 'actions-positive', text: `Buy ${this.formatCurrency(amount)}` };
+            } else if (amount < -0.01) {
+                return { class: 'actions-negative', text: `Sell ${this.formatCurrency(Math.abs(amount))}` };
+            }
+            return { class: 'actions-neutral', text: 'No action' };
+        }
+
+        _getTypeDisplay(type) {
+            const typeMap = {
+                'Stock': { icon: '<i class="fas fa-chart-line me-1" style="color: #3b82f6;"></i>', label: 'Stock' },
+                'ETF': { icon: '<i class="fas fa-layer-group me-1" style="color: #10b981;"></i>', label: 'ETF' },
+                'Crypto': { icon: '<i class="fab fa-bitcoin me-1" style="color: #f59e0b;"></i>', label: 'Crypto' },
+            };
+            const entry = typeMap[type];
+            return entry ? entry.icon + entry.label : '-';
         }
 
         hideExpandCollapseButtons() {
@@ -765,11 +740,6 @@ document.addEventListener('DOMContentLoaded', function () {
             // Find the selected portfolio
             const portfolio = this.portfolioData.portfolios.find(p => p.name === this.selectedPortfolio);
             if (!portfolio) return;
-
-            // Special handling for GME portfolio - add debugging
-            if (portfolio.name === "GME") {
-                console.log("Processing GME portfolio:", portfolio);
-            }
 
             // Skip portfolios with no current value
             if (!portfolio.currentValue || portfolio.currentValue === 0) {
@@ -957,7 +927,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     Math.round(totalRealWeight) < 100
                 );
 
-                console.log(`Portfolio ${portfolio.name}: shouldShowMissingPositions=${shouldShowMissingPositions}, currentPositions=${currentPositionsCount}, effectivePositions=${effectivePositions}, minPositions=${portfolio.minPositions || 0}, desiredPositions=${portfolio.desiredPositions}, totalRealWeight=${totalRealWeight}%`);
             }
 
             // Third pass: assign target allocations and calculate total for normalization
@@ -999,7 +968,6 @@ document.addEventListener('DOMContentLoaded', function () {
             const normalizationFactor = (!hasBackendConstrainedValues && totalTargetAllocation > 0)
                 ? (100 / totalTargetAllocation)
                 : 1;
-            console.log(`Portfolio ${portfolio.name}: Total target allocation before normalization: ${totalTargetAllocation}%, normalization factor: ${normalizationFactor}, using backend values: ${hasBackendConstrainedValues}`);
 
             // Fourth pass: normalize allocations and calculate target values
             // Store normalized allocations in a separate map to avoid mutating originals
@@ -1033,8 +1001,6 @@ document.addEventListener('DOMContentLoaded', function () {
                                 : 0;
                             normalizedAllocations.set(position, backendAllocation);
                             sectorTargetAllocation += backendAllocation;
-
-                            console.log(`Using backend constrained value for ${position.name}: ${position.targetValue.toFixed(2)} (${backendAllocation.toFixed(2)}%)`);
                         } else {
                             // Fallback to frontend normalization if backend didn't provide targetValue
                             const normalizedAllocation = position.targetAllocation * normalizationFactor;
@@ -1043,8 +1009,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
                             const targetValue = (normalizedAllocation / 100) * portfolioTargetValue;
                             position.calculatedTargetValue = targetValue;
-
-                            console.log(`Using frontend normalization for ${position.name}: ${normalizedAllocation.toFixed(2)}%`);
                         }
                     });
 
@@ -1148,8 +1112,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            console.log(`Portfolio ${portfolio.name} (${this.rebalanceMode}): ${positiveGaps.length} buys (€${totalPositiveGap.toFixed(2)}), ${negativeGaps.length} sells (€${totalNegativeGap.toFixed(2)})`);
-
             // Distribute capital based on mode
             if (this.rebalanceMode === 'new-only') {
                 // New-only: Distribute new capital proportionally to positive gaps only
@@ -1162,10 +1124,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         item.position.action = allocation;
                         item.position.valueAfter = (item.position.currentValue || 0) + allocation;
-
-                        if (item.gap > 100) {
-                            console.log(`  Buy ${item.position.name}: gap=€${item.gap.toFixed(2)}, share=${(proportionalShare*100).toFixed(1)}%, allocation=€${allocation.toFixed(2)}`);
-                        }
                     });
                 }
 
@@ -1252,16 +1210,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
 
                     // Determine action class and text for the sector
-                    let sectorActionClass = "actions-neutral";
-                    let sectorActionText = "No action";
-
-                    if (sectorAction > 0.01) {
-                        sectorActionClass = "actions-positive";
-                        sectorActionText = `Buy ${this.formatCurrency(sectorAction)}`;
-                    } else if (sectorAction < -0.01) {
-                        sectorActionClass = "actions-negative";
-                        sectorActionText = `Sell ${this.formatCurrency(Math.abs(sectorAction))}`;
-                    }
+                    const { class: sectorActionClass, text: sectorActionText } = this._formatAction(sectorAction);
 
                     const sectorRow = document.createElement('tr');
                     // Add special styling for Missing Positions
@@ -1317,16 +1266,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 : 0;
 
                             // Determine action class and text
-                            let actionClass = "actions-neutral";
-                            let actionText = "No action";
-
-                            if (position.action > 0.01) {
-                                actionClass = "actions-positive";
-                                actionText = `Buy ${this.formatCurrency(position.action)}`;
-                            } else if (position.action < -0.01) {
-                                actionClass = "actions-negative";
-                                actionText = `Sell ${this.formatCurrency(Math.abs(position.action))}`;
-                            }
+                            const { class: actionClass, text: actionText } = this._formatAction(position.action);
 
                             // Position row - indented to show hierarchy
                             const positionRow = document.createElement('tr');
@@ -1351,18 +1291,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             const displayAllocation = normalizedAllocations.get(position) || 0;
 
                             // Investment type display with icon
-                            let typeDisplay = '-';
-                            let typeIcon = '';
-                            if (position.investment_type === 'Stock') {
-                                typeIcon = '<i class="fas fa-chart-line me-1" style="color: #3b82f6;"></i>';
-                                typeDisplay = typeIcon + 'Stock';
-                            } else if (position.investment_type === 'ETF') {
-                                typeIcon = '<i class="fas fa-layer-group me-1" style="color: #10b981;"></i>';
-                                typeDisplay = typeIcon + 'ETF';
-                            } else if (position.investment_type === 'Crypto') {
-                                typeIcon = '<i class="fab fa-bitcoin me-1" style="color: #f59e0b;"></i>';
-                                typeDisplay = typeIcon + 'Crypto';
-                            }
+                            const typeDisplay = this._getTypeDisplay(position.investment_type);
 
                             // Check if position is capped and build target allocation display
                             let targetAllocationDisplay = this.formatPercentage(displayAllocation);
@@ -1403,18 +1332,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         totalValueAfter += sectorValueAfter;
                     }
                 });
-            }
-
-            // Verification: Check if totalAction matches portfolioActionAmount
-            console.log(`Portfolio ${portfolio.name} verification:`);
-            console.log(`  Expected action (from global): €${portfolioActionAmount.toFixed(2)}`);
-            console.log(`  Calculated action (from positions): €${totalAction.toFixed(2)}`);
-            console.log(`  Difference: €${Math.abs(totalAction - portfolioActionAmount).toFixed(2)}`);
-
-            if (Math.abs(totalAction - portfolioActionAmount) > 0.10) {
-                console.warn(`⚠️ Mismatch detected! Detailed view actions don't match global view.`);
-            } else {
-                console.log(`✓ Actions match within rounding tolerance`);
             }
 
             // Portfolio total row

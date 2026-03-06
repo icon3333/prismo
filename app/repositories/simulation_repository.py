@@ -101,8 +101,12 @@ class SimulationRepository:
             try:
                 result['items'] = json.loads(result['items']) if result['items'] else []
             except json.JSONDecodeError:
-                logger.warning(f"Failed to parse items for simulation {simulation_id}")
+                logger.error(
+                    f"Corrupted JSON in simulation '{result.get('name', '?')}' (id={simulation_id}). "
+                    f"Items replaced with empty list. Raw data: {result['items'][:200] if result['items'] else 'None'}"
+                )
                 result['items'] = []
+                result['_items_corrupted'] = True
 
             # Parse deploy_manual_items JSON
             try:
@@ -213,46 +217,22 @@ class SimulationRepository:
         updates = []
         params = []
 
-        if name is not None:
-            updates.append('name = ?')
-            params.append(name)
+        # Simple fields: column name maps directly to parameter
+        field_map = {
+            'name': name, 'scope': scope, 'portfolio_id': portfolio_id,
+            'global_value_mode': global_value_mode, 'total_amount': total_amount,
+            'deploy_lump_sum': deploy_lump_sum, 'deploy_monthly': deploy_monthly,
+            'deploy_months': deploy_months, 'deploy_manual_mode': deploy_manual_mode,
+        }
+        for col, val in field_map.items():
+            if val is not None:
+                updates.append(f'{col} = ?')
+                params.append(val)
 
-        if scope is not None:
-            updates.append('scope = ?')
-            params.append(scope)
-
+        # JSON fields: need serialization
         if items is not None:
             updates.append('items = ?')
             params.append(json.dumps(items))
-
-        if portfolio_id is not None:
-            updates.append('portfolio_id = ?')
-            params.append(portfolio_id)
-
-        if global_value_mode is not None:
-            updates.append('global_value_mode = ?')
-            params.append(global_value_mode)
-
-        if total_amount is not None:
-            updates.append('total_amount = ?')
-            params.append(total_amount)
-
-        if deploy_lump_sum is not None:
-            updates.append('deploy_lump_sum = ?')
-            params.append(deploy_lump_sum)
-
-        if deploy_monthly is not None:
-            updates.append('deploy_monthly = ?')
-            params.append(deploy_monthly)
-
-        if deploy_months is not None:
-            updates.append('deploy_months = ?')
-            params.append(deploy_months)
-
-        if deploy_manual_mode is not None:
-            updates.append('deploy_manual_mode = ?')
-            params.append(deploy_manual_mode)
-
         if deploy_manual_items is not None:
             updates.append('deploy_manual_items = ?')
             params.append(json.dumps(deploy_manual_items))

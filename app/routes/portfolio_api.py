@@ -1,5 +1,5 @@
 from flask import (
-    request, flash, session, jsonify, redirect, url_for, Response, g
+    request, session, jsonify, Response, g
 )
 from app.db_manager import query_db, execute_db, backup_database, get_db
 from app.decorators import require_auth
@@ -1899,13 +1899,6 @@ def upload_csv():
     """
     logger.info(f"CSV upload request - account_id: {session.get('account_id')}")
 
-    # Determine if this is an AJAX request
-    accept_header = request.headers.get('Accept', '')
-    is_ajax = ('application/json' in accept_header or
-               request.headers.get('X-Requested-With') == 'XMLHttpRequest')
-
-    logger.info(f"Request headers: Accept='{accept_header}', X-Requested-With='{request.headers.get('X-Requested-With')}', is_ajax={is_ajax}")
-
     try:
         account_id = g.account_id
         logger.info(f"CSV upload for account_id: {account_id}")
@@ -1964,41 +1957,23 @@ def upload_csv():
 
         logger.info(f"CSV processing successfully dispatched to background job: {job_id}")
 
-        # Return immediate success response - allows session cookie to be updated
-        if is_ajax:
-            return success_response(message='CSV upload started successfully. Processing in background...')
-        else:
-            flash('CSV upload started successfully. Processing in background...', 'info')
-            return redirect(url_for('portfolio.enrich'))
+        return success_response(message='CSV upload started successfully. Processing in background...')
 
     except ValidationError as e:
         logger.error(f"CSV validation error: {e}")
-        if is_ajax:
-            return error_response(str(e), status=400)
-        flash(str(e), 'error')
-        return redirect(url_for('portfolio.enrich'))
+        return error_response(str(e), status=400)
 
     except CSVProcessingError as e:
         logger.error(f"CSV processing error: {e}")
-        if is_ajax:
-            return error_response(str(e), status=500)
-        flash(str(e), 'error')
-        return redirect(url_for('portfolio.enrich'))
+        return error_response(str(e), status=500)
 
     except DataIntegrityError as e:
         logger.error(f"Data integrity error: {e}")
-        if is_ajax:
-            return error_response(str(e), status=409)
-        flash(str(e), 'error')
-        return redirect(url_for('portfolio.enrich'))
+        return error_response(str(e), status=409)
 
     except Exception as e:
         logger.exception("Unexpected error during CSV upload")
-        error_message = 'An unexpected error occurred during CSV upload'
-        if is_ajax:
-            return error_response(error_message, status=500)
-        flash(error_message, 'error')
-        return redirect(url_for('portfolio.enrich'))
+        return error_response('An unexpected error occurred during CSV upload', status=500)
 
 
 def _validate_batch_updates(updates: List[Dict], account_id: int) -> tuple:
@@ -2346,10 +2321,9 @@ def update_portfolio_api():
 
 @require_auth
 def manage_portfolios():
-    """Add, rename, or delete portfolios. Returns JSON for AJAX requests, redirect otherwise."""
+    """Add, rename, or delete portfolios. Returns JSON."""
     account_id = g.account_id
     action = request.form.get('action')
-    is_ajax = request.accept_mimetypes.best == 'application/json'
 
     def _get_portfolio_names():
         """Get current portfolio names for the account."""
@@ -2359,19 +2333,6 @@ def manage_portfolios():
         )
         return [r['name'] if isinstance(r, dict) else r[0] for r in rows] if rows else []
 
-    def _error(msg):
-        if is_ajax:
-            return jsonify({'success': False, 'message': msg}), 400
-        flash(msg, 'error')
-        return redirect(url_for('portfolio.enrich'))
-
-    def _success(msg):
-        if is_ajax:
-            invalidate_portfolio_cache(account_id)
-            return jsonify({'success': True, 'message': msg, 'portfolios': _get_portfolio_names()})
-        flash(msg, 'success')
-        return None  # Continue to end of function
-
     try:
         # Create backup
         backup_database()
@@ -2379,7 +2340,7 @@ def manage_portfolios():
         if action == 'add':
             portfolio_name = normalize_portfolio(request.form.get('add_portfolio_name', ''))
             if not portfolio_name:
-                return _error('Portfolio name cannot be empty')
+                return jsonify({'success': False, 'message': 'Portfolio name cannot be empty'}), 400
 
             existing = query_db(
                 'SELECT 1 FROM portfolios WHERE name = ? AND account_id = ?',
@@ -2387,22 +2348,21 @@ def manage_portfolios():
                 one=True
             )
             if existing:
-                return _error(f'Portfolio "{portfolio_name}" already exists')
+                return jsonify({'success': False, 'message': f'Portfolio "{portfolio_name}" already exists'}), 400
 
             execute_db(
                 'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
                 [portfolio_name, account_id]
             )
-            result = _success(f'Portfolio "{portfolio_name}" added successfully')
-            if result:
-                return result
+            invalidate_portfolio_cache(account_id)
+            return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" added successfully', 'portfolios': _get_portfolio_names()})
 
         elif action == 'rename':
             old_name = normalize_portfolio(request.form.get('old_name', ''))
             new_name = normalize_portfolio(request.form.get('new_name', ''))
 
             if not old_name or not new_name:
-                return _error('Both old and new portfolio names are required')
+                return jsonify({'success': False, 'message': 'Both old and new portfolio names are required'}), 400
 
             existing = query_db(
                 'SELECT 1 FROM portfolios WHERE name = ? AND account_id = ?',
@@ -2410,21 +2370,20 @@ def manage_portfolios():
                 one=True
             )
             if existing:
-                return _error(f'Portfolio "{new_name}" already exists')
+                return jsonify({'success': False, 'message': f'Portfolio "{new_name}" already exists'}), 400
 
             execute_db(
                 'UPDATE portfolios SET name = ? WHERE name = ? AND account_id = ?',
                 [new_name, old_name, account_id]
             )
-            result = _success(f'Portfolio renamed from "{old_name}" to "{new_name}"')
-            if result:
-                return result
+            invalidate_portfolio_cache(account_id)
+            return jsonify({'success': True, 'message': f'Portfolio renamed from "{old_name}" to "{new_name}"', 'portfolios': _get_portfolio_names()})
 
         elif action == 'delete':
             portfolio_name = request.form.get('delete_portfolio_name', '').strip()
 
             if not portfolio_name:
-                return _error('Portfolio name is required')
+                return jsonify({'success': False, 'message': 'Portfolio name is required'}), 400
 
             companies = query_db('''
                 SELECT COUNT(*) as count FROM companies c
@@ -2433,30 +2392,23 @@ def manage_portfolios():
             ''', [portfolio_name, account_id], one=True)
 
             if companies and isinstance(companies, dict) and companies.get('count', 0) > 0:
-                return _error(f'Cannot delete portfolio "{portfolio_name}" because it contains companies')
+                return jsonify({'success': False, 'message': f'Cannot delete portfolio "{portfolio_name}" because it contains companies'}), 400
 
             execute_db(
                 'DELETE FROM portfolios WHERE name = ? AND account_id = ?',
                 [portfolio_name, account_id]
             )
-            result = _success(f'Portfolio "{portfolio_name}" deleted successfully')
-            if result:
-                return result
+            invalidate_portfolio_cache(account_id)
+            return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" deleted successfully', 'portfolios': _get_portfolio_names()})
 
     except (DataIntegrityError, ValidationError) as e:
-        if is_ajax:
-            return jsonify({'success': False, 'message': str(e)}), 400
-        flash(f'Error managing portfolios: {str(e)}', 'error')
+        return jsonify({'success': False, 'message': str(e)}), 400
     except Exception as e:
         logger.exception("Unexpected error managing portfolios")
-        if is_ajax:
-            return jsonify({'success': False, 'message': 'An unexpected error occurred'}), 500
-        flash('An unexpected error occurred while managing portfolios', 'error')
+        return jsonify({'success': False, 'message': 'An unexpected error occurred'}), 500
 
-    # Invalidate cache after portfolio modifications
     invalidate_portfolio_cache(account_id)
-
-    return redirect(url_for('portfolio.enrich'))
+    return jsonify({'success': False, 'message': 'Invalid action'}), 400
 
 
 @require_auth
@@ -3850,3 +3802,437 @@ def get_historical_prices_api():
     except Exception as e:
         logger.exception("Error fetching historical prices")
         return error_response('Failed to fetch historical prices', 500)
+
+
+# ============================================================================
+# Account Management API
+# ============================================================================
+
+@require_auth
+def get_account_info():
+    """
+    Get account information.
+
+    GET /portfolio/api/account
+
+    Returns:
+        - username, account_id, created_at, last_price_update
+    """
+    try:
+        account_id = g.account_id
+        account = query_db(
+            'SELECT id, username, created_at, last_price_update FROM accounts WHERE id = ?',
+            [account_id], one=True
+        )
+
+        if not account:
+            return not_found_response('account', account_id)
+
+        return jsonify({
+            'success': True,
+            'username': account['username'],
+            'account_id': account['id'],
+            'created_at': account['created_at'],
+            'last_price_update': account.get('last_price_update')
+        })
+
+    except Exception as e:
+        logger.exception("Error getting account info")
+        return error_response('Failed to get account info', 500)
+
+
+@require_auth
+def update_account_username():
+    """
+    Update account username.
+
+    PUT /portfolio/api/account/username
+    Body: { "username": "new_name" }
+    """
+    try:
+        import sqlite3 as _sqlite3
+
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data:
+            return validation_error_response('request', 'Request body is required')
+
+        new_username = (data.get('username') or '').strip()
+        if not new_username:
+            return validation_error_response('username', 'Username cannot be empty')
+
+        backup_database()
+
+        rows_affected = execute_db(
+            'UPDATE accounts SET username = ? WHERE id = ?',
+            [new_username, account_id]
+        )
+
+        if rows_affected > 0:
+            session['username'] = new_username
+            return jsonify({'success': True})
+        else:
+            return error_response('No changes made', 400)
+
+    except _sqlite3.IntegrityError:
+        return validation_error_response('username', f'Username "{new_username}" already exists')
+    except Exception as e:
+        logger.exception("Error updating username")
+        return error_response('Failed to update username', 500)
+
+
+@require_auth
+def api_reset_account_settings():
+    """
+    Reset all saved settings for the current account.
+
+    POST /portfolio/api/account/reset-settings
+    """
+    try:
+        account_id = g.account_id
+        backup_database()
+        execute_db('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.exception("Error resetting account settings")
+        return error_response('Failed to reset account settings', 500)
+
+
+@require_auth
+def api_delete_stocks_crypto():
+    """
+    Delete all stocks and crypto data for the current account.
+
+    POST /portfolio/api/account/delete-stocks-crypto
+    """
+    try:
+        account_id = g.account_id
+        backup_database()
+
+        with get_db() as db:
+            identifiers = query_db('''
+                SELECT DISTINCT identifier
+                FROM companies
+                WHERE account_id = ? AND identifier IS NOT NULL AND identifier != ''
+            ''', [account_id])
+
+            db.execute('''
+                DELETE FROM company_shares
+                WHERE company_id IN (
+                    SELECT id FROM companies WHERE account_id = ?
+                )
+            ''', [account_id])
+
+            db.execute('DELETE FROM companies WHERE account_id = ?', [account_id])
+
+            deleted_count = 0
+            if identifiers:
+                for item in identifiers:
+                    identifier = item['identifier']
+                    other_usages = query_db('''
+                        SELECT 1 FROM companies WHERE identifier = ? LIMIT 1
+                    ''', [identifier])
+                    if not other_usages:
+                        db.execute('DELETE FROM market_prices WHERE identifier = ?', [identifier])
+                        deleted_count += 1
+
+                if deleted_count > 0:
+                    logger.info(f"Deleted {deleted_count} orphaned market prices during stock/crypto deletion")
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.exception("Error deleting stocks/crypto data")
+        return error_response('Failed to delete stocks and crypto data', 500)
+
+
+@require_auth
+def api_delete_account():
+    """
+    Delete account and all associated data.
+
+    POST /portfolio/api/account/delete
+    Body: { "confirmation": "DELETE" }
+    """
+    try:
+        account_id = g.account_id
+        data = request.get_json()
+
+        if not data or data.get('confirmation') != 'DELETE':
+            return validation_error_response('confirmation', 'Please type DELETE to confirm account deletion')
+
+        backup_database()
+
+        with get_db() as db:
+            db.execute('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
+
+            identifiers = query_db('''
+                SELECT DISTINCT identifier
+                FROM companies
+                WHERE account_id = ? AND identifier IS NOT NULL AND identifier != ''
+            ''', [account_id])
+
+            db.execute('''
+                DELETE FROM company_shares
+                WHERE company_id IN (
+                    SELECT id FROM companies WHERE account_id = ?
+                )
+            ''', [account_id])
+            db.execute('DELETE FROM companies WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM portfolios WHERE account_id = ?', [account_id])
+
+            # Delete market prices not used by other accounts
+            deleted_count = 0
+            try:
+                remaining_accounts = query_db(
+                    'SELECT COUNT(*) as count FROM accounts WHERE id != ?', [account_id])
+                is_last_account = remaining_accounts and remaining_accounts[0]['count'] == 0
+
+                if is_last_account:
+                    logger.info("This is the last account - deleting all market prices")
+                    market_prices_count = query_db(
+                        'SELECT COUNT(*) as count FROM market_prices')
+                    count_to_delete = market_prices_count[0]['count'] if market_prices_count else 0
+                    if count_to_delete > 0:
+                        db.execute('DELETE FROM market_prices')
+                        logger.info(
+                            f"Deleted all {count_to_delete} market prices as the last account was deleted")
+                        deleted_count = count_to_delete
+                else:
+                    if identifiers:
+                        logger.info(
+                            f"Checking {len(identifiers)} market prices for potential cleanup after account deletion")
+                        for item in identifiers:
+                            identifier = item['identifier']
+                            other_usages = query_db('''
+                                SELECT 1 FROM companies
+                                WHERE identifier = ?
+                                LIMIT 1
+                            ''', [identifier])
+                            if not other_usages:
+                                logger.info(
+                                    f"Deleting orphaned market price for identifier: {identifier}")
+                                db.execute(
+                                    'DELETE FROM market_prices WHERE identifier = ?', [identifier])
+                                deleted_count += 1
+
+                if deleted_count > 0:
+                    logger.info(
+                        f"Deleted {deleted_count} orphaned market prices during account deletion")
+
+                if not is_last_account:
+                    all_company_identifiers = query_db('''
+                        SELECT DISTINCT identifier FROM companies
+                        WHERE identifier IS NOT NULL AND identifier != ''
+                    ''')
+                    used_identifiers = {
+                        item['identifier'] for item in all_company_identifiers} if all_company_identifiers else set()
+                    all_price_records = query_db(
+                        'SELECT identifier FROM market_prices')
+                    if all_price_records:
+                        for item in all_price_records:
+                            identifier = item['identifier']
+                            if identifier not in used_identifiers:
+                                logger.info(
+                                    f"Found additional orphaned market price to delete: {identifier}")
+                                db.execute(
+                                    'DELETE FROM market_prices WHERE identifier = ?', [identifier])
+                                deleted_count += 1
+            except Exception as e:
+                logger.error(
+                    f"Error while cleaning up market prices: {str(e)}")
+
+            db.execute('DELETE FROM accounts WHERE id = ?', [account_id])
+
+        session.pop('account_id', None)
+        session.pop('username', None)
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.exception("Error deleting account")
+        return error_response('Failed to delete account', 500)
+
+
+@require_auth
+def api_import_account_data():
+    """
+    Import account data from JSON file upload.
+
+    POST /portfolio/api/account/import
+    Content-Type: multipart/form-data with 'file' field
+    """
+    try:
+        account_id = g.account_id
+
+        if 'file' not in request.files:
+            return validation_error_response('file', 'No file selected')
+
+        file = request.files['file']
+        if file.filename == '':
+            return validation_error_response('file', 'No file selected')
+
+        file_content = file.read().decode('utf-8')
+        import_payload = json.loads(file_content)
+
+        if 'export_version' not in import_payload or 'data' not in import_payload:
+            return validation_error_response('file', 'Invalid export file format')
+
+        backup_database()
+
+        with get_db() as db:
+            # Delete existing data
+            identifiers = query_db('''
+                SELECT DISTINCT identifier
+                FROM companies
+                WHERE account_id = ? AND identifier IS NOT NULL AND identifier != ''
+            ''', [account_id])
+
+            db.execute('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
+            db.execute('''
+                DELETE FROM company_shares
+                WHERE company_id IN (SELECT id FROM companies WHERE account_id = ?)
+            ''', [account_id])
+            db.execute('DELETE FROM companies WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM portfolios WHERE account_id = ?', [account_id])
+
+            # Clean up orphaned market prices
+            if identifiers:
+                for item in identifiers:
+                    identifier = item['identifier']
+                    other_usages = query_db('SELECT 1 FROM companies WHERE identifier = ? LIMIT 1', [identifier])
+                    if not other_usages:
+                        db.execute('DELETE FROM market_prices WHERE identifier = ?', [identifier])
+
+            # Import new data with ID remapping
+            data = import_payload['data']
+            old_to_new_portfolio_map = {}
+            old_to_new_company_map = {}
+
+            # Import portfolios
+            if 'portfolios' in data and data['portfolios']:
+                for portfolio in data['portfolios']:
+                    name = portfolio['name'].strip().lower() if portfolio['name'] else portfolio['name']
+                    db.execute('INSERT INTO portfolios (name, account_id) VALUES (?, ?)', [name, account_id])
+
+            cursor = db.execute('SELECT id, name FROM portfolios WHERE account_id = ?', [account_id])
+            db_portfolios = cursor.fetchall()
+            name_to_new_id = {row['name']: row['id'] for row in db_portfolios}
+
+            for old_portfolio in data.get('portfolios', []):
+                old_id = old_portfolio['id']
+                name = old_portfolio['name']
+                new_id = name_to_new_id.get(name)
+                if new_id is not None:
+                    old_to_new_portfolio_map[old_id] = new_id
+
+            # Import companies
+            if 'companies' in data and data['companies']:
+                for company in data['companies']:
+                    new_portfolio_id = old_to_new_portfolio_map.get(company['portfolio_id'])
+                    if new_portfolio_id:
+                        old_company_id = company['id']
+                        cursor = db.execute('''
+                            INSERT INTO companies (name, identifier, sector, portfolio_id, account_id,
+                                                 total_invested, override_country, country_manually_edited,
+                                                 country_manual_edit_date)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', [
+                            company['name'], company['identifier'], company['sector'],
+                            new_portfolio_id, account_id, company.get('total_invested', 0),
+                            company.get('override_country'), company.get('country_manually_edited', 0),
+                            company.get('country_manual_edit_date')
+                        ])
+                        old_to_new_company_map[old_company_id] = cursor.lastrowid
+
+            # Import company_shares
+            if 'company_shares' in data and data['company_shares']:
+                for share in data['company_shares']:
+                    new_company_id = old_to_new_company_map.get(share['company_id'])
+                    if new_company_id:
+                        db.execute('''
+                            INSERT INTO company_shares (company_id, shares, override_share,
+                                                      manual_edit_date, is_manually_edited,
+                                                      csv_modified_after_edit)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', [
+                            new_company_id, share.get('shares'), share.get('override_share'),
+                            share.get('manual_edit_date'), share.get('is_manually_edited', 0),
+                            share.get('csv_modified_after_edit', 0)
+                        ])
+
+            # Import expanded_state with portfolio ID remapping
+            if 'expanded_state' in data and data['expanded_state']:
+                for state in data['expanded_state']:
+                    variable_value = state['variable_value']
+                    if state['page_name'] == 'builder' and state['variable_name'] == 'portfolios':
+                        try:
+                            portfolios_data = json.loads(variable_value)
+                            for portfolio_item in portfolios_data:
+                                old_id = portfolio_item.get('id')
+                                if old_id in old_to_new_portfolio_map:
+                                    portfolio_item['id'] = old_to_new_portfolio_map[old_id]
+                            variable_value = json.dumps(portfolios_data)
+                        except json.JSONDecodeError:
+                            pass
+                    db.execute('''
+                        INSERT INTO expanded_state (account_id, page_name, variable_name,
+                                                  variable_type, variable_value, last_updated)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', [
+                        account_id, state['page_name'], state['variable_name'],
+                        state['variable_type'], variable_value,
+                        state.get('last_updated', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                    ])
+
+            # Import identifier_mappings
+            if 'identifier_mappings' in data and data['identifier_mappings']:
+                for mapping in data['identifier_mappings']:
+                    db.execute('''
+                        INSERT INTO identifier_mappings (account_id, csv_identifier, preferred_identifier,
+                                                       company_name, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', [
+                        account_id, mapping['csv_identifier'], mapping['preferred_identifier'],
+                        mapping.get('company_name'),
+                        mapping.get('created_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')),
+                        mapping.get('updated_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                    ])
+
+            # Import simulations
+            if 'simulations' in data and data['simulations']:
+                for sim in data['simulations']:
+                    old_portfolio_id = sim.get('portfolio_id')
+                    new_portfolio_id = None
+                    if old_portfolio_id is not None:
+                        new_portfolio_id = old_to_new_portfolio_map.get(old_portfolio_id)
+                        if new_portfolio_id is None:
+                            continue
+                    db.execute('''
+                        INSERT INTO simulations (account_id, name, scope, portfolio_id, items, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ''', [
+                        account_id, sim['name'], sim.get('scope', 'global'),
+                        new_portfolio_id, sim['items'],
+                        sim.get('created_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')),
+                        sim.get('updated_at', datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+                    ])
+
+            db.execute(
+                'UPDATE accounts SET last_price_update = ? WHERE id = ?',
+                [datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), account_id]
+            )
+
+        return jsonify({'success': True})
+
+    except json.JSONDecodeError:
+        return validation_error_response('file', 'Invalid JSON file format')
+    except Exception as e:
+        logger.exception("Error importing account data")
+        return error_response('Failed to import account data', 500)

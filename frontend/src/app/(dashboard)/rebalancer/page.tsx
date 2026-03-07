@@ -24,36 +24,9 @@ import {
 import { Globe, PieChart, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
+import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
 import { DetailedOverview } from "./detailed-overview";
 import { SummaryFooter } from "./summary-footer";
-
-const fmt = {
-  currency: new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }),
-  percent: new Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }),
-};
-
-function formatAction(action: number) {
-  if (Math.abs(action) < 0.01)
-    return { text: "No action", className: "text-muted-foreground" };
-  if (action > 0)
-    return {
-      text: `Buy ${fmt.currency.format(action)}`,
-      className: "text-emerald-400",
-    };
-  return {
-    text: `Sell ${fmt.currency.format(Math.abs(action))}`,
-    className: "text-coral-500",
-  };
-}
 
 export default function RebalancerPage() {
   const {
@@ -204,6 +177,10 @@ function PortfolioTable({
 }) {
   let totalBuys = 0;
   let totalSells = 0;
+  for (const p of portfolios) {
+    if (p.action > 0.01) totalBuys += p.action;
+    else if (p.action < -0.01) totalSells += Math.abs(p.action);
+  }
 
   return (
     <TooltipProvider>
@@ -247,9 +224,6 @@ function PortfolioTable({
             const afterPct =
               newTotalValue > 0 ? valueAfter / newTotalValue : 0;
             const { text, className } = formatAction(p.action);
-
-            if (p.action > 0.01) totalBuys += p.action;
-            else if (p.action < -0.01) totalSells += Math.abs(p.action);
 
             const desired = p.desiredPositions ?? p.minPositions ?? 0;
             const currentPositions = p.sectors

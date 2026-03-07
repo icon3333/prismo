@@ -118,12 +118,7 @@ export function calculateDetailedRebalancing(
   const totalCurrentValue = portfolio.currentValue || 0;
 
   // Calculate distribution base and portfolio target value
-  let portfolioTargetValue: number;
-  if (mode === "new-only") {
-    portfolioTargetValue = totalCurrentValue + portfolioActionAmount;
-  } else {
-    portfolioTargetValue = totalCurrentValue + portfolioActionAmount;
-  }
+  const portfolioTargetValue = totalCurrentValue + portfolioActionAmount;
 
   const sectors = portfolio.sectors ?? [];
   const builderPositions = portfolio.builderPositions ?? [];
@@ -196,11 +191,16 @@ export function calculateDetailedRebalancing(
   let hasBackendConstraints = false;
 
   // Deep-clone positions to avoid mutating original data
-  const workingSectors: Array<{
+  interface WorkingSector {
     name: string;
     positions: PortfolioPosition[];
     isPlaceholder?: boolean;
-  }> = [];
+    _currentValue: number;
+    _targetAlloc: number;
+    _calcTargetValue: number;
+  }
+
+  const workingSectors: WorkingSector[] = [];
 
   for (const sector of sectors) {
     if (!sector.positions?.length) continue;
@@ -212,6 +212,9 @@ export function calculateDetailedRebalancing(
       name: sector.name,
       positions: clonedPositions,
       isPlaceholder: sector.isPlaceholder,
+      _currentValue: 0,
+      _targetAlloc: 0,
+      _calcTargetValue: 0,
     });
 
     for (const pos of clonedPositions) {
@@ -265,11 +268,9 @@ export function calculateDetailedRebalancing(
       }
     }
 
-    // Attach sector-level computed values temporarily
-    (ws as Record<string, unknown>)._currentValue = sectorCurrentValue;
-    (ws as Record<string, unknown>)._targetAlloc = sectorTargetAlloc;
-    (ws as Record<string, unknown>)._calcTargetValue =
-      (sectorTargetAlloc / 100) * portfolioTargetValue;
+    ws._currentValue = sectorCurrentValue;
+    ws._targetAlloc = sectorTargetAlloc;
+    ws._calcTargetValue = (sectorTargetAlloc / 100) * portfolioTargetValue;
   }
 
   // === Pass 5: Unified allocation distribution ===
@@ -279,11 +280,7 @@ export function calculateDetailedRebalancing(
   let totalNegativeGap = 0;
 
   for (const ws of workingSectors) {
-    const sectorCurrentValue =
-      (ws as Record<string, unknown>)._currentValue as number;
-    const sectorCalcTarget =
-      (ws as Record<string, unknown>)._calcTargetValue as number;
-    const sectorGap = sectorCalcTarget - sectorCurrentValue;
+    const sectorGap = ws._calcTargetValue - ws._currentValue;
 
     for (const pos of ws.positions) {
       const posCurrentValue = pos.currentValue || 0;
@@ -401,17 +398,12 @@ export function calculateDetailedRebalancing(
     totalAction += actionSum;
     totalValueAfter += valueAfterSum;
 
-    const sectorTargetAlloc =
-      (ws as Record<string, unknown>)._targetAlloc as number;
-    const sectorCalcTarget =
-      (ws as Record<string, unknown>)._calcTargetValue as number;
-
     return {
       name: ws.name,
       positions: ws.positions,
       currentValue: sectorCurrentValue,
-      targetAllocation: sectorTargetAlloc,
-      calculatedTargetValue: sectorCalcTarget,
+      targetAllocation: ws._targetAlloc,
+      calculatedTargetValue: ws._calcTargetValue,
       actionSum,
       valueAfterSum,
       isPlaceholder: ws.isPlaceholder,

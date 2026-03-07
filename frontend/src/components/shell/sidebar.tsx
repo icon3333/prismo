@@ -11,14 +11,19 @@ import {
   Boxes,
   Scale,
   FlaskConical,
-  Settings,
+  User,
   EyeOff,
   Eye,
+  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
+import { useAccount } from "@/hooks/use-account";
 
 const NAV_SECTIONS = [
   {
@@ -46,7 +51,9 @@ const NAV_SECTIONS = [
 export function Sidebar() {
   const pathname = usePathname();
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
-  const [expanded, setExpanded] = useState(false);
+  const { account } = useAccount();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [expanded, setExpanded] = useState(true);
 
   return (
     <aside
@@ -112,6 +119,26 @@ export function Sidebar() {
         ))}
       </nav>
 
+      {/* Collapse (above divider) */}
+      <div className="py-2">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className={cn(
+            "flex w-full items-center py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors",
+            expanded ? "gap-3 px-4" : "justify-center"
+          )}
+        >
+          {expanded ? (
+            <PanelLeftClose className="size-4 shrink-0" />
+          ) : (
+            <PanelLeftOpen className="size-4 shrink-0" />
+          )}
+          {expanded && (
+            <span className="whitespace-nowrap">Collapse</span>
+          )}
+        </button>
+      </div>
+
       {/* Bottom Actions */}
       <div className="border-t border-border py-2">
         <button
@@ -132,6 +159,24 @@ export function Sidebar() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          className={cn(
+            "flex w-full items-center py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors",
+            expanded ? "gap-3 px-4" : "justify-center"
+          )}
+        >
+          {resolvedTheme === "dark" ? (
+            <Sun className="size-4 shrink-0" />
+          ) : (
+            <Moon className="size-4 shrink-0" />
+          )}
+          {expanded && (
+            <span className="whitespace-nowrap">
+              {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
+            </span>
+          )}
+        </button>
         <Link
           href="/account"
           className={cn(
@@ -142,25 +187,29 @@ export function Sidebar() {
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
         >
-          <Settings className="size-4 shrink-0" />
+          <User className="size-4 shrink-0" />
           {expanded && (
-            <span className="whitespace-nowrap">Settings</span>
+            <span className="whitespace-nowrap truncate">
+              {account?.username ?? "Account"}
+            </span>
           )}
         </Link>
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={async () => {
+            await fetch("/auth/logout", {
+              method: "POST",
+              credentials: "include",
+            });
+            window.location.reload();
+          }}
           className={cn(
             "flex w-full items-center py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors",
             expanded ? "gap-3 px-4" : "justify-center"
           )}
         >
-          {expanded ? (
-            <PanelLeftClose className="size-4 shrink-0" />
-          ) : (
-            <PanelLeftOpen className="size-4 shrink-0" />
-          )}
+          <LogOut className="size-4 shrink-0" />
           {expanded && (
-            <span className="whitespace-nowrap">Collapse</span>
+            <span className="whitespace-nowrap">Logout</span>
           )}
         </button>
       </div>

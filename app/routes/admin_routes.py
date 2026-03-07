@@ -6,7 +6,7 @@ smart identifier normalization system, including cleanup operations
 and testing functionality.
 """
 
-from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
+from flask import Blueprint, request, jsonify
 from ..utils.identifier_normalization import (
     normalize_identifier,
     cleanup_crypto_duplicates,
@@ -18,13 +18,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
-
-
-@admin_bp.route('/identifier-normalization')
-@require_auth
-def identifier_normalization():
-    """Display the identifier normalization management page."""
-    return render_template('admin/identifier_normalization.html')
 
 
 @admin_bp.route('/api/test-normalization', methods=['POST'])

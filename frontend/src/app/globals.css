@@ -78,41 +78,41 @@
 }
 
 /* ============================================================
-   Ocean Depth is always dark - set values directly on :root
+   Light mode (default) — Inverted Ocean Depth
    ============================================================ */
 
 :root {
   /* Core surfaces */
-  --background: oklch(0.129 0.041 264.7);   /* #020617 ocean-950 */
-  --foreground: oklch(0.984 0.003 248.2);    /* #F8FAFC pearl-50 */
+  --background: oklch(0.984 0.003 248.2);    /* #F8FAFC pearl-50 */
+  --foreground: oklch(0.208 0.040 265.8);    /* #0F172A ocean-900 */
 
-  --card: oklch(0.208 0.040 265.8);          /* #0F172A ocean-900 */
-  --card-foreground: oklch(0.984 0.003 248.2);
+  --card: oklch(1 0 0);                       /* #FFFFFF white */
+  --card-foreground: oklch(0.208 0.040 265.8);
 
-  --popover: oklch(0.208 0.040 265.8);
-  --popover-foreground: oklch(0.984 0.003 248.2);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.208 0.040 265.8);
 
-  --muted: oklch(0.279 0.037 260.0);         /* #1E293B ocean-800 */
-  --muted-foreground: oklch(0.711 0.035 256.8); /* #94A3B8 pearl-400 */
+  --muted: oklch(0.968 0.007 248.1);         /* #F1F5F9 pearl-100 */
+  --muted-foreground: oklch(0.554 0.022 257.4); /* #64748B ocean-500 */
 
   /* Primary accent - Aqua */
   --primary: oklch(0.715 0.126 215.2);       /* #06B6D4 */
-  --primary-foreground: oklch(0.129 0.041 264.7);
+  --primary-foreground: oklch(1 0 0);
 
   /* Secondary */
-  --secondary: oklch(0.279 0.037 260.0);     /* #1E293B */
-  --secondary-foreground: oklch(0.984 0.003 248.2);
+  --secondary: oklch(0.968 0.007 248.1);     /* #F1F5F9 */
+  --secondary-foreground: oklch(0.208 0.040 265.8);
 
   /* Accent */
-  --accent: oklch(0.279 0.037 260.0);
-  --accent-foreground: oklch(0.984 0.003 248.2);
+  --accent: oklch(0.968 0.007 248.1);
+  --accent-foreground: oklch(0.208 0.040 265.8);
 
   /* Destructive */
   --destructive: oklch(0.637 0.208 25.3);    /* #EF4444 */
 
   /* Borders & rings */
-  --border: oklch(1 0 0 / 15%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(0 0 0 / 10%);
+  --input: oklch(0 0 0 / 10%);
   --ring: oklch(0.715 0.126 215.2);          /* Aqua focus ring */
 
   /* Radius */
@@ -126,13 +126,13 @@
   --chart-5: oklch(0.711 0.035 256.8);      /* Pearl-400 */
 
   /* Sidebar */
-  --sidebar: oklch(0.208 0.040 265.8);
-  --sidebar-foreground: oklch(0.984 0.003 248.2);
+  --sidebar: oklch(0.968 0.007 248.1);
+  --sidebar-foreground: oklch(0.208 0.040 265.8);
   --sidebar-primary: oklch(0.715 0.126 215.2);
-  --sidebar-primary-foreground: oklch(0.129 0.041 264.7);
-  --sidebar-accent: oklch(0.279 0.037 260.0);
-  --sidebar-accent-foreground: oklch(0.984 0.003 248.2);
-  --sidebar-border: oklch(1 0 0 / 15%);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.932 0.012 248.0);
+  --sidebar-accent-foreground: oklch(0.208 0.040 265.8);
+  --sidebar-border: oklch(0 0 0 / 10%);
   --sidebar-ring: oklch(0.715 0.126 215.2);
 
   /* --- Ocean Depth Custom Properties --- */
@@ -142,10 +142,10 @@
   --warning-foreground: oklch(0.129 0.041 264.7);
 
   /* Overlays */
-  --primary-light: oklch(0.715 0.126 215.2 / 15%);
-  --danger-light: oklch(0.637 0.208 25.3 / 10%);
-  --success-light: oklch(0.704 0.123 182.5 / 15%);
-  --warning-light: oklch(0.705 0.187 47.6 / 15%);
+  --primary-light: oklch(0.715 0.126 215.2 / 10%);
+  --danger-light: oklch(0.637 0.208 25.3 / 8%);
+  --success-light: oklch(0.704 0.123 182.5 / 10%);
+  --warning-light: oklch(0.705 0.187 47.6 / 10%);
 
   /* Spacing tokens */
   --space-xs: 0.25rem;
@@ -160,20 +160,23 @@
   --transition-smooth: 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* .dark selector mirrors :root since Ocean Depth is always dark */
+/* ============================================================
+   Dark mode — Ocean Depth
+   ============================================================ */
+
 .dark {
-  --background: oklch(0.129 0.041 264.7);
-  --foreground: oklch(0.984 0.003 248.2);
-  --card: oklch(0.208 0.040 265.8);
+  --background: oklch(0.129 0.041 264.7);   /* #020617 ocean-950 */
+  --foreground: oklch(0.984 0.003 248.2);    /* #F8FAFC pearl-50 */
+  --card: oklch(0.208 0.040 265.8);          /* #0F172A ocean-900 */
   --card-foreground: oklch(0.984 0.003 248.2);
   --popover: oklch(0.208 0.040 265.8);
   --popover-foreground: oklch(0.984 0.003 248.2);
+  --muted: oklch(0.279 0.037 260.0);         /* #1E293B ocean-800 */
+  --muted-foreground: oklch(0.711 0.035 256.8); /* #94A3B8 pearl-400 */
   --primary: oklch(0.715 0.126 215.2);
   --primary-foreground: oklch(0.129 0.041 264.7);
   --secondary: oklch(0.279 0.037 260.0);
   --secondary-foreground: oklch(0.984 0.003 248.2);
-  --muted: oklch(0.279 0.037 260.0);
-  --muted-foreground: oklch(0.711 0.035 256.8);
   --accent: oklch(0.279 0.037 260.0);
   --accent-foreground: oklch(0.984 0.003 248.2);
   --destructive: oklch(0.637 0.208 25.3);
@@ -193,6 +196,10 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 248.2);
   --sidebar-border: oklch(1 0 0 / 15%);
   --sidebar-ring: oklch(0.715 0.126 215.2);
+  --primary-light: oklch(0.715 0.126 215.2 / 15%);
+  --danger-light: oklch(0.637 0.208 25.3 / 10%);
+  --success-light: oklch(0.704 0.123 182.5 / 15%);
+  --warning-light: oklch(0.705 0.187 47.6 / 15%);
 }
 
 /* ============================================================
@@ -200,6 +207,9 @@
    ============================================================ */
 
 html {
+  color-scheme: light;
+}
+html.dark {
   color-scheme: dark;
 }
 

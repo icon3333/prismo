@@ -15,6 +15,22 @@ const nextConfig: NextConfig = {
         source: "/auth/select/:id",
         destination: "http://localhost:8065/api/select_account/:id",
       },
+      {
+        source: "/manage-portfolios",
+        destination: "http://localhost:8065/portfolio/manage_portfolios",
+      },
+      {
+        source: "/csv-upload",
+        destination: "http://localhost:8065/portfolio/upload",
+      },
+      {
+        source: "/account/export",
+        destination: "http://localhost:8065/account/export",
+      },
+      {
+        source: "/auth/logout",
+        destination: "http://localhost:8065/api/clear_account",
+      },
     ];
   },
 };

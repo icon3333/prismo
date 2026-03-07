@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 
 export const oceanDepthChartColors = {
   primary: "#06B6D4",
@@ -12,28 +13,37 @@ export const oceanDepthChartColors = {
   series: ["#06B6D4", "#14B8A6", "#F97316", "#22D3EE", "#94A3B8"],
 } as const;
 
-export const oceanDepthChartTheme = {
-  chart: {
-    background: "transparent",
-    foreColor: "#94A3B8",
-    toolbar: { show: false },
-  },
-  grid: {
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    strokeDashArray: 4,
-  },
-  tooltip: {
-    theme: "dark",
-    style: { fontSize: "12px" },
-  },
-  xaxis: {
-    labels: { style: { colors: "#94A3B8", fontSize: "12px" } },
-    axisBorder: { color: "rgba(255, 255, 255, 0.15)" },
-  },
-  yaxis: {
-    labels: { style: { colors: "#94A3B8", fontSize: "12px" } },
-  },
-} as const;
+export function getChartTheme(isDark: boolean) {
+  return {
+    chart: {
+      background: "transparent",
+      foreColor: isDark ? "#94A3B8" : "#64748B",
+      toolbar: { show: false },
+    },
+    grid: {
+      borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.08)",
+      strokeDashArray: 4,
+    },
+    tooltip: {
+      theme: isDark ? "dark" as const : "light" as const,
+      style: { fontSize: "12px" },
+    },
+    xaxis: {
+      labels: { style: { colors: isDark ? "#94A3B8" : "#64748B", fontSize: "12px" } },
+      axisBorder: { color: isDark ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.10)" },
+    },
+    yaxis: {
+      labels: { style: { colors: isDark ? "#94A3B8" : "#64748B", fontSize: "12px" } },
+    },
+  };
+}
+
+export const oceanDepthChartTheme = getChartTheme(true);
+
+export function useChartTheme() {
+  const { resolvedTheme } = useTheme();
+  return getChartTheme(resolvedTheme === "dark");
+}
 
 export interface ChartWrapperProps {
   title?: string;

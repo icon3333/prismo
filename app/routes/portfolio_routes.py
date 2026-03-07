@@ -1,10 +1,8 @@
 from flask import (
-    Blueprint, render_template, redirect, url_for,
-    request, flash, session, jsonify, current_app, g
+    Blueprint, redirect,
+    session, g
 )
 import logging
-import requests
-from app.db_manager import query_db
 from app.decorators import require_auth
 from app.cache import cache
 from app.routes.portfolio_api import (
@@ -19,75 +17,18 @@ from app.routes.portfolio_api import (
     builder_investment_targets,
     get_account_cash, set_account_cash,
     add_company, validate_identifier, delete_manual_companies, get_portfolios_for_dropdown,
-    get_historical_prices_api
+    get_historical_prices_api,
+    get_account_info, update_account_username, api_reset_account_settings,
+    api_delete_stocks_crypto, api_delete_account, api_import_account_data
 )
 from app.routes.portfolio_updates import update_price_api, update_single_portfolio_api, bulk_update, get_portfolio_companies, update_all_prices, update_selected_prices, price_fetch_progress, price_update_status
 from app.utils.data_processing import clear_data_caches
-from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_default
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Cache timeout constants (in seconds)
-CACHE_TIMEOUT_COUNTRIES_API = 86400  # 24 hours - country list rarely changes
-
 portfolio_bp = Blueprint('portfolio', __name__,
-                         url_prefix='/portfolio',
-                         template_folder='../../templates')
-
-
-# Helper function to fetch countries from external API with caching and fallback
-@cache.memoize(timeout=CACHE_TIMEOUT_COUNTRIES_API)
-def _fetch_countries_from_api():
-    """
-    Fetch country list from REST Countries API with proper error handling.
-
-    Returns:
-        list: List of country names, starting with '(crypto)'
-    """
-    # Minimal fallback list in case API is down
-    FALLBACK_COUNTRIES = [
-        '(crypto)', 'United States', 'United Kingdom', 'Germany', 'France',
-        'Japan', 'China', 'Canada', 'Australia', 'Switzerland', 'Netherlands',
-        'Sweden', 'Denmark', 'Norway', 'Singapore', 'Hong Kong'
-    ]
-
-    try:
-        # Reduced timeout from 10s to 3s - API typically responds in <1s
-        response = requests.get(
-            'https://restcountries.com/v3.1/all?fields=name',
-            timeout=3
-        )
-        response.raise_for_status()  # Raise exception for 4xx/5xx status codes
-
-        api_countries = response.json()
-        countries = ['(crypto)']  # Always include crypto first
-
-        # Extract country names and sort them
-        country_names = []
-        for country in api_countries:
-            if 'name' in country and 'common' in country['name']:
-                name = country['name']['common']
-                # Skip duplicates and clean up names
-                if name not in country_names and name != '(crypto)':
-                    country_names.append(name)
-
-        # Sort alphabetically and add to list
-        country_names.sort()
-        countries.extend(country_names)
-
-        logger.info(f"Successfully loaded {len(countries)} countries from REST Countries API")
-        return countries
-
-    except requests.Timeout:
-        logger.warning("REST Countries API timeout after 3s, using fallback list")
-        return FALLBACK_COUNTRIES
-    except requests.RequestException as e:
-        logger.warning(f"REST Countries API request failed: {e}, using fallback list")
-        return FALLBACK_COUNTRIES
-    except (ValueError, KeyError) as e:
-        logger.error(f"Failed to parse REST Countries API response: {e}, using fallback list")
-        return FALLBACK_COUNTRIES
+                         url_prefix='/portfolio')
 
 
 # Ensure session persistence
@@ -99,186 +40,26 @@ def make_session_permanent():
     session.modified = True   # This ensures changes are saved
 
 
-@portfolio_bp.route('/enrich')
-@require_auth
-def enrich():
-    """Portfolio data enrichment page"""
-    logger.info("Accessing enrich page")
-
-    account_id = g.account_id
-    logger.info(f"Loading enrich page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    # Get portfolio data
-    portfolio_data = get_portfolio_data(account_id)
-    logger.info(f"Retrieved {len(portfolio_data)} portfolio items")
-
-    # Get portfolios from the portfolios table
-    portfolios_from_table = query_db('''
-        SELECT name FROM portfolios 
-        WHERE account_id = ? AND name IS NOT NULL
-        ORDER BY name
-    ''', [account_id])
-
-    # Extract portfolio names without filtering out any valid names
-    portfolios = [{'name': p['name']} for p in portfolios_from_table] if portfolios_from_table else []
-
-    # Ensure '-' is in the list
-    has_default = any(p['name'] == '-' for p in portfolios)
-    if not has_default:
-        default_exists = query_db('''
-            SELECT 1 FROM portfolios
-            WHERE account_id = ? AND name = '-'
-        ''', [account_id], one=True)
-
-        if default_exists:
-            portfolios.append({'name': '-'})
-            logger.info("Added '-' portfolio to the enrich page data")
-
-    logger.info(
-        f"Retrieved {len(portfolios)} portfolios from the portfolios table: {[p['name'] for p in portfolios]}")
-
-    # Get comprehensive country list from REST Countries API (cached with fallback)
-    countries = _fetch_countries_from_api()
-
-    # Log template variables for debugging
-    logger.info(f"Template variables for enrich page:")
-    logger.info(f"- portfolio_data: {len(portfolio_data)} items")
-    logger.info(f"- portfolios: {[p['name'] for p in portfolios]}")
-    logger.info(f"- countries: {len(countries)} countries loaded - first 5: {countries[:5]}")
-
-    # Calculate metrics safely handling None values
-    last_updates = [item['last_updated']
-                    for item in portfolio_data if item['last_updated'] is not None]
-    total_value = sum(
-        (item['price_eur'] or 0) * (item['effective_shares'] or 0)
-        for item in portfolio_data
-    )
-    missing_prices = sum(1 for item in portfolio_data if not item['price_eur'])
-    total_items = len(portfolio_data)
-    # Health metric: percentage of items with prices (0 if no items exist)
-    health = int((total_items - missing_prices) / total_items * 100) if total_items > 0 else 0
-
-    # Check if we should use the default portfolio
-    use_default_portfolio = session.pop('use_default_portfolio', False)
-
-    return render_template('pages/enrich.html',
-                           portfolio_data=portfolio_data,
-                           portfolios=[p['name'] for p in portfolios],
-                           countries=countries,
-                           use_default_portfolio=use_default_portfolio,
-                           metrics={
-                               'total': total_items,
-                               'health': health,
-                               'missing': missing_prices,
-                               'totalValue': total_value,
-                               'lastUpdate': max(last_updates) if last_updates else None
-                           })
-
-
-@portfolio_bp.route('/concentrations')
-@require_auth
-def concentrations():
-    """Concentrations page with global portfolio allocation visualizations"""
-    logger.info("Accessing concentrations page")
-
-    account_id = g.account_id
-    logger.info(f"Loading concentrations page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    return render_template('pages/concentrations.html')
-
-
-@portfolio_bp.route('/performance')
-@require_auth
-def performance():
-    """Portfolio performance page"""
-    logger.info("Accessing performance page")
-
-    account_id = g.account_id
-    logger.info(f"Loading performance page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    return render_template('pages/performance.html')
-
-@portfolio_bp.route('/builder')
-@require_auth
-def builder():
-    """Builder page - configure portfolio allocation targets"""
-    logger.info("Accessing Builder page")
-
-    account_id = g.account_id
-    logger.info(f"Loading Builder page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    # Pass empty data that Vue.js will replace
-    position = {'companyName': ''}  # Placeholder to avoid Jinja2 errors
-
-    return render_template('pages/builder.html', position=position)
-
-@portfolio_bp.route('/rebalancer')
-@require_auth
-def rebalancer():
-    """Rebalancer page - recommend buy/sell actions to rebalance portfolio allocations"""
-    logger.info("Accessing Rebalancer page")
-
-    account_id = g.account_id
-    logger.info(f"Loading Rebalancer page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    return render_template('pages/rebalancer.html')
-
-@portfolio_bp.route('/simulator')
-@require_auth
-def simulator():
-    """Simulator page - what-if scenario sandbox for hypothetical positions"""
-    logger.info("Accessing Simulator page")
-
-    account_id = g.account_id
-    logger.info(f"Loading Simulator page for account_id: {account_id}")
-
-    account = g.account
-    if isinstance(account, dict):
-        logger.info(f"Account found: {account.get('username', '')}")
-
-    return render_template('pages/simulator.html')
-
-
 # Backward-compatibility redirects for old URLs
 @portfolio_bp.route('/analyse')
 @require_auth
 def analyse_redirect():
-    return redirect(url_for('portfolio.performance'), code=301)
+    return redirect('/portfolio/performance', code=301)
 
 @portfolio_bp.route('/build')
 @require_auth
 def build_redirect():
-    return redirect(url_for('portfolio.builder'), code=301)
+    return redirect('/portfolio/builder', code=301)
 
 @portfolio_bp.route('/allocate')
 @require_auth
 def allocate_redirect():
-    return redirect(url_for('portfolio.rebalancer'), code=301)
+    return redirect('/portfolio/rebalancer', code=301)
 
 @portfolio_bp.route('/risk_overview')
 @require_auth
 def risk_overview_redirect():
-    return redirect(url_for('portfolio.concentrations'), code=301)
+    return redirect('/portfolio/concentrations', code=301)
 
 @portfolio_bp.route('/api/allocate/<path:subpath>')
 @require_auth
@@ -374,3 +155,16 @@ portfolio_bp.add_url_rule('/api/portfolios_dropdown',
 # Historical Prices API
 portfolio_bp.add_url_rule('/api/historical_prices',
                           view_func=get_historical_prices_api, methods=['GET'])
+# Account Management API
+portfolio_bp.add_url_rule('/api/account',
+                          view_func=get_account_info, methods=['GET'])
+portfolio_bp.add_url_rule('/api/account/username',
+                          view_func=update_account_username, methods=['PUT'])
+portfolio_bp.add_url_rule('/api/account/reset-settings',
+                          view_func=api_reset_account_settings, methods=['POST'])
+portfolio_bp.add_url_rule('/api/account/delete-stocks-crypto',
+                          view_func=api_delete_stocks_crypto, methods=['POST'])
+portfolio_bp.add_url_rule('/api/account/delete',
+                          view_func=api_delete_account, methods=['POST'])
+portfolio_bp.add_url_rule('/api/account/import',
+                          view_func=api_import_account_data, methods=['POST'])

@@ -155,7 +155,7 @@ export function usePerformance(): UsePerformanceReturn {
         setIsLoading(true);
         setError(null);
 
-        const [portfolioList, cashData, savedState] = await Promise.all([
+        const [rawPortfolioList, cashData, savedState] = await Promise.all([
           apiFetch<PortfolioOption[]>(
             "/portfolios?include_ids=true&has_companies=true"
           ),
@@ -167,6 +167,11 @@ export function usePerformance(): UsePerformanceReturn {
 
         if (cancelled) return;
 
+        // Ensure IDs are strings for Select component compatibility
+        const portfolioList = rawPortfolioList.map((p) => ({
+          ...p,
+          id: String(p.id),
+        }));
         setPortfolios(portfolioList);
         setCashBalance(cashData.cash || 0);
 
@@ -200,16 +205,20 @@ export function usePerformance(): UsePerformanceReturn {
           }
         }
 
-        // Auto-load saved portfolio
-        const savedId = savedState.selectedPortfolio;
+        // Auto-load saved portfolio or auto-select first
+        let targetId = savedState.selectedPortfolio;
         if (
-          savedId &&
-          portfolioList.some((p) => p.id === savedId || savedId === "all")
+          !targetId ||
+          (!portfolioList.some((p) => p.id === targetId) && targetId !== "all")
         ) {
-          setSelectedPortfolioIdState(savedId);
+          // No saved portfolio or it was deleted — auto-select
+          targetId = portfolioList.length >= 2 ? "all" : portfolioList[0]?.id;
+        }
+        if (targetId) {
+          setSelectedPortfolioIdState(targetId);
           try {
             const data = await apiFetch<PerformancePortfolioData>(
-              `/portfolio_data/${savedId}`
+              `/portfolio_data/${targetId}`
             );
             if (!cancelled) setPortfolioData(data);
           } catch {
@@ -232,6 +241,7 @@ export function usePerformance(): UsePerformanceReturn {
     init();
     return () => {
       cancelled = true;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, []);
 

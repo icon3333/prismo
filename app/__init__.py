@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask
 from app.db_manager import init_db
 from app.routes.main_routes import main_bp
 from app.routes.account_routes import account_bp

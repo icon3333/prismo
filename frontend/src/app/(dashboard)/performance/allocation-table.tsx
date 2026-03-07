@@ -45,7 +45,7 @@ function formatPnL(abs: number | null, pct: number | null, invested: number | nu
     return { text: "N/A", className: "text-muted-foreground", tooltip: "" };
   }
 
-  const sign = abs > 0 ? "+" : "";
+  const sign = abs > 0 ? "+" : abs < 0 ? "-" : "";
   const colorClass =
     abs > 0
       ? "text-emerald-400"

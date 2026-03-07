@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, request, jsonify
 import logging
 import os
 from datetime import datetime
@@ -8,9 +8,7 @@ def create_app(config_name=None):
     import time
     _create_app_start = time.time()
 
-    app = Flask(__name__,
-                template_folder='../templates',
-                static_folder='../static')
+    app = Flask(__name__)
 
     # Load configuration from config.py
     from config import config
@@ -44,7 +42,6 @@ def create_app(config_name=None):
     # Override with additional settings for development
     if config_name == 'development':
         app.config.update(
-            TEMPLATES_AUTO_RELOAD=True,
             JSON_SORT_KEYS=False
         )
     
@@ -82,11 +79,6 @@ def create_app(config_name=None):
         app.logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
     
     # Security headers disabled for demo
-    
-    # Add context processor for datetime
-    @app.context_processor
-    def inject_now():
-        return {'now': datetime.now()}
     
     # Register blueprints
     if _show_timing:

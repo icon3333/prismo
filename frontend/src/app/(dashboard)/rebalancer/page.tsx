@@ -15,9 +15,17 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { Globe, PieChart } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Globe, PieChart, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { DetailedOverview } from "./detailed-overview";
+import { SummaryFooter } from "./summary-footer";
 
 const fmt = {
   currency: new Intl.NumberFormat("en-US", {
@@ -155,11 +163,18 @@ export default function RebalancerPage() {
               </AlertDescription>
             </Alert>
           ) : (
-            <PortfolioTable
-              portfolios={rebalanced}
-              totalCurrentValue={totalCurrentValue}
-              newTotalValue={newTotalValue}
-            />
+            <>
+              <PortfolioTable
+                portfolios={rebalanced}
+                totalCurrentValue={totalCurrentValue}
+                newTotalValue={newTotalValue}
+              />
+              <SummaryFooter
+                rebalanced={rebalanced}
+                mode={mode}
+                investmentAmount={investmentAmount}
+              />
+            </>
           )}
         </TabsContent>
 
@@ -191,6 +206,7 @@ function PortfolioTable({
   let totalSells = 0;
 
   return (
+    <TooltipProvider>
     <div className="rounded-md border border-border overflow-hidden">
       <Table>
         <TableHeader>
@@ -235,13 +251,36 @@ function PortfolioTable({
             if (p.action > 0.01) totalBuys += p.action;
             else if (p.action < -0.01) totalSells += Math.abs(p.action);
 
+            const desired = p.desiredPositions ?? p.minPositions ?? 0;
+            const currentPositions = p.sectors
+              ?.filter((s) => s.name !== "Missing Positions")
+              .reduce((sum, s) => sum + (s.positions?.length ?? s.positionCount ?? 0), 0) ?? 0;
+            const deficit = desired > 0 ? desired - currentPositions : 0;
+
             return (
-              <TableRow key={p.name}>
+              <TableRow
+                key={p.name}
+                className={cn(deficit > 0 && "border-l-2 border-l-amber-500")}
+              >
                 <TableCell className="font-medium">
-                  {p.name}
-                  {(p.currentValue || 0) === 0 && (
-                    <span className="ml-2 text-xs text-aqua-400">Empty</span>
-                  )}
+                  <span className="flex items-center gap-1.5">
+                    {p.name}
+                    {(p.currentValue || 0) === 0 && (
+                      <span className="text-xs text-aqua-400">
+                        Empty - Needs Positions
+                      </span>
+                    )}
+                    {deficit > 0 && (p.currentValue || 0) > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <AlertTriangle className="size-3.5 text-amber-400 shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Needs {deficit} more position{deficit > 1 ? "s" : ""}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </span>
                 </TableCell>
                 <TableCell className="text-right">
                   <SensitiveValue>
@@ -323,6 +362,7 @@ function PortfolioTable({
         </TableBody>
       </Table>
     </div>
+    </TooltipProvider>
   );
 }
 

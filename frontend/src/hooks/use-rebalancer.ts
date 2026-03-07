@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { calculateRebalancing } from "@/lib/rebalancer-calc";
+import { PortfolioState } from "@/lib/portfolio-state";
 import type {
   PortfolioData,
   RebalanceMode,
@@ -28,9 +29,15 @@ export function useRebalancer(): UseRebalancerReturn {
   );
   const [mode, setMode] = useState<RebalanceMode>("existing-only");
   const [investmentAmount, setInvestmentAmount] = useState(0);
-  const [selectedPortfolio, setSelectedPortfolio] = useState("");
+  const [selectedPortfolio, setSelectedPortfolioState] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const setSelectedPortfolio = useCallback((name: string) => {
+    setSelectedPortfolioState(name);
+    // Persist cross-page selection
+    PortfolioState.set(name);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,14 +46,24 @@ export function useRebalancer(): UseRebalancerReturn {
       try {
         setIsLoading(true);
         setError(null);
-        const data = await apiFetch<PortfolioData>(
-          "/simulator/portfolio-data"
-        );
+
+        const [data, savedId] = await Promise.all([
+          apiFetch<PortfolioData>("/simulator/portfolio-data"),
+          PortfolioState.get(),
+        ]);
+
         if (!cancelled) {
           setPortfolioData(data);
           if (data.portfolios?.length) {
-            const first = data.portfolios.find((p) => p.targetWeight > 0);
-            if (first) setSelectedPortfolio(first.name);
+            // Try to restore cross-page selection
+            const restored = savedId
+              ? data.portfolios.find(
+                  (p) => p.name === savedId && p.targetWeight > 0
+                )
+              : null;
+            const first =
+              restored ?? data.portfolios.find((p) => p.targetWeight > 0);
+            if (first) setSelectedPortfolioState(first.name);
           }
         }
       } catch (err) {

@@ -10,10 +10,43 @@ export interface PortfolioCompany {
   country: string | null;
 }
 
+export interface PortfolioPosition {
+  name: string;
+  identifier?: string | null;
+  investment_type: "Stock" | "ETF" | "Crypto";
+  currentValue: number;
+  targetAllocation: number;
+  targetValue?: number | null;
+  calculatedTargetValue?: number;
+  is_capped?: boolean;
+  unconstrained_target_value?: number;
+  applicable_rule?: string;
+  isPlaceholder?: boolean;
+  positionSlot?: number;
+  positionsRemaining?: number;
+  gap?: number;
+  action?: number;
+  valueAfter?: number;
+  excludedReason?: string;
+}
+
 export interface PortfolioSector {
   name: string;
   companies: PortfolioCompany[];
   positionCount: number;
+  positions?: PortfolioPosition[];
+  currentValue?: number;
+  targetAllocation?: number;
+  targetValue?: number;
+  targetWeight?: number;
+  calculatedTargetValue?: number;
+  isPlaceholder?: boolean;
+}
+
+export interface BuilderPosition {
+  companyName?: string;
+  weight?: number;
+  isPlaceholder?: boolean;
 }
 
 export interface Portfolio {
@@ -23,6 +56,8 @@ export interface Portfolio {
   sectors: PortfolioSector[];
   minPositions?: number;
   desiredPositions?: number;
+  effectivePositions?: number;
+  builderPositions?: BuilderPosition[];
 }
 
 export interface PortfolioData {
@@ -36,4 +71,26 @@ export interface RebalancedPortfolio extends Portfolio {
   targetValue: number;
   discrepancy: number;
   action: number;
+}
+
+export interface DetailedSector {
+  name: string;
+  positions: PortfolioPosition[];
+  currentValue: number;
+  targetAllocation: number;
+  calculatedTargetValue: number;
+  actionSum: number;
+  valueAfterSum: number;
+  isPlaceholder?: boolean;
+}
+
+export interface DetailedRebalancing {
+  sectors: DetailedSector[];
+  shouldShowMissingPositions: boolean;
+  portfolioTargetValue: number;
+  totalCurrentValue: number;
+  totalAction: number;
+  totalValueAfter: number;
+  totalBuys: number;
+  totalSells: number;
 }

@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1560 symbols, 4571 relationships, 124 execution flows).
+This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1197 symbols, 3365 relationships, 92 execution flows).
 
 ## Always Start Here
 

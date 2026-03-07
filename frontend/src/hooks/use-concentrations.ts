@@ -90,10 +90,9 @@ export function useConcentrations() {
         setDataLoading(true);
         setError(null);
 
-        // Fast phase: portfolios list, cash, saved state
-        const [portfolioList, cashData, savedState] = await Promise.all([
-          apiFetch<PortfolioOption[]>("/portfolios?include_ids=true&has_companies=true"),
-          apiFetch<{ cash: number }>("/account/cash").catch(() => ({ cash: 0 })),
+        // Critical fetches — charts + saved filter state
+        const [allData, savedState] = await Promise.all([
+          apiFetch<PerformancePortfolioData>("/portfolio_data/all?fields=companies"),
           apiFetch<PersistedFields>("/state?page=risk_overview").catch(
             () => ({} as PersistedFields)
           ),
@@ -101,8 +100,7 @@ export function useConcentrations() {
 
         if (cancelled) return;
 
-        setPortfolios(portfolioList);
-        setCashBalance(cashData.cash || 0);
+        setAllCompanies(allData.companies || []);
 
         stateRef.current = { ...savedState };
 
@@ -122,21 +120,23 @@ export function useConcentrations() {
         }
 
         setIsLoading(false);
+        setDataLoading(false);
 
-        // Data phase: slow portfolio data call
-        const allData = await apiFetch<PerformancePortfolioData>("/portfolio_data/all");
-
-        if (cancelled) return;
-
-        setAllCompanies(allData.companies || []);
+        // Deferred fetches — filter chips + cash toggle
+        Promise.all([
+          apiFetch<PortfolioOption[]>("/portfolios?include_ids=true&has_companies=true"),
+          apiFetch<{ cash: number }>("/account/cash").catch(() => ({ cash: 0 })),
+        ]).then(([portfolioList, cashData]) => {
+          if (!cancelled) {
+            setPortfolios(portfolioList);
+            setCashBalance(cashData.cash || 0);
+          }
+        });
       } catch (err) {
         if (!cancelled) {
           setError(
             err instanceof Error ? err.message : "Failed to load portfolio data"
           );
-        }
-      } finally {
-        if (!cancelled) {
           setIsLoading(false);
           setDataLoading(false);
         }

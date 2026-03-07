@@ -653,6 +653,7 @@ class PortfolioRepository:
         return rowcount is not None and rowcount > 0
 
     @staticmethod
+    @cache.memoize(timeout=30)
     def get_portfolio_data_with_enrichment(account_id: int) -> list:
         """
         Get enriched portfolio data with all fields needed for the frontend.
@@ -668,22 +669,6 @@ class PortfolioRepository:
             List of enriched portfolio items as dicts
         """
         logger.debug(f"Fetching enriched portfolio data for account {account_id}")
-
-        # Validate account exists
-        account = query_db('SELECT * FROM accounts WHERE id = ?', [account_id], one=True)
-        if not account:
-            logger.error(f"Account with ID {account_id} not found in database")
-            return []
-
-        # Check if any portfolios exist for this account
-        portfolios = query_db(
-            'SELECT COUNT(*) as count FROM portfolios WHERE account_id = ?',
-            [account_id],
-            one=True
-        )
-        if not portfolios or portfolios['count'] == 0:
-            logger.error(f"No portfolios found for account_id: {account_id}")
-            return []
 
         # Single optimized query to fetch all data
         query = '''

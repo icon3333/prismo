@@ -1,4 +1,5 @@
 import type {
+  PortfolioMetrics,
   PortfolioDataItem,
   AllocationRules,
   Violation,
@@ -13,6 +14,22 @@ function calculateItemValue(item: PortfolioDataItem): number {
     return Number(item.custom_total_value) || 0;
   }
   return (Number(item.price_eur) || 0) * (Number(item.effective_shares) || 0);
+}
+
+export function computeMetricsFromItems(items: PortfolioDataItem[]): PortfolioMetrics {
+  const total_items = items.length;
+  const total_value = items.reduce((s, i) => s + calculateItemValue(i), 0);
+  const missing_prices = items.filter(
+    (item) =>
+      !item.current_value &&
+      !(item.is_custom_value && item.custom_total_value != null) &&
+      (!item.price_eur || item.price_eur === 0)
+  ).length;
+  const health =
+    total_items > 0
+      ? Math.round(((total_items - missing_prices) / total_items) * 100)
+      : 100;
+  return { total_value, total_items, health, missing_prices };
 }
 
 export function calculateViolations(

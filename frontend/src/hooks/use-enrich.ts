@@ -58,28 +58,35 @@ export function useEnrich() {
     try {
       setIsLoading(true);
       setError(null);
-      const [itemsData, portfolios, cashData, builderData, dropdownData] = await Promise.all([
+
+      // Critical fetches — unblock table rendering
+      const [itemsData, portfolios] = await Promise.all([
         apiFetch<EnrichItem[]>("/portfolio_data"),
         apiFetch<string[]>("/portfolios"),
-        apiFetch<{ success: boolean; cash: number }>("/account/cash").catch(() => ({ success: false, cash: 0 })),
-        apiFetch<{ data?: { budget?: { availableToInvest?: number } }; partialData?: { budget?: { availableToInvest?: number } } }>("/builder/investment-targets").catch(() => null),
-        apiFetch<{ success: boolean; portfolios: PortfolioDropdownItem[] }>("/portfolios_dropdown").catch(() => ({ success: false, portfolios: [] })),
       ]);
       setItems(itemsData);
       setPortfolioOptions(portfolios.filter((p) => p && p !== "-"));
-      setCashBalance(cashData.cash || 0);
-      if (dropdownData?.portfolios) setPortfolioDropdown(dropdownData.portfolios);
+      setIsLoading(false);
 
-      // Extract builder available
-      const bd = builderData?.data || builderData;
-      const partial = builderData && "partialData" in builderData ? builderData.partialData : null;
-      const budget = (bd as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
-      const partialBudget = (partial as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
-      const avail = budget?.availableToInvest ?? partialBudget?.availableToInvest ?? null;
-      setBuilderAvailable(typeof avail === "number" ? avail : null);
+      // Deferred fetches — summary bar & add-position dialog
+      Promise.all([
+        apiFetch<{ success: boolean; cash: number }>("/account/cash").catch(() => ({ success: false, cash: 0 })),
+        apiFetch<{ data?: { budget?: { availableToInvest?: number } }; partialData?: { budget?: { availableToInvest?: number } } }>("/builder/investment-targets").catch(() => null),
+        apiFetch<{ success: boolean; portfolios: PortfolioDropdownItem[] }>("/portfolios_dropdown").catch(() => ({ success: false, portfolios: [] })),
+      ]).then(([cashData, builderData, dropdownData]) => {
+        setCashBalance(cashData.cash || 0);
+        if (dropdownData?.portfolios) setPortfolioDropdown(dropdownData.portfolios);
+
+        // Extract builder available
+        const bd = builderData?.data || builderData;
+        const partial = builderData && "partialData" in builderData ? builderData.partialData : null;
+        const budget = (bd as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
+        const partialBudget = (partial as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
+        const avail = budget?.availableToInvest ?? partialBudget?.availableToInvest ?? null;
+        setBuilderAvailable(typeof avail === "number" ? avail : null);
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load data");
-    } finally {
       setIsLoading(false);
     }
   }, []);
@@ -154,10 +161,11 @@ export function useEnrich() {
   const saveIdentifierChange = useCallback(
     async (id: number, identifier: string) => {
       await saveField(id, { identifier: identifier || "", is_identifier_user_edit: true });
+      updateItemLocal(id, { identifier });
       toast.success("Identifier updated");
-      await refreshData();
+      refreshData();
     },
-    [saveField, refreshData]
+    [saveField, updateItemLocal, refreshData]
   );
 
   const saveSectorChange = useCallback(
@@ -268,7 +276,7 @@ export function useEnrich() {
     async (id: number) => {
       await saveField(id, { reset_identifier: true });
       toast.success("Identifier reset");
-      await refreshData();
+      refreshData();
     },
     [saveField, refreshData]
   );

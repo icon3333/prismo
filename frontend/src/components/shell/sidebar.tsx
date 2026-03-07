@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Home,
   Gem,
@@ -21,9 +21,22 @@ import {
   Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 import { useTheme } from "next-themes";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
 import { useAccount } from "@/hooks/use-account";
+
+// Route → endpoints to warm on hover
+const PREFETCH: Record<string, string[]> = {
+  "/": ["/portfolio_data", "/portfolios?include_ids=true&has_companies=true", "/account/cash", "/state?page=builder", "/simulator/portfolio-data"],
+  "/enrich": ["/portfolio_data", "/portfolios", "/account/cash", "/builder/investment-targets", "/portfolios_dropdown"],
+  "/concentrations": ["/portfolios?include_ids=true&has_companies=true", "/account/cash", "/state?page=risk_overview", "/portfolio_data/all?fields=companies"],
+};
+
+function prefetchRoute(href: string) {
+  const endpoints = PREFETCH[href];
+  if (endpoints) endpoints.forEach((p) => apiFetch(p).catch(() => {}));
+}
 
 const NAV_SECTIONS = [
   {
@@ -54,6 +67,8 @@ export function Sidebar() {
   const { account } = useAccount();
   const { resolvedTheme, setTheme } = useTheme();
   const [expanded, setExpanded] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <aside
@@ -98,6 +113,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onMouseEnter={() => prefetchRoute(item.href)}
                   className={cn(
                     "flex items-center py-2 text-sm transition-colors relative",
                     expanded ? "gap-3 px-4" : "justify-center",
@@ -166,14 +182,14 @@ export function Sidebar() {
             expanded ? "gap-3 px-4" : "justify-center"
           )}
         >
-          {resolvedTheme === "dark" ? (
+          {mounted && resolvedTheme === "dark" ? (
             <Sun className="size-4 shrink-0" />
           ) : (
             <Moon className="size-4 shrink-0" />
           )}
           {expanded && (
             <span className="whitespace-nowrap">
-              {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
+              {mounted && resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
             </span>
           )}
         </button>

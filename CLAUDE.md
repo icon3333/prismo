@@ -135,7 +135,7 @@ Flask-Caching with SimpleCache (in-memory): 15-min for stock prices, 1-hour for 
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1197 symbols, 3365 relationships, 92 execution flows).
+This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1201 symbols, 3372 relationships, 93 execution flows).
 
 ## Always Start Here
 

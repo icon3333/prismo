@@ -22,6 +22,7 @@ from app.utils.identifier_mapping import store_identifier_mapping
 from app.utils.identifier_normalization import normalize_identifier
 from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis, normalize_portfolio
 from app.services.allocation_service import AllocationService
+from app.repositories.portfolio_repository import PortfolioRepository
 from app.cache import cache
 
 
@@ -506,6 +507,8 @@ def invalidate_portfolio_cache(account_id: int) -> None:
     """
     try:
         cache.delete_memoized(_get_simulator_portfolio_data_internal, account_id)
+        cache.delete_memoized(_get_all_portfolios_data, account_id)
+        cache.delete_memoized(PortfolioRepository.get_portfolio_data_with_enrichment, account_id)
         logger.debug(f"Cache invalidated for account_id: {account_id}")
     except Exception as e:
         # Cache invalidation failure is not critical - log full traceback and continue
@@ -700,7 +703,8 @@ def get_portfolio_data_api():
         return error_response('Failed to load portfolio data', 500)
 
 
-def _get_all_portfolios_data(account_id: int) -> dict:
+@cache.memoize(timeout=30)
+def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
     """
     Get aggregated portfolio data across all portfolios for an account.
 
@@ -708,6 +712,8 @@ def _get_all_portfolios_data(account_id: int) -> dict:
 
     Args:
         account_id: User's account ID
+        fields: Optional comma-separated fields to return. 'companies' skips
+                sector/thesis/portfolio groupings for faster response.
 
     Returns:
         Dictionary with aggregated portfolio data in the same format as single portfolio
@@ -749,33 +755,36 @@ def _get_all_portfolios_data(account_id: int) -> dict:
             'portfolios': []
         }
 
+    companies_only = fields == 'companies'
+
     # Group by portfolio BEFORE deduplication (for Portfolios tab)
     portfolios_raw = {}
-    for company in companies_raw:
-        portfolio_name = company.get('portfolio_name') or 'Unknown'
-        current_value = float(calculate_item_value(company))
-        total_invested = float(company.get('total_invested', 0) or 0)
+    if not companies_only:
+        for company in companies_raw:
+            portfolio_name = company.get('portfolio_name') or 'Unknown'
+            current_value = float(calculate_item_value(company))
+            total_invested = float(company.get('total_invested', 0) or 0)
 
-        if portfolio_name not in portfolios_raw:
-            portfolios_raw[portfolio_name] = {
-                'name': portfolio_name,
-                'companies': [],
-                'total_value': 0,
-                'total_invested': 0
+            if portfolio_name not in portfolios_raw:
+                portfolios_raw[portfolio_name] = {
+                    'name': portfolio_name,
+                    'companies': [],
+                    'total_value': 0,
+                    'total_invested': 0
+                }
+
+            # Create company entry for this portfolio (non-deduplicated)
+            company_entry = {
+                'name': company['name'],
+                'identifier': company['identifier'],
+                'sector': company.get('sector'),
+                'current_value': current_value,
+                'total_invested': total_invested
             }
 
-        # Create company entry for this portfolio (non-deduplicated)
-        company_entry = {
-            'name': company['name'],
-            'identifier': company['identifier'],
-            'sector': company.get('sector'),
-            'current_value': current_value,
-            'total_invested': total_invested
-        }
-
-        portfolios_raw[portfolio_name]['companies'].append(company_entry)
-        portfolios_raw[portfolio_name]['total_value'] += current_value
-        portfolios_raw[portfolio_name]['total_invested'] += total_invested
+            portfolios_raw[portfolio_name]['companies'].append(company_entry)
+            portfolios_raw[portfolio_name]['total_value'] += current_value
+            portfolios_raw[portfolio_name]['total_invested'] += total_invested
 
     # Deduplicate by identifier - group by identifier and aggregate
     deduped = {}
@@ -844,6 +853,25 @@ def _get_all_portfolios_data(account_id: int) -> dict:
         else:
             company['pnl_absolute'] = None
             company['pnl_percentage'] = None
+
+    if companies_only:
+        # Fast path: skip groupings, just return companies
+        last_updated = max((c['last_updated'] for c in companies if c['last_updated']), default=None)
+        logger.info(f"Returning {len(companies)} unique companies (companies-only mode)")
+        return {
+            'portfolio_id': 'all',
+            'portfolio_name': 'All Portfolios',
+            'total_value': total_value,
+            'cash': totals['cash'],
+            'portfolio_total': portfolio_total,
+            'total_invested': sum(float(c.get('total_invested', 0)) for c in companies),
+            'num_holdings': len(companies),
+            'last_updated': last_updated,
+            'companies': companies,
+            'sectors': [],
+            'theses': [],
+            'portfolios': []
+        }
 
     # Group by sector
     sectors = {}
@@ -1023,7 +1051,8 @@ def get_single_portfolio_data_api(portfolio_id):
 
         # Handle "all portfolios" aggregation
         if portfolio_id == 'all':
-            response_data = _get_all_portfolios_data(account_id)
+            fields = request.args.get('fields')
+            response_data = _get_all_portfolios_data(account_id, fields=fields)
             return jsonify(response_data)
 
         # Validate portfolio_id is a valid integer

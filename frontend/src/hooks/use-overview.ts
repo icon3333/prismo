@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { apiFetch } from "@/lib/api";
 import {
+  computeMetricsFromItems,
   calculateViolations,
   getHealthStatus,
   extractMissingPositions,
@@ -36,29 +37,19 @@ export function useOverview() {
         setDataLoading(true);
         setError(null);
 
-        // Fast phase
-        const [metricsData, portfolioList, cashData] = await Promise.all([
-          apiFetch<PortfolioMetrics>("/portfolio_metrics"),
+        const [items, portfolioList, cashData, stateData, rebalData] = await Promise.all([
+          apiFetch<PortfolioDataItem[]>("/portfolio_data").catch(() => [] as PortfolioDataItem[]),
           apiFetch<PortfolioOption[]>("/portfolios?include_ids=true&has_companies=true"),
           apiFetch<{ cash: number }>("/account/cash").catch(() => ({ cash: 0 })),
-        ]);
-
-        if (cancelled) return;
-
-        setMetrics(metricsData);
-        setPortfolios(portfolioList);
-        setCashBalance(cashData.cash || 0);
-        setIsLoading(false);
-
-        // Data phase
-        const [items, stateData, rebalData] = await Promise.all([
-          apiFetch<PortfolioDataItem[]>("/portfolio_data").catch(() => []),
           apiFetch<{ rules?: string }>("/state?page=builder").catch((): { rules?: string } => ({})),
           apiFetch<RebalancerData>("/simulator/portfolio-data").catch(() => null),
         ]);
 
         if (cancelled) return;
 
+        setMetrics(computeMetricsFromItems(items));
+        setPortfolios(portfolioList);
+        setCashBalance(cashData.cash || 0);
         setPortfolioItems(items);
         setRebalancerData(rebalData);
 

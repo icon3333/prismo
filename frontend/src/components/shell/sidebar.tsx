@@ -84,7 +84,7 @@ export function Sidebar() {
           expanded ? "gap-3 px-4" : "justify-center"
         )}
       >
-        <Gem className="size-5 shrink-0 text-aqua-500" />
+        <Gem className="size-5 shrink-0 text-aqua-500" suppressHydrationWarning />
         {expanded && (
           <span className="font-bold text-lg whitespace-nowrap">
             Prismo
@@ -122,7 +122,7 @@ export function Sidebar() {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
-                  <item.icon className="size-4 shrink-0" />
+                  <item.icon className="size-4 shrink-0" suppressHydrationWarning />
                   {expanded && (
                     <span className="whitespace-nowrap">
                       {item.label}
@@ -145,9 +145,9 @@ export function Sidebar() {
           )}
         >
           {expanded ? (
-            <PanelLeftClose className="size-4 shrink-0" />
+            <PanelLeftClose className="size-4 shrink-0" suppressHydrationWarning />
           ) : (
-            <PanelLeftOpen className="size-4 shrink-0" />
+            <PanelLeftOpen className="size-4 shrink-0" suppressHydrationWarning />
           )}
           {expanded && (
             <span className="whitespace-nowrap">Collapse</span>
@@ -165,9 +165,9 @@ export function Sidebar() {
           )}
         >
           {isAnonymous ? (
-            <EyeOff className="size-4 shrink-0" />
+            <EyeOff className="size-4 shrink-0" suppressHydrationWarning />
           ) : (
-            <Eye className="size-4 shrink-0" />
+            <Eye className="size-4 shrink-0" suppressHydrationWarning />
           )}
           {expanded && (
             <span className="whitespace-nowrap">
@@ -183,9 +183,9 @@ export function Sidebar() {
           )}
         >
           {mounted && resolvedTheme === "dark" ? (
-            <Sun className="size-4 shrink-0" />
+            <Sun className="size-4 shrink-0" suppressHydrationWarning />
           ) : (
-            <Moon className="size-4 shrink-0" />
+            <Moon className="size-4 shrink-0" suppressHydrationWarning />
           )}
           {expanded && (
             <span className="whitespace-nowrap">
@@ -203,7 +203,7 @@ export function Sidebar() {
               : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
           )}
         >
-          <User className="size-4 shrink-0" />
+          <User className="size-4 shrink-0" suppressHydrationWarning />
           {expanded && (
             <span className="whitespace-nowrap truncate">
               {account?.username ?? "Account"}
@@ -223,7 +223,7 @@ export function Sidebar() {
             expanded ? "gap-3 px-4" : "justify-center"
           )}
         >
-          <LogOut className="size-4 shrink-0" />
+          <LogOut className="size-4 shrink-0" suppressHydrationWarning />
           {expanded && (
             <span className="whitespace-nowrap">Logout</span>
           )}

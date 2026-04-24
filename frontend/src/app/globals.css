@@ -327,3 +327,12 @@ html {
   filter: blur(8px);
   pointer-events: auto;
 }
+
+/* ============================================================
+   Ptsim live-dot pulse — used by <LiveDot level="live" />.
+   ============================================================ */
+@keyframes ptsim-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+.ptsim-live-dot { animation: ptsim-pulse var(--pulse-dur) ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ptsim-live-dot { animation: none; }
+}

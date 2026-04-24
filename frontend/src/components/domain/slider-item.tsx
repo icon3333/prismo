@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { int } from "@/lib/format";
 
 export interface SliderItemProps {
   name: string;
@@ -20,7 +21,7 @@ export function SliderItem({
   currentValue,
   constraint,
   isOverLimit = false,
-  formatValue = (v) => `${v.toLocaleString()}`,
+  formatValue = int,
   onChange,
 }: SliderItemProps) {
   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
@@ -36,7 +37,7 @@ export function SliderItem({
     >
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-foreground">{name}</span>
-        <span className="text-sm text-foreground">{formatValue(value)}</span>
+        <span className="text-sm text-foreground font-mono tabular-nums">{formatValue(value)}</span>
       </div>
 
       <div className="relative h-2 rounded-full bg-muted overflow-hidden">

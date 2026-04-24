@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { formatNumber } from "@/lib/builder-calc";
+import { parseGermanNumber } from "@/lib/enrich-calc";
 import type { BudgetData, PortfolioMetrics } from "@/types/builder";
 
 interface BudgetSectionProps {
@@ -49,7 +50,7 @@ function BudgetInput({
 
   const handleBlur = useCallback(() => {
     setEditing(false);
-    const parsed = parseFloat(rawValue.replace(/,/g, ""));
+    const parsed = parseGermanNumber(rawValue);
     onChange(isNaN(parsed) ? 0 : parsed);
   }, [rawValue, onChange]);
 

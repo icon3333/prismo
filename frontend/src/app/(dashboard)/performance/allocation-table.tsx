@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { eur, signedPct } from "@/lib/format";
 import type { AllocationRow, AllocationMode, ChartSelection } from "@/types/performance";
 
 interface AllocationTableProps {
@@ -29,13 +30,7 @@ interface AllocationTableProps {
   onExpandedChange?: (expanded: Record<string, boolean>) => void;
 }
 
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }),
-  percent: (v: number) => v.toFixed(1) + "%",
-};
+const fmtPercent = (v: number) => v.toFixed(1) + "%";
 
 type SortField = "name" | "percentage" | "value" | "pnl-eur" | "pnl-pct";
 type SortDir = "asc" | "desc";
@@ -45,7 +40,6 @@ function formatPnL(abs: number | null, pct: number | null, invested: number | nu
     return { text: "N/A", className: "text-muted-foreground", tooltip: "" };
   }
 
-  const sign = abs > 0 ? "+" : abs < 0 ? "-" : "";
   const colorClass =
     abs > 0
       ? "text-emerald-400"
@@ -55,11 +49,11 @@ function formatPnL(abs: number | null, pct: number | null, invested: number | nu
 
   const tooltip =
     invested != null
-      ? `Total Invested: €${fmt.currency.format(invested)}`
+      ? `Total Invested: ${eur(invested)}`
       : "";
 
   return {
-    text: `€${fmt.currency.format(Math.abs(abs))} (${sign}${Math.abs(pct ?? 0).toFixed(1)}%)`,
+    text: `${eur(abs)} (${signedPct(pct ?? 0)})`,
     className: colorClass,
     tooltip,
   };
@@ -340,11 +334,11 @@ export function AllocationTable({
                     {row.sector}
                   </TableCell>
                   <TableCell className="text-right">
-                    {fmt.percent(row.percentage)}
+                    {fmtPercent(row.percentage)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-mono tabular-nums">
                     <SensitiveValue>
-                      €{fmt.currency.format(row.value)}
+                      {eur(row.value)}
                     </SensitiveValue>
                   </TableCell>
                   <TableCell className="text-right">
@@ -424,10 +418,10 @@ function TreeRow({
           </span>
         </TableCell>
         <TableCell className="text-right">
-          {fmt.percent(row.percentage)}
+          {fmtPercent(row.percentage)}
         </TableCell>
-        <TableCell className="text-right">
-          <SensitiveValue>€{fmt.currency.format(row.value)}</SensitiveValue>
+        <TableCell className="text-right font-mono tabular-nums">
+          <SensitiveValue>{eur(row.value)}</SensitiveValue>
         </TableCell>
         <TableCell className="text-right">
           <span className={pnl.className} title={pnl.tooltip}>
@@ -451,13 +445,13 @@ function TreeRow({
           const pctDisplay =
             mode === "portfolios" ? (
               <span className="text-muted-foreground">
-                {fmt.percent(child.percentage)}
+                {fmtPercent(child.percentage)}
               </span>
             ) : (
               <>
-                {fmt.percent(child.categoryPercentage ?? 0)}{" "}
+                {fmtPercent(child.categoryPercentage ?? 0)}{" "}
                 <span className="text-muted-foreground text-xs">
-                  ({fmt.percent(child.percentage)} total)
+                  ({fmtPercent(child.percentage)} total)
                 </span>
               </>
             );
@@ -473,9 +467,9 @@ function TreeRow({
             >
               <TableCell className="pl-8">{child.name}</TableCell>
               <TableCell className="text-right text-sm">{pctDisplay}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right font-mono tabular-nums">
                 <SensitiveValue>
-                  €{fmt.currency.format(child.value)}
+                  {eur(child.value)}
                 </SensitiveValue>
               </TableCell>
               <TableCell className="text-right">

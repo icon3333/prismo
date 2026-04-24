@@ -290,6 +290,23 @@ html {
   html {
     @apply font-sans;
   }
+
+  /* Terminal §6.4 — global 2px cyan focus ring on every interactive surface.
+     Component primitives strip their default focus-visible:ring-* utilities;
+     this rule supplies the single canonical ring. */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus);
+  }
+}
+
+/* Terminal §8.3 — left-rule row hover.
+   2px cyan inset slides in on the first cell of any hovered tbody row.
+   Implemented globally so TableCell doesn't need per-instance class plumbing. */
+@layer components {
+  table tbody tr:hover td:first-child {
+    box-shadow: inset 2px 0 0 var(--cyan);
+  }
 }
 
 /* ============================================================

@@ -3,13 +3,15 @@ import { Input as InputPrimitive } from "@base-ui/react/input"
 
 import { cn } from "@/lib/utils"
 
+// Terminal §9.3 — 30px, bg-2 fill, rule-2 border, mono 12px.
+// Focus = cyan border swap (no ring; global :focus-visible adds the 2px box-shadow).
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
     <InputPrimitive
       type={type}
       data-slot="input"
       className={cn(
-        "h-8 w-full min-w-0 border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        "h-[30px] w-full min-w-0 border border-rule-2 bg-bg-2 px-3 py-1 font-mono text-[12px] text-ink outline-none transition-colors duration-[80ms] file:inline-flex file:h-6 file:border-0 file:bg-transparent file:font-mono file:text-[12px] file:font-medium file:text-ink placeholder:text-ink-3 focus:border-cyan disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       {...props}

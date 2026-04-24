@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -82,7 +81,7 @@ export function SaveDialog({
             onClick={handleSubmit}
             disabled={!name.trim() || loading}
           >
-            {loading && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            {loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             {mode === "rename" ? "Rename" : "Save"}
           </Button>
         </DialogFooter>

@@ -275,14 +275,14 @@ export function PerformanceChart({
   };
 
   return (
-    <div className="rounded-md border border-border bg-card p-4">
+    <div className="border border-border bg-card p-4">
       <div className="mb-3">
         <h3 className="text-base font-semibold mb-2">
           {selection ? `${selection.groupName} Returns` : "Returns"}
         </h3>
         <div className="flex flex-wrap gap-2">
           {/* Chart mode toggle */}
-          <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+          <div className="flex gap-0.5 border border-border bg-muted p-0.5">
             {(["aggregate", "detail"] as ChartMode[]).map((m) => (
               <Button
                 key={m}
@@ -290,7 +290,7 @@ export function PerformanceChart({
                 size="sm"
                 className={cn(
                   "text-xs h-7 px-2.5 capitalize",
-                  chartMode === m && "bg-background shadow-sm"
+                  chartMode === m && "bg-background"
                 )}
                 onClick={() => setChartMode(m)}
               >
@@ -300,7 +300,7 @@ export function PerformanceChart({
           </div>
 
           {/* Period toggle */}
-          <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+          <div className="flex gap-0.5 border border-border bg-muted p-0.5">
             {periods.map((p) => (
               <Button
                 key={p.value}
@@ -308,7 +308,7 @@ export function PerformanceChart({
                 size="sm"
                 className={cn(
                   "text-xs h-7 px-2.5",
-                  period === p.value && "bg-background shadow-sm"
+                  period === p.value && "bg-background"
                 )}
                 onClick={() => setPeriod(p.value)}
               >

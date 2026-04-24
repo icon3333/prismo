@@ -86,7 +86,7 @@ export function PortfolioRow({
   );
 
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 overflow-hidden">
+    <div className="border border-border/50 bg-slate-900/50 overflow-hidden">
       {/* Collapsed strip */}
       <button
         type="button"

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Check, AlertTriangle } from "lucide-react";
+import { Check, AlertTriangle } from "lucide-react";
 import { parseGermanNumber } from "@/lib/enrich-calc";
 import type {
   AddPositionForm,
@@ -164,7 +164,7 @@ export function AddPositionDialog({
                 onBlur={handleIdentifierBlur}
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                {validation.loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+                {validation.loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
                 {validation.status === "valid" && <Check className="size-4 text-emerald-400" />}
                 {validation.status === "invalid" && <AlertTriangle className="size-4 text-amber-400" />}
               </div>
@@ -303,7 +303,7 @@ export function AddPositionDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="size-4 mr-1.5 animate-spin" />}
+            {isSubmitting && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Add Position
           </Button>
         </DialogFooter>

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { RefreshCw, Plus, Download, Search, Hammer, Coins, Upload, Loader2 } from "lucide-react";
+import { RefreshCw, Plus, Download, Search, Hammer, Coins, Upload } from "lucide-react";
 import { formatDateAgo, parseGermanNumber } from "@/lib/enrich-calc";
 import type { EnrichMetrics } from "@/types/enrich";
 
@@ -90,7 +90,7 @@ export function SummaryBar({
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-card p-4">
+    <div className="space-y-3 border border-border bg-card p-4">
       {/* Row 1: Metrics */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div>
@@ -171,7 +171,7 @@ export function SummaryBar({
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onUpdateAll} disabled={isPriceUpdating}>
             {isPriceUpdating ? (
-              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
             ) : (
               <RefreshCw className="size-3.5 mr-1.5" />
             )}

@@ -38,7 +38,7 @@ export function CategoryTable({ categories, className }: CategoryTableProps) {
     setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
 
   return (
-    <div className={cn("rounded-md border border-border overflow-hidden", className)}>
+    <div className={cn("border border-border overflow-hidden", className)}>
       <Table>
         <TableHeader>
           <TableRow className="bg-muted hover:bg-muted">

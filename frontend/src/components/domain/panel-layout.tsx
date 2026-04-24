@@ -35,7 +35,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        "rounded-md border bg-card p-4",
+        "border bg-card p-4",
         variant === "primary"
           ? "border-2 border-primary"
           : "border-border",

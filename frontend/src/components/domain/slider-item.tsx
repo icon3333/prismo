@@ -28,7 +28,7 @@ export function SliderItem({
   return (
     <div
       className={cn(
-        "rounded-md px-4 py-2 transition-colors",
+        "px-4 py-2 transition-colors",
         isOverLimit
           ? "border-l-3 border-l-destructive bg-[var(--danger-light)]"
           : "bg-aqua-500/5 hover:bg-aqua-500/10"

@@ -57,7 +57,7 @@ export function AllocationSummary({
   const noPortfolios = portfolios.length === 0;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Allocation Summary</h2>
         <div className="flex gap-2">

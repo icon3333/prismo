@@ -82,7 +82,7 @@ export default function RebalancerPage() {
 
         <TabsContent value="global" className="space-y-4">
           {/* Rebalance Controls */}
-          <div className="flex flex-wrap items-end gap-6 rounded-md border border-border bg-card p-4">
+          <div className="flex flex-wrap items-end gap-6 border border-border bg-card p-4">
             <RadioGroup
               value={mode}
               onValueChange={(v) => setMode(v as RebalanceMode)}
@@ -184,7 +184,7 @@ function PortfolioTable({
 
   return (
     <TooltipProvider>
-    <div className="rounded-md border border-border overflow-hidden">
+    <div className="border border-border overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted hover:bg-muted">

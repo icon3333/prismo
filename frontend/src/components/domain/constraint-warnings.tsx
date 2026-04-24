@@ -21,7 +21,7 @@ export function ConstraintWarnings({
   return (
     <div
       className={cn(
-        "rounded-md border border-destructive bg-[var(--danger-light)] p-4",
+        "border border-destructive bg-[var(--danger-light)] p-4",
         className
       )}
     >

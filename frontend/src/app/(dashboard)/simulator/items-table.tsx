@@ -19,7 +19,7 @@ interface Props {
 export function ItemsTable({ sim }: Props) {
   if (sim.items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-border/50 bg-card/50 py-12 text-muted-foreground">
+      <div className="flex flex-col items-center justify-center gap-2 border border-border/50 bg-card/50 py-12 text-muted-foreground">
         <Briefcase className="h-8 w-8 opacity-50" />
         <p className="text-sm">Add positions to build a simulated portfolio.</p>
       </div>
@@ -31,7 +31,7 @@ export function ItemsTable({ sim }: Props) {
     !isPortfolioMode && sim.scope === "portfolio" && sim.portfolios.length > 0;
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 overflow-x-auto">
+    <div className="border border-border/50 bg-card/50 overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>

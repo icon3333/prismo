@@ -138,7 +138,7 @@ export default function AccountPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         {/* Left panel: Account info */}
-        <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+        <div className="border border-border/50 bg-slate-900/50 p-5">
           <h2 className="mb-4 text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Account Info
           </h2>
@@ -203,7 +203,7 @@ export default function AccountPage() {
                       ref={fileInputRef}
                       type="file"
                       accept=".json"
-                      className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-slate-700"
+                      className="text-sm file:mr-3 file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-slate-700"
                     />
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -237,7 +237,7 @@ export default function AccountPage() {
             />
 
             {/* Delete Account */}
-            <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-5">
+            <div className="border border-red-500/30 bg-red-950/20 p-5">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 size-5 text-red-400 shrink-0" />
                 <div className="flex-1">
@@ -322,7 +322,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <h3 className="mb-3 font-medium">{title}</h3>
       {children}
     </div>
@@ -343,7 +343,7 @@ function DangerSection({
   onConfirm: () => Promise<void>;
 }) {
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-5">
+    <div className="border border-red-500/30 bg-red-950/20 p-5">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 size-5 text-red-400 shrink-0" />
         <div className="flex-1">

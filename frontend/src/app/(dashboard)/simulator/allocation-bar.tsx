@@ -44,7 +44,7 @@ export function AllocationBar({
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-2 py-1.5 px-1 rounded-md text-left transition-colors hover:bg-muted/30",
+        "w-full flex items-center gap-2 py-1.5 px-1 text-left transition-colors hover:bg-muted/30",
         isExpanded && "bg-muted/30"
       )}
     >

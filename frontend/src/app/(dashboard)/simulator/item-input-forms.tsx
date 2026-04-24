@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Loader2, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";
@@ -145,7 +145,7 @@ function TickerInput({ sim }: { sim: UseSimulatorReturn }) {
             onClick={() => submit(value)}
           >
             {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
             ) : (
               <Plus className="h-3.5 w-3.5" />
             )}
@@ -154,7 +154,7 @@ function TickerInput({ sim }: { sim: UseSimulatorReturn }) {
 
         {/* Dropdown */}
         {showDropdown && suggestions.length > 0 && (
-          <div className="absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-md overflow-hidden">
+          <div className="absolute z-50 mt-1 w-full border border-border bg-popover overflow-hidden">
             {suggestions.map((s, i) => (
               <button
                 key={`${s.ticker}-${i}`}
@@ -258,7 +258,7 @@ function DimensionInput({
 
         {/* Dropdown */}
         {showDropdown && filtered.length > 0 && (
-          <div className="absolute z-50 mt-1 w-full max-h-[200px] overflow-y-auto rounded-lg border border-border bg-popover shadow-md">
+          <div className="absolute z-50 mt-1 w-full max-h-[200px] overflow-y-auto border border-border bg-popover">
             {filtered.slice(0, 10).map((opt) => (
               <button
                 key={opt}

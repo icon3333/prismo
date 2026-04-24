@@ -46,7 +46,7 @@ export function PositionDetailsPanel({ chartType, label, sim }: Props) {
   }
 
   return (
-    <div className="ml-5 mb-2 rounded-lg border border-border/30 bg-muted/10 overflow-hidden">
+    <div className="ml-5 mb-2 border border-border/30 bg-muted/10 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 text-xs text-muted-foreground">
         <span>

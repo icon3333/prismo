@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
 import type { PortfolioOption } from "@/types/simulator";
 
 interface Props {
@@ -158,7 +157,7 @@ export function CloneDialog({
             onClick={handleSubmit}
             disabled={!selectedPortfolioId || !name.trim() || loading}
           >
-            {loading && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            {loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Clone
           </Button>
         </DialogFooter>

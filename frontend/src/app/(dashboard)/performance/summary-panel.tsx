@@ -96,7 +96,7 @@ export function SummaryPanel({
     : "Never";
 
   return (
-    <div className="rounded-md border border-border bg-card p-4 space-y-4">
+    <div className="border border-border bg-card p-4 space-y-4">
       {/* Top row: selector + cash toggle */}
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">

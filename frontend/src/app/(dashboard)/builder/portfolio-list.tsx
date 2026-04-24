@@ -73,7 +73,7 @@ export function PortfolioList({
 
       {/* Allocation status banner */}
       <div
-        className={`rounded-lg border px-4 py-2 text-sm font-medium ${bannerClass} ${bannerBorder}`}
+        className={`border px-4 py-2 text-sm font-medium ${bannerClass} ${bannerBorder}`}
       >
         Total allocation: {rounded}%
       </div>

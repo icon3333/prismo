@@ -78,7 +78,7 @@ export function EnrichTable({
   ...saveProps
 }: EnrichTableProps) {
   return (
-    <div className="rounded-md border border-border overflow-auto">
+    <div className="border border-border overflow-auto">
       <Table className="[&_input]:[font-size:inherit] [&_[data-slot=select-trigger]]:[font-size:inherit]">
         <TableHeader>
           <ShadTableRow className="bg-muted hover:bg-muted">

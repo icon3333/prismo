@@ -13,15 +13,15 @@ function LoadingSkeleton() {
     <div className="space-y-6">
       <Skeleton className="h-10 w-full" />
       <div className="grid gap-4 sm:grid-cols-4">
-        <Skeleton className="h-10 rounded-lg" />
-        <Skeleton className="h-10 rounded-lg" />
-        <Skeleton className="h-10 rounded-lg" />
-        <Skeleton className="h-10 rounded-lg" />
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
+        <Skeleton className="h-10" />
       </div>
-      <Skeleton className="h-64 rounded-xl" />
+      <Skeleton className="h-64" />
       <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-48 rounded-xl" />
-        <Skeleton className="h-48 rounded-xl" />
+        <Skeleton className="h-48" />
+        <Skeleton className="h-48" />
       </div>
     </div>
   );
@@ -36,7 +36,7 @@ export default function SimulatorPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Simulator</h1>
-        <div className="rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-400">
+        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-400">
           {sim.error}
         </div>
       </div>

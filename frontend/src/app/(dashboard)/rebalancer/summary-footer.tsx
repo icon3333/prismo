@@ -41,7 +41,7 @@ export function SummaryFooter({
       : totalCurrentValue + investmentAmount;
 
   return (
-    <div className="rounded-md border border-border bg-card p-4 space-y-1.5 text-sm">
+    <div className="border border-border bg-card p-4 space-y-1.5 text-sm">
       <Row label="Portfolio Value">
         <SensitiveValue>{fmt.format(totalCurrentValue)}</SensitiveValue>
       </Row>

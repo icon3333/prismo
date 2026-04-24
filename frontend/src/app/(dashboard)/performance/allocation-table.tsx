@@ -203,12 +203,12 @@ export function AllocationTable({
     : ["thesis", "sector", "stocks"];
 
   return (
-    <div className="rounded-md border border-border bg-card p-4">
+    <div className="border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-base font-semibold">
           {modeLabels[mode]} Allocation
         </h3>
-        <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+        <div className="flex gap-0.5 border border-border bg-muted p-0.5">
           {modes.map((m) => (
             <Button
               key={m}
@@ -216,7 +216,7 @@ export function AllocationTable({
               size="sm"
               className={cn(
                 "text-xs h-7 px-2.5",
-                mode === m && "bg-background shadow-sm"
+                mode === m && "bg-background"
               )}
               onClick={() => onModeChange(m)}
             >
@@ -226,7 +226,7 @@ export function AllocationTable({
         </div>
       </div>
 
-      <div className="rounded-md border border-border overflow-hidden">
+      <div className="border border-border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted hover:bg-muted">

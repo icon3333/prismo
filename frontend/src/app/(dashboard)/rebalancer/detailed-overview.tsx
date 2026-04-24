@@ -134,7 +134,7 @@ export function DetailedOverview({
         </div>
 
         {selected && sectors.length > 0 && detailed ? (
-          <div className="rounded-md border border-border overflow-hidden">
+          <div className="border border-border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">

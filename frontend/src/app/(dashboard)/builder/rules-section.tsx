@@ -22,7 +22,7 @@ const ruleFields: {
 
 export function RulesSection({ rules, setRule }: RulesSectionProps) {
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <h2 className="mb-4 text-lg font-semibold">Allocation Rules</h2>
       <div className="space-y-3">
         {ruleFields.map((field) => (

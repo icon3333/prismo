@@ -45,7 +45,7 @@ function ViolationGauge({
 }) {
   const count = violations.length;
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
+    <div className="border border-border bg-card p-5">
       <p className="text-sm font-semibold text-muted-foreground mb-3">
         {title}
       </p>
@@ -129,7 +129,7 @@ export default function OverviewPage() {
       <h1 className="text-2xl font-bold">Overview</h1>
 
       {/* Dashboard header */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="border border-border bg-card p-6">
         <h2 className="text-xl font-bold">Welcome</h2>
         <p className="text-sm text-muted-foreground">
           Your portfolio at a glance
@@ -137,7 +137,7 @@ export default function OverviewPage() {
 
         {/* Metric pills */}
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-md bg-muted p-4 text-center">
+          <div className="bg-muted p-4 text-center">
             <div className="text-lg font-bold font-mono">
               <SensitiveValue>
                 {metrics ? currencyFmt.format(metrics.total_value) : "—"}
@@ -147,7 +147,7 @@ export default function OverviewPage() {
               Total Value
             </div>
           </div>
-          <div className="rounded-md bg-muted p-4 text-center">
+          <div className="bg-muted p-4 text-center">
             <div className="text-lg font-bold font-mono">
               {portfolios.length}
             </div>
@@ -155,7 +155,7 @@ export default function OverviewPage() {
               Portfolios
             </div>
           </div>
-          <div className="rounded-md bg-muted p-4 text-center">
+          <div className="bg-muted p-4 text-center">
             <div className="text-lg font-bold font-mono">
               {metrics?.total_items ?? 0}
             </div>
@@ -171,7 +171,7 @@ export default function OverviewPage() {
         <Skeleton className="h-24 w-full" />
       ) : (
         missingPositions.length > 0 && (
-          <div className="rounded-lg border border-border bg-card p-6">
+          <div className="border border-border bg-card p-6">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold">Stocks Missing</h2>
               <Link
@@ -189,7 +189,7 @@ export default function OverviewPage() {
               {missingPositions.map((p) => (
                 <div
                   key={p.name}
-                  className="flex-1 min-w-[260px] rounded-md border-l-4 border-l-coral-500 bg-coral-500/10 p-4"
+                  className="flex-1 min-w-[260px] border-l-4 border-l-coral-500 bg-coral-500/10 p-4"
                 >
                   <p className="font-semibold">{p.name}</p>
                   <p className="text-sm text-muted-foreground">
@@ -215,7 +215,7 @@ export default function OverviewPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-border bg-card p-6">
+        <div className="border border-border bg-card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Concentrations</h2>
             <Link
@@ -227,7 +227,7 @@ export default function OverviewPage() {
           </div>
 
           {/* Health card */}
-          <div className="flex items-center gap-3 rounded-md border border-border bg-muted p-4 mb-4">
+          <div className="flex items-center gap-3 border border-border bg-muted p-4 mb-4">
             <HealthIcon status={healthStatus.icon} />
             <div>
               <p className="font-semibold">{healthStatus.title}</p>

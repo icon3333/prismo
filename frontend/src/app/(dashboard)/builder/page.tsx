@@ -12,11 +12,11 @@ function LoadingSkeleton() {
     <div className="space-y-6">
       <Skeleton className="h-8 w-48" />
       <div className="grid gap-6 lg:grid-cols-2">
-        <Skeleton className="h-64 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
+        <Skeleton className="h-64" />
+        <Skeleton className="h-64" />
       </div>
-      <Skeleton className="h-48 rounded-xl" />
-      <Skeleton className="h-48 rounded-xl" />
+      <Skeleton className="h-48" />
+      <Skeleton className="h-48" />
     </div>
   );
 }
@@ -32,7 +32,7 @@ export default function BuilderPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Builder</h1>
-        <div className="rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-400">
+        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-400">
           {builder.error}
         </div>
       </div>

@@ -19,7 +19,6 @@ import {
   Trash2,
   Copy,
   Link,
-  Loader2,
   Check,
   AlertTriangle,
 } from "lucide-react";
@@ -48,13 +47,13 @@ export function SimulatorHeader({ sim }: Props) {
         <h1 className="text-2xl font-bold">Simulator</h1>
 
         {/* Mode toggle group */}
-        <div className="inline-flex rounded-lg border border-border/50 bg-muted/30 p-0.5">
+        <div className="inline-flex border border-border/50 bg-muted/30 p-0.5">
           <button
             onClick={() => sim.switchMode("overlay")}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
               !isPortfolioMode
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-background text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -64,9 +63,9 @@ export function SimulatorHeader({ sim }: Props) {
           <button
             onClick={() => sim.switchMode("portfolio")}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors",
               isPortfolioMode
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-background text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -295,9 +294,7 @@ function AutoSaveIndicator({ status }: { status: string }) {
       )}
     >
       {status === "saving" && (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin" /> Saving
-        </>
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
       )}
       {status === "saved" && (
         <>

@@ -104,7 +104,7 @@ export function BudgetSection({
   portfolioMetrics,
 }: BudgetSectionProps) {
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <h2 className="mb-4 text-lg font-semibold">Budget</h2>
       <div className="space-y-3">
         {budgetFields.map((field) => (

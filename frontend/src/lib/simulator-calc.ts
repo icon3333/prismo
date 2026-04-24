@@ -1,3 +1,4 @@
+import { eur } from "@/lib/format";
 import type {
   SimulatorItem,
   SimulatorMode,
@@ -25,13 +26,11 @@ export function normalizeLabel(label: string): string {
 // Value formatting (de-DE locale, matching Flask JS)
 // ---------------------------------------------------------------------------
 
-const deFormatter = new Intl.NumberFormat("de-DE", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-
+/** Bare de-DE number for inline-edit inputs. e.g. `1.234,56`. */
 export function formatSimValue(value: number): string {
-  return deFormatter.format(value);
+  // eur() returns "1.234,56 €" — strip the trailing currency symbol so this
+  // can be used in number-only input fields.
+  return eur(value).replace(/\s?€$/, "");
 }
 
 export function parseSimValue(str: string): number {
@@ -45,15 +44,9 @@ export function parseSimValue(str: string): number {
   return Math.max(0, Math.min(999_999_999, num));
 }
 
+/** Formatted EUR for simulator display surfaces. e.g. `1.234,56 €`. */
 export function formatCurrency(value: number): string {
-  const num = value || 0;
-  return (
-    "€" +
-    num.toLocaleString("de-DE", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    })
-  );
+  return eur(value || 0);
 }
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
+import { eur, signedEur, signedPct } from "@/lib/format";
 import type {
   PortfolioOption,
   PerformancePortfolioData,
@@ -26,13 +27,6 @@ interface SummaryPanelProps {
   onIncludeCashChange: (v: boolean) => void;
 }
 
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }),
-};
-
 function formatPnLSummary(
   abs: number | null,
   pct: number | null
@@ -41,18 +35,15 @@ function formatPnLSummary(
     return { text: "N/A", className: "text-muted-foreground" };
   }
 
-  const absVal = abs;
-  const pctVal = pct ?? 0;
-  const sign = absVal > 0 ? "+" : "";
   const colorClass =
-    absVal > 0
+    abs > 0
       ? "text-emerald-400"
-      : absVal < 0
+      : abs < 0
         ? "text-coral-500"
         : "text-muted-foreground";
 
   return {
-    text: `${sign}€${fmt.currency.format(Math.abs(absVal))} (${sign}${Math.abs(pctVal).toFixed(1)}%)`,
+    text: `${signedEur(abs)} (${signedPct(pct ?? 0)})`,
     className: colorClass,
   };
 }
@@ -135,7 +126,7 @@ export function SummaryPanel({
             />
             Cash
             <Badge variant="secondary" className="sensitive-value">
-              €{fmt.currency.format(cashBalance)}
+              {eur(cashBalance)}
             </Badge>
           </label>
         )}
@@ -148,9 +139,9 @@ export function SummaryPanel({
             <p className="text-xs text-muted-foreground uppercase tracking-wider">
               Value
             </p>
-            <p className="text-lg font-semibold">
+            <p className="text-lg font-semibold font-mono tabular-nums">
               <SensitiveValue>
-                €{fmt.currency.format(displayValue)}
+                {eur(displayValue)}
               </SensitiveValue>
             </p>
           </div>

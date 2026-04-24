@@ -1,6 +1,7 @@
 "use client";
 
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
+import { eur } from "@/lib/format";
 import type { RebalancedPortfolio, RebalanceMode } from "@/types/portfolio";
 
 interface SummaryFooterProps {
@@ -8,12 +9,6 @@ interface SummaryFooterProps {
   mode: RebalanceMode;
   investmentAmount: number;
 }
-
-const fmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-});
 
 export function SummaryFooter({
   rebalanced,
@@ -43,26 +38,26 @@ export function SummaryFooter({
   return (
     <div className="border border-border bg-card p-4 space-y-1.5 text-sm">
       <Row label="Portfolio Value">
-        <SensitiveValue>{fmt.format(totalCurrentValue)}</SensitiveValue>
+        <SensitiveValue>{eur(totalCurrentValue)}</SensitiveValue>
       </Row>
 
       {netCapital > 0 && (
         <Row label="New Capital Required">
           <span className="text-emerald-400">
-            <SensitiveValue>{fmt.format(netCapital)}</SensitiveValue>
+            <SensitiveValue>{eur(netCapital)}</SensitiveValue>
           </span>
         </Row>
       )}
 
       <Row label="New Portfolio Value">
-        <SensitiveValue>{fmt.format(newTotalValue)}</SensitiveValue>
+        <SensitiveValue>{eur(newTotalValue)}</SensitiveValue>
       </Row>
 
       {(totalBuys > 0 || totalSells > 0) && (
         <Row label="Total Transactions">
           {totalBuys > 0 && (
             <span className="text-emerald-400">
-              Buy: <SensitiveValue>{fmt.format(totalBuys)}</SensitiveValue>
+              Buy: <SensitiveValue>{eur(totalBuys)}</SensitiveValue>
             </span>
           )}
           {totalBuys > 0 && totalSells > 0 && (
@@ -70,7 +65,7 @@ export function SummaryFooter({
           )}
           {totalSells > 0 && (
             <span className="text-coral-500">
-              Sell: <SensitiveValue>{fmt.format(totalSells)}</SensitiveValue>
+              Sell: <SensitiveValue>{eur(totalSells)}</SensitiveValue>
             </span>
           )}
         </Row>

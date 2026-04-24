@@ -16,12 +16,8 @@ import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { RotateCcw } from "lucide-react";
 import { useInlineEdit } from "@/hooks/use-inline-edit";
 import { calculateItemValue, getValueSource } from "@/lib/enrich-calc";
+import { eur, shares as fmtShares } from "@/lib/format";
 import type { EnrichItem, InvestmentType } from "@/types/enrich";
-
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }),
-  number: new Intl.NumberFormat("de-DE"),
-};
 
 interface TableRowProps {
   item: EnrichItem;
@@ -101,13 +97,13 @@ export const TableRow = React.memo(function TableRow({
     onCommit: (v) => onSaveThesis(item.id, v),
   });
 
-  const shares = useInlineEdit(fmt.number.format(item.effective_shares ?? 0), {
+  const shares = useInlineEdit(fmtShares(item.effective_shares ?? 0), {
     onCommit: (v) => onSaveShares(item.id, v),
   });
 
   const totalValue = useInlineEdit(
     getValueSource(item) === "custom" && item.custom_total_value != null
-      ? fmt.number.format(item.custom_total_value)
+      ? fmtShares(item.custom_total_value)
       : "",
     {
       onCommit: (v) => onSaveTotalValue(item.id, v),
@@ -119,10 +115,10 @@ export const TableRow = React.memo(function TableRow({
   useEffect(() => { company.syncValue(item.company ?? ""); }, [item.company]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { sector.syncValue(item.sector ?? ""); }, [item.sector]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { thesis.syncValue(item.thesis ?? ""); }, [item.thesis]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { shares.syncValue(fmt.number.format(item.effective_shares ?? 0)); }, [item.effective_shares]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { shares.syncValue(fmtShares(item.effective_shares ?? 0)); }, [item.effective_shares]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const v = getValueSource(item) === "custom" && item.custom_total_value != null
-      ? fmt.number.format(item.custom_total_value)
+      ? fmtShares(item.custom_total_value)
       : "";
     totalValue.syncValue(v);
   }, [item.custom_total_value, item.is_custom_value]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -185,9 +181,9 @@ export const TableRow = React.memo(function TableRow({
             }`}
           >
             {item.price_eur != null && item.price_eur > 0
-              ? fmt.currency.format(item.price_eur)
+              ? eur(item.price_eur)
               : valueSrc === "custom"
-                ? fmt.currency.format(item.custom_price_eur ?? 0)
+                ? eur(item.custom_price_eur ?? 0)
                 : "No price"}
           </span>
         </SensitiveValue>
@@ -292,7 +288,7 @@ export const TableRow = React.memo(function TableRow({
             {...shares.inputProps}
             title={
               item.is_manually_edited
-                ? `Original: ${fmt.number.format(item.shares)}${item.csv_modified_after_edit ? " (CSV modified after edit)" : ""}`
+                ? `Original: ${fmtShares(item.shares)}${item.csv_modified_after_edit ? " (CSV modified after edit)" : ""}`
                 : undefined
             }
           />
@@ -316,8 +312,8 @@ export const TableRow = React.memo(function TableRow({
               <RevertButton onClick={() => onResetCustomValue(item.id)} title="Reset to market" />
             </>
           ) : valueSrc === "market" ? (
-            <SensitiveValue>
-              {fmt.currency.format(computedValue)}
+            <SensitiveValue className="font-mono tabular-nums">
+              {eur(computedValue)}
             </SensitiveValue>
           ) : (
             <SensitiveValue>
@@ -332,9 +328,9 @@ export const TableRow = React.memo(function TableRow({
       </TableCell>
 
       {/* Total Invested */}
-      <TableCell className="text-right">
+      <TableCell className="text-right font-mono tabular-nums">
         <SensitiveValue>
-          {item.total_invested != null ? fmt.currency.format(item.total_invested) : "-"}
+          {item.total_invested != null ? eur(item.total_invested) : "-"}
         </SensitiveValue>
       </TableCell>
     </ShadTableRow>

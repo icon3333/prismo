@@ -4,12 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { cn } from "@/lib/utils";
+import { eur } from "@/lib/format";
 import type { PortfolioOption } from "@/types/performance";
-
-const fmt = new Intl.NumberFormat("de-DE", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 interface PortfolioFilterProps {
   portfolios: PortfolioOption[];
@@ -81,8 +77,8 @@ export function PortfolioFilter({
             Include Cash
           </label>
           {cashBalance > 0 && (
-            <span className="text-xs text-aqua-400/80">
-              <SensitiveValue>(€{fmt.format(cashBalance)})</SensitiveValue>
+            <span className="text-xs text-aqua-400/80 font-mono tabular-nums">
+              <SensitiveValue>({eur(cashBalance)})</SensitiveValue>
             </span>
           )}
         </div>

@@ -13,13 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { Violation } from "@/types/overview";
-
-const currencyFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
+import { eur } from "@/lib/format";
 
 function HealthIcon({ status }: { status: string }) {
   switch (status) {
@@ -140,7 +134,7 @@ export default function OverviewPage() {
           <div className="bg-muted p-4 text-center">
             <div className="text-lg font-bold font-mono">
               <SensitiveValue>
-                {metrics ? currencyFmt.format(metrics.total_value) : "—"}
+                {metrics ? eur(metrics.total_value) : "—"}
               </SensitiveValue>
             </div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

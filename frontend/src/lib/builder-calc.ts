@@ -1,3 +1,4 @@
+import { eur, int } from "@/lib/format";
 import type {
   BudgetData,
   BuilderRealPosition,
@@ -315,18 +316,13 @@ export function buildCSVContent(
     .join("\n");
 }
 
+/** Formatted EUR for builder display surfaces. e.g. `1.234,56 €`. */
 export function formatCurrencyRaw(amount: number): string {
-  if (typeof amount !== "number" || isNaN(amount)) return "\u20AC0";
-  if (Math.abs(amount) >= 100) {
-    return `\u20AC${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  }
-  return `\u20AC${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return eur(amount);
 }
 
+/** Plain de-DE integer for builder budget inputs. e.g. `1.234`. */
 export function formatNumber(value: number): string {
   if (!value) return "";
-  return value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 0,
-  });
+  return int(value);
 }

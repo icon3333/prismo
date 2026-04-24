@@ -13,11 +13,8 @@ import {
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { RefreshCw, Plus, Download, Search, Hammer, Coins, Upload } from "lucide-react";
 import { formatDateAgo, parseGermanNumber } from "@/lib/enrich-calc";
+import { eur } from "@/lib/format";
 import type { EnrichMetrics } from "@/types/enrich";
-
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }),
-};
 
 interface SummaryBarProps {
   metrics: EnrichMetrics;
@@ -60,7 +57,7 @@ export function SummaryBar({
   onSaveCash,
   onUseBuilderAsCash,
 }: SummaryBarProps) {
-  const [cashInput, setCashInput] = useState(fmt.currency.format(cashBalance));
+  const [cashInput, setCashInput] = useState(eur(cashBalance));
   const cashOriginal = useRef(cashBalance);
 
   const handleCashFocus = useCallback(() => {
@@ -71,22 +68,22 @@ export function SummaryBar({
   const handleCashBlur = useCallback(() => {
     const val = parseGermanNumber(cashInput);
     if (isNaN(val) || val < 0) {
-      setCashInput(fmt.currency.format(cashBalance));
+      setCashInput(eur(cashBalance));
       return;
     }
     if (Math.abs(val - cashOriginal.current) < 0.01) {
-      setCashInput(fmt.currency.format(cashBalance));
+      setCashInput(eur(cashBalance));
       return;
     }
     onSaveCash(val);
-    setCashInput(fmt.currency.format(val));
+    setCashInput(eur(val));
   }, [cashInput, cashBalance, onSaveCash]);
 
   // Sync cash display when cashBalance prop changes
   const prevCash = useRef(cashBalance);
   if (prevCash.current !== cashBalance) {
     prevCash.current = cashBalance;
-    setCashInput(fmt.currency.format(cashBalance));
+    setCashInput(eur(cashBalance));
   }
 
   return (
@@ -100,7 +97,7 @@ export function SummaryBar({
         <div>
           <span className="text-muted-foreground">Holdings</span>{" "}
           <SensitiveValue className="font-semibold">
-            {fmt.currency.format(metrics.totalValue)}
+            {eur(metrics.totalValue)}
           </SensitiveValue>
         </div>
         <div className="flex items-center gap-1.5">
@@ -120,7 +117,7 @@ export function SummaryBar({
               <button
                 onClick={onUseBuilderAsCash}
                 className="text-muted-foreground hover:text-aqua-400 transition-colors"
-                title={`Use ${fmt.currency.format(builderAvailable)} from Builder`}
+                title={`Use ${eur(builderAvailable)} from Builder`}
               >
                 <Coins className="size-3.5" />
               </button>
@@ -131,7 +128,7 @@ export function SummaryBar({
         <div>
           <span className="text-muted-foreground">Total</span>{" "}
           <SensitiveValue className="font-semibold">
-            {fmt.currency.format(portfolioTotal)}
+            {eur(portfolioTotal)}
           </SensitiveValue>
         </div>
         <div className="ml-auto text-xs text-muted-foreground">

@@ -5,27 +5,19 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   Ocean Depth Design System - Tailwind v4 Theme + shadcn/ui
+   Prismo — Terminal Design System
+   Bloomberg-flavored, expert density. Dark charcoal canvas.
+   Cyan = live / CSV / primary. Amber = simulation / manual / warn.
+   Mono-dominant. Tonal depth. Square corners. Zero shadows.
+   Spec: README §1–§18, colors_and_type.css.
    ============================================================ */
 
 @theme inline {
-  /* --- Ocean Depth Custom Colors --- */
-  --color-ocean-950: oklch(0.129 0.041 264.7);
-  --color-ocean-900: oklch(0.208 0.040 265.8);
-  --color-ocean-800: oklch(0.279 0.037 260.0);
-  --color-aqua-400: oklch(0.797 0.134 211.6);
-  --color-aqua-500: oklch(0.715 0.126 215.2);
-  --color-teal-500: oklch(0.704 0.123 182.5);
-  --color-coral-500: oklch(0.705 0.187 47.6);
-  --color-pearl-50: oklch(0.984 0.003 248.2);
-  --color-pearl-100: oklch(0.968 0.007 248.1);
-  --color-pearl-400: oklch(0.711 0.035 256.8);
+  /* --- Fonts (next/font CSS variables, set in app/layout.tsx) --- */
+  --font-sans: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-mono), "Fira Code", ui-monospace, SFMono-Regular, monospace;
 
-  /* --- Fonts --- */
-  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: var(--font-geist-mono), 'Fira Code', monospace;
-
-  /* --- Disable all box shadows --- */
+  /* --- Disable all box shadows — Terminal §2 rule 2: depth is tonal --- */
   --shadow-2xs: none;
   --shadow-xs: none;
   --shadow-sm: none;
@@ -34,16 +26,17 @@
   --shadow-xl: none;
   --shadow-2xl: none;
 
-  /* --- Border radius --- */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* --- Radii — Terminal §6.3: square corners everywhere --- */
+  --radius-none: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
 
-  /* --- shadcn/ui color mappings --- */
+  /* --- shadcn/ui color mappings (passthrough to Terminal tokens in :root) --- */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -78,138 +71,183 @@
 }
 
 /* ============================================================
-   Light mode (default) — Inverted Ocean Depth
+   Terminal raw tokens (README §5, §6, §7) + shadcn aliases.
+   Dark-only — next-themes is forced to dark in app/layout.tsx.
    ============================================================ */
 
 :root {
-  /* Core surfaces */
-  --background: oklch(0.984 0.003 248.2);    /* #F8FAFC pearl-50 */
-  --foreground: oklch(0.208 0.040 265.8);    /* #0F172A ocean-900 */
+  color-scheme: dark;
 
-  --card: oklch(1 0 0);                       /* #FFFFFF white */
-  --card-foreground: oklch(0.208 0.040 265.8);
+  /* ---------- Canvas / panel backgrounds (§5.1, tonal depth) ---------- */
+  --bg:       #0B0D0E;
+  --bg-1:     #111416;
+  --bg-2:     #171B1E;
+  --bg-3:     #1E2328;
+  --bg-4:     #262C32;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.040 265.8);
+  /* ---------- Rules / borders (§5.2) ---------- */
+  --rule:     #242A30;
+  --rule-2:   #30373E;
+  --rule-3:   #454D56;
 
-  --muted: oklch(0.968 0.007 248.1);         /* #F1F5F9 pearl-100 */
-  --muted-foreground: oklch(0.554 0.022 257.4); /* #64748B ocean-500 */
+  /* ---------- Ink (§5.3) ---------- */
+  --ink:      #E8ECEF;
+  --ink-1:    #B4BBC2;
+  --ink-2:    #7A838C;
+  --ink-3:    #4A5057;
+  --ink-inv:  #041015;
 
-  /* Primary accent - Aqua */
-  --primary: oklch(0.715 0.126 215.2);       /* #06B6D4 */
-  --primary-foreground: oklch(1 0 0);
+  /* ---------- Accents (§5.4) ---------- */
+  --cyan:     #00D4E6;
+  --cyan-1:   #3BE1EF;
+  --cyan-2:   #0093A0;
 
-  /* Secondary */
-  --secondary: oklch(0.968 0.007 248.1);     /* #F1F5F9 */
-  --secondary-foreground: oklch(0.208 0.040 265.8);
+  --amber:    #FFB020;
+  --amber-1:  #FFC34D;
+  --amber-2:  #CC8A10;
 
-  /* Accent */
-  --accent: oklch(0.968 0.007 248.1);
-  --accent-foreground: oklch(0.208 0.040 265.8);
+  --green:    #00C16A;
+  --green-1:  #37D88C;
 
-  /* Destructive */
-  --destructive: oklch(0.637 0.208 25.3);    /* #EF4444 */
+  --red:      #FF5360;
+  --red-1:    #FF7A83;
 
-  /* Borders & rings */
-  --border: oklch(0 0 0 / 10%);
-  --input: oklch(0 0 0 / 10%);
-  --ring: oklch(0.715 0.126 215.2);          /* Aqua focus ring */
+  --violet:   #8B7CF6;
 
-  /* Radius */
-  --radius: 0.5rem;
+  /* ---------- Source-of-truth (§5.4) ---------- */
+  --src-csv:    var(--cyan);
+  --src-manual: var(--amber);
 
-  /* Chart colors */
-  --chart-1: oklch(0.715 0.126 215.2);      /* Aqua */
-  --chart-2: oklch(0.704 0.123 182.5);      /* Teal */
-  --chart-3: oklch(0.705 0.187 47.6);       /* Coral */
-  --chart-4: oklch(0.797 0.134 211.6);      /* Aqua-400 */
-  --chart-5: oklch(0.711 0.035 256.8);      /* Pearl-400 */
+  /* ---------- Sector palette (§5.5, categorical, allocation only) ---------- */
+  --sec-tech:     var(--cyan);
+  --sec-etf:      var(--violet);
+  --sec-consumer: var(--amber);
+  --sec-energy:   var(--green);
+  --sec-finance:  #E85AA0;
+  --sec-health:   #5AC8FA;
+  --sec-cash:     var(--ink-3);
 
-  /* Sidebar */
-  --sidebar: oklch(0.968 0.007 248.1);
-  --sidebar-foreground: oklch(0.208 0.040 265.8);
-  --sidebar-primary: oklch(0.715 0.126 215.2);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.932 0.012 248.0);
-  --sidebar-accent-foreground: oklch(0.208 0.040 265.8);
-  --sidebar-border: oklch(0 0 0 / 10%);
-  --sidebar-ring: oklch(0.715 0.126 215.2);
+  /* ---------- Spacing — 4px base (§6.1) ---------- */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
 
-  /* --- Ocean Depth Custom Properties --- */
-  --success: oklch(0.704 0.123 182.5);       /* #14B8A6 teal-500 */
-  --success-foreground: oklch(0.129 0.041 264.7);
-  --warning: oklch(0.705 0.187 47.6);        /* #F97316 coral-500 */
-  --warning-foreground: oklch(0.129 0.041 264.7);
+  /* ---------- Control sizing (§6.2) ---------- */
+  --btn-h-sm: 22px;
+  --btn-h:    28px;
+  --btn-h-lg: 34px;
+  --input-h:  30px;
+  --bar-h:    40px;
+  --row-h:    44px;
 
-  /* Overlays */
-  --primary-light: oklch(0.715 0.126 215.2 / 10%);
-  --danger-light: oklch(0.637 0.208 25.3 / 8%);
-  --success-light: oklch(0.704 0.123 182.5 / 10%);
-  --warning-light: oklch(0.705 0.187 47.6 / 10%);
+  /* ---------- Motion (§7) ---------- */
+  --t-fast:   80ms linear;
+  --t-base:   120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --t-smooth: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pulse-dur: 1.4s;
 
-  /* Spacing tokens */
-  --space-xs: 0.25rem;
-  --space-sm: 0.5rem;
-  --space-md: 1rem;
-  --space-lg: 1.5rem;
-  --space-xl: 2rem;
+  /* ---------- Focus ring (§6.4) ---------- */
+  --focus: 0 0 0 2px var(--cyan);
 
-  /* Transitions */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-smooth: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* ============================================================
+     shadcn/ui semantic vars — aliased to Terminal tokens.
+     Names preserved so existing components compile unchanged.
+     ============================================================ */
+
+  --background: var(--bg);
+  --foreground: var(--ink);
+
+  --card: var(--bg-1);
+  --card-foreground: var(--ink);
+
+  --popover: var(--bg-1);
+  --popover-foreground: var(--ink);
+
+  --primary: var(--cyan);
+  --primary-foreground: var(--ink-inv);
+
+  --secondary: var(--bg-2);
+  --secondary-foreground: var(--ink);
+
+  --muted: var(--bg-1);
+  --muted-foreground: var(--ink-2);
+
+  --accent: var(--bg-2);
+  --accent-foreground: var(--ink);
+
+  --destructive: var(--red);
+
+  --border: var(--rule);
+  --input: var(--rule-2);
+  --ring: var(--cyan);
+
+  /* Chart colors — sector-mapped (§5.5) */
+  --chart-1: var(--cyan);
+  --chart-2: var(--violet);
+  --chart-3: var(--amber);
+  --chart-4: var(--green);
+  --chart-5: #E85AA0;
+
+  /* Sidebar (legacy — sidebar deleted in Phase 5; kept compile-safe) */
+  --sidebar: var(--bg-1);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--cyan);
+  --sidebar-primary-foreground: var(--ink-inv);
+  --sidebar-accent: var(--bg-2);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--cyan);
+
+  /* Compatibility shims for components still reading these names */
+  --success: var(--green);
+  --success-foreground: var(--ink-inv);
+  --warning: var(--amber);
+  --warning-foreground: var(--ink-inv);
+
+  /* Accent tints (§5.6: 8–12% opacity over panel) */
+  --primary-light: rgba(0, 212, 230, 0.10);
+  --danger-light:  rgba(255, 83, 96, 0.10);
+  --success-light: rgba(0, 193, 106, 0.10);
+  --warning-light: rgba(255, 176, 32, 0.10);
+
+  /* Spacing aliases — match legacy --space-* names; values align with --sp-* */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Transition aliases — match legacy --transition-* names; Terminal motion */
+  --transition-fast:   var(--t-fast);
+  --transition-base:   var(--t-base);
+  --transition-smooth: var(--t-smooth);
+
+  /* shadcn radius — square corners everywhere */
+  --radius: 0rem;
 }
 
 /* ============================================================
-   Dark mode — Ocean Depth
+   .dark — kept so .dark variant utilities still bind.
+   No overrides needed (dark-only system). next-themes forces
+   .dark on <html> via forcedTheme="dark" in app/layout.tsx.
    ============================================================ */
 
 .dark {
-  --background: oklch(0.129 0.041 264.7);   /* #020617 ocean-950 */
-  --foreground: oklch(0.984 0.003 248.2);    /* #F8FAFC pearl-50 */
-  --card: oklch(0.208 0.040 265.8);          /* #0F172A ocean-900 */
-  --card-foreground: oklch(0.984 0.003 248.2);
-  --popover: oklch(0.208 0.040 265.8);
-  --popover-foreground: oklch(0.984 0.003 248.2);
-  --muted: oklch(0.279 0.037 260.0);         /* #1E293B ocean-800 */
-  --muted-foreground: oklch(0.711 0.035 256.8); /* #94A3B8 pearl-400 */
-  --primary: oklch(0.715 0.126 215.2);
-  --primary-foreground: oklch(0.129 0.041 264.7);
-  --secondary: oklch(0.279 0.037 260.0);
-  --secondary-foreground: oklch(0.984 0.003 248.2);
-  --accent: oklch(0.279 0.037 260.0);
-  --accent-foreground: oklch(0.984 0.003 248.2);
-  --destructive: oklch(0.637 0.208 25.3);
-  --border: oklch(1 0 0 / 15%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.715 0.126 215.2);
-  --chart-1: oklch(0.715 0.126 215.2);
-  --chart-2: oklch(0.704 0.123 182.5);
-  --chart-3: oklch(0.705 0.187 47.6);
-  --chart-4: oklch(0.797 0.134 211.6);
-  --chart-5: oklch(0.711 0.035 256.8);
-  --sidebar: oklch(0.208 0.040 265.8);
-  --sidebar-foreground: oklch(0.984 0.003 248.2);
-  --sidebar-primary: oklch(0.715 0.126 215.2);
-  --sidebar-primary-foreground: oklch(0.129 0.041 264.7);
-  --sidebar-accent: oklch(0.279 0.037 260.0);
-  --sidebar-accent-foreground: oklch(0.984 0.003 248.2);
-  --sidebar-border: oklch(1 0 0 / 15%);
-  --sidebar-ring: oklch(0.715 0.126 215.2);
-  --primary-light: oklch(0.715 0.126 215.2 / 15%);
-  --danger-light: oklch(0.637 0.208 25.3 / 10%);
-  --success-light: oklch(0.704 0.123 182.5 / 15%);
-  --warning-light: oklch(0.705 0.187 47.6 / 15%);
+  color-scheme: dark;
 }
 
 /* ============================================================
-   Base styles
+   Base
    ============================================================ */
 
 html {
-  color-scheme: light;
-}
-html.dark {
   color-scheme: dark;
 }
 
@@ -226,7 +264,9 @@ html.dark {
 }
 
 /* ============================================================
-   Anonymous Mode (blur sensitive values)
+   Anonymous mode (existing mechanism — Phase 5 relocates the
+   trigger into the masthead and switches the selector to
+   html[data-anon="true"]; Phase 1 leaves wiring intact).
    ============================================================ */
 
 .anonymous-mode .sensitive-value {

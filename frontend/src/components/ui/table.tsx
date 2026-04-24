@@ -4,6 +4,10 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// Terminal §9.5 — mono 13px body, mono 10px UPPER headers.
+// The 2px cyan inset on first cell hover is delivered by a global rule
+// (`@layer components { table tbody tr:hover td:first-child { … } }` in globals.css)
+// so callers don't need to thread classes per cell.
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
@@ -12,7 +16,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     >
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        className={cn("w-full caption-bottom font-mono text-[13px]", className)}
         {...props}
       />
     </div>
@@ -44,7 +48,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t border-rule bg-bg-1 text-ink font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -57,7 +61,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+        "group border-b border-rule transition-colors duration-[80ms] hover:bg-bg-1 data-[state=selected]:bg-bg-1",
         className
       )}
       {...props}
@@ -70,7 +74,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-auto bg-bg-1 px-3 py-[10px] text-left align-middle font-mono text-[10px] font-medium uppercase tracking-[0.12em] whitespace-nowrap text-ink-2 border-b border-rule [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -83,7 +87,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        "px-3 py-3 align-middle whitespace-nowrap text-ink [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -98,7 +102,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn("mt-3 text-[12px] text-ink-2", className)}
       {...props}
     />
   )

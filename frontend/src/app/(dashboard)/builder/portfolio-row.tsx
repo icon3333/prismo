@@ -142,7 +142,7 @@ export function PortfolioRow({
 
           {/* Current Positions */}
           <span
-            className={`text-xs ${currentBelow ? "text-red-400" : "text-muted-foreground"}`}
+            className={`text-xs ${currentBelow ? "text-red" : "text-muted-foreground"}`}
           >
             {currentPositions} current
           </span>
@@ -192,7 +192,7 @@ export function PortfolioRow({
             <label className="text-sm text-muted-foreground">
               Even split
               {portfolio.evenSplit && (
-                <span className="ml-1 text-xs text-aqua-400">
+                <span className="ml-1 text-xs text-cyan">
                   (max {computeEvenSplitWeight(effectivePositions).toFixed(1)}%
                   per position)
                 </span>

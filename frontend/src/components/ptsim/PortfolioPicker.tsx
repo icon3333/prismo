@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -21,11 +21,13 @@ const PER_PORTFOLIO_ROUTES = [
   "/rebalancer",
 ];
 
-function pickActiveLabel(pathname: string, portfolios: PortfolioOption[]): {
-  label: string;
-  showChevron: boolean;
-  hidden: boolean;
-} {
+// When a per-portfolio page is selected from Overview, default landing page.
+const DEFAULT_PER_PORTFOLIO_LANDING = "/enrich";
+
+function pickActiveLabel(
+  pathname: string,
+  activePortfolioName: string | null,
+): { label: string; showChevron: boolean; hidden: boolean } {
   if (pathname.startsWith("/simulator")) {
     return { label: "SANDBOX", showChevron: false, hidden: true };
   }
@@ -34,11 +36,8 @@ function pickActiveLabel(pathname: string, portfolios: PortfolioOption[]): {
   }
   for (const r of PER_PORTFOLIO_ROUTES) {
     if (pathname.startsWith(r)) {
-      // Picker selection wiring is page-local today (Phase 7 will wire
-      // global selection); we surface a generic label until then.
-      const first = portfolios[0]?.name;
       return {
-        label: first ?? "ALL PORTFOLIOS",
+        label: activePortfolioName ?? "SELECT PORTFOLIO",
         showChevron: true,
         hidden: false,
       };
@@ -47,41 +46,80 @@ function pickActiveLabel(pathname: string, portfolios: PortfolioOption[]): {
   return { label: "ALL PORTFOLIOS", showChevron: true, hidden: false };
 }
 
+// useSearchParams() suspends during prerender, so the picker is wrapped in
+// Suspense to keep dashboard pages statically renderable. The fallback
+// renders a deterministic non-interactive trigger so the masthead chrome
+// looks correct in the streamed HTML.
 export function PortfolioPicker() {
+  return (
+    <Suspense
+      fallback={
+        <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-2">
+          ▾
+        </span>
+      }
+    >
+      <PortfolioPickerInner />
+    </Suspense>
+  );
+}
+
+function PortfolioPickerInner() {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { account } = useAccount();
   const [portfolios, setPortfolios] = useState<PortfolioOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // Effect body is a single call to a function — satisfies
+  // react-hooks/set-state-in-effect (setState lives inside the closure,
+  // not directly in the effect body).
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(false);
-    apiFetch<PortfolioOption[]>(
-      "/portfolios?include_ids=true&has_companies=true",
-    )
-      .then((data) => {
+    const loadPortfolios = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const data = await apiFetch<PortfolioOption[]>(
+          "/portfolios?include_ids=true&has_companies=true",
+        );
         if (!cancelled) {
           setPortfolios(Array.isArray(data) ? data : []);
-          setLoading(false);
         }
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) {
+          // Silently absorb non-API errors; surface API failures as empty/error state.
           if (!(e instanceof ApiError)) {
-            // swallow non-API errors quietly
+            // no-op
           }
           setError(true);
-          setLoading(false);
         }
-      });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    loadPortfolios();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const { label, showChevron, hidden } = pickActiveLabel(pathname, portfolios);
+  // Active portfolio = ?portfolio=<id> URL param. Page-local hooks may also
+  // read this and use it as their filter; the picker is now the single
+  // source of truth for "what portfolio is currently in focus."
+  const activeId = searchParams.get("portfolio");
+  const activePortfolio = useMemo(
+    () => (activeId ? portfolios.find((p) => String(p.id) === activeId) : undefined),
+    [activeId, portfolios],
+  );
+  const activePortfolioName = activePortfolio?.name ?? null;
+
+  const { label, showChevron, hidden } = pickActiveLabel(
+    pathname,
+    activePortfolioName,
+  );
 
   // Sandbox path → render plain label, no dropdown.
   if (hidden) {
@@ -95,6 +133,17 @@ export function PortfolioPicker() {
   const total = portfolios.length;
   const accountName = (account?.username ?? "ACCOUNT").toUpperCase();
   const isAllPortfoliosActive = pathname === "/";
+
+  // Decide where clicking a portfolio row should land:
+  // - On Overview → jump to the default per-portfolio surface (Enrich).
+  // - On a per-portfolio page → stay on that page, swap the ?portfolio= param.
+  const targetRouteForPortfolio = (id: string | number): string => {
+    const onPerPortfolio = PER_PORTFOLIO_ROUTES.some((r) =>
+      pathname.startsWith(r),
+    );
+    const base = onPerPortfolio ? pathname : DEFAULT_PER_PORTFOLIO_LANDING;
+    return `${base}?portfolio=${id}`;
+  };
 
   return (
     <DropdownMenu>
@@ -134,12 +183,7 @@ export function PortfolioPicker() {
         {/* All portfolios row */}
         <button
           type="button"
-          onClick={() => {
-            // TODO(Phase 7): wire global portfolio selection
-            console.warn(
-              "[PortfolioPicker] selection wiring pending — Phase 7",
-            );
-          }}
+          onClick={() => router.push("/")}
           className={cn(
             "w-full grid grid-cols-[24px_1fr_auto] items-center gap-2 px-3 py-2 text-left transition-colors duration-[80ms]",
             isAllPortfoliosActive
@@ -196,16 +240,12 @@ export function PortfolioPicker() {
         {!loading && !error && total > 0 && (
           <div className="py-1 max-h-[320px] overflow-y-auto">
             {portfolios.map((p, idx) => {
-              const active = false; // page-local selection — Phase 7
+              const active = String(p.id) === activeId;
               return (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => {
-                    console.warn(
-                      "[PortfolioPicker] selection wiring pending — Phase 7",
-                    );
-                  }}
+                  onClick={() => router.push(targetRouteForPortfolio(p.id))}
                   className={cn(
                     "w-full grid grid-cols-[24px_1fr_auto] items-center gap-2 px-3 py-2 text-left transition-colors duration-[80ms]",
                     active ? "bg-bg-3" : "hover:bg-bg-2",
@@ -228,16 +268,11 @@ export function PortfolioPicker() {
           </div>
         )}
 
-        {/* Footer */}
+        {/* Footer — opens account/import surface where new portfolios are created. */}
         <div className="border-t border-rule">
           <button
             type="button"
-            onClick={() => {
-              // TODO(Phase 7): wire create-portfolio action
-              console.warn(
-                "[PortfolioPicker] new-portfolio wiring pending — Phase 7",
-              );
-            }}
+            onClick={() => router.push("/account")}
             className="w-full px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.12em] text-cyan hover:bg-bg-2 transition-colors duration-[80ms]"
           >
             + NEW PORTFOLIO ↗

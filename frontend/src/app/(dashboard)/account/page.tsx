@@ -226,7 +226,7 @@ export default function AccountPage() {
               <div className="flex items-start gap-3">
                 <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
                 <div className="flex-1">
-                  <h3 className="font-medium text-red-400">Delete Account</h3>
+                  <h3 className="font-medium text-red">Delete Account</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Permanently delete this account and all associated data. This action is irreversible.
                   </p>
@@ -326,7 +326,7 @@ function DangerSection({
       <div className="flex items-start gap-3">
         <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
         <div className="flex-1">
-          <h3 className="font-medium text-red-400">{title}</h3>
+          <h3 className="font-medium text-red">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           <AlertDialog>
             <AlertDialogTrigger

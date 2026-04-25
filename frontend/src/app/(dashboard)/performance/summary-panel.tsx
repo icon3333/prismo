@@ -37,9 +37,9 @@ function formatPnLSummary(
 
   const colorClass =
     abs > 0
-      ? "text-emerald-400"
+      ? "text-green"
       : abs < 0
-        ? "text-coral-500"
+        ? "text-red"
         : "text-muted-foreground";
 
   return {

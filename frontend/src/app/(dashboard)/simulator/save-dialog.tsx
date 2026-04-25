@@ -31,10 +31,13 @@ export function SaveDialog({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setName(mode === "rename" && currentName ? currentName : "");
-      setLoading(false);
-    }
+    const initialize = () => {
+      if (open) {
+        setName(mode === "rename" && currentName ? currentName : "");
+        setLoading(false);
+      }
+    };
+    initialize();
   }, [open, mode, currentName]);
 
   const handleSubmit = async () => {

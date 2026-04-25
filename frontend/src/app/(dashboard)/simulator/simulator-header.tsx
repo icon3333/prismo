@@ -271,8 +271,8 @@ function AutoSaveIndicator({ status }: { status: string }) {
       className={cn(
         "inline-flex items-center gap-1 text-xs transition-opacity",
         status === "saving" && "text-muted-foreground animate-pulse",
-        status === "saved" && "text-emerald-400",
-        status === "error" && "text-red-400"
+        status === "saved" && "text-green",
+        status === "error" && "text-red"
       )}
     >
       {status === "saving" && (
@@ -319,8 +319,8 @@ function AllocationSummaryBadge({
       variant="outline"
       className={cn(
         "text-xs",
-        status === "full" && "border-emerald-400/50 text-emerald-400",
-        status === "over" && "border-red-400/50 text-red-400",
+        status === "full" && "border-emerald-400/50 text-green",
+        status === "over" && "border-red-400/50 text-red",
         status === "under" && "border-border text-muted-foreground"
       )}
     >

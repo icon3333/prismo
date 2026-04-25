@@ -56,7 +56,7 @@ export function AccountPicker() {
               className="w-full justify-start gap-2"
               onClick={() => selectAccount(account.id)}
             >
-              <User className="size-4 text-aqua-500" />
+              <User className="size-4 text-cyan" />
               {account.username}
             </Button>
           ))}

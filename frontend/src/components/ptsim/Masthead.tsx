@@ -96,7 +96,11 @@ export function Masthead() {
     : "LIVE · EUR";
 
   const username = account?.username ?? "—";
-  const displayUser = truncate(username, 12);
+  // §17.2 — anon mode masks the account name to first letter + ellipsis dots.
+  const displayUser =
+    isAnonymous && username && username !== "—"
+      ? `${username[0]}•••`
+      : truncate(username, 12);
 
   return (
     <header className="w-full border-b border-rule bg-bg">

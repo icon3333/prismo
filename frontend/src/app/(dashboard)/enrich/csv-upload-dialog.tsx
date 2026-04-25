@@ -208,7 +208,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
             <div className="space-y-2">
               <Progress value={status === "uploading" ? null : progress} />
               <p className="text-xs text-muted-foreground text-center">
-                {status === "uploading" ? "Uploading..." : message}
+                {status === "uploading" ? "FETCHING…" : message}
               </p>
             </div>
           )}
@@ -229,7 +229,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
               </Button>
               <Button onClick={handleUpload} disabled={!file || isActive}>
                 {isActive && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
-                {status === "uploading" ? "Uploading..." : status === "processing" ? "Processing..." : "Upload"}
+                {status === "uploading" || status === "processing" ? "FETCHING…" : "Upload"}
               </Button>
             </>
           )}

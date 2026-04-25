@@ -322,6 +322,12 @@ html {
   transition: filter 0.2s ease-in-out;
 }
 
+/* §17.1 — hover-reveal: bring a single value into focus for verification
+   without flipping the whole toggle. */
+.anonymous-mode .sensitive-value:hover {
+  filter: none;
+}
+
 .anonymous-mode input.sensitive-value,
 .anonymous-mode .sensitive-value input {
   filter: blur(8px);

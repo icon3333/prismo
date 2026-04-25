@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 interface AnonymousModeContextType {
   isAnonymous: boolean;
@@ -16,12 +16,28 @@ export function useAnonymousMode() {
   return useContext(AnonymousModeContext);
 }
 
+const STORAGE_KEY = "prismo.anon";
+
 export function AnonymousModeProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const [isAnonymous, setIsAnonymous] = useState(false);
+
+  // §17.1 — restore from sessionStorage on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.sessionStorage.getItem(STORAGE_KEY);
+      if (stored === "1") {
+        setIsAnonymous(true);
+        document.documentElement.classList.add("anonymous-mode");
+      }
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — silent.
+    }
+  }, []);
 
   const toggle = useCallback(() => {
     setIsAnonymous((prev) => {
@@ -30,6 +46,11 @@ export function AnonymousModeProvider({
         document.documentElement.classList.add("anonymous-mode");
       } else {
         document.documentElement.classList.remove("anonymous-mode");
+      }
+      try {
+        window.sessionStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
       }
       return next;
     });

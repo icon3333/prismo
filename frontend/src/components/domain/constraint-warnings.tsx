@@ -1,4 +1,3 @@
-import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface ConstraintViolation {
@@ -26,7 +25,7 @@ export function ConstraintWarnings({
       )}
     >
       <div className="flex items-center gap-2 text-destructive font-semibold mb-3">
-        <AlertTriangle className="size-4" />
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red align-middle" aria-hidden />
         Constraint Warnings
       </div>
 

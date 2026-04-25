@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { eur, signedPct } from "@/lib/format";
 import type { AllocationRow, AllocationMode, ChartSelection } from "@/types/performance";
@@ -398,13 +397,10 @@ function TreeRow({
                   e.stopPropagation();
                   onToggle();
                 }}
-                className="p-0.5"
+                className="p-0.5 text-ink-2 leading-none w-3 inline-block"
+                aria-hidden
               >
-                {isOpen ? (
-                  <ChevronDown className="size-4" />
-                ) : (
-                  <ChevronRight className="size-4" />
-                )}
+                {isOpen ? "▴" : "▾"}
               </span>
             ) : (
               <span className="w-5" />

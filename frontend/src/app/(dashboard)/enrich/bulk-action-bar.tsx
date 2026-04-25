@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, X } from "lucide-react";
 import type { BulkEditValues } from "@/types/enrich";
 
 interface BulkActionBarProps {
@@ -132,7 +131,6 @@ export function BulkActionBar({
       </Button>
 
       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClear}>
-        <X className="size-3.5 mr-1" />
         Clear
       </Button>
 
@@ -147,7 +145,6 @@ export function BulkActionBar({
               />
             }
           >
-            <Trash2 className="size-3.5 mr-1" />
             Delete ({selectedManualCount})
           </AlertDialogTrigger>
           <AlertDialogContent>

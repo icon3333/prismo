@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Upload, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "completed" | "failed";
@@ -159,7 +158,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
 
           {status === "completed" && (
             <Alert>
-              <CheckCircle2 className="size-4 text-emerald-400" />
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle mr-2" aria-hidden />
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
@@ -169,7 +168,6 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
             className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border p-6 cursor-pointer hover:border-muted-foreground/50 transition-colors"
             onClick={() => !isActive && fileInputRef.current?.click()}
           >
-            <Upload className="size-8 text-muted-foreground" />
             {file ? (
               <p className="text-sm">{file.name}</p>
             ) : (

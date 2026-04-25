@@ -3,9 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";
 import type { SearchResult } from "@/types/simulator";
 
@@ -121,9 +119,7 @@ function TickerInput({ sim }: { sim: UseSimulatorReturn }) {
       <div className="relative">
         <div className="flex gap-1.5">
           <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-8"
               placeholder="Ticker or name..."
               value={value}
               onChange={(e) => handleInputChange(e.target.value)}
@@ -147,7 +143,7 @@ function TickerInput({ sim }: { sim: UseSimulatorReturn }) {
             {loading ? (
               <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
             ) : (
-              <Plus className="h-3.5 w-3.5" />
+              "+ ADD"
             )}
           </Button>
         </div>
@@ -252,7 +248,7 @@ function DimensionInput({
             }}
           />
           <Button size="sm" disabled={!value.trim()} onClick={submit}>
-            <Plus className="h-3.5 w-3.5" />
+            + ADD
           </Button>
         </div>
 

@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { RotateCcw } from "lucide-react";
 import { useInlineEdit } from "@/hooks/use-inline-edit";
 import { calculateItemValue, getValueSource } from "@/lib/enrich-calc";
 import { eur, shares as fmtShares } from "@/lib/format";
@@ -45,10 +44,10 @@ function RevertButton({ onClick, title }: { onClick: () => void; title: string }
   return (
     <button
       onClick={onClick}
-      className="ml-1 text-muted-foreground hover:text-aqua-400 transition-colors shrink-0"
+      className="ml-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors shrink-0"
       title={title}
     >
-      <RotateCcw className="size-3" />
+      RESET
     </button>
   );
 }

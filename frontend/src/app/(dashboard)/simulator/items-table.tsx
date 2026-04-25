@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Briefcase } from "lucide-react";
 import { ItemsTableRow } from "./items-table-row";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";
 
@@ -20,7 +19,6 @@ export function ItemsTable({ sim }: Props) {
   if (sim.items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 border border-border/50 bg-card/50 py-12 text-muted-foreground">
-        <Briefcase className="h-8 w-8 opacity-50" />
         <p className="text-sm">Add positions to build a simulated portfolio.</p>
       </div>
     );

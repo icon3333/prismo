@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -85,11 +84,9 @@ function CategoryGroup({
       >
         <TableCell colSpan={3} className="font-medium">
           <span className="flex items-center gap-1">
-            {isExpanded ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
+            <span aria-hidden className="text-ink-2 leading-none w-3 inline-block">
+              {isExpanded ? "▴" : "▾"}
+            </span>
             {category.name}
           </span>
         </TableCell>

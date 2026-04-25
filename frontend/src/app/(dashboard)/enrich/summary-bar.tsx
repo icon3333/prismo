@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { RefreshCw, Plus, Download, Search, Hammer, Coins, Upload } from "lucide-react";
 import { formatDateAgo, parseGermanNumber } from "@/lib/enrich-calc";
 import { eur } from "@/lib/format";
 import type { EnrichMetrics } from "@/types/enrich";
@@ -113,16 +112,13 @@ export function SummaryBar({
             />
           </SensitiveValue>
           {builderAvailable != null && (
-            <>
-              <button
-                onClick={onUseBuilderAsCash}
-                className="text-muted-foreground hover:text-aqua-400 transition-colors"
-                title={`Use ${eur(builderAvailable)} from Builder`}
-              >
-                <Coins className="size-3.5" />
-              </button>
-              <span title="Builder configured"><Hammer className="size-3 text-muted-foreground" /></span>
-            </>
+            <button
+              onClick={onUseBuilderAsCash}
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors"
+              title={`Use ${eur(builderAvailable)} from Builder`}
+            >
+              USE BUILDER
+            </button>
           )}
         </div>
         <div>
@@ -156,9 +152,8 @@ export function SummaryBar({
         </Select>
 
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
-            className="h-8 w-48 pl-8 text-xs"
+            className="h-8 w-48 text-xs"
             placeholder="Search company..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -167,29 +162,20 @@ export function SummaryBar({
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onUpdateAll} disabled={isPriceUpdating}>
-            {isPriceUpdating ? (
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
-            ) : (
-              <RefreshCw className="size-3.5 mr-1.5" />
-            )}
             {isPriceUpdating ? "Updating..." : "Update All"}
           </Button>
           {selectedCount > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onUpdateSelected}>
-              <RefreshCw className="size-3.5 mr-1.5" />
               Update ({selectedCount})
             </Button>
           )}
           <Button size="sm" className="h-8 text-xs" onClick={onAddPosition}>
-            <Plus className="size-3.5 mr-1.5" />
-            Add Position
+            + Add Position
           </Button>
           <Button size="sm" className="h-8 text-xs" onClick={onCsvUpload}>
-            <Upload className="size-3.5 mr-1.5" />
             Import CSV
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onDownloadCSV}>
-            <Download className="size-3.5 mr-1.5" />
             Export
           </Button>
         </div>

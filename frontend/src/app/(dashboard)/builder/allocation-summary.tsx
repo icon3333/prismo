@@ -18,7 +18,6 @@ import {
   formatCurrencyRaw,
 } from "@/lib/builder-calc";
 import type { BuilderPortfolio } from "@/types/builder";
-import { Download, FileText } from "lucide-react";
 
 interface AllocationSummaryProps {
   portfolios: BuilderPortfolio[];
@@ -67,7 +66,6 @@ export function AllocationSummary({
             disabled={noPortfolios}
             onClick={onExportCSV}
           >
-            <Download className="size-3.5 mr-1" />
             CSV
           </Button>
           <Button
@@ -76,7 +74,6 @@ export function AllocationSummary({
             disabled={noPortfolios}
             onClick={onExportPDF}
           >
-            <FileText className="size-3.5 mr-1" />
             PDF
           </Button>
         </div>

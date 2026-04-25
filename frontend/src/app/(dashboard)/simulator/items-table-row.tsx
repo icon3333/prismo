@@ -17,7 +17,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatSimValue, parseSimValue } from "@/lib/simulator-calc";
 import type { SimulatorItem } from "@/types/simulator";
@@ -132,7 +131,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
-                  <AlertTriangle className="h-3 w-3 text-amber-400" />
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle" aria-hidden />
                 </TooltipTrigger>
                 <TooltipContent side="left" className="max-w-[200px]">
                   <p className="text-xs">{item.targetWarning}</p>
@@ -153,9 +152,10 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
       <TableCell>
         <button
           onClick={() => sim.deleteItem(item.id)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"
+          aria-label="Remove"
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-ink-2 hover:text-ink leading-none text-[14px]"
         >
-          <X className="h-3.5 w-3.5" />
+          ×
         </button>
       </TableCell>
     </TableRow>

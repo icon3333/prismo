@@ -4,7 +4,6 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
-import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
 
@@ -50,7 +49,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <ChevronDownIcon className="pointer-events-none size-4 text-ink-2" />
+          <span aria-hidden className="pointer-events-none ml-2 text-ink-2 leading-none">▾</span>
         }
       />
     </SelectPrimitive.Trigger>
@@ -127,13 +126,6 @@ function SelectItem({
       <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
         {children}
       </SelectPrimitive.ItemText>
-      <SelectPrimitive.ItemIndicator
-        render={
-          <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
-        }
-      >
-        <CheckIcon className="pointer-events-none" />
-      </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
 }
@@ -159,13 +151,12 @@ function SelectScrollUpButton({
     <SelectPrimitive.ScrollUpArrow
       data-slot="select-scroll-up-button"
       className={cn(
-        "top-0 z-10 flex w-full cursor-default items-center justify-center bg-bg-1 py-1 text-ink-2 [&_svg:not([class*='size-'])]:size-4",
+        "top-0 z-10 flex w-full cursor-default items-center justify-center bg-bg-1 py-1 text-ink-2",
         className
       )}
       {...props}
     >
-      <ChevronUpIcon
-      />
+      <span aria-hidden className="leading-none">▴</span>
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -178,13 +169,12 @@ function SelectScrollDownButton({
     <SelectPrimitive.ScrollDownArrow
       data-slot="select-scroll-down-button"
       className={cn(
-        "bottom-0 z-10 flex w-full cursor-default items-center justify-center bg-bg-1 py-1 text-ink-2 [&_svg:not([class*='size-'])]:size-4",
+        "bottom-0 z-10 flex w-full cursor-default items-center justify-center bg-bg-1 py-1 text-ink-2",
         className
       )}
       {...props}
     >
-      <ChevronDownIcon
-      />
+      <span aria-hidden className="leading-none">▾</span>
     </SelectPrimitive.ScrollDownArrow>
   )
 }

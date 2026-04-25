@@ -21,7 +21,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Globe, PieChart, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
@@ -70,14 +69,8 @@ export default function RebalancerPage() {
 
       <Tabs defaultValue="global">
         <TabsList>
-          <TabsTrigger value="global" className="gap-1.5">
-            <Globe className="size-3.5" />
-            Global Overview
-          </TabsTrigger>
-          <TabsTrigger value="detailed" className="gap-1.5">
-            <PieChart className="size-3.5" />
-            Detailed Overview
-          </TabsTrigger>
+          <TabsTrigger value="global">Global Overview</TabsTrigger>
+          <TabsTrigger value="detailed">Detailed Overview</TabsTrigger>
         </TabsList>
 
         <TabsContent value="global" className="space-y-4">
@@ -247,7 +240,7 @@ function PortfolioTable({
                     {deficit > 0 && (p.currentValue || 0) > 0 && (
                       <Tooltip>
                         <TooltipTrigger>
-                          <AlertTriangle className="size-3.5 text-amber-400 shrink-0" />
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle shrink-0" aria-hidden />
                         </TooltipTrigger>
                         <TooltipContent>
                           Needs {deficit} more position{deficit > 1 ? "s" : ""}

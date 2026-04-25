@@ -25,7 +25,6 @@ import type {
   PortfolioCompany,
   SortOptions,
 } from "@/types/builder";
-import { ChevronRight, ChevronDown, Plus } from "lucide-react";
 
 interface PortfolioRowProps {
   portfolio: BuilderPortfolio;
@@ -93,11 +92,9 @@ export function PortfolioRow({
         onClick={onToggleExpanded}
         className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
       >
-        {expanded ? (
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        )}
+        <span aria-hidden className="text-ink-2 leading-none w-3 inline-block shrink-0">
+          {expanded ? "▴" : "▾"}
+        </span>
         <span className="flex-1 font-medium text-sm">{portfolio.name}</span>
 
         <div className="flex items-center gap-4 text-sm tabular-nums">
@@ -182,8 +179,7 @@ export function PortfolioRow({
               disabled={!selectedCompany}
               onClick={() => onAddPosition()}
             >
-              <Plus className="size-3.5 mr-1" />
-              Add
+              + Add
             </Button>
           </div>
 

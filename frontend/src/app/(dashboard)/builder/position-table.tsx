@@ -25,12 +25,6 @@ import type {
   BuilderPosition,
   SortOptions,
 } from "@/types/builder";
-import {
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  X,
-} from "lucide-react";
 
 interface PositionTableProps {
   positions: BuilderRealPosition[];
@@ -45,12 +39,10 @@ interface PositionTableProps {
 }
 
 function SortIcon({ column, sort }: { column: string; sort: SortOptions }) {
-  if (sort.column !== column) return <ArrowUpDown className="size-3.5 text-muted-foreground" />;
-  return sort.direction === "asc" ? (
-    <ArrowUp className="size-3.5 text-aqua-400" />
-  ) : (
-    <ArrowDown className="size-3.5 text-aqua-400" />
-  );
+  const active = sort.column === column;
+  const glyph = active && sort.direction === "desc" ? "▼" : "▲";
+  const cls = active ? "text-cyan" : "text-ink-3";
+  return <span aria-hidden className={`text-[10px] leading-none ${cls}`}>{glyph}</span>;
 }
 
 export function PositionTable({
@@ -228,10 +220,11 @@ function RealPositionRow({
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+          aria-label="Remove"
+          className="size-7 text-ink-2 hover:text-ink leading-none text-[14px]"
           onClick={() => onRemove(position.companyId)}
         >
-          <X className="size-3.5" />
+          ×
         </Button>
       </TableCell>
     </TableRow>

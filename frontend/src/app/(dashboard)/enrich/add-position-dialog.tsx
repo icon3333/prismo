@@ -18,7 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Check, AlertTriangle } from "lucide-react";
 import { parseGermanNumber } from "@/lib/enrich-calc";
 import type {
   AddPositionForm,
@@ -165,8 +164,8 @@ export function AddPositionDialog({
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
                 {validation.loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
-                {validation.status === "valid" && <Check className="size-4 text-emerald-400" />}
-                {validation.status === "invalid" && <AlertTriangle className="size-4 text-amber-400" />}
+                {validation.status === "valid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle" aria-hidden />}
+                {validation.status === "invalid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle" aria-hidden />}
               </div>
             </div>
           </div>

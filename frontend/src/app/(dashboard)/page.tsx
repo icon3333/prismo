@@ -5,27 +5,24 @@ import { useOverview } from "@/hooks/use-overview";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Wrench,
-  ShieldAlert,
-  ArrowRight,
-} from "lucide-react";
 import type { Violation } from "@/types/overview";
 import { eur } from "@/lib/format";
 
 function HealthIcon({ status }: { status: string }) {
-  switch (status) {
-    case "check":
-      return <CheckCircle2 className="h-8 w-8 text-emerald-500" />;
-    case "warning":
-      return <AlertTriangle className="h-8 w-8 text-amber-500" />;
-    case "alert":
-      return <ShieldAlert className="h-8 w-8 text-coral-500" />;
-    default:
-      return <Wrench className="h-8 w-8 text-pearl-400" />;
-  }
+  const color =
+    status === "check"
+      ? "bg-green"
+      : status === "warning"
+        ? "bg-amber"
+        : status === "alert"
+          ? "bg-red"
+          : "bg-ink-3";
+  return (
+    <span
+      aria-hidden
+      className={`inline-block w-1.5 h-1.5 rounded-full ${color} align-middle`}
+    />
+  );
 }
 
 function ViolationGauge({
@@ -172,7 +169,7 @@ export default function OverviewPage() {
                 href="/builder"
                 className="inline-flex items-center gap-1 text-sm text-aqua-500 hover:text-aqua-400"
               >
-                Go to Builder <ArrowRight className="h-4 w-4" />
+                Go to Builder
               </Link>
             </div>
             <p className="text-sm text-muted-foreground mb-3">
@@ -216,7 +213,7 @@ export default function OverviewPage() {
               href="/concentrations"
               className="inline-flex items-center gap-1 text-sm text-aqua-500 hover:text-aqua-400"
             >
-              View Details <ArrowRight className="h-4 w-4" />
+              View Details
             </Link>
           </div>
 

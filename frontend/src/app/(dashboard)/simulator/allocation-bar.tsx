@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -49,11 +48,9 @@ export function AllocationBar({
       )}
     >
       {/* Expand icon */}
-      {isExpanded ? (
-        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-      ) : (
-        <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-      )}
+      <span aria-hidden className="text-ink-2 leading-none w-3 inline-block shrink-0">
+        {isExpanded ? "▴" : "▾"}
+      </span>
 
       {/* Label */}
       <span className="text-sm truncate min-w-[80px] max-w-[120px]">

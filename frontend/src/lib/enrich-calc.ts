@@ -133,9 +133,9 @@ export function formatDateAgo(date: string | null): string {
 }
 
 export function getHealthColorClass(pct: number): string {
-  if (pct >= 100) return "text-emerald-400";
+  if (pct >= 100) return "text-green";
   if (pct >= 70) return "text-amber-400";
-  return "text-red-400";
+  return "text-red";
 }
 
 export function parseGermanNumber(value: string): number {

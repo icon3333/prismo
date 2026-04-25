@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,10 +80,15 @@ export function SummaryBar({
 
   // Sync cash display when cashBalance prop changes
   const prevCash = useRef(cashBalance);
-  if (prevCash.current !== cashBalance) {
-    prevCash.current = cashBalance;
-    setCashInput(eur(cashBalance));
-  }
+  useEffect(() => {
+    const sync = () => {
+      if (prevCash.current !== cashBalance) {
+        prevCash.current = cashBalance;
+        setCashInput(eur(cashBalance));
+      }
+    };
+    sync();
+  }, [cashBalance]);
 
   return (
     <div className="space-y-3 border border-border bg-card p-4">

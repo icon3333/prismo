@@ -190,7 +190,7 @@ export function DetailedOverview({
                   </TableCell>
                   <TableCell className="text-right text-xs">
                     {detailed.totalBuys > 0 && (
-                      <span className="text-emerald-400">
+                      <span className="text-green">
                         Buy:{" "}
                         <SensitiveValue>
                           {fmt.currency.format(detailed.totalBuys)}
@@ -201,7 +201,7 @@ export function DetailedOverview({
                       <br />
                     )}
                     {detailed.totalSells > 0 && (
-                      <span className="text-coral-500">
+                      <span className="text-red">
                         Sell:{" "}
                         <SensitiveValue>
                           {fmt.currency.format(detailed.totalSells)}
@@ -349,8 +349,8 @@ function PositionRow({
   const { text: actionText, className: actionClass } = formatAction(posAction);
 
   const typeColors: Record<string, string> = {
-    ETF: "text-aqua-400",
-    Crypto: "text-coral-500",
+    ETF: "text-cyan",
+    Crypto: "text-red",
     Stock: "",
   };
 

@@ -32,7 +32,7 @@ export function SliderItem({
         "px-4 py-2 transition-colors",
         isOverLimit
           ? "border-l-3 border-l-destructive bg-[var(--danger-light)]"
-          : "bg-aqua-500/5 hover:bg-aqua-500/10"
+          : "bg-cyan/5 hover:bg-cyan/10"
       )}
     >
       <div className="flex items-center justify-between mb-1">

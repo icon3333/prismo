@@ -175,7 +175,7 @@ export const TableRow = React.memo(function TableRow({
               valueSrc === "custom"
                 ? "text-amber-400"
                 : valueSrc === "none"
-                  ? "text-red-400"
+                  ? "text-red"
                   : ""
             }`}
           >
@@ -279,7 +279,7 @@ export const TableRow = React.memo(function TableRow({
           <Input
             className={`h-6 w-16 text-right ${
               item.csv_modified_after_edit
-                ? "text-red-400"
+                ? "text-red"
                 : item.is_manually_edited
                   ? "text-amber-400"
                   : ""
@@ -317,7 +317,7 @@ export const TableRow = React.memo(function TableRow({
           ) : (
             <SensitiveValue>
               <Input
-                className="h-6 w-20 text-right text-red-400"
+                className="h-6 w-20 text-right text-red"
                 placeholder="Enter value"
                 {...totalValue.inputProps}
               />

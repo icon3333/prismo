@@ -180,7 +180,7 @@ export function AddPositionDialog({
               value={form.name}
               onChange={(e) => update("name", e.target.value)}
             />
-            {errors.name && <p className="text-xs text-red-400 mt-0.5">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-red mt-0.5">{errors.name}</p>}
           </div>
 
           {/* Portfolio */}
@@ -212,7 +212,7 @@ export function AddPositionDialog({
               value={form.sector}
               onChange={(e) => update("sector", e.target.value)}
             />
-            {errors.sector && <p className="text-xs text-red-400 mt-0.5">{errors.sector}</p>}
+            {errors.sector && <p className="text-xs text-red mt-0.5">{errors.sector}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -264,7 +264,7 @@ export function AddPositionDialog({
               value={form.shares}
               onChange={(e) => update("shares", e.target.value)}
             />
-            {errors.shares && <p className="text-xs text-red-400 mt-0.5">{errors.shares}</p>}
+            {errors.shares && <p className="text-xs text-red mt-0.5">{errors.shares}</p>}
           </div>
 
           {/* Total Value (conditional) */}
@@ -279,7 +279,7 @@ export function AddPositionDialog({
                 value={form.total_value}
                 onChange={(e) => update("total_value", e.target.value)}
               />
-              {errors.total_value && <p className="text-xs text-red-400 mt-0.5">{errors.total_value}</p>}
+              {errors.total_value && <p className="text-xs text-red mt-0.5">{errors.total_value}</p>}
             </div>
           )}
 

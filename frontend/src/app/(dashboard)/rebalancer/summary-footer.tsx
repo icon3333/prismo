@@ -43,7 +43,7 @@ export function SummaryFooter({
 
       {netCapital > 0 && (
         <Row label="New Capital Required">
-          <span className="text-emerald-400">
+          <span className="text-green">
             <SensitiveValue>{eur(netCapital)}</SensitiveValue>
           </span>
         </Row>
@@ -56,7 +56,7 @@ export function SummaryFooter({
       {(totalBuys > 0 || totalSells > 0) && (
         <Row label="Total Transactions">
           {totalBuys > 0 && (
-            <span className="text-emerald-400">
+            <span className="text-green">
               Buy: <SensitiveValue>{eur(totalBuys)}</SensitiveValue>
             </span>
           )}
@@ -64,7 +64,7 @@ export function SummaryFooter({
             <span className="text-muted-foreground mx-1">|</span>
           )}
           {totalSells > 0 && (
-            <span className="text-coral-500">
+            <span className="text-red">
               Sell: <SensitiveValue>{eur(totalSells)}</SensitiveValue>
             </span>
           )}

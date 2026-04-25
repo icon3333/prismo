@@ -36,7 +36,7 @@ export default function SimulatorPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Simulator</h1>
-        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-400">
+        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red">
           {sim.error}
         </div>
       </div>

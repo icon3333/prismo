@@ -59,7 +59,7 @@ export function BulkActionBar({
     : `This will permanently delete ${selectedManualNames.length} manually-added positions: ${selectedManualNames.join(", ")}.`;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border border-aqua-400/30 bg-aqua-400/5 p-3">
+    <div className="flex flex-wrap items-center gap-2 border border-cyan/30 bg-cyan/5 p-3">
       <span className="text-sm font-medium mr-2">{selectedCount} selected</span>
 
       <Select

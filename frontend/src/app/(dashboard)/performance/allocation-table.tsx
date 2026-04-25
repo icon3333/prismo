@@ -41,9 +41,9 @@ function formatPnL(abs: number | null, pct: number | null, invested: number | nu
 
   const colorClass =
     abs > 0
-      ? "text-emerald-400"
+      ? "text-green"
       : abs < 0
-        ? "text-coral-500"
+        ? "text-red"
         : "text-muted-foreground";
 
   const tooltip =
@@ -97,13 +97,15 @@ export function AllocationTable({
   };
 
   const handleSort = (field: SortField) => {
-    let newField: SortField | null = field;
-    let newDir: SortDir;
-    if (sortField === field) {
-      newDir = sortDir === "asc" ? "desc" : "asc";
-    } else {
-      newDir = field === "name" ? "asc" : "desc";
-    }
+    const newField: SortField | null = field;
+    const newDir: SortDir =
+      sortField === field
+        ? sortDir === "asc"
+          ? "desc"
+          : "asc"
+        : field === "name"
+          ? "asc"
+          : "desc";
     setSortField(newField);
     setSortDir(newDir);
     onSortChange?.(newField, newDir);
@@ -253,7 +255,7 @@ export function AllocationTable({
                   className={cn(
                     "cursor-pointer text-[10px] hover:text-foreground",
                     sortField === "pnl-eur"
-                      ? "text-aqua-400 font-bold"
+                      ? "text-cyan font-bold"
                       : "text-muted-foreground"
                   )}
                   onClick={(e) => {
@@ -268,7 +270,7 @@ export function AllocationTable({
                   className={cn(
                     "cursor-pointer text-[10px] hover:text-foreground",
                     sortField === "pnl-pct"
-                      ? "text-aqua-400 font-bold"
+                      ? "text-cyan font-bold"
                       : "text-muted-foreground"
                   )}
                   onClick={(e) => {
@@ -324,7 +326,7 @@ export function AllocationTable({
                   key={row.name}
                   className={cn(
                     "cursor-pointer",
-                    isSelected && "bg-aqua-400/10"
+                    isSelected && "bg-cyan/10"
                   )}
                   onClick={() => handleRowClick(row, false)}
                 >
@@ -382,7 +384,7 @@ function TreeRow({
       <TableRow
         className={cn(
           "bg-muted/30 cursor-pointer hover:bg-muted/50",
-          isSelected && "bg-aqua-400/10"
+          isSelected && "bg-cyan/10"
         )}
         onClick={() => {
           if (isCash) return;
@@ -457,7 +459,7 @@ function TreeRow({
               key={child.name}
               className={cn(
                 "cursor-pointer",
-                childSelected && "bg-aqua-400/10"
+                childSelected && "bg-cyan/10"
               )}
               onClick={() => onRowClick(child, false)}
             >

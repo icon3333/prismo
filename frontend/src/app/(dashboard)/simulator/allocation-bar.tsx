@@ -35,7 +35,7 @@ export function AllocationBar({
     const delta = percentage - baselinePercentage;
     if (Math.abs(delta) >= 0.1) {
       deltaText = `(${delta > 0 ? "+" : ""}${delta.toFixed(1)}%)`;
-      deltaClass = delta > 0 ? "text-emerald-400" : "text-red-400";
+      deltaClass = delta > 0 ? "text-green" : "text-red";
     }
   }
 

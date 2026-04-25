@@ -47,7 +47,7 @@ function ViolationGauge({
               ? "bg-muted text-muted-foreground"
               : count > 0
                 ? "bg-destructive"
-                : "bg-emerald-500"
+                : "bg-green"
           }`}
         >
           {hasRule ? count : "—"}
@@ -167,7 +167,7 @@ export default function OverviewPage() {
               <h2 className="text-lg font-semibold">Stocks Missing</h2>
               <Link
                 href="/builder"
-                className="inline-flex items-center gap-1 text-sm text-aqua-500 hover:text-aqua-400"
+                className="inline-flex items-center gap-1 text-sm text-cyan hover:text-cyan"
               >
                 Go to Builder
               </Link>
@@ -180,7 +180,7 @@ export default function OverviewPage() {
               {missingPositions.map((p) => (
                 <div
                   key={p.name}
-                  className="flex-1 min-w-[260px] border-l-4 border-l-coral-500 bg-coral-500/10 p-4"
+                  className="flex-1 min-w-[260px] border-l-4 border-l-red bg-red/10 p-4"
                 >
                   <p className="font-semibold">{p.name}</p>
                   <p className="text-sm text-muted-foreground">
@@ -211,7 +211,7 @@ export default function OverviewPage() {
             <h2 className="text-lg font-semibold">Concentrations</h2>
             <Link
               href="/concentrations"
-              className="inline-flex items-center gap-1 text-sm text-aqua-500 hover:text-aqua-400"
+              className="inline-flex items-center gap-1 text-sm text-cyan hover:text-cyan"
             >
               View Details
             </Link>

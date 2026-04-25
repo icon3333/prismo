@@ -27,16 +27,19 @@ export function AnonymousModeProvider({
 
   // §17.1 — restore from sessionStorage on mount.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stored = window.sessionStorage.getItem(STORAGE_KEY);
-      if (stored === "1") {
-        setIsAnonymous(true);
-        document.documentElement.classList.add("anonymous-mode");
+    const restore = () => {
+      if (typeof window === "undefined") return;
+      try {
+        const stored = window.sessionStorage.getItem(STORAGE_KEY);
+        if (stored === "1") {
+          setIsAnonymous(true);
+          document.documentElement.classList.add("anonymous-mode");
+        }
+      } catch {
+        // sessionStorage unavailable (private mode, etc.) — silent.
       }
-    } catch {
-      // sessionStorage unavailable (private mode, etc.) — silent.
-    }
+    };
+    restore();
   }, []);
 
   const toggle = useCallback(() => {

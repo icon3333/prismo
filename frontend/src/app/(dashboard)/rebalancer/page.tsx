@@ -233,7 +233,7 @@ function PortfolioTable({
                   <span className="flex items-center gap-1.5">
                     {p.name}
                     {(p.currentValue || 0) === 0 && (
-                      <span className="text-xs text-aqua-400">
+                      <span className="text-xs text-cyan">
                         Empty - Needs Positions
                       </span>
                     )}
@@ -299,7 +299,7 @@ function PortfolioTable({
             </TableCell>
             <TableCell className="text-right text-xs">
               {totalBuys > 0 && (
-                <span className="text-emerald-400">
+                <span className="text-green">
                   Buy:{" "}
                   <SensitiveValue>
                     {fmt.currency.format(totalBuys)}
@@ -308,7 +308,7 @@ function PortfolioTable({
               )}
               {totalBuys > 0 && totalSells > 0 && <br />}
               {totalSells > 0 && (
-                <span className="text-coral-500">
+                <span className="text-red">
                   Sell:{" "}
                   <SensitiveValue>
                     {fmt.currency.format(totalSells)}

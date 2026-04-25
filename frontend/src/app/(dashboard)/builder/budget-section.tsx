@@ -89,7 +89,7 @@ function ReadOnlyField({
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="text-sm font-medium text-foreground">{label}</div>
-      <div className="text-sm font-semibold text-aqua-400 tabular-nums">
+      <div className="text-sm font-semibold text-cyan tabular-nums">
         <SensitiveValue>
           &euro;{formatNumber(value)}
         </SensitiveValue>
@@ -119,7 +119,7 @@ export function BudgetSection({
                     <button
                       type="button"
                       onClick={populateAlreadyInvested}
-                      className="ml-2 text-xs text-aqua-400 hover:text-aqua-300 transition-colors"
+                      className="ml-2 text-xs text-cyan hover:text-cyan-1 transition-colors"
                     >
                       (use{" "}
                       <SensitiveValue>

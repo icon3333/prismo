@@ -40,7 +40,7 @@ export function PortfolioFilter({
           size="sm"
           className={cn(
             "text-xs h-7 px-3 rounded-full",
-            isAllSelected && "bg-aqua-400/20 text-aqua-400 border border-aqua-400/30"
+            isAllSelected && "bg-cyan/20 text-cyan border border-cyan/30"
           )}
           onClick={onSelectAll}
         >
@@ -56,7 +56,7 @@ export function PortfolioFilter({
               size="sm"
               className={cn(
                 "text-xs h-7 px-3 rounded-full",
-                isActive && "bg-aqua-400/20 text-aqua-400 border border-aqua-400/30"
+                isActive && "bg-cyan/20 text-cyan border border-cyan/30"
               )}
               onClick={() => onTogglePortfolio(p.name)}
             >
@@ -77,7 +77,7 @@ export function PortfolioFilter({
             Include Cash
           </label>
           {cashBalance > 0 && (
-            <span className="text-xs text-aqua-400/80 font-mono tabular-nums">
+            <span className="text-xs text-cyan/80 font-mono tabular-nums">
               <SensitiveValue>({eur(cashBalance)})</SensitiveValue>
             </span>
           )}

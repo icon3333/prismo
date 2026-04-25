@@ -46,13 +46,16 @@ export function CloneDialog({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open && portfolios.length > 0) {
-      const firstId = String(portfolios[0].id);
-      setSelectedPortfolioId(firstId);
-      setName(`Clone of ${portfolios[0].name}`);
-      setValueMode("with-values");
-      setLoading(false);
-    }
+    const initialize = () => {
+      if (open && portfolios.length > 0) {
+        const firstId = String(portfolios[0].id);
+        setSelectedPortfolioId(firstId);
+        setName(`Clone of ${portfolios[0].name}`);
+        setValueMode("with-values");
+        setLoading(false);
+      }
+    };
+    initialize();
   }, [open, portfolios]);
 
   const handlePortfolioChange = (v: string | null) => {

@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { eur, signedEur, signedPct } from "@/lib/format";
+import { date, eur, signedEur, signedPct } from "@/lib/format";
 import type {
   PortfolioOption,
   PerformancePortfolioData,
@@ -83,7 +83,7 @@ export function SummaryPanel({
     : null;
 
   const lastUpdated = portfolioData?.last_updated
-    ? new Date(portfolioData.last_updated).toLocaleDateString()
+    ? date(portfolioData.last_updated)
     : "Never";
 
   return (

@@ -1,14 +1,14 @@
 import type { EnrichItem, EnrichMetrics, ColumnHealth, SortState } from "@/types/enrich";
+import {
+  calculatePositionValue,
+  getPositionValueSource,
+} from "@/lib/position-value";
+import { date as formatDate } from "@/lib/format";
 
 // --- Value calculations ---
 
 export function calculateItemValue(item: EnrichItem): number {
-  if (item.is_custom_value && item.custom_total_value != null) {
-    return parseFloat(String(item.custom_total_value)) || 0;
-  }
-  const price = parseFloat(String(item.price_eur)) || 0;
-  const shares = parseFloat(String(item.effective_shares)) || 0;
-  return price * shares;
+  return calculatePositionValue(item, { preferCurrentValue: false });
 }
 
 export function calculatePortfolioTotal(items: EnrichItem[]): number {
@@ -16,9 +16,8 @@ export function calculatePortfolioTotal(items: EnrichItem[]): number {
 }
 
 export function getValueSource(item: EnrichItem): "custom" | "market" | "none" {
-  if (item.is_custom_value && item.custom_total_value != null) return "custom";
-  if (item.price_eur != null && item.price_eur > 0) return "market";
-  return "none";
+  const source = getPositionValueSource(item, { preferCurrentValue: false });
+  return source === "current" ? "market" : source;
 }
 
 // --- Health calculations ---
@@ -121,15 +120,15 @@ export function filterItems(items: EnrichItem[], portfolio: string | null, searc
 
 // --- Formatting ---
 
-export function formatDateAgo(date: string | null): string {
-  if (!date) return "Never";
-  const d = new Date(date);
+export function formatDateAgo(value: string | null): string {
+  if (!value) return "Never";
+  const d = new Date(value);
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return d.toLocaleDateString();
+  return formatDate(d);
 }
 
 export function getHealthColorClass(pct: number): string {

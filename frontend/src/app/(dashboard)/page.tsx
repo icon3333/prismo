@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useOverview } from "@/hooks/use-overview";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { eur, int, pct } from "@/lib/format";
 import type { Violation } from "@/types/overview";
-import { eur } from "@/lib/format";
 
-function HealthIcon({ status }: { status: string }) {
+function StatusMark({ status }: { status: string }) {
   const color =
     status === "check"
       ? "bg-green"
@@ -17,15 +18,42 @@ function HealthIcon({ status }: { status: string }) {
         : status === "alert"
           ? "bg-red"
           : "bg-ink-3";
+
   return (
     <span
       aria-hidden
-      className={`inline-block w-1.5 h-1.5 rounded-full ${color} align-middle`}
+      className={`inline-block h-2 w-2 border border-bg ${color}`}
     />
   );
 }
 
-function ViolationGauge({
+function MetricCell({
+  label,
+  value,
+  muted,
+}: {
+  label: string;
+  value: ReactNode;
+  muted?: ReactNode;
+}) {
+  return (
+    <div className="border border-border bg-card p-4">
+      <div className="font-mono text-[11px] uppercase text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-2 text-xl font-semibold tracking-normal text-foreground">
+        {value}
+      </div>
+      {muted && (
+        <div className="mt-1 font-mono text-[11px] uppercase text-ink-3">
+          {muted}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViolationPanel({
   title,
   violations,
   hasRule,
@@ -34,48 +62,58 @@ function ViolationGauge({
   violations: Violation[];
   hasRule: boolean;
 }) {
-  const count = violations.length;
+  const state = !hasRule
+    ? "UNSET"
+    : violations.length > 0
+      ? "BREACH"
+      : "CLEAR";
+  const stateClass =
+    state === "CLEAR"
+      ? "text-green"
+      : state === "BREACH"
+        ? "text-red"
+        : "text-ink-3";
+
   return (
-    <div className="border border-border bg-card p-5">
-      <p className="text-sm font-semibold text-muted-foreground mb-3">
-        {title}
-      </p>
-      <div className="flex justify-center mb-2">
-        <div
-          className={`flex h-20 w-20 items-center justify-center rounded-full text-3xl font-bold font-mono text-white ${
-            !hasRule
-              ? "bg-muted text-muted-foreground"
-              : count > 0
-                ? "bg-destructive"
-                : "bg-green"
-          }`}
-        >
-          {hasRule ? count : "—"}
-        </div>
+    <section className="border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <h3 className="font-mono text-xs font-semibold uppercase text-foreground">
+          {title}
+        </h3>
+        <span className={`font-mono text-xs font-semibold ${stateClass}`}>
+          {state}
+        </span>
       </div>
-      <p className="text-center text-xs text-muted-foreground">
-        {!hasRule
-          ? "no rules set"
-          : count === 0
-            ? "all within limits"
-            : ""}
-      </p>
-      {hasRule && violations.length > 0 && (
-        <div className="mt-3 max-h-48 space-y-0 overflow-y-auto">
-          {violations.map((v) => (
-            <div
-              key={v.name}
-              className="flex items-center justify-between border-b border-border py-2 text-sm"
-            >
-              <span className="truncate mr-2">{v.name}</span>
-              <span className="shrink-0 font-semibold font-mono text-destructive">
-                +{(v.currentPercentage - v.maxPercentage).toFixed(1)}%
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <div className="divide-y divide-border">
+        {!hasRule ? (
+          <div className="px-4 py-5 text-sm text-muted-foreground">
+            Rule not configured.
+          </div>
+        ) : violations.length === 0 ? (
+          <div className="px-4 py-5 text-sm text-muted-foreground">
+            No concentration exceptions.
+          </div>
+        ) : (
+          violations.slice(0, 5).map((violation) => {
+            const overage =
+              violation.currentPercentage - violation.maxPercentage;
+            return (
+              <div
+                key={`${violation.type}-${violation.name}`}
+                className="grid grid-cols-[1fr_auto] gap-4 px-4 py-3 text-sm"
+              >
+                <span className="truncate text-foreground">
+                  {violation.name}
+                </span>
+                <span className="font-mono font-semibold text-red">
+                  +{pct(overage)}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -83,6 +121,7 @@ export default function OverviewPage() {
   const {
     metrics,
     portfolios,
+    cashBalance,
     isLoading,
     dataLoading,
     error,
@@ -97,7 +136,9 @@ export default function OverviewPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Overview</h1>
+        <h1 className="font-mono text-xl font-semibold uppercase">
+          PORTFOLIO STATUS
+        </h1>
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -107,7 +148,9 @@ export default function OverviewPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Overview</h1>
+        <h1 className="font-mono text-xl font-semibold uppercase">
+          PORTFOLIO STATUS
+        </h1>
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -115,138 +158,146 @@ export default function OverviewPage() {
     );
   }
 
+  const holdingsValue = metrics?.total_value ?? 0;
+  const totalExposure = holdingsValue + cashBalance;
+  const totalViolations =
+    stockViolations.length + sectorViolations.length + countryViolations.length;
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Overview</h1>
-
-      {/* Dashboard header */}
-      <div className="border border-border bg-card p-6">
-        <h2 className="text-xl font-bold">Welcome</h2>
-        <p className="text-sm text-muted-foreground">
-          Your portfolio at a glance
-        </p>
-
-        {/* Metric pills */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="bg-muted p-4 text-center">
-            <div className="text-lg font-bold font-mono">
-              <SensitiveValue>
-                {metrics ? eur(metrics.total_value) : "—"}
-              </SensitiveValue>
+      <header className="border border-border bg-card">
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <div className="font-mono text-[11px] uppercase text-muted-foreground">
+              OPERATOR OVERVIEW
             </div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Total Value
-            </div>
+            <h1 className="mt-1 font-mono text-2xl font-semibold uppercase tracking-normal">
+              PORTFOLIO STATUS
+            </h1>
           </div>
-          <div className="bg-muted p-4 text-center">
-            <div className="text-lg font-bold font-mono">
-              {portfolios.length}
-            </div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Portfolios
-            </div>
-          </div>
-          <div className="bg-muted p-4 text-center">
-            <div className="text-lg font-bold font-mono">
-              {metrics?.total_items ?? 0}
-            </div>
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Assets
-            </div>
+          <div className="flex items-center gap-2 border border-border bg-bg px-3 py-2 font-mono text-xs uppercase">
+            <StatusMark status={healthStatus.icon} />
+            <span>{healthStatus.title}</span>
           </div>
         </div>
-      </div>
+        <div className="grid gap-px bg-border md:grid-cols-4">
+          <MetricCell
+            label="Total Exposure"
+            value={
+              <SensitiveValue>{eur(totalExposure)}</SensitiveValue>
+            }
+            muted={
+              <>
+                <SensitiveValue>{eur(holdingsValue)}</SensitiveValue> holdings
+              </>
+            }
+          />
+          <MetricCell
+            label="Cash"
+            value={<SensitiveValue>{eur(cashBalance)}</SensitiveValue>}
+          />
+          <MetricCell
+            label="Portfolios"
+            value={<span className="font-mono">{int(portfolios.length)}</span>}
+          />
+          <MetricCell
+            label="Positions"
+            value={<span className="font-mono">{int(metrics?.total_items ?? 0)}</span>}
+            muted={`${int(metrics?.missing_prices ?? 0)} missing prices`}
+          />
+        </div>
+      </header>
 
-      {/* Missing Positions */}
       {dataLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : (
         missingPositions.length > 0 && (
-          <div className="border border-border bg-card p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">Stocks Missing</h2>
+          <section className="border border-red bg-red/10">
+            <div className="flex items-center justify-between gap-4 border-b border-red/40 px-5 py-4">
+              <div>
+                <h2 className="font-mono text-sm font-semibold uppercase text-red">
+                  BUILDER POSITIONS REQUIRED
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {int(missingPositions.length)} portfolio allocation plan
+                  {missingPositions.length === 1 ? " needs" : "s need"} more
+                  positions.
+                </p>
+              </div>
               <Link
                 href="/builder"
-                className="inline-flex items-center gap-1 text-sm text-cyan hover:text-cyan"
+                className="border border-red px-3 py-2 font-mono text-xs uppercase text-red hover:bg-red/10"
               >
-                Go to Builder
+                Open Builder
               </Link>
             </div>
-            <p className="text-sm text-muted-foreground mb-3">
-              Some portfolios need more positions to meet their allocation
-              requirements.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {missingPositions.map((p) => (
+            <div className="divide-y divide-red/30">
+              {missingPositions.map((portfolio) => (
                 <div
-                  key={p.name}
-                  className="flex-1 min-w-[260px] border-l-4 border-l-red bg-red/10 p-4"
+                  key={portfolio.name}
+                  className="grid gap-2 px-5 py-3 text-sm md:grid-cols-[1fr_auto]"
                 >
-                  <p className="font-semibold">{p.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-semibold">{p.missing_count}</span>{" "}
-                    position{p.missing_count !== 1 ? "s" : ""} missing (
-                    {p.current_positions}/{p.effective_positions} filled)
-                  </p>
+                  <span className="font-medium text-foreground">
+                    {portfolio.name}
+                  </span>
+                  <span className="font-mono text-red">
+                    {int(portfolio.missing_count)} missing |{" "}
+                    {int(portfolio.current_positions)}/
+                    {int(portfolio.effective_positions)} filled
+                  </span>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )
       )}
 
-      {/* Concentrations */}
       {dataLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-20 w-full" />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
             <Skeleton className="h-48" />
           </div>
         </div>
       ) : (
-        <div className="border border-border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Concentrations</h2>
+        <section className="border border-border bg-card">
+          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+            <div>
+              <h2 className="font-mono text-sm font-semibold uppercase">
+                CONCENTRATION WATCH
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {healthStatus.subtitle}. {int(totalViolations)} active exception
+                {totalViolations === 1 ? "" : "s"}.
+              </p>
+            </div>
             <Link
               href="/concentrations"
-              className="inline-flex items-center gap-1 text-sm text-cyan hover:text-cyan"
+              className="border border-border px-3 py-2 font-mono text-xs uppercase text-cyan hover:bg-cyan/10"
             >
               View Details
             </Link>
           </div>
-
-          {/* Health card */}
-          <div className="flex items-center gap-3 border border-border bg-muted p-4 mb-4">
-            <HealthIcon status={healthStatus.icon} />
-            <div>
-              <p className="font-semibold">{healthStatus.title}</p>
-              <p className="text-sm text-muted-foreground">
-                {healthStatus.subtitle}
-              </p>
-            </div>
-          </div>
-
-          {/* Gauge cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <ViolationGauge
-              title="Stock Violations"
+          <div className="grid gap-px bg-border md:grid-cols-3">
+            <ViolationPanel
+              title="Stock Limits"
               violations={stockViolations}
               hasRule={!!rules?.maxPerStock && rules.maxPerStock > 0}
             />
-            <ViolationGauge
-              title="Sector Violations"
+            <ViolationPanel
+              title="Sector Limits"
               violations={sectorViolations}
               hasRule={!!rules?.maxPerSector && rules.maxPerSector > 0}
             />
-            <ViolationGauge
-              title="Country Violations"
+            <ViolationPanel
+              title="Country Limits"
               violations={countryViolations}
               hasRule={!!rules?.maxPerCountry && rules.maxPerCountry > 0}
             />
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

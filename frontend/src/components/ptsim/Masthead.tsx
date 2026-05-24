@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/hooks/use-account";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
+import { cetTime } from "@/lib/format";
 import { LiveDot } from "./LiveDot";
 import { PortfolioPicker } from "./PortfolioPicker";
 import {
@@ -67,15 +68,6 @@ function useNowEvery30s(): number {
   return now;
 }
 
-function formatCetTime(ms: number): string {
-  const d = new Date(ms);
-  return d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Berlin",
-  });
-}
-
 export function Masthead() {
   const pathname = usePathname();
   const router = useRouter();
@@ -92,7 +84,7 @@ export function Masthead() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const liveLabel = mounted
-    ? `LIVE · EUR · ${formatCetTime(now)} CET`
+    ? `LIVE · EUR · ${cetTime(now)}`
     : "LIVE · EUR";
 
   const username = account?.username ?? "—";

@@ -1,0 +1,255 @@
+/* ============================================================
+   Portfolio Simulator — TERMINAL Design System
+   Bloomberg-flavored, expert density. Dark charcoal canvas,
+   cyan = live data, amber = warning/editable, green/red = gain/loss.
+   Mono-dominant type. Tonal depth, no borders-as-chrome.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- Canvas / panel backgrounds (tonal depth) ---------- */
+  --bg:       #0B0D0E;   /* canvas */
+  --bg-1:     #111416;   /* panel / header bar */
+  --bg-2:     #171B1E;   /* raised surface / ticker cells */
+  --bg-3:     #1E2328;   /* hover / active row */
+  --bg-4:     #262C32;   /* pressed */
+
+  /* ---------- Rules (emphasis via subtle tonal step) ---------- */
+  --rule:     #242A30;
+  --rule-2:   #30373E;
+  --rule-3:   #454D56;
+
+  /* ---------- Ink (4-step text hierarchy) ---------- */
+  --ink:      #E8ECEF;   /* primary */
+  --ink-1:    #B4BBC2;   /* secondary */
+  --ink-2:    #7A838C;   /* tertiary / labels */
+  --ink-3:    #4A5057;   /* quaternary / muted */
+  --ink-inv:  #041015;   /* on cyan/amber fills */
+
+  /* ---------- Accents ---------- */
+  --cyan:     #00D4E6;   /* live / primary / CSV source */
+  --cyan-1:   #3BE1EF;   /* hover */
+  --cyan-2:   #0093A0;   /* pressed */
+
+  --amber:    #FFB020;   /* simulation / manual source / warning */
+  --amber-1:  #FFC34D;
+  --amber-2:  #CC8A10;
+
+  --violet:   #8B7CF6;   /* ETF / secondary categorical */
+  --green:    #00C16A;   /* gain */
+  --green-1:  #37D88C;
+  --red:      #FF5360;   /* loss */
+  --red-1:    #FF7A83;
+
+  /* Semantic */
+  --success:  var(--green);
+  --warning:  var(--amber);
+  --error:    var(--red);
+  --info:     var(--cyan);
+
+  /* ---------- Source-of-truth colors ---------- */
+  --src-csv:    var(--cyan);
+  --src-manual: var(--amber);
+
+  /* ---------- Sector palette (categorical) ---------- */
+  --sec-tech:     var(--cyan);
+  --sec-etf:      var(--violet);
+  --sec-consumer: var(--amber);
+  --sec-energy:   var(--green);
+  --sec-finance:  #E85AA0;
+  --sec-health:   #5AC8FA;
+  --sec-cash:     var(--ink-3);
+
+  /* ---------- Typography ---------- */
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+
+  /* Sizes — terminal is SMALL. Density is the point. */
+  --fs-hero:    40px;      /* ticker main figure */
+  --fs-h1:      26px;      /* page title */
+  --fs-h2:      18px;      /* section title */
+  --fs-h3:      15px;      /* card title */
+  --fs-body:    13px;      /* default body */
+  --fs-body-sm: 12px;      /* secondary */
+  --fs-mono:    13px;      /* table numbers */
+  --fs-label:   11px;      /* mono uppercase labels */
+  --fs-micro:   10px;      /* badges / meta */
+  --fs-kbd:     10px;      /* kbd chips */
+
+  --fw-reg:     400;
+  --fw-med:     500;
+  --fw-semi:    600;
+  --fw-bold:    700;
+
+  --lh-tight:   1.1;
+  --lh-snug:    1.25;
+  --lh-body:    1.5;
+
+  --tr-tight:   -0.02em;  /* hero figures, h1 */
+  --tr-normal:  0;
+  --tr-mono:    0.02em;   /* mono labels */
+  --tr-label:   0.12em;   /* uppercase labels */
+  --tr-wide:    0.16em;   /* kickers */
+
+  /* ---------- Spacing (4px base — denser than standard 8px) ---------- */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------- Radii — terminal is quadratic ---------- */
+  --radius-none: 0;
+  --radius-sm:   2px;   /* kbd chips, pills */
+  --radius-md:   3px;   /* rare */
+
+  /* ---------- Motion ---------- */
+  --t-fast:   80ms linear;
+  --t-base:   120ms cubic-bezier(0.4, 0, 0.2, 1);
+  --t-smooth: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --pulse-dur: 1.4s;
+
+  /* ---------- Elevation — zero shadows, tonal only ---------- */
+  --elev-0: var(--bg);
+  --elev-1: var(--bg-1);
+  --elev-2: var(--bg-2);
+  --elev-3: var(--bg-3);
+
+  /* ---------- Control sizing ---------- */
+  --btn-h:      28px;
+  --btn-h-sm:   22px;
+  --btn-h-lg:   34px;
+  --input-h:    30px;
+  --bar-h:      40px;   /* masthead bar */
+  --row-h:      44px;   /* table row min */
+
+  /* ---------- Focus ring ---------- */
+  --focus: 0 0 0 2px var(--cyan);
+}
+
+/* ---------- Light inversion (optional; not default) ---------- */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg:       #FAFBFC;
+  --bg-1:     #F2F4F6;
+  --bg-2:     #E8EBEE;
+  --bg-3:     #DCE1E6;
+  --bg-4:     #CED4DA;
+  --rule:     #DCE1E6;
+  --rule-2:   #C4CBD3;
+  --rule-3:   #A8B0B9;
+  --ink:      #0B0D0E;
+  --ink-1:    #2A2F34;
+  --ink-2:    #5A6068;
+  --ink-3:    #8C929A;
+  --ink-inv:  #FAFBFC;
+  --cyan:     #0098A8;
+  --amber:    #B8750F;
+  --green:    #008B4A;
+  --red:      #C8333E;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: var(--fs-body); line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--cyan); }
+
+/* ============================================================
+   Semantic type classes
+   ============================================================ */
+.ds-hero {
+  font-family: var(--mono); font-weight: var(--fw-semi);
+  font-size: var(--fs-hero); line-height: var(--lh-tight); letter-spacing: var(--tr-tight);
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.ds-h1 {
+  font-family: var(--sans); font-weight: var(--fw-semi);
+  font-size: var(--fs-h1); line-height: var(--lh-tight); letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.ds-h2 {
+  font-family: var(--sans); font-weight: var(--fw-semi);
+  font-size: var(--fs-h2); line-height: var(--lh-snug); letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.ds-h3 {
+  font-family: var(--sans); font-weight: var(--fw-semi);
+  font-size: var(--fs-h3); line-height: var(--lh-snug);
+  color: var(--ink);
+}
+.ds-body { font-family: var(--sans); font-size: var(--fs-body); color: var(--ink-1); }
+.ds-body-sm { font-family: var(--sans); font-size: var(--fs-body-sm); color: var(--ink-2); }
+.ds-label {
+  font-family: var(--mono); font-weight: var(--fw-med);
+  font-size: var(--fs-label); letter-spacing: var(--tr-label);
+  text-transform: uppercase; color: var(--ink-2);
+}
+.ds-kicker {
+  font-family: var(--mono); font-weight: var(--fw-semi);
+  font-size: var(--fs-label); letter-spacing: var(--tr-wide);
+  text-transform: uppercase; color: var(--cyan);
+}
+.ds-micro {
+  font-family: var(--mono); font-weight: var(--fw-med);
+  font-size: var(--fs-micro); letter-spacing: var(--tr-label);
+  text-transform: uppercase; color: var(--ink-3);
+}
+.ds-mono, .ds-number {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tr-mono);
+}
+
+/* ============================================================
+   Color utilities
+   ============================================================ */
+.up { color: var(--green); }
+.down { color: var(--red); }
+.neutral { color: var(--ink-2); }
+.live { color: var(--cyan); }
+.warn { color: var(--amber); }
+
+/* ============================================================
+   Live dot — the signature motif
+   ============================================================ */
+.live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); vertical-align: middle;
+  animation: ds-pulse var(--pulse-dur) ease-in-out infinite;
+}
+.live-dot.cyan { background: var(--cyan); }
+.live-dot.amber { background: var(--amber); }
+@keyframes ds-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+
+/* ============================================================
+   Keyboard chips (the power-user signal)
+   ============================================================ */
+kbd, .kbd {
+  display: inline-block;
+  font-family: var(--mono); font-size: var(--fs-kbd); font-weight: var(--fw-med);
+  padding: 2px 5px; background: var(--bg-2); border: 1px solid var(--rule-2);
+  color: var(--ink-1); border-radius: var(--radius-sm);
+  line-height: 1;
+}
+
+/* ============================================================
+   Focus ring (accessibility)
+   ============================================================ */
+:focus-visible { outline: none; box-shadow: var(--focus); }

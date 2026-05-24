@@ -7,13 +7,10 @@ import type {
   MissingPortfolio,
   RebalancerData,
 } from "@/types/overview";
+import { calculatePositionValue } from "@/lib/position-value";
 
 function calculateItemValue(item: PortfolioDataItem): number {
-  if (item.current_value != null) return item.current_value;
-  if (item.is_custom_value && item.custom_total_value != null) {
-    return Number(item.custom_total_value) || 0;
-  }
-  return (Number(item.price_eur) || 0) * (Number(item.effective_shares) || 0);
+  return calculatePositionValue(item);
 }
 
 export function computeMetricsFromItems(items: PortfolioDataItem[]): PortfolioMetrics {

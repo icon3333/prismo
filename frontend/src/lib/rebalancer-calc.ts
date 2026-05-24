@@ -1,8 +1,6 @@
 import type {
   Portfolio,
   PortfolioPosition,
-  PortfolioSector,
-  BuilderPosition,
   RebalancedPortfolio,
   RebalanceMode,
   DetailedSector,

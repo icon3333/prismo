@@ -13,9 +13,9 @@
    ============================================================ */
 
 @theme inline {
-  /* --- Fonts (next/font CSS variables, set in app/layout.tsx) --- */
-  --font-sans: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-mono: var(--font-mono), "Fira Code", ui-monospace, SFMono-Regular, monospace;
+  /* --- Fonts (system-first stacks; no build-time font fetch) --- */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
 
   /* --- Disable all box shadows — Terminal §2 rule 2: depth is tonal --- */
   --shadow-2xs: none;

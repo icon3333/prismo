@@ -22,7 +22,6 @@ import {
 import type {
   BuilderRealPosition,
   BuilderPlaceholderPosition,
-  BuilderPosition,
   SortOptions,
 } from "@/types/builder";
 

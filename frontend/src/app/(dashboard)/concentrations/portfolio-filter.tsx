@@ -39,7 +39,7 @@ export function PortfolioFilter({
           variant={isAllSelected ? "secondary" : "ghost"}
           size="sm"
           className={cn(
-            "text-xs h-7 px-3 rounded-full",
+            "h-7 px-3 text-xs",
             isAllSelected && "bg-cyan/20 text-cyan border border-cyan/30"
           )}
           onClick={onSelectAll}
@@ -55,7 +55,7 @@ export function PortfolioFilter({
               variant={isActive ? "secondary" : "ghost"}
               size="sm"
               className={cn(
-                "text-xs h-7 px-3 rounded-full",
+                "h-7 px-3 text-xs",
                 isActive && "bg-cyan/20 text-cyan border border-cyan/30"
               )}
               onClick={() => onTogglePortfolio(p.name)}

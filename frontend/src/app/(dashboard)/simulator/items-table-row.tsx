@@ -142,7 +142,6 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
           <InlineNumberInput
             value={item.targetPercent}
             suffix="%"
-            decimals={1}
             onCommit={(v) => sim.updateItemValue(item.id, "targetPercent", v)}
           />
         </div>
@@ -228,13 +227,11 @@ function InlineNumberInput({
   value,
   prefix,
   suffix,
-  decimals = 2,
   onCommit,
 }: {
   value: number;
   prefix?: string;
   suffix?: string;
-  decimals?: number;
   onCommit: (value: number) => void;
 }) {
   const [editing, setEditing] = useState(false);

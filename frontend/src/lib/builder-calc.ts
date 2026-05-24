@@ -1,6 +1,5 @@
 import { eur, int } from "@/lib/format";
 import type {
-  BudgetData,
   BuilderRealPosition,
   BuilderPlaceholderPosition,
   BuilderPosition,

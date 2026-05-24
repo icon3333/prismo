@@ -4,7 +4,6 @@ import secrets
 import shutil
 import warnings
 from pathlib import Path
-from app.main import create_app
 import argparse
 
 # Suppress Python 3.13+ semaphore leak warnings on shutdown
@@ -166,22 +165,36 @@ def check_and_setup_environment():
             sys.exit(1)
 
 
-# Create the Flask application at module level
-# This is required for gunicorn to find the app object
 import time
 
-# Only show timing in debug/development mode AND in the main process (not reloader parent)
-_is_debug = os.environ.get('FLASK_ENV', 'development') == 'development'
-_is_reloader_parent = not os.environ.get('WERKZEUG_RUN_MAIN') and _is_debug
 
-if _is_debug and not _is_reloader_parent:
-    _app_creation_start = time.time()
+def create_application():
+    """Create the Flask app after environment setup has had a chance to run."""
+    from app.main import create_app
 
-app = create_app()
+    # Only show timing in debug/development mode AND in the main process (not reloader parent)
+    is_debug = os.environ.get('FLASK_ENV', 'development') == 'development'
+    is_reloader_parent = not os.environ.get('WERKZEUG_RUN_MAIN') and is_debug
 
-if _is_debug and not _is_reloader_parent:
-    _app_creation_time = time.time() - _app_creation_start
-    print(f"⏱️  App creation took: {_app_creation_time:.3f} seconds")
+    if is_debug and not is_reloader_parent:
+        app_creation_start = time.time()
+
+    flask_app = create_app()
+
+    if is_debug and not is_reloader_parent:
+        app_creation_time = time.time() - app_creation_start
+        print(f"⏱️  App creation took: {app_creation_time:.3f} seconds")
+
+    return flask_app
+
+
+# Gunicorn imports `app` from this module. CLI execution creates it after
+# argument handling so setup-only commands do not need Flask or SECRET_KEY.
+if __name__ == '__main__':
+    app = None
+else:
+    check_and_setup_environment()
+    app = create_application()
 
 if __name__ == '__main__':
     # Parse command line arguments first to check for skip flag
@@ -211,6 +224,8 @@ if __name__ == '__main__':
     # Check environment setup before running (unless skipped)
     if not args.skip_setup:
         check_and_setup_environment()
+
+    app = create_application()
 
     # Run the application with the specified port
     # Debug mode should be controlled by FLASK_ENV, not hardcoded

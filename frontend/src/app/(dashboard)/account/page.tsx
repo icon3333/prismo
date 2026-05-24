@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { dateTime } from "@/lib/format";
 import { toast } from "sonner";
 
 export default function AccountPage() {
@@ -109,13 +110,7 @@ export default function AccountPage() {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "Never";
     try {
-      return new Date(dateStr + "Z").toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return dateTime(dateStr + "Z");
     } catch {
       return dateStr;
     }

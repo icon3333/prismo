@@ -151,7 +151,6 @@ export default function RebalancerPage() {
             selectedPortfolio={selectedPortfolio}
             onSelectPortfolio={setSelectedPortfolio}
             mode={mode}
-            investmentAmount={investmentAmount}
           />
         </TabsContent>
       </Tabs>

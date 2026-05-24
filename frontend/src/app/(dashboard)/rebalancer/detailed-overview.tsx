@@ -41,7 +41,6 @@ interface DetailedOverviewProps {
   selectedPortfolio: string;
   onSelectPortfolio: (name: string) => void;
   mode: RebalanceMode;
-  investmentAmount: number;
 }
 
 export function DetailedOverview({
@@ -50,7 +49,6 @@ export function DetailedOverview({
   selectedPortfolio,
   onSelectPortfolio,
   mode,
-  investmentAmount,
 }: DetailedOverviewProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 

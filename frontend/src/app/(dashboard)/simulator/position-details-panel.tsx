@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   getPositionsForLabel,
-  getGlobalTotal,
   formatSimValue,
 } from "@/lib/simulator-calc";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";

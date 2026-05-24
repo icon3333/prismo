@@ -25,6 +25,34 @@ const intFmt = new Intl.NumberFormat("de-DE", {
   maximumFractionDigits: 0,
 });
 
+const dateFmt = new Intl.DateTimeFormat("de-DE", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+const longDateFmt = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+
+const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+const cetTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Berlin",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
 const MINUS = "−";
 const DASH = "—";
 
@@ -58,6 +86,38 @@ export const shares = (n: number | null | undefined): string =>
 /** Plain integer with German thousands separator. e.g. `12.345`. */
 export const int = (n: number | null | undefined): string =>
   isFinite(n) ? intFmt.format(n) : DASH;
+
+type DateInput = Date | string | number | null | undefined;
+
+const parseDate = (value: DateInput): Date | null => {
+  if (value == null || value === "") return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+/** Compact date. e.g. `24.05.2026`. */
+export const date = (value: DateInput): string => {
+  const parsed = parseDate(value);
+  return parsed ? dateFmt.format(parsed) : DASH;
+};
+
+/** Long document/report date. e.g. `May 24, 2026`. */
+export const longDate = (value: DateInput): string => {
+  const parsed = parseDate(value);
+  return parsed ? longDateFmt.format(parsed) : DASH;
+};
+
+/** Compact date and time. e.g. `May 24, 2026, 02:32 PM`. */
+export const dateTime = (value: DateInput): string => {
+  const parsed = parseDate(value);
+  return parsed ? dateTimeFmt.format(parsed) : DASH;
+};
+
+/** Berlin market-clock timestamp. e.g. `14:32:08 CET`. */
+export const cetTime = (value: DateInput): string => {
+  const parsed = parseDate(value);
+  return parsed ? `${cetTimeFmt.format(parsed)} CET` : DASH;
+};
 
 // ---------- Legacy compat (rebalancer surfaces still import these) ----------
 

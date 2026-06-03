@@ -14,6 +14,19 @@ export function AccountPicker() {
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function selectAccount(id: number, opts: { reload?: boolean } = { reload: true }) {
+    const res = await fetch(`/api/select_account/${id}`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (res.ok) {
+      setCurrentId(id);
+      if (opts.reload !== false) window.location.reload();
+      return true;
+    }
+    return false;
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -40,19 +53,6 @@ export function AccountPicker() {
       cancelled = true;
     };
   }, []);
-
-  async function selectAccount(id: number, opts: { reload?: boolean } = { reload: true }) {
-    const res = await fetch(`/api/select_account/${id}`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (res.ok) {
-      setCurrentId(id);
-      if (opts.reload !== false) window.location.reload();
-      return true;
-    }
-    return false;
-  }
 
   if (loading) return null;
   if (currentId) return null; // Already authenticated

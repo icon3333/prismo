@@ -525,10 +525,7 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
             # Working outside of request context (background thread) - skip session updates
             logger.debug("Working outside request context - skipping session updates")
         
-        # CRITICAL: Always backup before processing [[memory:7528819]]
-        logger.info("Creating automatic backup before CSV processing...")
-        backup_database()
-        
+        # Note: backups handled by the 6-hour scheduled job.
         # Parse CSV with common delimiters
         try:
             df = pd.read_csv(

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 import logging
 import os
 from datetime import datetime
@@ -175,6 +175,29 @@ def create_app(config_name=None):
         _total_time = time.time() - _create_app_start
         print(f"  ⏱️  TOTAL create_app() time: {_total_time:.3f}s\n")
 
+    @app.after_request
+    def _add_etag_and_cache_control(response):
+        """
+        For GET JSON responses: attach ETag + `Cache-Control: private, max-age=30`
+        and return 304 if the client's `If-None-Match` matches.
+
+        Pairs naturally with the existing `@cache.memoize` decorators on hot reads
+        (server-side) and the `apiFetch` 30s memory cache (client-side): after
+        navigating away and back, the browser revalidates with the ETag and gets a
+        small 304 instead of the full JSON.
+        """
+        if request.method != 'GET':
+            return response
+        if response.status_code >= 300:
+            return response
+        ct = response.content_type or ''
+        if 'application/json' not in ct:
+            return response
+
+        response.add_etag()
+        response.headers.setdefault('Cache-Control', 'private, max-age=30')
+        return response.make_conditional(request)
+
     @app.route('/health')
     def health_check():
         """Health check endpoint for Docker and load balancers."""
@@ -197,21 +220,4 @@ def create_app(config_name=None):
                 'error': str(e)
             }), 503
 
-    @app.route('/profile', methods=['POST'])
-    def get_profile():
-        data = request.get_json() if request.is_json else request.form
-        symbol = data.get('identifier', '').strip().upper()
-        
-        if not symbol:
-            return jsonify({'error': 'No symbol provided'})
-        
-        try:
-            from app.utils.yfinance_utils import get_yfinance_info
-            result = get_yfinance_info(symbol)
-            return jsonify(result)
-                
-        except Exception as e:
-            app.logger.error(f"Error processing request: {str(e)}")
-            return jsonify({'error': str(e)})
-    
     return app

@@ -1,5 +1,6 @@
 # app/utils/db_utils.py
 import logging
+import threading
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Union
 from app.db_manager import query_db, execute_db, get_background_db
@@ -7,85 +8,99 @@ from app.db_manager import query_db, execute_db, get_background_db
 logger = logging.getLogger(__name__)
 
 
+# --- Thread-local SQLite connections for background threads ---
+#
+# The previous implementation opened and closed a fresh sqlite3.Connection on
+# every helper call. During a batch refresh that fires `_update_job_progress_background`
+# every 2s and `_process_single_identifier` per identifier, that was many
+# open/PRAGMA-executescript/close cycles per second. Reusing a connection per
+# thread eliminates that overhead. ThreadPoolExecutor reuses its workers, so the
+# pool ends up holding a small fixed number of persistent connections; idle SQLite
+# connections are cheap.
+
+_bg_local = threading.local()
+
+
+def _get_thread_conn():
+    """Return a SQLite connection owned by the current thread (lazy create)."""
+    conn = getattr(_bg_local, 'conn', None)
+    if conn is None:
+        conn = get_background_db()
+        _bg_local.conn = conn
+    return conn
+
+
+def close_thread_conn() -> None:
+    """Close and drop the current thread's background connection (if any).
+
+    Call at the end of a long-running background job for the threads you own
+    (the job's main thread). Workers in the persistent pool keep their
+    connections for their lifetime — that is intentional.
+    """
+    conn = getattr(_bg_local, 'conn', None)
+    if conn is None:
+        return
+    try:
+        conn.close()
+    except Exception:
+        pass
+    _bg_local.conn = None
+
+
+def _reset_thread_conn_on_error() -> None:
+    """Drop a possibly-bad thread connection so the next call recreates it."""
+    conn = getattr(_bg_local, 'conn', None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    _bg_local.conn = None
+
+
 def query_background_db(query, args=(), one=False):
     """
-    Query the database from background threads and return results as dictionary objects.
-    This function doesn't require Flask application context.
+    Query the database from background threads. Uses a thread-local connection.
     """
-    db = None
     cursor = None
     try:
-        logger.debug(f"Executing background query: {query}")
-        logger.debug(f"Query args: {args}")
-
-        db = get_background_db()
+        db = _get_thread_conn()
         cursor = db.execute(query, args)
         rv = cursor.fetchall()
-
-        # Convert rows to dictionaries
         result = [dict(row) for row in rv]
-        logger.debug(f"Background query returned {len(result)} rows")
-
         return (result[0] if result else None) if one else result
     except Exception as e:
-        logger.error(f"Background database query failed: {str(e)}")
-        logger.error(f"Query was: {query}")
-        logger.error(f"Args were: {args}")
+        logger.error(f"Background query failed: {e} | query={query} args={args}")
+        _reset_thread_conn_on_error()
         raise
     finally:
-        # Ensure resources are always cleaned up
-        if cursor:
+        if cursor is not None:
             try:
                 cursor.close()
-            except Exception:
-                pass
-        if db:
-            try:
-                db.close()
             except Exception:
                 pass
 
 
 def execute_background_db(query, args=()):
     """
-    Execute a statement from background threads and commit changes, returning the rowcount.
-    This function doesn't require Flask application context.
+    Execute a statement from background threads and commit, returning rowcount.
+    Uses a thread-local connection.
     """
-    db = None
     cursor = None
     try:
-        logger.debug(f"Executing background statement: {query}")
-        logger.debug(f"📋 Statement args: {args}")
-
-        db = get_background_db()
-        logger.debug(f"🔗 Got background database connection: {db}")
-
+        db = _get_thread_conn()
         cursor = db.execute(query, args)
         rowcount = cursor.rowcount
-        logger.debug(f"Statement executed, rowcount: {rowcount}")
-
         db.commit()
-        logger.debug(f"Database changes committed")
-
-        logger.debug(f"📈 Background statement affected {rowcount} rows")
         return rowcount
     except Exception as e:
-        logger.error(f"Background database execute failed: {str(e)}")
-        logger.error(f"📜 Statement was: {query}")
-        logger.error(f"📋 Args were: {args}")
-        logger.error(f"🚨 Exception type: {type(e).__name__}")
-        logger.error(f"Full exception details:", exc_info=True)
+        logger.error(f"Background execute failed: {e} | query={query} args={args}")
+        _reset_thread_conn_on_error()
         raise
     finally:
-        # Ensure resources are always cleaned up
-        if cursor:
+        if cursor is not None:
             try:
                 cursor.close()
-            except Exception:
-                pass
-        if db:
-            try:
-                db.close()
             except Exception:
                 pass
 
@@ -106,20 +121,17 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
     Returns:
         Success status
     """
-    conn = None
     try:
-        logger.debug(f"Starting database update for identifier: {identifier}")
-        logger.debug(f"Price data: {price} {currency} ({price_eur} EUR), country: {country}")
-
         if not identifier or price is None:
             logger.warning(f"Missing identifier or price: {identifier}, {price}")
             return False
 
         now = datetime.now().isoformat()
-        logger.debug(f"⏰ Timestamp: {now}")
 
-        # Get a single connection for all operations
-        conn = get_background_db()
+        # Reuse the thread-local connection — workers in the persistent batch
+        # pool keep one connection each, instead of paying open + PRAGMA + close
+        # per identifier.
+        conn = _get_thread_conn()
         cursor = conn.cursor()
 
         # If we have a modified identifier, update the company records first
@@ -135,28 +147,17 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
             identifier = modified_identifier
 
         # Use INSERT OR REPLACE instead of SELECT + UPDATE/INSERT to reduce lock contention
-        logger.debug(f"📝 Upserting price record for {identifier}")
+        logger.debug(f"Upserting price record for {identifier}")
         cursor.execute('''
             INSERT OR REPLACE INTO market_prices
             (identifier, price, currency, price_eur, last_updated, country)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', [identifier, price, currency, price_eur, now, country])
-        logger.debug(f"Price record upserted for {identifier}")
 
-        # Update last_price_update in accounts table for all accounts that have this identifier
-        logger.debug(f"🔄 Updating account timestamps for {identifier}")
-        cursor.execute('''
-            UPDATE accounts
-            SET last_price_update = ?
-            WHERE id IN (
-                SELECT DISTINCT account_id
-                FROM companies
-                WHERE identifier = ?
-            )
-        ''', [now, identifier])
-        logger.debug(f"Updated {cursor.rowcount} account records with new timestamp")
+        # NOTE: accounts.last_price_update is no longer updated here. The
+        # batch_processing job calls bulk_update_accounts_last_price_update()
+        # once at the end of the batch, replacing N per-identifier UPDATEs.
 
-        # Commit all changes in a single transaction
         conn.commit()
 
         # Auto-categorize investment type if not already set (separate transaction, non-critical)
@@ -177,38 +178,58 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
             # Don't fail the entire price update if auto-categorization fails
             logger.warning(f"Auto-categorization failed for {identifier}: {e}")
 
-        logger.info(f"🎉 Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) with country={country}")
+        logger.info(f"Updated price for {identifier}: {price} {currency} ({price_eur} EUR) country={country}")
         return True
 
     except Exception as e:
-        if conn:
-            conn.rollback()
-        logger.error(f"Failed to update price in database for {identifier}: {str(e)}")
-        logger.error(f"🚨 Exception type: {type(e).__name__}")
-        logger.error(f"Full exception details:", exc_info=True)
+        # Roll back so the thread connection stays usable for the next call.
+        try:
+            _get_thread_conn().rollback()
+        except Exception:
+            _reset_thread_conn_on_error()
+        logger.error(f"Failed to update price for {identifier}: {e}", exc_info=True)
         return False
-    finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
+
+
+def bulk_update_accounts_last_price_update(identifiers: List[str]) -> int:
+    """
+    Set accounts.last_price_update for every account that holds any of the
+    given identifiers. Replaces N per-identifier UPDATEs at end of a batch.
+    Uses the thread-local connection.
+    """
+    if not identifiers:
+        return 0
+
+    try:
+        db = _get_thread_conn()
+        placeholders = ','.join('?' * len(identifiers))
+        rowcount = db.execute(
+            f'''
+            UPDATE accounts
+            SET last_price_update = ?
+            WHERE id IN (
+                SELECT DISTINCT account_id
+                FROM companies
+                WHERE identifier IN ({placeholders})
+            )
+            ''',
+            [datetime.now().isoformat(), *identifiers],
+        ).rowcount
+        db.commit()
+        logger.info(f"Bulk-updated last_price_update on {rowcount} account(s) for {len(identifiers)} identifier(s)")
+        return rowcount
+    except Exception as e:
+        logger.error(f"bulk_update_accounts_last_price_update failed: {e}")
+        _reset_thread_conn_on_error()
+        return 0
 
 
 def update_price_in_db(identifier: str, price: float, currency: str, price_eur: float, country: Optional[str] = None, modified_identifier: Optional[str] = None) -> bool:
     """
     Update price in database for a single identifier.
 
-    Args:
-        identifier: Stock identifier (ISIN or ticker)
-        price: Price in original currency
-        currency: Currency code
-        price_eur: Price in EUR
-        country: Country of the company
-        modified_identifier: If provided, update the company's identifier to this value
-
-    Returns:
-        Success status
+    Uses INSERT OR REPLACE for the upsert (one statement instead of SELECT +
+    UPDATE/INSERT, matching the background variant).
     """
     try:
         if not identifier or price is None:
@@ -218,89 +239,41 @@ def update_price_in_db(identifier: str, price: float, currency: str, price_eur: 
 
         now = datetime.now().isoformat()
 
-        # If we have a modified identifier, update the company records first
         if modified_identifier:
             logger.info(
-                f"⚠️ Updating identifier in database from {identifier} to {modified_identifier}")
-
-            # Update identifier in companies table
-            rows_updated = execute_db('''
-                UPDATE companies 
-                SET identifier = ?
-                WHERE identifier = ?
-            ''', [modified_identifier, identifier])
-
+                f"Updating identifier in database from {identifier} to {modified_identifier}")
+            rows_updated = execute_db(
+                'UPDATE companies SET identifier = ? WHERE identifier = ?',
+                [modified_identifier, identifier]
+            )
             logger.info(
                 f"Updated {rows_updated} company records with new identifier {modified_identifier}")
-
-            # Use the modified identifier for all subsequent operations
             identifier = modified_identifier
 
-        # Check if the record exists in market_prices
-        existing = query_db(
-            'SELECT 1 FROM market_prices WHERE identifier = ?',
-            [identifier],
-            one=True
-        )
-
-        if existing:
-            # Update existing record
-            execute_db('''
-                UPDATE market_prices
-                SET price = ?, currency = ?, price_eur = ?, last_updated = ?,
-                    country = ?
-                WHERE identifier = ?
-            ''', [price, currency, price_eur, now, country, identifier])
-            logger.info(
-                f"Updated existing price record for {identifier} with additional data")
-        else:
-            # Insert new record
-            execute_db('''
-                INSERT INTO market_prices
-                (identifier, price, currency, price_eur, last_updated, country)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', [identifier, price, currency, price_eur, now, country])
-            logger.info(
-                f"Created new price record for {identifier} with additional data")
-
-        # Update last_price_update in accounts table for all accounts that have this identifier
         execute_db('''
-            UPDATE accounts 
-            SET last_price_update = ? 
+            INSERT OR REPLACE INTO market_prices
+            (identifier, price, currency, price_eur, last_updated, country)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', [identifier, price, currency, price_eur, now, country])
+
+        execute_db('''
+            UPDATE accounts
+            SET last_price_update = ?
             WHERE id IN (
-                SELECT DISTINCT account_id 
-                FROM companies 
+                SELECT DISTINCT account_id
+                FROM companies
                 WHERE identifier = ?
             )
         ''', [now, identifier])
 
         logger.info(
-            f"Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) with country={country}")
+            f"Successfully updated price for {identifier}: {price} {currency} ({price_eur} EUR) country={country}")
         return True
 
     except Exception as e:
         logger.error(
             f"Failed to update price in database for {identifier}: {str(e)}")
         return False
-
-
-def get_portfolios(account_id):
-    """Get list of portfolios for an account"""
-    try:
-        portfolios = query_db('''
-            SELECT id, name
-            FROM portfolios
-            WHERE account_id = ?
-            ORDER BY name
-        ''', [account_id])
-
-        if portfolios is None:
-            return []
-        
-        return [{'id': p['id'], 'name': p['name']} for p in portfolios]
-    except Exception as e:
-        logger.error(f"Error getting portfolios: {str(e)}")
-        return []
 
 
 def load_portfolio_data(account_id=None, portfolio_id=None):
@@ -315,52 +288,13 @@ def load_portfolio_data(account_id=None, portfolio_id=None):
         List of portfolio items or empty list if error
     """
     try:
-        # Validate inputs
         if account_id is None and portfolio_id is None:
             logger.error(
                 "Both account_id and portfolio_id are None - at least one is required")
             return []
 
-        # Check for valid account_id
-        if account_id is not None:
-            account_check = query_db('SELECT id FROM accounts WHERE id = ?', [
-                                     account_id], one=True)
-            if not account_check:
-                logger.error(
-                    f"Account with ID {account_id} does not exist in database")
-                return []
-
-        # Check for valid portfolio_id
-        if portfolio_id is not None:
-            portfolio_check = query_db('SELECT id FROM portfolios WHERE id = ?', [
-                                       portfolio_id], one=True)
-            if not portfolio_check:
-                logger.error(
-                    f"Portfolio with ID {portfolio_id} does not exist in database")
-                return []
-
-        # Check for companies associated with this account/portfolio
-        company_check_query = 'SELECT COUNT(*) as count FROM companies WHERE 1=1'
-        company_check_params = []
-
-        if account_id:
-            company_check_query += ' AND account_id = ?'
-            company_check_params.append(account_id)
-        if portfolio_id:
-            company_check_query += ' AND portfolio_id = ?'
-            company_check_params.append(portfolio_id)
-
-        company_count = query_db(
-            company_check_query, company_check_params, one=True)
-        if not company_count or (isinstance(company_count, dict) and company_count.get('count', 0) == 0):
-            logger.warning(
-                f"No companies found for the specified filters (account_id={account_id}, portfolio_id={portfolio_id})")
-        else:
-            count_value = company_count.get('count', 0) if isinstance(company_count, dict) else 0
-            logger.info(
-                f"Found {count_value} companies for the specified filters")
-
-        # Build main query
+        # Build main query. Empty input ranges return [] naturally; the
+        # previous three preliminary existence/count queries were just logging.
         params = []
         query = '''
             SELECT

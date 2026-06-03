@@ -28,10 +28,7 @@ def refresh_exchange_rates_if_needed() -> bool:
 
         # Check if refresh is needed
         if not ExchangeRateRepository.is_refresh_needed(hours=24):
-            last_update = ExchangeRateRepository.get_last_update_time()
-            logger.info(f"✅ Exchange rates are fresh (last updated: {last_update})")
-            # Preload into cache for fast access
-            ExchangeRateRepository.preload_cache()
+            logger.info("✅ Exchange rates are fresh")
             return False
 
         logger.info("🔄 Refreshing exchange rates...")
@@ -57,12 +54,9 @@ def refresh_exchange_rates_if_needed() -> bool:
         # Store rates in database
         ExchangeRateRepository.upsert_rates_batch(rates, 'EUR')
 
-        # Clear value calculator cache to use new rates
+        # Clear value calculator cache so subsequent calc loops re-read fresh rates.
         from app.utils.value_calculator import clear_exchange_rate_cache
         clear_exchange_rate_cache()
-
-        # Preload into cache for fast access
-        ExchangeRateRepository.preload_cache()
 
         logger.info(f"✅ Refreshed {len(rates)} exchange rates: {list(rates.keys())}")
         return True

@@ -30,8 +30,8 @@ def require_auth(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'account_id' not in session:
-            logger.warning(
-                f"Unauthenticated access attempt to {f.__name__} at {request.path}"
+            logger.info(
+                f"Unauthenticated access to {f.__name__} at {request.path}"
             )
             return jsonify({
                 'error': 'Authentication required. Please select an account.'

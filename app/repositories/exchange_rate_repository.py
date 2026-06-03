@@ -8,20 +8,19 @@ Exchange rates are stored per currency pair (from_currency -> EUR) and
 refreshed every 24 hours. Only the latest rate is kept (no historical tracking).
 """
 
-from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from typing import Optional, Dict, List
+from datetime import datetime
 from app.db_manager import query_db, execute_db, get_db
 import logging
-import threading
 
 logger = logging.getLogger(__name__)
 
-# In-memory cache for exchange rates (cleared daily)
-# Thread-safe access via _cache_lock
-_rates_cache: Dict[str, float] = {}
-_cache_timestamp: Optional[datetime] = None
-_cache_lock = threading.Lock()
-CACHE_DURATION_HOURS = 24
+# Note: this repository used to hold its own in-memory cache (with a thread
+# lock) on top of value_calculator's `_exchange_rates_cache`. Two caches for
+# ~10 rows of data was redundant and the lock cost was paid per call in the
+# value-calc inner loop. value_calculator is now the sole reader-side cache;
+# this repository is a thin DB shim. The HTTP-source cache lives on
+# yfinance_utils.get_exchange_rate (@cache.memoize).
 
 
 class ExchangeRateRepository:
@@ -29,77 +28,31 @@ class ExchangeRateRepository:
 
     @staticmethod
     def get_rate(from_currency: str, to_currency: str = 'EUR') -> Optional[float]:
-        """
-        Get the exchange rate for a currency pair.
-
-        Args:
-            from_currency: Source currency code (e.g., 'USD', 'GBP')
-            to_currency: Target currency code (default: 'EUR')
-
-        Returns:
-            Exchange rate as float, or None if not found
-        """
+        """Get the exchange rate for a currency pair, or None if not found."""
         if from_currency == to_currency:
             return 1.0
 
-        # Check in-memory cache first
-        cache_key = f"{from_currency}_{to_currency}"
-        cached_rate = ExchangeRateRepository._get_cached_rate(cache_key)
-        if cached_rate is not None:
-            return cached_rate
-
-        logger.debug(f"Fetching exchange rate from DB: {from_currency} -> {to_currency}")
         result = query_db(
             '''
-            SELECT rate, last_updated
+            SELECT rate
             FROM exchange_rates
             WHERE from_currency = ? AND to_currency = ?
             ''',
             [from_currency, to_currency],
             one=True
         )
-
-        if result:
-            rate = result['rate']
-            # Update in-memory cache
-            ExchangeRateRepository._set_cached_rate(cache_key, rate)
-            logger.debug(f"Exchange rate {from_currency}->{to_currency}: {rate}")
-            return rate
-
-        return None
+        return result['rate'] if result else None
 
     @staticmethod
     def get_all_rates(to_currency: str = 'EUR') -> Dict[str, float]:
-        """
-        Get all exchange rates for a target currency.
-
-        Args:
-            to_currency: Target currency code (default: 'EUR')
-
-        Returns:
-            Dict mapping from_currency -> rate
-        """
-        logger.debug(f"Fetching all exchange rates to {to_currency}")
+        """Return {from_currency: rate} for all stored rates targeting to_currency."""
         results = query_db(
-            '''
-            SELECT from_currency, rate
-            FROM exchange_rates
-            WHERE to_currency = ?
-            ''',
+            'SELECT from_currency, rate FROM exchange_rates WHERE to_currency = ?',
             [to_currency]
         )
 
-        rates = {}
-        if results:
-            for row in results:
-                rates[row['from_currency']] = row['rate']
-                # Update in-memory cache
-                cache_key = f"{row['from_currency']}_{to_currency}"
-                ExchangeRateRepository._set_cached_rate(cache_key, row['rate'])
-
-        # Always include EUR -> EUR = 1.0
+        rates: Dict[str, float] = {row['from_currency']: row['rate'] for row in (results or [])}
         rates['EUR'] = 1.0
-
         logger.info(f"Loaded {len(rates)} exchange rates to {to_currency}")
         return rates
 
@@ -134,10 +87,6 @@ class ExchangeRateRepository:
             ''',
             [from_currency, to_currency, rate, last_updated]
         )
-
-        # Update in-memory cache
-        cache_key = f"{from_currency}_{to_currency}"
-        ExchangeRateRepository._set_cached_rate(cache_key, rate)
 
     @staticmethod
     def upsert_rates_batch(rates: Dict[str, float], to_currency: str = 'EUR') -> int:
@@ -177,10 +126,6 @@ class ExchangeRateRepository:
                     [from_currency, to_currency, rate, now]
                 )
                 count += 1
-
-                # Update in-memory cache
-                cache_key = f"{from_currency}_{to_currency}"
-                ExchangeRateRepository._set_cached_rate(cache_key, rate)
 
             db.commit()
             logger.info(f"Successfully updated {count} exchange rates")
@@ -298,59 +243,12 @@ class ExchangeRateRepository:
         deleted = cursor.rowcount
         db.commit()
 
-        # Clear in-memory cache
-        ExchangeRateRepository._clear_cache()
+        # Invalidate the value_calculator-side cache so calc loops re-read.
+        try:
+            from app.utils.value_calculator import clear_exchange_rate_cache
+            clear_exchange_rate_cache()
+        except Exception:
+            pass
 
         logger.info(f"Deleted {deleted} exchange rate records")
         return deleted
-
-    # --- In-memory cache management (thread-safe) ---
-
-    @staticmethod
-    def _get_cached_rate(cache_key: str) -> Optional[float]:
-        """Get rate from in-memory cache if still valid (thread-safe)."""
-        global _rates_cache, _cache_timestamp
-
-        with _cache_lock:
-            if _cache_timestamp is None:
-                return None
-
-            # Check if cache is still valid (within 24 hours)
-            if datetime.now() - _cache_timestamp > timedelta(hours=CACHE_DURATION_HOURS):
-                # Clear cache while holding lock
-                _rates_cache.clear()
-                # Note: can't call _clear_cache here to avoid deadlock
-                return None
-
-            return _rates_cache.get(cache_key)
-
-    @staticmethod
-    def _set_cached_rate(cache_key: str, rate: float) -> None:
-        """Set rate in in-memory cache (thread-safe)."""
-        global _rates_cache, _cache_timestamp
-
-        with _cache_lock:
-            if _cache_timestamp is None:
-                _cache_timestamp = datetime.now()
-
-            _rates_cache[cache_key] = rate
-
-    @staticmethod
-    def _clear_cache() -> None:
-        """Clear the in-memory cache (thread-safe)."""
-        global _rates_cache, _cache_timestamp
-
-        with _cache_lock:
-            _rates_cache = {}
-            _cache_timestamp = None
-            logger.debug("Cleared exchange rate in-memory cache")
-
-    @staticmethod
-    def preload_cache() -> None:
-        """
-        Preload all exchange rates into in-memory cache.
-
-        Call this at application startup for optimal performance.
-        """
-        logger.info("Preloading exchange rates into cache")
-        ExchangeRateRepository.get_all_rates('EUR')

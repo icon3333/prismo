@@ -85,12 +85,12 @@ export function PortfolioRow({
   );
 
   return (
-    <div className="border border-border/50 bg-slate-900/50 overflow-hidden">
+    <div className="border border-border bg-card overflow-hidden">
       {/* Collapsed strip */}
       <button
         type="button"
         onClick={onToggleExpanded}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors"
       >
         <span aria-hidden className="text-ink-2 leading-none w-3 inline-block shrink-0">
           {expanded ? "▴" : "▾"}

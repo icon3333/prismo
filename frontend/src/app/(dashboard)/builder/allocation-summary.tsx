@@ -56,7 +56,7 @@ export function AllocationSummary({
   const noPortfolios = portfolios.length === 0;
 
   return (
-    <div className="border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border bg-card p-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Allocation Summary</h2>
         <div className="flex gap-2">
@@ -86,7 +86,7 @@ export function AllocationSummary({
       ) : (
         <Table>
           <TableHeader>
-            <TableRow className="border-border/30">
+            <TableRow>
               <TableHead>Portfolio</TableHead>
               <TableHead>Position</TableHead>
               <TableHead className="text-right">Global %</TableHead>
@@ -143,7 +143,7 @@ function PortfolioSummaryBlock({
   return (
     <>
       {/* Portfolio header row */}
-      <TableRow className="border-border/20 bg-slate-800/40">
+      <TableRow className="bg-muted hover:bg-muted">
         <TableCell className="font-semibold">{name}</TableCell>
         <TableCell />
         <TableCell className="text-right font-semibold tabular-nums">
@@ -157,7 +157,7 @@ function PortfolioSummaryBlock({
 
       {/* Position rows */}
       {groups.map((group, i) => (
-        <TableRow key={i} className="border-border/10">
+        <TableRow key={i}>
           <TableCell />
           <TableCell
             className={`text-sm ${group.isPlaceholder ? "italic text-muted-foreground" : ""}`}

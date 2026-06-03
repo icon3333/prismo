@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { usePagePersistence } from "@/hooks/use-page-persistence";
 import {
   filterByPortfolios,
   groupByDimension,
@@ -29,27 +30,7 @@ export function useConcentrations() {
   const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const stateRef = useRef<PersistedFields>({});
-
-  const persistState = useCallback((partial: Partial<PersistedFields>) => {
-    stateRef.current = { ...stateRef.current, ...partial };
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await apiFetch("/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            page: "risk_overview",
-            ...stateRef.current,
-          }),
-        });
-      } catch {
-        // Silently fail
-      }
-    }, 500);
-  }, []);
+  const { persistState, hydrate } = usePagePersistence<PersistedFields>("risk_overview");
 
   const setIncludeCash = useCallback(
     (v: boolean) => {
@@ -102,7 +83,7 @@ export function useConcentrations() {
 
         setAllCompanies(allData.companies || []);
 
-        stateRef.current = { ...savedState };
+        hydrate(savedState);
 
         if (savedState.includeCash !== undefined) {
           setIncludeCashState(savedState.includeCash === "true");
@@ -146,9 +127,8 @@ export function useConcentrations() {
     init();
     return () => {
       cancelled = true;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [hydrate]);
 
   const isAllSelected = selectedPortfolios.size === 0;
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { buildAllocationRows } from "@/lib/performance-calc";
+import { usePagePersistence } from "@/hooks/use-page-persistence";
 import type {
   PortfolioOption,
   PerformancePortfolioData,
@@ -60,28 +61,7 @@ export function usePerformance(): UsePerformanceReturn {
   const [initialSortDir, setInitialSortDir] = useState<SortDir>("desc");
   const [initialExpanded, setInitialExpanded] = useState<Record<string, boolean>>({});
 
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const stateRef = useRef<AllPersistedFields>({});
-
-  // Debounced persist — merges partial into stateRef, POSTs ALL keys
-  const persistState = useCallback((partial: Partial<AllPersistedFields>) => {
-    stateRef.current = { ...stateRef.current, ...partial };
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await apiFetch("/state", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            page: "performance",
-            ...stateRef.current,
-          }),
-        });
-      } catch {
-        // Silently fail
-      }
-    }, 500);
-  }, []);
+  const { persistState, hydrate } = usePagePersistence<AllPersistedFields>("performance");
 
   const setIncludeCash = useCallback(
     (v: boolean) => {
@@ -175,8 +155,8 @@ export function usePerformance(): UsePerformanceReturn {
         setPortfolios(portfolioList);
         setCashBalance(cashData.cash || 0);
 
-        // Seed stateRef with everything from server so future POSTs include all keys
-        stateRef.current = { ...savedState };
+        // Seed accumulated state with everything from server so future POSTs include all keys
+        hydrate(savedState);
 
         // Restore includeCash
         if (savedState.includeCash !== undefined) {
@@ -241,9 +221,8 @@ export function usePerformance(): UsePerformanceReturn {
     init();
     return () => {
       cancelled = true;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [hydrate]);
 
   const isAllPortfolios = portfolioData?.portfolio_id === "all";
 

@@ -6,6 +6,7 @@ import type {
   ExposureData,
   HeatmapMode,
 } from "@/types/performance";
+import { cashSlice } from "./cash-inclusion";
 
 /**
  * Build allocation rows from portfolio data for any mode.
@@ -16,9 +17,7 @@ export function buildAllocationRows(
   includeCash: boolean,
   cashBalance: number
 ): AllocationRow[] {
-  const holdingsValue = data.total_value;
-  const cash = includeCash && cashBalance > 0 ? cashBalance : 0;
-  const denominator = holdingsValue + cash;
+  const { total: denominator } = cashSlice(data.total_value, includeCash, cashBalance);
   const pct = (value: number) => (denominator > 0 ? (value / denominator) * 100 : 0);
 
   let rows: AllocationRow[];

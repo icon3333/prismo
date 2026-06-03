@@ -84,7 +84,7 @@ export function SaveDialog({
             onClick={handleSubmit}
             disabled={!name.trim() || loading}
           >
-            {loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+            {loading && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             {mode === "rename" ? "Rename" : "Save"}
           </Button>
         </DialogFooter>

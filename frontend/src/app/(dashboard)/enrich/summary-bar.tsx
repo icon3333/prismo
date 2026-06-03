@@ -3,13 +3,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { formatDateAgo, parseGermanNumber } from "@/lib/enrich-calc";
 import { eur } from "@/lib/format";
@@ -20,9 +13,6 @@ interface SummaryBarProps {
   cashBalance: number;
   portfolioTotal: number;
   builderAvailable: number | null;
-  portfolioOptions: string[];
-  selectedPortfolio: string | null;
-  onSelectPortfolio: (v: string | null) => void;
   searchQuery: string;
   onSearchChange: (v: string) => void;
   selectedCount: number;
@@ -41,9 +31,6 @@ export function SummaryBar({
   cashBalance,
   portfolioTotal,
   builderAvailable,
-  portfolioOptions,
-  selectedPortfolio,
-  onSelectPortfolio,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -119,7 +106,7 @@ export function SummaryBar({
           {builderAvailable != null && (
             <button
               onClick={onUseBuilderAsCash}
-              className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors"
+              className="font-mono text-micro uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors"
               title={`Use ${eur(builderAvailable)} from Builder`}
             >
               USE BUILDER
@@ -139,26 +126,9 @@ export function SummaryBar({
 
       {/* Row 2: Controls */}
       <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={selectedPortfolio ?? "__all__"}
-          onValueChange={(v) => onSelectPortfolio(v === "__all__" ? null : v)}
-        >
-          <SelectTrigger className="h-8 w-44 text-xs">
-            <SelectValue placeholder="All Portfolios" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">All Portfolios</SelectItem>
-            {portfolioOptions.map((p) => (
-              <SelectItem key={p} value={p}>
-                {p}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         <div className="relative">
           <Input
-            className="h-8 w-48 text-xs"
+            className="h-8 w-64 text-xs"
             placeholder="Search company..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}

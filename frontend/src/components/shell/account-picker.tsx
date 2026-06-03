@@ -61,7 +61,7 @@ export function AccountPicker() {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95">
       <div className="w-full max-w-sm border border-border bg-card p-6 space-y-4">
         <div className="text-center">
-          <h2 className="text-xl font-bold">Welcome to Prismo</h2>
+          <h2 className="text-title font-bold">Welcome to Prismo</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Select an account to continue
           </p>

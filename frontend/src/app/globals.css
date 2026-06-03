@@ -17,6 +17,30 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
 
+  /* --- Type scale (the single governing typography ladder) ---
+     RULE: mono = chrome (the terminal frame: nav, controls, tables, labels,
+     metrics). sans = content (what the user reads/writes: prose, headings).
+     Small text never drops below `text-micro` (10px), and only there when it's
+     an uppercase, letter-spaced label. `text-body`/`text-body-sm` intentionally
+     equal Tailwind's `text-sm`/`text-xs` (14/12px) — those aliases stay valid
+     for sans content; new code prefers the semantic names. */
+  --text-micro:                10px;  /* mono — eyebrow caps: badges, tags, table heads, menu labels */
+  --text-micro--line-height:   14px;
+  --text-chrome:               12px;  /* mono — interactive chrome: masthead, nav, buttons, inputs, menus */
+  --text-chrome--line-height:  16px;
+  --text-data:                 13px;  /* mono — table body cells, tab-panel data */
+  --text-data--line-height:    18px;
+  --text-body-sm:              12px;  /* sans — secondary / muted content (≡ text-xs) */
+  --text-body-sm--line-height: 16px;
+  --text-body:                 14px;  /* sans — default content prose (≡ text-sm) */
+  --text-body--line-height:    20px;
+  --text-section:              16px;  /* sans — section headings, dialog titles */
+  --text-section--line-height: 22px;
+  --text-title:                20px;  /* sans — page <h1> (PageHeader) */
+  --text-title--line-height:   26px;
+  --text-display:              22px;  /* mono — hero metric numbers */
+  --text-display--line-height: 26px;
+
   /* --- Disable all box shadows — Terminal §2 rule 2: depth is tonal --- */
   --shadow-2xs: none;
   --shadow-xs: none;

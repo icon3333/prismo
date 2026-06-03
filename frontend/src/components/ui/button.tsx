@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 // Terminal §9.1 — mono-uppercase chrome, square corners, no focus ring
 // (global :focus-visible in globals.css supplies the 2px cyan box-shadow).
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center border bg-clip-padding font-mono text-[11px] font-medium uppercase tracking-[0.06em] whitespace-nowrap outline-none select-none transition-colors duration-[80ms] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center border bg-clip-padding font-mono text-chrome font-medium uppercase tracking-[0.06em] whitespace-nowrap outline-none select-none transition-colors duration-[80ms] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -29,10 +29,10 @@ const buttonVariants = cva(
       },
       size: {
         default:
-          "h-7 gap-1.5 px-3 text-[11px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-[22px] gap-1 px-2 text-[10px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-[22px] gap-1 px-2 text-[10px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-[34px] gap-1.5 px-4 text-[11px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-7 gap-1.5 px-3 text-chrome has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        xs: "h-[22px] gap-1 px-2 text-chrome has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-[22px] gap-1 px-2 text-chrome has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-[34px] gap-1.5 px-4 text-chrome has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "h-7 w-7",
         "icon-xs":
           "h-[22px] w-[22px] [&_svg:not([class*='size-'])]:size-3",

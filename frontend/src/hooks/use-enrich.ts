@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import {
   filterItems,
@@ -31,8 +32,12 @@ export function useEnrich() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters & sort
-  const [selectedPortfolio, setSelectedPortfolio] = useState<string | null>(null);
+  // Filters & sort.
+  // selectedPortfolio (name) is derived from `?portfolio=<id>` in the URL,
+  // resolved against the loaded portfolioDropdown list. The Masthead-less
+  // PortfolioPicker in the page header is the only writer.
+  const searchParams = useSearchParams();
+  const portfolioIdFromUrl = searchParams.get("portfolio");
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState<SortState>({ column: null, direction: "asc" });
 
@@ -84,6 +89,17 @@ export function useEnrich() {
   }, [fetchData]);
 
   // --- Derived state ---
+
+  // Resolve URL `?portfolio=<id>` → portfolio name. Picker writes IDs; the
+  // legacy filter function expects names, so we translate via the dropdown.
+  // "all" or missing param both mean "no filter".
+  const selectedPortfolio = useMemo<string | null>(() => {
+    if (!portfolioIdFromUrl || portfolioIdFromUrl === "all") return null;
+    const match = portfolioDropdown.find(
+      (p) => String(p.id) === portfolioIdFromUrl
+    );
+    return match?.name ?? null;
+  }, [portfolioIdFromUrl, portfolioDropdown]);
 
   const filteredItems = useMemo(
     () => filterItems(items, selectedPortfolio, searchQuery),
@@ -642,7 +658,6 @@ export function useEnrich() {
 
     // Filters
     selectedPortfolio,
-    setSelectedPortfolio,
     searchQuery,
     setSearchQuery,
     sort,

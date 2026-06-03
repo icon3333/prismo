@@ -44,7 +44,7 @@ function RevertButton({ onClick, title }: { onClick: () => void; title: string }
   return (
     <button
       onClick={onClick}
-      className="ml-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors shrink-0"
+      className="ml-1 font-mono text-micro uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors shrink-0"
       title={title}
     >
       RESET
@@ -53,8 +53,8 @@ function RevertButton({ onClick, title }: { onClick: () => void; title: string }
 }
 
 function SourceBadge({ source }: { source: EnrichItem["source"] }) {
-  if (source === "manual") return <Badge variant="outline" className="text-[9px] px-1 py-0 mr-1">M</Badge>;
-  if (source === "ibkr") return <Badge variant="outline" className="text-[9px] px-1 py-0 mr-1">IB</Badge>;
+  if (source === "manual") return <Badge variant="outline" className="text-micro px-1 py-0 mr-1">M</Badge>;
+  if (source === "ibkr") return <Badge variant="outline" className="text-micro px-1 py-0 mr-1">IB</Badge>;
   return null;
 }
 

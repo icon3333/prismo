@@ -85,7 +85,7 @@ export function PositionDetailsPanel({ chartType, label, sim }: Props) {
               {isSimulated ? (
                 <Badge
                   variant="outline"
-                  className="text-[10px] border-cyan-400/30 text-cyan-400"
+                  className="text-micro border-cyan-400/30 text-cyan-400"
                 >
                   + Sim
                 </Badge>

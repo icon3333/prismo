@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { usePerformance } from "@/hooks/use-performance";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/shell/page-header";
 import { PanelLayout } from "@/components/domain/panel-layout";
 import { SummaryPanel } from "./summary-panel";
 import { AllocationTable } from "./allocation-table";
@@ -11,10 +12,26 @@ import { PerformanceChart } from "./performance-chart";
 import type { ChartSelection } from "@/types/performance";
 
 export default function PerformancePage() {
+  return (
+    <Suspense fallback={<PerformanceSkeleton />}>
+      <PerformancePageInner />
+    </Suspense>
+  );
+}
+
+function PerformanceSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Performance" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
+
+function PerformancePageInner() {
   const {
-    portfolios,
     selectedPortfolioId,
-    setSelectedPortfolioId,
     portfolioData,
     cashBalance,
     includeCash,
@@ -36,32 +53,32 @@ export default function PerformancePage() {
     null
   );
 
+  // Reset chart selection when the active portfolio flips. The picker writes
+  // ?portfolio= → usePerformance updates selectedPortfolioId → we observe the
+  // change here. Uses React 19's "adjusting state while rendering" pattern
+  // (https://react.dev/reference/react/useState#storing-information-from-previous-renders)
+  // to avoid the set-state-in-effect lint rule.
+  const [trackedPortfolioId, setTrackedPortfolioId] =
+    useState(selectedPortfolioId);
+  if (selectedPortfolioId !== trackedPortfolioId) {
+    setTrackedPortfolioId(selectedPortfolioId);
+    setChartSelection(null);
+  }
+
   // Clear chart selection on mode change
   const handleModeChange = (mode: typeof allocationMode) => {
     setChartSelection(null);
     setAllocationMode(mode);
   };
 
-  // Clear chart selection on portfolio change
-  const handlePortfolioChange = (id: string) => {
-    setChartSelection(null);
-    setSelectedPortfolioId(id);
-  };
-
   if (isLoading && !portfolioData) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Performance</h1>
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-64 w-full" />
-      </div>
-    );
+    return <PerformanceSkeleton />;
   }
 
   if (error && !portfolioData) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Performance</h1>
+        <PageHeader title="Performance" />
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -71,12 +88,9 @@ export default function PerformancePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Performance</h1>
+      <PageHeader title="Performance" />
 
       <SummaryPanel
-        portfolios={portfolios}
-        selectedPortfolioId={selectedPortfolioId}
-        onSelectPortfolio={handlePortfolioChange}
         portfolioData={portfolioData}
         cashBalance={cashBalance}
         includeCash={includeCash}

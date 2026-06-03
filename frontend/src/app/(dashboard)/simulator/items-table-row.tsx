@@ -45,7 +45,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
             <span className="text-xs text-muted-foreground">—</span>
           )}
           {item.existsInPortfolio && (
-            <span className="text-[10px] text-muted-foreground" title="Exists in portfolio">
+            <span className="text-micro text-muted-foreground" title="Exists in portfolio">
               ●
             </span>
           )}

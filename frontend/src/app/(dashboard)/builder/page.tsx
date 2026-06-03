@@ -6,11 +6,12 @@ import { RulesSection } from "./rules-section";
 import { PortfolioList } from "./portfolio-list";
 import { AllocationSummary } from "./allocation-summary";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/shell/page-header";
 
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <Skeleton className="h-8 w-48" />
+      <PageHeader title="Builder" showPortfolioPicker={false} />
       <div className="grid gap-6 lg:grid-cols-2">
         <Skeleton className="h-64" />
         <Skeleton className="h-64" />
@@ -31,7 +32,7 @@ export default function BuilderPage() {
   if (builder.error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Builder</h1>
+        <PageHeader title="Builder" showPortfolioPicker={false} />
         <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red">
           {builder.error}
         </div>
@@ -41,14 +42,17 @@ export default function BuilderPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Builder</h1>
-        {builder.isSaving && (
-          <span className="text-xs text-muted-foreground animate-pulse">
-            Saving...
-          </span>
-        )}
-      </div>
+      <PageHeader
+        title="Builder"
+        showPortfolioPicker={false}
+        right={
+          builder.isSaving ? (
+            <span className="text-xs text-muted-foreground animate-pulse">
+              Saving...
+            </span>
+          ) : undefined
+        }
+      />
 
       {/* Budget + Rules side by side on large screens */}
       <div className="grid gap-6 lg:grid-cols-2">

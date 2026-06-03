@@ -76,7 +76,7 @@ export function TickerCells({ cells, className }: TickerCellsProps) {
             className="bg-bg-2 p-4 flex flex-col gap-2"
           >
             <div className="flex items-center gap-2">
-              <span className="font-mono uppercase text-[10px] tracking-[0.12em] text-ink-2">
+              <span className="font-mono uppercase text-micro tracking-[0.12em] text-ink-2">
                 {cell.label}
               </span>
               {cell.pulse && (
@@ -89,7 +89,7 @@ export function TickerCells({ cells, className }: TickerCellsProps) {
             <div
               className={cn(
                 "font-mono leading-none tracking-[-0.02em] text-ink",
-                isHero ? "text-[40px]" : "text-[22px] text-ink-1",
+                isHero ? "text-[40px]" : "text-display text-ink-1",
               )}
             >
               {cell.value}
@@ -98,7 +98,7 @@ export function TickerCells({ cells, className }: TickerCellsProps) {
               {cell.delta ? (
                 <span
                   className={cn(
-                    "font-mono text-[12px]",
+                    "font-mono text-chrome",
                     TONE[cell.deltaTone ?? "neutral"],
                   )}
                 >

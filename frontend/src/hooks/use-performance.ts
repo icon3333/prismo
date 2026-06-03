@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { buildAllocationRows } from "@/lib/performance-calc";
 import { usePagePersistence } from "@/hooks/use-page-persistence";
@@ -26,7 +27,6 @@ interface AllPersistedFields {
 interface UsePerformanceReturn {
   portfolios: PortfolioOption[];
   selectedPortfolioId: string;
-  setSelectedPortfolioId: (id: string) => void;
   portfolioData: PerformancePortfolioData | null;
   cashBalance: number;
   includeCash: boolean;
@@ -46,6 +46,11 @@ interface UsePerformanceReturn {
 }
 
 export function usePerformance(): UsePerformanceReturn {
+  const searchParams = useSearchParams();
+  // Picker writes `?portfolio=<id>` (or "all"). Missing param means the
+  // hook auto-defaults: server-persisted last choice, or "all"/first.
+  const urlPortfolioId = searchParams.get("portfolio");
+
   const [portfolios, setPortfolios] = useState<PortfolioOption[]>([]);
   const [selectedPortfolioId, setSelectedPortfolioIdState] = useState("");
   const [portfolioData, setPortfolioData] =
@@ -98,35 +103,45 @@ export function usePerformance(): UsePerformanceReturn {
     [persistState]
   );
 
-  // Load portfolio data when selection changes
-  const setSelectedPortfolioId = useCallback(
-    async (id: string) => {
-      setSelectedPortfolioIdState(id);
-      if (!id) {
-        setPortfolioData(null);
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        const data = await apiFetch<PerformancePortfolioData>(
-          `/portfolio_data/${id}`
-        );
-        setPortfolioData(data);
-        setError(null);
-        persistState({ selectedPortfolio: id });
-      } catch (err) {
-        setError(
-          err instanceof ApiError ? err.message : "Failed to load portfolio data"
-        );
-      } finally {
-        setIsLoading(false);
-      }
+  // Resolve the effective portfolio id from URL > persisted > default.
+  // Re-runs when the URL flips (PortfolioPicker writes to `?portfolio=`).
+  const resolveEffectiveId = useCallback(
+    (
+      list: PortfolioOption[],
+      urlId: string | null,
+      saved: string | undefined,
+    ): string => {
+      const isKnown = (id: string) =>
+        id === "all" || list.some((p) => p.id === id);
+      if (urlId && isKnown(urlId)) return urlId;
+      if (saved && isKnown(saved)) return saved;
+      return list.length >= 2 ? "all" : list[0]?.id ?? "";
     },
-    [persistState]
+    [],
   );
 
-  // Initial load: portfolios + cash + persisted state
+  const fetchPortfolioData = useCallback(async (id: string) => {
+    if (!id) {
+      setPortfolioData(null);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const data = await apiFetch<PerformancePortfolioData>(
+        `/portfolio_data/${id}`,
+      );
+      setPortfolioData(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : "Failed to load portfolio data",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Initial load: portfolios + cash + persisted UI state
   useEffect(() => {
     let cancelled = false;
 
@@ -147,7 +162,7 @@ export function usePerformance(): UsePerformanceReturn {
 
         if (cancelled) return;
 
-        // Ensure IDs are strings for Select component compatibility
+        // Ensure IDs are strings for downstream comparison
         const portfolioList = rawPortfolioList.map((p) => ({
           ...p,
           id: String(p.id),
@@ -158,25 +173,19 @@ export function usePerformance(): UsePerformanceReturn {
         // Seed accumulated state with everything from server so future POSTs include all keys
         hydrate(savedState);
 
-        // Restore includeCash
+        // Restore UI state (not the portfolio selection — that's URL-driven now)
         if (savedState.includeCash !== undefined) {
           setIncludeCashState(savedState.includeCash === "true");
         }
-
-        // Restore allocationMode
         if (savedState.allocationMode) {
           setAllocationModeState(savedState.allocationMode as AllocationMode);
         }
-
-        // Restore sort state
         if (savedState.sortField) {
           setInitialSortField(savedState.sortField as SortField);
         }
         if (savedState.sortDir) {
           setInitialSortDir(savedState.sortDir as SortDir);
         }
-
-        // Restore expanded rows
         if (savedState.expandedRows) {
           try {
             setInitialExpanded(JSON.parse(savedState.expandedRows));
@@ -185,25 +194,15 @@ export function usePerformance(): UsePerformanceReturn {
           }
         }
 
-        // Auto-load saved portfolio or auto-select first
-        let targetId = savedState.selectedPortfolio;
-        if (
-          !targetId ||
-          (!portfolioList.some((p) => p.id === targetId) && targetId !== "all")
-        ) {
-          // No saved portfolio or it was deleted — auto-select
-          targetId = portfolioList.length >= 2 ? "all" : portfolioList[0]?.id;
-        }
+        // Resolve initial portfolio: URL wins, else server-persisted, else default
+        const targetId = resolveEffectiveId(
+          portfolioList,
+          urlPortfolioId,
+          savedState.selectedPortfolio,
+        );
         if (targetId) {
           setSelectedPortfolioIdState(targetId);
-          try {
-            const data = await apiFetch<PerformancePortfolioData>(
-              `/portfolio_data/${targetId}`
-            );
-            if (!cancelled) setPortfolioData(data);
-          } catch {
-            // Portfolio may have been deleted
-          }
+          await fetchPortfolioData(targetId);
         }
       } catch (err) {
         if (!cancelled) {
@@ -222,7 +221,28 @@ export function usePerformance(): UsePerformanceReturn {
     return () => {
       cancelled = true;
     };
-  }, [hydrate]);
+    // Intentionally excludes urlPortfolioId — initial mount only. Subsequent
+    // URL changes are handled by the separate effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrate, resolveEffectiveId, fetchPortfolioData]);
+
+  // Respond to URL `?portfolio=` flips after mount (picker → router.push).
+  useEffect(() => {
+    if (!portfolios.length) return;
+    const next = resolveEffectiveId(portfolios, urlPortfolioId, undefined);
+    if (next && next !== selectedPortfolioId) {
+      setSelectedPortfolioIdState(next);
+      persistState({ selectedPortfolio: next });
+      void fetchPortfolioData(next);
+    }
+  }, [
+    urlPortfolioId,
+    portfolios,
+    selectedPortfolioId,
+    persistState,
+    resolveEffectiveId,
+    fetchPortfolioData,
+  ]);
 
   const isAllPortfolios = portfolioData?.portfolio_id === "all";
 
@@ -241,7 +261,6 @@ export function usePerformance(): UsePerformanceReturn {
   return {
     portfolios,
     selectedPortfolioId,
-    setSelectedPortfolioId,
     portfolioData,
     cashBalance,
     includeCash,

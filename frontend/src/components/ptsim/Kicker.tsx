@@ -13,7 +13,7 @@ export function Kicker({ id, label, meta, className }: KickerProps) {
   return (
     <div
       className={cn(
-        "font-mono font-semibold text-[11px] uppercase tracking-[0.16em] text-cyan",
+        "font-mono font-semibold text-chrome uppercase tracking-[0.16em] text-cyan",
         className,
       )}
     >

@@ -27,7 +27,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           <span className="inline-block w-1.5 h-1.5 bg-red" />
         ),
         loading: (
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
+          <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>
         ),
       }}
       style={
@@ -42,8 +42,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
         duration: 4000,
         classNames: {
           toast: "cn-toast border border-rule-2 bg-bg-1 text-ink duration-[80ms]",
-          title: "font-mono text-[11px] uppercase tracking-[0.12em] text-ink",
-          description: "font-sans text-[12px] text-ink-1",
+          title: "font-mono text-chrome uppercase tracking-[0.12em] text-ink",
+          description: "font-sans text-body-sm text-ink-1",
         },
       }}
       position="bottom-right"

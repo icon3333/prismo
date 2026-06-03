@@ -22,10 +22,10 @@ export function SimulationBanner({
       )}
       style={{ background: "rgba(255,176,32,0.08)" }}
     >
-      <span className="font-mono uppercase text-[10px] tracking-[0.12em] text-amber">
+      <span className="font-mono uppercase text-micro tracking-[0.12em] text-amber">
         SIMULATION MODE
       </span>
-      <span className="text-[12px] text-ink-1">{message}</span>
+      <span className="text-chrome text-ink-1">{message}</span>
     </div>
   );
 }

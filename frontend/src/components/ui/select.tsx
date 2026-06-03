@@ -41,7 +41,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit items-center justify-between gap-1.5 border border-rule-2 bg-bg-2 px-3 font-mono text-[12px] text-ink whitespace-nowrap outline-none select-none transition-colors duration-[80ms] disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-ink-3 data-[size=default]:h-[30px] data-[size=sm]:h-[26px] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex w-fit items-center justify-between gap-1.5 border border-rule-2 bg-bg-2 px-3 font-mono text-chrome text-ink whitespace-nowrap outline-none select-none transition-colors duration-[80ms] disabled:cursor-not-allowed disabled:opacity-50 data-placeholder:text-ink-3 data-[size=default]:h-[30px] data-[size=sm]:h-[26px] *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -103,7 +103,7 @@ function SelectLabel({
   return (
     <SelectPrimitive.GroupLabel
       data-slot="select-label"
-      className={cn("px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2", className)}
+      className={cn("px-3 py-2 font-mono text-micro uppercase tracking-[0.12em] text-ink-2", className)}
       {...props}
     />
   )
@@ -118,7 +118,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 pr-8 text-[12px] text-ink outline-hidden select-none transition-colors duration-[80ms] hover:bg-bg-2 focus:bg-bg-2 data-[state=checked]:text-cyan data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex w-full cursor-pointer items-center gap-1.5 px-3 py-2 pr-8 text-chrome text-ink outline-hidden select-none transition-colors duration-[80ms] hover:bg-bg-2 focus:bg-bg-2 data-[state=checked]:text-cyan data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}

@@ -33,7 +33,7 @@ export function SimulatorHeader({ sim }: Props) {
     <div className="space-y-3">
       {/* Row 1: Title + Mode toggle + Auto-save status */}
       <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold">Simulator</h1>
+        <h1 className="text-title font-bold">Simulator</h1>
 
         {/* Mode toggle group */}
         <div className="inline-flex border border-border/50 bg-muted/30 p-0.5">
@@ -276,7 +276,7 @@ function AutoSaveIndicator({ status }: { status: string }) {
       )}
     >
       {status === "saving" && (
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
+        <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>
       )}
       {status === "saved" && (
         <>

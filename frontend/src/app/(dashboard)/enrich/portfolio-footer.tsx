@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +28,8 @@ interface PortfolioFooterProps {
 }
 
 export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: PortfolioFooterProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [action, setAction] = useState("");
   const [name, setName] = useState("");
   const [oldName, setOldName] = useState("");
@@ -34,6 +37,30 @@ export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: Portfol
   const [deleteName, setDeleteName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Picker's "+ NEW PORTFOLIO" → /enrich?addPortfolio=1 → arm Add + focus.
+  // Consume the param once, then strip it so a refresh doesn't reopen it.
+  const wantsAddPortfolio = searchParams.get("addPortfolio") === "1";
+  const [hasConsumedFlag, setHasConsumedFlag] = useState(false);
+  if (wantsAddPortfolio && !hasConsumedFlag) {
+    // React 19 "adjusting state while rendering" — flips action to "add"
+    // synchronously, no cascading effect render.
+    setHasConsumedFlag(true);
+    setAction("add");
+  }
+  useEffect(() => {
+    if (!hasConsumedFlag) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("addPortfolio");
+    const qs = params.toString();
+    router.replace(qs ? `/enrich?${qs}` : "/enrich");
+  }, [hasConsumedFlag, router, searchParams]);
+
+  // Focus the name input as soon as the Add form renders.
+  useEffect(() => {
+    if (action === "add") nameInputRef.current?.focus();
+  }, [action]);
 
   const canApply =
     (action === "add" && name.trim()) ||
@@ -91,6 +118,7 @@ export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: Portfol
 
         {action === "add" && (
           <Input
+            ref={nameInputRef}
             className="h-7 w-40 text-xs"
             placeholder="Portfolio name"
             value={name}
@@ -138,7 +166,7 @@ export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: Portfol
 
         {action && (
           <Button size="sm" className="h-7 text-xs" disabled={!canApply || isProcessing} onClick={handleApply}>
-            {isProcessing && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+            {isProcessing && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Apply
           </Button>
         )}

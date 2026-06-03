@@ -41,7 +41,7 @@ function SortIcon({ column, sort }: { column: string; sort: SortOptions }) {
   const active = sort.column === column;
   const glyph = active && sort.direction === "desc" ? "▼" : "▲";
   const cls = active ? "text-cyan" : "text-ink-3";
-  return <span aria-hidden className={`text-[10px] leading-none ${cls}`}>{glyph}</span>;
+  return <span aria-hidden className={`text-micro leading-none ${cls}`}>{glyph}</span>;
 }
 
 export function PositionTable({

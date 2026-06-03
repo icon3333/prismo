@@ -253,7 +253,7 @@ export function AllocationTable({
                 P&L{" "}
                 <span
                   className={cn(
-                    "cursor-pointer text-[10px] hover:text-foreground",
+                    "cursor-pointer text-micro hover:text-foreground",
                     sortField === "pnl-eur"
                       ? "text-cyan font-bold"
                       : "text-muted-foreground"
@@ -268,7 +268,7 @@ export function AllocationTable({
                 /{" "}
                 <span
                   className={cn(
-                    "cursor-pointer text-[10px] hover:text-foreground",
+                    "cursor-pointer text-micro hover:text-foreground",
                     sortField === "pnl-pct"
                       ? "text-cyan font-bold"
                       : "text-muted-foreground"

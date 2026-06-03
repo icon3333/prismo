@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, X } from "lucide-react";
 import type { BulkEditValues } from "@/types/enrich";
 
 interface BulkActionBarProps {
@@ -60,7 +59,7 @@ export function BulkActionBar({
     : `This will permanently delete ${selectedManualNames.length} manually-added positions: ${selectedManualNames.join(", ")}.`;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-aqua-400/30 bg-aqua-400/5 p-3">
+    <div className="flex flex-wrap items-center gap-2 border border-cyan/30 bg-cyan/5 p-3">
       <span className="text-sm font-medium mr-2">{selectedCount} selected</span>
 
       <Select
@@ -132,7 +131,6 @@ export function BulkActionBar({
       </Button>
 
       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClear}>
-        <X className="size-3.5 mr-1" />
         Clear
       </Button>
 
@@ -147,7 +145,6 @@ export function BulkActionBar({
               />
             }
           >
-            <Trash2 className="size-3.5 mr-1" />
             Delete ({selectedManualCount})
           </AlertDialogTrigger>
           <AlertDialogContent>

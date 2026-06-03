@@ -8,7 +8,6 @@ import {
   TableRow as ShadTableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowUp, ArrowDown } from "lucide-react";
 import { getHealthColorClass } from "@/lib/enrich-calc";
 import type { EnrichItem, SortState, SortColumn, ColumnHealth } from "@/types/enrich";
 import { TableRow } from "./table-row";
@@ -55,12 +54,12 @@ const COLUMNS: { key: SortColumn; label: string; healthKey?: keyof ColumnHealth;
 ];
 
 function SortIcon({ column, sort }: { column: SortColumn; sort: SortState }) {
-  if (sort.column !== column) return <ArrowUp className="size-3 opacity-0 group-hover:opacity-30" />;
-  return sort.direction === "asc" ? (
-    <ArrowUp className="size-3 text-aqua-400" />
-  ) : (
-    <ArrowDown className="size-3 text-aqua-400" />
-  );
+  const active = sort.column === column;
+  const glyph = active && sort.direction === "desc" ? "▼" : "▲";
+  const cls = active
+    ? "text-cyan"
+    : "text-ink-3 opacity-0 group-hover:opacity-100";
+  return <span aria-hidden className={`text-[10px] leading-none ${cls}`}>{glyph}</span>;
 }
 
 export function EnrichTable({
@@ -78,7 +77,7 @@ export function EnrichTable({
   ...saveProps
 }: EnrichTableProps) {
   return (
-    <div className="rounded-md border border-border overflow-auto">
+    <div className="border border-border overflow-auto">
       <Table className="[&_input]:[font-size:inherit] [&_[data-slot=select-trigger]]:[font-size:inherit]">
         <TableHeader>
           <ShadTableRow className="bg-muted hover:bg-muted">

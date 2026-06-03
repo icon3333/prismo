@@ -24,14 +24,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import {
-  ChevronDown,
-  ChevronRight,
-  Expand,
-  Shrink,
-  Lock,
-  PlusCircle,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateDetailedRebalancing } from "@/lib/rebalancer-calc";
 import type {
@@ -49,7 +41,6 @@ interface DetailedOverviewProps {
   selectedPortfolio: string;
   onSelectPortfolio: (name: string) => void;
   mode: RebalanceMode;
-  investmentAmount: number;
 }
 
 export function DetailedOverview({
@@ -58,7 +49,6 @@ export function DetailedOverview({
   selectedPortfolio,
   onSelectPortfolio,
   mode,
-  investmentAmount,
 }: DetailedOverviewProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -122,11 +112,9 @@ export function DetailedOverview({
           {sectors.length > 0 && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={expandAll}>
-                <Expand className="size-3.5 mr-1" />
                 Expand All
               </Button>
               <Button variant="outline" size="sm" onClick={collapseAll}>
-                <Shrink className="size-3.5 mr-1" />
                 Collapse All
               </Button>
             </div>
@@ -134,7 +122,7 @@ export function DetailedOverview({
         </div>
 
         {selected && sectors.length > 0 && detailed ? (
-          <div className="rounded-md border border-border overflow-hidden">
+          <div className="border border-border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">
@@ -200,7 +188,7 @@ export function DetailedOverview({
                   </TableCell>
                   <TableCell className="text-right text-xs">
                     {detailed.totalBuys > 0 && (
-                      <span className="text-emerald-400">
+                      <span className="text-green">
                         Buy:{" "}
                         <SensitiveValue>
                           {fmt.currency.format(detailed.totalBuys)}
@@ -211,7 +199,7 @@ export function DetailedOverview({
                       <br />
                     )}
                     {detailed.totalSells > 0 && (
-                      <span className="text-coral-500">
+                      <span className="text-red">
                         Sell:{" "}
                         <SensitiveValue>
                           {fmt.currency.format(detailed.totalSells)}
@@ -282,11 +270,9 @@ function SectorGroup({
       >
         <TableCell className="font-medium">
           <span className="flex items-center gap-1">
-            {isExpanded ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
+            <span aria-hidden className="text-ink-2 leading-none w-3 inline-block">
+              {isExpanded ? "▴" : "▾"}
+            </span>
             {sector.name}
             <span className="text-xs text-muted-foreground ml-1">
               ({sector.positions.length})
@@ -361,8 +347,8 @@ function PositionRow({
   const { text: actionText, className: actionClass } = formatAction(posAction);
 
   const typeColors: Record<string, string> = {
-    ETF: "text-aqua-400",
-    Crypto: "text-coral-500",
+    ETF: "text-cyan",
+    Crypto: "text-red",
     Stock: "",
   };
 
@@ -372,12 +358,12 @@ function PositionRow({
     >
       <TableCell className="pl-8">
         <span className="flex items-center gap-1.5">
-          {isPlaceholder && <PlusCircle className="size-3.5 shrink-0" />}
+          {isPlaceholder && <span aria-hidden className="text-ink-2 leading-none">+</span>}
           <span>{position.name}</span>
           {position.is_capped && (
             <Tooltip>
               <TooltipTrigger>
-                <Lock className="size-3 text-amber-400 shrink-0" />
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle shrink-0" aria-hidden />
               </TooltipTrigger>
               <TooltipContent>
                 <p>

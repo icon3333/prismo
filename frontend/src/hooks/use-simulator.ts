@@ -10,6 +10,11 @@ import {
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
+  loadPersistedState,
+  savePersistedState,
+} from "@/lib/simulator-persistence";
+import { useSimulationAutosave } from "@/hooks/use-simulation-autosave";
+import {
   generateItemId,
   normalizeLabel,
   recalculateAllPercentageItems,
@@ -28,7 +33,6 @@ import type {
   SimulatorMode,
   SimulatorScope,
   CategoryMode,
-  AutoSaveStatus,
   SimulationSummary,
   SimulationFull,
   PortfolioData,
@@ -37,29 +41,6 @@ import type {
   TickerLookupResult,
   DeployManualItem,
 } from "@/types/simulator";
-
-// ---------------------------------------------------------------------------
-// localStorage helpers
-// ---------------------------------------------------------------------------
-
-const LS_KEY = "simulator_state";
-
-function loadPersistedState(): PersistedState | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function savePersistedState(state: PersistedState) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -88,7 +69,6 @@ export function useSimulator() {
   // --- UI state ---
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<AutoSaveStatus>("idle");
   const [expandedCountryBar, setExpandedCountryBar] = useState<string | null>(null);
   const [expandedSectorBar, setExpandedSectorBar] = useState<string | null>(null);
 
@@ -101,14 +81,20 @@ export function useSimulator() {
     manualItems: [] as DeployManualItem[],
   });
 
-  // --- Refs for auto-save ---
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const autoSaveErrorCountRef = useRef(0);
-  const autoSaveStatusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const currentSimIdRef = useRef<number | null>(null);
-
-  // Keep ref in sync
-  currentSimIdRef.current = currentSimulationId;
+  const {
+    autoSaveStatus,
+    setAutoSaveStatus,
+    triggerAutoSave,
+    cancelPendingAutoSave,
+    flushAutoSave,
+  } = useSimulationAutosave({
+    currentSimulationId,
+    payload: {
+      items,
+      totalAmount,
+      deploy: deployRef.current,
+    },
+  });
 
   // =========================================================================
   // Persist helpers
@@ -139,69 +125,6 @@ export function useSimulator() {
     },
     [mode, scope, portfolioId, currentSimulationId]
   );
-
-  // =========================================================================
-  // Auto-save
-  // =========================================================================
-
-  const doAutoSave = useCallback(async () => {
-    const simId = currentSimIdRef.current;
-    if (!simId) return;
-
-    setAutoSaveStatus("saving");
-    try {
-      const res = await apiFetch<{ success: boolean }>(
-        `/simulator/simulations/${simId}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            items,
-            global_value_mode: "euro",
-            total_amount: totalAmount,
-            deploy_lump_sum: deployRef.current.lumpSum,
-            deploy_monthly: deployRef.current.monthly,
-            deploy_months: deployRef.current.months,
-            deploy_manual_mode: deployRef.current.manualMode,
-            deploy_manual_items: deployRef.current.manualItems,
-          }),
-        }
-      );
-      if (res.success) {
-        autoSaveErrorCountRef.current = 0;
-        setAutoSaveStatus("saved");
-        clearTimeout(autoSaveStatusTimerRef.current);
-        autoSaveStatusTimerRef.current = setTimeout(
-          () => setAutoSaveStatus("idle"),
-          2000
-        );
-      } else {
-        throw new Error("save failed");
-      }
-    } catch {
-      autoSaveErrorCountRef.current++;
-      setAutoSaveStatus("error");
-      if (autoSaveErrorCountRef.current >= 3) {
-        toast.error("Auto-save failed repeatedly. Check your connection.");
-        autoSaveErrorCountRef.current = 0;
-      }
-      clearTimeout(autoSaveStatusTimerRef.current);
-      autoSaveStatusTimerRef.current = setTimeout(
-        () => setAutoSaveStatus("idle"),
-        4000
-      );
-    }
-  }, [items, totalAmount]);
-
-  const triggerAutoSave = useCallback(() => {
-    if (!currentSimIdRef.current) return;
-    clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(doAutoSave, 800);
-  }, [doAutoSave]);
-
-  const cancelPendingAutoSave = useCallback(() => {
-    clearTimeout(autoSaveTimerRef.current);
-  }, []);
 
   // =========================================================================
   // Fetch helpers
@@ -339,7 +262,7 @@ export function useSimulator() {
         if (!silent) toast.error("Failed to load simulation");
       }
     },
-    [cancelPendingAutoSave, mode, populateFromSimulation]
+    [cancelPendingAutoSave, mode, populateFromSimulation, setAutoSaveStatus]
   );
 
   // =========================================================================
@@ -354,7 +277,7 @@ export function useSimulator() {
       setError(null);
 
       try {
-        const [portfoliosList, simsList] = await Promise.all([
+        const [, simsList] = await Promise.all([
           fetchPortfolios(),
           fetchSimulations(),
         ]);
@@ -464,9 +387,10 @@ export function useSimulator() {
       if (newMode === mode) return;
 
       // Flush pending auto-save
-      cancelPendingAutoSave();
-      if (currentSimIdRef.current) {
-        await doAutoSave();
+      if (currentSimulationId) {
+        await flushAutoSave();
+      } else {
+        cancelPendingAutoSave();
       }
 
       // Save current mode's simulation ID
@@ -510,8 +434,10 @@ export function useSimulator() {
       scope,
       portfolioId,
       cancelPendingAutoSave,
-      doAutoSave,
+      currentSimulationId,
+      flushAutoSave,
       persistLocalStorage,
+      setAutoSaveStatus,
       simulations,
       loadSimulation,
     ]
@@ -810,7 +736,12 @@ export function useSimulator() {
       toast.error("Failed to delete simulation");
       return false;
     }
-  }, [currentSimulationId, currentSimulationName, fetchSimulations]);
+  }, [
+    currentSimulationId,
+    currentSimulationName,
+    fetchSimulations,
+    setAutoSaveStatus,
+  ]);
 
   // =========================================================================
   // Clone portfolio
@@ -895,17 +826,6 @@ export function useSimulator() {
     () => getGlobalTotal(mode, totalAmount, items, portfolios),
     [mode, totalAmount, items, portfolios]
   );
-
-  // =========================================================================
-  // Cleanup
-  // =========================================================================
-
-  useEffect(() => {
-    return () => {
-      clearTimeout(autoSaveTimerRef.current);
-      clearTimeout(autoSaveStatusTimerRef.current);
-    };
-  }, []);
 
   // =========================================================================
   // Return

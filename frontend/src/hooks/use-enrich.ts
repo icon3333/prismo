@@ -22,18 +22,6 @@ import type {
 } from "@/types/enrich";
 import { toast } from "sonner";
 
-const INITIAL_ADD_FORM: AddPositionForm = {
-  identifier: "",
-  name: "",
-  portfolio_id: null,
-  sector: "",
-  investment_type: null,
-  country: "",
-  shares: "",
-  total_value: "",
-  total_invested: "",
-};
-
 export function useEnrich() {
   const [items, setItems] = useState<EnrichItem[]>([]);
   const [portfolioOptions, setPortfolioOptions] = useState<string[]>([]);
@@ -92,7 +80,7 @@ export function useEnrich() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, [fetchData]);
 
   // --- Derived state ---

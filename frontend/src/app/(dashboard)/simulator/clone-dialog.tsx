@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
 import type { PortfolioOption } from "@/types/simulator";
 
 interface Props {
@@ -47,13 +46,16 @@ export function CloneDialog({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (open && portfolios.length > 0) {
-      const firstId = String(portfolios[0].id);
-      setSelectedPortfolioId(firstId);
-      setName(`Clone of ${portfolios[0].name}`);
-      setValueMode("with-values");
-      setLoading(false);
-    }
+    const initialize = () => {
+      if (open && portfolios.length > 0) {
+        const firstId = String(portfolios[0].id);
+        setSelectedPortfolioId(firstId);
+        setName(`Clone of ${portfolios[0].name}`);
+        setValueMode("with-values");
+        setLoading(false);
+      }
+    };
+    initialize();
   }, [open, portfolios]);
 
   const handlePortfolioChange = (v: string | null) => {
@@ -158,7 +160,7 @@ export function CloneDialog({
             onClick={handleSubmit}
             disabled={!selectedPortfolioId || !name.trim() || loading}
           >
-            {loading && <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />}
+            {loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Clone
           </Button>
         </DialogFooter>

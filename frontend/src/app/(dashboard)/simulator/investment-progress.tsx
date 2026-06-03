@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { Target, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/simulator-calc";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";
@@ -18,9 +17,9 @@ export function InvestmentProgress({ sim }: Props) {
 
   if (!targets) {
     return (
-      <div className="rounded-xl border border-border/50 bg-card/50 p-4">
+      <div className="border border-border/50 bg-card/50 p-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Info className="h-4 w-4" />
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan align-middle" aria-hidden />
           <span>
             Set up your investment targets in the{" "}
             <a
@@ -86,13 +85,12 @@ function ProgressBar({
   }
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-3">
+    <div className="border border-border/50 bg-card/50 p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-cyan-400" />
           <span className="text-sm font-medium">Investment Progress</span>
-          <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
+          <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5">
             {scopeLabel}
             {allocationInfo}
           </span>

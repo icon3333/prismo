@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { eur, signedPct } from "@/lib/format";
 import type { AllocationRow, AllocationMode, ChartSelection } from "@/types/performance";
 
 interface AllocationTableProps {
@@ -29,13 +29,7 @@ interface AllocationTableProps {
   onExpandedChange?: (expanded: Record<string, boolean>) => void;
 }
 
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }),
-  percent: (v: number) => v.toFixed(1) + "%",
-};
+const fmtPercent = (v: number) => v.toFixed(1) + "%";
 
 type SortField = "name" | "percentage" | "value" | "pnl-eur" | "pnl-pct";
 type SortDir = "asc" | "desc";
@@ -45,21 +39,20 @@ function formatPnL(abs: number | null, pct: number | null, invested: number | nu
     return { text: "N/A", className: "text-muted-foreground", tooltip: "" };
   }
 
-  const sign = abs > 0 ? "+" : abs < 0 ? "-" : "";
   const colorClass =
     abs > 0
-      ? "text-emerald-400"
+      ? "text-green"
       : abs < 0
-        ? "text-coral-500"
+        ? "text-red"
         : "text-muted-foreground";
 
   const tooltip =
     invested != null
-      ? `Total Invested: €${fmt.currency.format(invested)}`
+      ? `Total Invested: ${eur(invested)}`
       : "";
 
   return {
-    text: `€${fmt.currency.format(Math.abs(abs))} (${sign}${Math.abs(pct ?? 0).toFixed(1)}%)`,
+    text: `${eur(abs)} (${signedPct(pct ?? 0)})`,
     className: colorClass,
     tooltip,
   };
@@ -104,13 +97,15 @@ export function AllocationTable({
   };
 
   const handleSort = (field: SortField) => {
-    let newField: SortField | null = field;
-    let newDir: SortDir;
-    if (sortField === field) {
-      newDir = sortDir === "asc" ? "desc" : "asc";
-    } else {
-      newDir = field === "name" ? "asc" : "desc";
-    }
+    const newField: SortField | null = field;
+    const newDir: SortDir =
+      sortField === field
+        ? sortDir === "asc"
+          ? "desc"
+          : "asc"
+        : field === "name"
+          ? "asc"
+          : "desc";
     setSortField(newField);
     setSortDir(newDir);
     onSortChange?.(newField, newDir);
@@ -203,12 +198,12 @@ export function AllocationTable({
     : ["thesis", "sector", "stocks"];
 
   return (
-    <div className="rounded-md border border-border bg-card p-4">
+    <div className="border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-base font-semibold">
           {modeLabels[mode]} Allocation
         </h3>
-        <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+        <div className="flex gap-0.5 border border-border bg-muted p-0.5">
           {modes.map((m) => (
             <Button
               key={m}
@@ -216,7 +211,7 @@ export function AllocationTable({
               size="sm"
               className={cn(
                 "text-xs h-7 px-2.5",
-                mode === m && "bg-background shadow-sm"
+                mode === m && "bg-background"
               )}
               onClick={() => onModeChange(m)}
             >
@@ -226,7 +221,7 @@ export function AllocationTable({
         </div>
       </div>
 
-      <div className="rounded-md border border-border overflow-hidden">
+      <div className="border border-border overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted hover:bg-muted">
@@ -260,7 +255,7 @@ export function AllocationTable({
                   className={cn(
                     "cursor-pointer text-[10px] hover:text-foreground",
                     sortField === "pnl-eur"
-                      ? "text-aqua-400 font-bold"
+                      ? "text-cyan font-bold"
                       : "text-muted-foreground"
                   )}
                   onClick={(e) => {
@@ -275,7 +270,7 @@ export function AllocationTable({
                   className={cn(
                     "cursor-pointer text-[10px] hover:text-foreground",
                     sortField === "pnl-pct"
-                      ? "text-aqua-400 font-bold"
+                      ? "text-cyan font-bold"
                       : "text-muted-foreground"
                   )}
                   onClick={(e) => {
@@ -331,7 +326,7 @@ export function AllocationTable({
                   key={row.name}
                   className={cn(
                     "cursor-pointer",
-                    isSelected && "bg-aqua-400/10"
+                    isSelected && "bg-cyan/10"
                   )}
                   onClick={() => handleRowClick(row, false)}
                 >
@@ -340,11 +335,11 @@ export function AllocationTable({
                     {row.sector}
                   </TableCell>
                   <TableCell className="text-right">
-                    {fmt.percent(row.percentage)}
+                    {fmtPercent(row.percentage)}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-mono tabular-nums">
                     <SensitiveValue>
-                      €{fmt.currency.format(row.value)}
+                      {eur(row.value)}
                     </SensitiveValue>
                   </TableCell>
                   <TableCell className="text-right">
@@ -389,7 +384,7 @@ function TreeRow({
       <TableRow
         className={cn(
           "bg-muted/30 cursor-pointer hover:bg-muted/50",
-          isSelected && "bg-aqua-400/10"
+          isSelected && "bg-cyan/10"
         )}
         onClick={() => {
           if (isCash) return;
@@ -404,13 +399,10 @@ function TreeRow({
                   e.stopPropagation();
                   onToggle();
                 }}
-                className="p-0.5"
+                className="p-0.5 text-ink-2 leading-none w-3 inline-block"
+                aria-hidden
               >
-                {isOpen ? (
-                  <ChevronDown className="size-4" />
-                ) : (
-                  <ChevronRight className="size-4" />
-                )}
+                {isOpen ? "▴" : "▾"}
               </span>
             ) : (
               <span className="w-5" />
@@ -424,10 +416,10 @@ function TreeRow({
           </span>
         </TableCell>
         <TableCell className="text-right">
-          {fmt.percent(row.percentage)}
+          {fmtPercent(row.percentage)}
         </TableCell>
-        <TableCell className="text-right">
-          <SensitiveValue>€{fmt.currency.format(row.value)}</SensitiveValue>
+        <TableCell className="text-right font-mono tabular-nums">
+          <SensitiveValue>{eur(row.value)}</SensitiveValue>
         </TableCell>
         <TableCell className="text-right">
           <span className={pnl.className} title={pnl.tooltip}>
@@ -451,13 +443,13 @@ function TreeRow({
           const pctDisplay =
             mode === "portfolios" ? (
               <span className="text-muted-foreground">
-                {fmt.percent(child.percentage)}
+                {fmtPercent(child.percentage)}
               </span>
             ) : (
               <>
-                {fmt.percent(child.categoryPercentage ?? 0)}{" "}
+                {fmtPercent(child.categoryPercentage ?? 0)}{" "}
                 <span className="text-muted-foreground text-xs">
-                  ({fmt.percent(child.percentage)} total)
+                  ({fmtPercent(child.percentage)} total)
                 </span>
               </>
             );
@@ -467,15 +459,15 @@ function TreeRow({
               key={child.name}
               className={cn(
                 "cursor-pointer",
-                childSelected && "bg-aqua-400/10"
+                childSelected && "bg-cyan/10"
               )}
               onClick={() => onRowClick(child, false)}
             >
               <TableCell className="pl-8">{child.name}</TableCell>
               <TableCell className="text-right text-sm">{pctDisplay}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right font-mono tabular-nums">
                 <SensitiveValue>
-                  €{fmt.currency.format(child.value)}
+                  {eur(child.value)}
                 </SensitiveValue>
               </TableCell>
               <TableCell className="text-right">

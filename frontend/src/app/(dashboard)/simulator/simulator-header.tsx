@@ -11,18 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Layers,
-  Briefcase,
-  Save,
-  Pencil,
-  Trash2,
-  Copy,
-  Link,
-  Loader2,
-  Check,
-  AlertTriangle,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseSimValue, formatSimValue } from "@/lib/simulator-calc";
 import { SaveDialog } from "./save-dialog";
@@ -48,29 +36,27 @@ export function SimulatorHeader({ sim }: Props) {
         <h1 className="text-2xl font-bold">Simulator</h1>
 
         {/* Mode toggle group */}
-        <div className="inline-flex rounded-lg border border-border/50 bg-muted/30 p-0.5">
+        <div className="inline-flex border border-border/50 bg-muted/30 p-0.5">
           <button
             onClick={() => sim.switchMode("overlay")}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex items-center px-3 py-1.5 text-sm font-medium transition-colors",
               !isPortfolioMode
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-background text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Layers className="h-3.5 w-3.5" />
             Overlay
           </button>
           <button
             onClick={() => sim.switchMode("portfolio")}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "inline-flex items-center px-3 py-1.5 text-sm font-medium transition-colors",
               isPortfolioMode
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-background text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Briefcase className="h-3.5 w-3.5" />
             Sandbox
           </button>
         </div>
@@ -81,7 +67,6 @@ export function SimulatorHeader({ sim }: Props) {
         {/* Cloned-from label */}
         {sim.currentClonedFromName && isPortfolioMode && (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Link className="h-3 w-3" />
             Cloned from: {sim.currentClonedFromName}
           </span>
         )}
@@ -178,7 +163,6 @@ export function SimulatorHeader({ sim }: Props) {
             setSaveDialogOpen(true);
           }}
         >
-          <Save className="h-3.5 w-3.5 mr-1" />
           Save As
         </Button>
 
@@ -192,7 +176,6 @@ export function SimulatorHeader({ sim }: Props) {
                 setSaveDialogOpen(true);
               }}
             >
-              <Pencil className="h-3.5 w-3.5 mr-1" />
               Rename
             </Button>
 
@@ -202,7 +185,6 @@ export function SimulatorHeader({ sim }: Props) {
                 size="sm"
                 onClick={() => setDeleteConfirm(true)}
               >
-                <Trash2 className="h-3.5 w-3.5 mr-1" />
                 Delete
               </Button>
             ) : (
@@ -236,7 +218,6 @@ export function SimulatorHeader({ sim }: Props) {
             size="sm"
             onClick={() => setCloneDialogOpen(true)}
           >
-            <Copy className="h-3.5 w-3.5 mr-1" />
             Clone Portfolio
           </Button>
         )}
@@ -290,23 +271,21 @@ function AutoSaveIndicator({ status }: { status: string }) {
       className={cn(
         "inline-flex items-center gap-1 text-xs transition-opacity",
         status === "saving" && "text-muted-foreground animate-pulse",
-        status === "saved" && "text-emerald-400",
-        status === "error" && "text-red-400"
+        status === "saved" && "text-green",
+        status === "error" && "text-red"
       )}
     >
       {status === "saving" && (
-        <>
-          <Loader2 className="h-3 w-3 animate-spin" /> Saving
-        </>
+        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>
       )}
       {status === "saved" && (
         <>
-          <Check className="h-3 w-3" /> Saved
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle" aria-hidden /> Saved
         </>
       )}
       {status === "error" && (
         <>
-          <AlertTriangle className="h-3 w-3" /> Save failed
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-red align-middle" aria-hidden /> Save failed
         </>
       )}
     </span>
@@ -340,8 +319,8 @@ function AllocationSummaryBadge({
       variant="outline"
       className={cn(
         "text-xs",
-        status === "full" && "border-emerald-400/50 text-emerald-400",
-        status === "over" && "border-red-400/50 text-red-400",
+        status === "full" && "border-emerald-400/50 text-green",
+        status === "over" && "border-red-400/50 text-red",
         status === "under" && "border-border text-muted-foreground"
       )}
     >

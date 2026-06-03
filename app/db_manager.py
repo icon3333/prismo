@@ -569,9 +569,13 @@ def migrate_database():
         # Migration 9: Rename category to sector
         if current_version < 9:
             logger.info("Applying migration 9: Renaming category to sector")
-            # Rename column using SQLite's ALTER TABLE RENAME COLUMN (SQLite 3.25+)
-            cursor.execute('ALTER TABLE companies RENAME COLUMN category TO sector')
-            # Drop old indexes
+            # Fresh DBs from schema.sql already have `sector` — only rename if the
+            # legacy `category` column actually exists, otherwise this ALTER would
+            # raise `no such column: category` and abort the whole migration chain.
+            cols = {row[1] for row in cursor.execute("PRAGMA table_info(companies)").fetchall()}
+            if "category" in cols and "sector" not in cols:
+                cursor.execute('ALTER TABLE companies RENAME COLUMN category TO sector')
+            # Drop old indexes (no-op if absent)
             cursor.execute('DROP INDEX IF EXISTS idx_companies_category')
             cursor.execute('DROP INDEX IF EXISTS idx_companies_portfolio_category')
             # Create new indexes with sector naming
@@ -809,15 +813,12 @@ def migrate_database():
         # Migration 19: Add type and clone tracking columns to simulations table
         if current_version < 19:
             logger.info("Applying migration 19: Adding type and clone columns to simulations")
-            cursor.execute(
-                "ALTER TABLE simulations ADD COLUMN type TEXT NOT NULL DEFAULT 'overlay' CHECK(type IN ('overlay', 'portfolio'))"
-            )
-            cursor.execute(
-                "ALTER TABLE simulations ADD COLUMN cloned_from_portfolio_id INTEGER"
-            )
-            cursor.execute(
-                "ALTER TABLE simulations ADD COLUMN cloned_from_name TEXT"
-            )
+            # Schema.sql already includes these columns on fresh DBs — use the
+            # duplicate-tolerant helper so re-running on a fresh install doesn't crash.
+            _safe_add_column(cursor, "simulations",
+                             "type TEXT NOT NULL DEFAULT 'overlay' CHECK(type IN ('overlay', 'portfolio'))")
+            _safe_add_column(cursor, "simulations", "cloned_from_portfolio_id INTEGER")
+            _safe_add_column(cursor, "simulations", "cloned_from_name TEXT")
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_simulations_type ON simulations(account_id, type)"
             )

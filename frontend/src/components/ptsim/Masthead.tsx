@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -9,33 +9,12 @@ import { useAccount } from "@/hooks/use-account";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
 import { cetTime } from "@/lib/format";
 import { LiveDot } from "./LiveDot";
-import { PortfolioPicker } from "./PortfolioPicker";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-
-const PAGE_NAMES: Record<string, string> = {
-  "/": "OVERVIEW",
-  "/enrich": "ENRICH",
-  "/concentrations": "CONCENTRATIONS",
-  "/performance": "PERFORMANCE",
-  "/builder": "BUILDER",
-  "/rebalancer": "REBALANCER",
-  "/simulator": "SIMULATOR",
-  "/account": "ACCOUNT",
-};
-
-function pageNameFor(pathname: string): string {
-  if (pathname === "/") return PAGE_NAMES["/"];
-  // Match longest prefix (excluding root)
-  const matches = Object.keys(PAGE_NAMES)
-    .filter((p) => p !== "/" && pathname.startsWith(p))
-    .sort((a, b) => b.length - a.length);
-  return matches[0] ? PAGE_NAMES[matches[0]] : "PRISMO";
-}
 
 const ROW2_GROUPS = [
   [{ href: "/", label: "Overview" }],
@@ -71,15 +50,12 @@ function useNowEvery30s(): number {
 
 export function Masthead() {
   const pathname = usePathname();
-  const router = useRouter();
   const { account } = useAccount();
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
   const { resolvedTheme, setTheme } = useTheme();
   const now = useNowEvery30s();
 
-  const pageName = pageNameFor(pathname);
-  const isOverview = pathname === "/";
-  const navLabel = isOverview ? "AGGREGATE NAV" : "NAV";
+  const navLabel = pathname === "/" ? "AGGREGATE NAV" : "NAV";
 
   // Render-time-stable timestamp for SSR/hydration: only render the time on
   // the client to avoid mismatches.
@@ -106,20 +82,9 @@ export function Masthead() {
             aria-hidden
             className="inline-block w-[10px] h-[10px] bg-cyan"
           />
-          <span className="font-mono font-bold uppercase text-[11px] tracking-[0.12em] text-cyan">
+          <span className="font-mono font-bold uppercase text-chrome tracking-[0.12em] text-cyan">
             PRISMO
           </span>
-        </div>
-
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 px-3 border-l border-rule">
-          <span className="font-mono uppercase text-[11px] tracking-[0.06em] text-ink">
-            {pageName}
-          </span>
-          <span aria-hidden className="text-ink-3 text-[11px]">
-            ·
-          </span>
-          <PortfolioPicker />
         </div>
 
         {/* Spacer */}
@@ -127,10 +92,10 @@ export function Masthead() {
 
         {/* NAV */}
         <div className="flex items-center gap-2 px-3 border-l border-rule">
-          <span className="font-mono uppercase text-[11px] tracking-[0.06em] text-ink-2">
+          <span className="font-mono uppercase text-chrome tracking-[0.06em] text-ink-2">
             {navLabel}
           </span>
-          <span className="font-mono tabular-nums text-[11px] text-ink">
+          <span className="font-mono tabular-nums text-chrome text-ink">
             —
           </span>
         </div>
@@ -138,7 +103,7 @@ export function Masthead() {
         {/* Live */}
         <div className="flex items-center gap-2 px-3 border-l border-rule">
           <LiveDot level="live" />
-          <span className="font-mono uppercase text-[11px] tracking-[0.06em] text-ink-2">
+          <span className="font-mono uppercase text-chrome tracking-[0.06em] text-ink-2">
             {liveLabel}
           </span>
         </div>
@@ -149,7 +114,7 @@ export function Masthead() {
           onClick={toggleAnonymous}
           aria-pressed={isAnonymous}
           className={cn(
-            "flex items-center px-3 border-l border-rule font-mono uppercase text-[11px] tracking-[0.06em] transition-colors duration-[80ms]",
+            "flex items-center px-3 border-l border-rule font-mono uppercase text-chrome tracking-[0.06em] transition-colors duration-[80ms]",
             isAnonymous
               ? "text-cyan bg-bg-3"
               : "text-ink-2 bg-transparent hover:text-ink",
@@ -164,7 +129,7 @@ export function Masthead() {
           onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
           aria-label="Toggle theme"
           aria-pressed={mounted ? resolvedTheme === "light" : false}
-          className="flex items-center px-3 border-l border-rule font-mono uppercase text-[11px] tracking-[0.06em] text-ink-2 bg-transparent hover:text-ink transition-colors duration-[80ms]"
+          className="flex items-center px-3 border-l border-rule font-mono uppercase text-chrome tracking-[0.06em] text-ink-2 bg-transparent hover:text-ink transition-colors duration-[80ms]"
         >
           {mounted ? (resolvedTheme === "dark" ? "DARK" : "LIGHT") : "DARK"}
         </button>
@@ -172,7 +137,7 @@ export function Masthead() {
         {/* Account */}
         <Link
           href="/account"
-          className="flex items-center px-3 border-l border-rule font-mono uppercase text-[11px] tracking-[0.06em] text-ink-2 hover:text-ink transition-colors duration-[80ms]"
+          className="flex items-center px-3 border-l border-rule font-mono uppercase text-chrome tracking-[0.06em] text-ink-2 hover:text-ink transition-colors duration-[80ms]"
         >
           ACCT · {displayUser}
         </Link>
@@ -240,9 +205,9 @@ export function Masthead() {
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "px-4 h-8 inline-flex items-center font-mono uppercase text-[11px] tracking-[0.06em] transition-colors duration-[80ms]",
+                    "px-4 h-8 inline-flex items-center font-mono uppercase text-chrome tracking-[0.06em] transition-colors duration-[80ms]",
                     active
-                      ? "text-ink border-b-2 border-cyan -mb-px"
+                      ? "text-cyan border-b-2 border-cyan -mb-px"
                       : "text-ink-2 hover:text-ink",
                   )}
                 >

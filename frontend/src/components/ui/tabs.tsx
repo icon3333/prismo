@@ -61,7 +61,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex items-center justify-center gap-1.5 -mb-px border-b-2 border-transparent bg-transparent px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-[0.12em] whitespace-nowrap text-ink-2 outline-none transition-colors duration-[80ms] hover:text-ink data-active:text-cyan data-active:border-cyan disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative inline-flex items-center justify-center gap-1.5 -mb-px border-b-2 border-transparent bg-transparent px-4 py-2 font-mono text-chrome font-medium uppercase tracking-[0.12em] whitespace-nowrap text-ink-2 outline-none transition-colors duration-[80ms] hover:text-ink data-active:text-cyan data-active:border-cyan disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -73,7 +73,7 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-[13px] outline-none", className)}
+      className={cn("flex-1 text-data outline-none", className)}
       {...props}
     />
   )

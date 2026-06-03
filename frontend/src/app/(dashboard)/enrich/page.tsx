@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Suspense, useState, useMemo } from "react";
 import { useEnrich } from "@/hooks/use-enrich";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/shell/page-header";
 import { SummaryBar } from "./summary-bar";
 import { EnrichTable } from "./enrich-table";
 import { BulkActionBar } from "./bulk-action-bar";
@@ -12,6 +13,24 @@ import { CsvUploadDialog } from "./csv-upload-dialog";
 import { PortfolioFooter } from "./portfolio-footer";
 
 export default function EnrichPage() {
+  return (
+    <Suspense fallback={<EnrichSkeleton />}>
+      <EnrichPageInner />
+    </Suspense>
+  );
+}
+
+function EnrichSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-8 w-32" />
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-96 w-full" />
+    </div>
+  );
+}
+
+function EnrichPageInner() {
   const enrich = useEnrich();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showCsvDialog, setShowCsvDialog] = useState(false);
@@ -44,7 +63,7 @@ export default function EnrichPage() {
   if (enrich.isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-8 w-32" />
+        <PageHeader title="Enrich" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-96 w-full" />
       </div>
@@ -54,7 +73,7 @@ export default function EnrichPage() {
   if (enrich.error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Enrich</h1>
+        <PageHeader title="Enrich" />
         <Alert variant="destructive">
           <AlertDescription>{enrich.error}</AlertDescription>
         </Alert>
@@ -64,7 +83,7 @@ export default function EnrichPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Enrich</h1>
+      <PageHeader title="Enrich" />
 
       <PortfolioFooter
         portfolioOptions={enrich.portfolioOptions}
@@ -76,9 +95,6 @@ export default function EnrichPage() {
         cashBalance={enrich.cashBalance}
         portfolioTotal={enrich.portfolioTotal}
         builderAvailable={enrich.builderAvailable}
-        portfolioOptions={enrich.portfolioOptions}
-        selectedPortfolio={enrich.selectedPortfolio}
-        onSelectPortfolio={enrich.setSelectedPortfolio}
         searchQuery={enrich.searchQuery}
         onSearchChange={enrich.setSearchQuery}
         selectedCount={enrich.selectedIds.size}

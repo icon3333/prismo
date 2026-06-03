@@ -8,7 +8,6 @@ import {
   DropdownMenuContent,
 } from "@/components/ui/dropdown-menu";
 import { apiFetch, ApiError } from "@/lib/api";
-import { useAccount } from "@/hooks/use-account";
 import { cn } from "@/lib/utils";
 import type { PortfolioOption } from "@/types/performance";
 
@@ -27,6 +26,7 @@ const DEFAULT_PER_PORTFOLIO_LANDING = "/enrich";
 function pickActiveLabel(
   pathname: string,
   activePortfolioName: string | null,
+  activeId: string | null,
 ): { label: string; showChevron: boolean; hidden: boolean } {
   if (pathname.startsWith("/simulator")) {
     return { label: "SANDBOX", showChevron: false, hidden: true };
@@ -36,6 +36,9 @@ function pickActiveLabel(
   }
   for (const r of PER_PORTFOLIO_ROUTES) {
     if (pathname.startsWith(r)) {
+      if (!activeId || activeId === "all") {
+        return { label: "ALL PORTFOLIOS", showChevron: true, hidden: false };
+      }
       return {
         label: activePortfolioName ?? "SELECT PORTFOLIO",
         showChevron: true,
@@ -54,7 +57,7 @@ export function PortfolioPicker() {
   return (
     <Suspense
       fallback={
-        <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink-2">
+        <span className="font-mono text-chrome uppercase tracking-[0.06em] text-ink-2">
           ▾
         </span>
       }
@@ -68,7 +71,6 @@ function PortfolioPickerInner() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { account } = useAccount();
   const [portfolios, setPortfolios] = useState<PortfolioOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -119,30 +121,43 @@ function PortfolioPickerInner() {
   const { label, showChevron, hidden } = pickActiveLabel(
     pathname,
     activePortfolioName,
+    activeId,
   );
 
   // Sandbox path → render plain label, no dropdown.
   if (hidden) {
     return (
-      <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-ink">
+      <span className="font-mono text-chrome uppercase tracking-[0.06em] text-ink">
         {label}
       </span>
     );
   }
 
   const total = portfolios.length;
-  const accountName = (account?.username ?? "ACCOUNT").toUpperCase();
-  const isAllPortfoliosActive = pathname === "/";
+  const onPerPortfolio = PER_PORTFOLIO_ROUTES.some((r) =>
+    pathname.startsWith(r),
+  );
+  // "All portfolios" is active when on Overview, or when on a per-portfolio
+  // page with no ?portfolio= param (which means "no filter / aggregate").
+  const isAllPortfoliosActive =
+    pathname === "/" || (onPerPortfolio && !activeId);
 
   // Decide where clicking a portfolio row should land:
   // - On Overview → jump to the default per-portfolio surface (Enrich).
   // - On a per-portfolio page → stay on that page, swap the ?portfolio= param.
   const targetRouteForPortfolio = (id: string | number): string => {
-    const onPerPortfolio = PER_PORTFOLIO_ROUTES.some((r) =>
-      pathname.startsWith(r),
-    );
     const base = onPerPortfolio ? pathname : DEFAULT_PER_PORTFOLIO_LANDING;
     return `${base}?portfolio=${id}`;
+  };
+
+  // "All portfolios" row: stay on current per-portfolio page (clear param),
+  // otherwise jump to Overview.
+  const handleAllPortfoliosClick = () => {
+    if (onPerPortfolio) {
+      router.push(pathname);
+    } else {
+      router.push("/");
+    }
   };
 
   return (
@@ -152,7 +167,7 @@ function PortfolioPickerInner() {
           <button
             type="button"
             className={cn(
-              "inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.06em] text-ink hover:text-cyan transition-colors duration-[80ms]",
+              "inline-flex items-center gap-1 font-mono text-chrome uppercase tracking-[0.06em] text-ink hover:text-cyan transition-colors duration-[80ms]",
               "outline-none",
             )}
           />
@@ -170,20 +185,10 @@ function PortfolioPickerInner() {
         sideOffset={4}
         className="min-w-[320px] max-w-[480px] p-0"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-rule">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2">
-            PORTFOLIOS · {accountName}
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
-            {total} TOTAL
-          </span>
-        </div>
-
         {/* All portfolios row */}
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={handleAllPortfoliosClick}
           className={cn(
             "w-full grid grid-cols-[24px_1fr_auto] items-center gap-2 px-3 py-2 text-left transition-colors duration-[80ms]",
             isAllPortfoliosActive
@@ -194,14 +199,14 @@ function PortfolioPickerInner() {
           <span
             aria-hidden
             className={cn(
-              "font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3",
+              "font-mono text-micro uppercase tracking-[0.06em] text-ink-3",
               isAllPortfoliosActive && "border-l-2 border-cyan pl-1 -ml-1",
             )}
           >
             *
           </span>
-          <span className="text-[13px] text-ink">All portfolios</span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+          <span className="text-data text-ink">All portfolios</span>
+          <span className="font-mono text-micro uppercase tracking-[0.12em] text-ink-3">
             AGGREGATE VIEW
           </span>
         </button>
@@ -216,11 +221,11 @@ function PortfolioPickerInner() {
                 key={i}
                 className="grid grid-cols-[24px_1fr_auto] items-center gap-2 px-3 py-2"
               >
-                <span className="font-mono text-[10px] text-ink-3">
+                <span className="font-mono text-micro text-ink-3">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="text-[13px] text-ink-3">—</span>
-                <span className="font-mono text-[12px] text-ink-3">—</span>
+                <span className="text-data text-ink-3">—</span>
+                <span className="font-mono text-chrome text-ink-3">—</span>
               </div>
             ))}
           </div>
@@ -228,10 +233,10 @@ function PortfolioPickerInner() {
 
         {!loading && (error || total === 0) && (
           <div className="px-3 py-6 text-center">
-            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 mb-1">
+            <div className="font-mono text-micro uppercase tracking-[0.12em] text-ink-2 mb-1">
               NO PORTFOLIOS
             </div>
-            <div className="text-[12px] text-ink-3">
+            <div className="text-chrome text-ink-3">
               Import a CSV or add a holding to begin.
             </div>
           </div>
@@ -254,26 +259,27 @@ function PortfolioPickerInner() {
                   <span
                     aria-hidden
                     className={cn(
-                      "font-mono text-[10px] uppercase tracking-[0.06em] text-ink-3",
+                      "font-mono text-micro uppercase tracking-[0.06em] text-ink-3",
                       active && "border-l-2 border-cyan pl-1 -ml-1",
                     )}
                   >
                     {String(idx + 1).padStart(2, "0")}
                   </span>
-                  <span className="text-[13px] text-ink truncate">{p.name}</span>
-                  <span className="font-mono text-[12px] text-ink-3">—</span>
+                  <span className="text-data text-ink truncate">{p.name}</span>
+                  <span className="font-mono text-chrome text-ink-3">—</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* Footer — opens account/import surface where new portfolios are created. */}
+        {/* Footer — jumps to Enrich with the portfolio-manager pre-armed
+            (action=add, name field focused). */}
         <div className="border-t border-rule">
           <button
             type="button"
-            onClick={() => router.push("/account")}
-            className="w-full px-3 py-2 text-left font-mono text-[11px] uppercase tracking-[0.12em] text-cyan hover:bg-bg-2 transition-colors duration-[80ms]"
+            onClick={() => router.push("/enrich?addPortfolio=1")}
+            className="w-full px-3 py-2 text-left font-mono text-chrome uppercase tracking-[0.12em] text-cyan hover:bg-bg-2 transition-colors duration-[80ms]"
           >
             + NEW PORTFOLIO ↗
           </button>

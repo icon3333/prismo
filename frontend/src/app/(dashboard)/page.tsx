@@ -38,14 +38,14 @@ function MetricCell({
 }) {
   return (
     <div className="border border-border bg-card p-4">
-      <div className="font-mono text-[11px] uppercase text-muted-foreground">
+      <div className="font-mono text-chrome uppercase text-muted-foreground">
         {label}
       </div>
       <div className="mt-2 text-xl font-semibold tracking-normal text-foreground">
         {value}
       </div>
       {muted && (
-        <div className="mt-1 font-mono text-[11px] uppercase text-ink-3">
+        <div className="mt-1 font-mono text-chrome uppercase text-ink-3">
           {muted}
         </div>
       )}
@@ -136,7 +136,7 @@ export default function OverviewPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="font-mono text-xl font-semibold uppercase">
+        <h1 className="font-mono text-title font-semibold uppercase">
           PORTFOLIO STATUS
         </h1>
         <Skeleton className="h-32 w-full" />
@@ -148,7 +148,7 @@ export default function OverviewPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="font-mono text-xl font-semibold uppercase">
+        <h1 className="font-mono text-title font-semibold uppercase">
           PORTFOLIO STATUS
         </h1>
         <Alert variant="destructive">
@@ -168,10 +168,10 @@ export default function OverviewPage() {
       <header className="border border-border bg-card">
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
-            <div className="font-mono text-[11px] uppercase text-muted-foreground">
+            <div className="font-mono text-chrome uppercase text-muted-foreground">
               OPERATOR OVERVIEW
             </div>
-            <h1 className="mt-1 font-mono text-2xl font-semibold uppercase tracking-normal">
+            <h1 className="mt-1 font-mono text-title font-semibold uppercase tracking-normal">
               PORTFOLIO STATUS
             </h1>
           </div>

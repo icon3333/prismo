@@ -144,27 +144,26 @@ export default function ThemePage() {
         </Section>
 
         {/* Typography */}
-        <Section title="Typography">
-          <div className="space-y-3 bg-card rounded-md border border-border p-6">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Page Title (1.5rem / 700)
-            </h1>
-            <h2 className="text-xl font-semibold">
-              Section Title (1.25rem / 600)
-            </h2>
-            <h3 className="text-base font-semibold">
-              Card Title (1rem / 600)
-            </h3>
-            <p className="text-sm">Body text (0.875rem / 400)</p>
-            <p className="text-xs text-muted-foreground">
-              Small/Meta text (0.75rem / 400)
-            </p>
-            <p className="text-2xl font-semibold text-primary">
-              Large Value (1.5rem / 600)
-            </p>
-            <p className="font-mono text-sm text-muted-foreground">
-              Monospace: JetBrains Mono
-            </p>
+        <Section title="Type Scale">
+          <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-2">
+            Rule: mono = chrome · sans = content. Floor = text-micro (10px).
+          </p>
+          <div className="divide-y divide-border border border-border bg-card">
+            {[
+              { cls: "text-micro font-mono uppercase tracking-[0.12em]", name: "text-micro", note: "10 · mono — eyebrow caps: badges, tags, table heads, menu labels" },
+              { cls: "text-chrome font-mono uppercase tracking-[0.06em]", name: "text-chrome", note: "12 · mono — interactive chrome: masthead, nav, buttons, inputs, menus" },
+              { cls: "text-data font-mono", name: "text-data", note: "13 · mono — table body cells, tab-panel data" },
+              { cls: "text-body-sm", name: "text-body-sm", note: "12 · sans — secondary / muted content (≡ text-xs)" },
+              { cls: "text-body", name: "text-body", note: "14 · sans — default content prose (≡ text-sm)" },
+              { cls: "text-section font-semibold", name: "text-section", note: "16 · sans — section headings, dialog titles" },
+              { cls: "text-title font-bold", name: "text-title", note: "20 · sans — page <h1> (PageHeader)" },
+              { cls: "text-display font-mono", name: "text-display", note: "22 · mono — hero metric numbers" },
+            ].map((t) => (
+              <div key={t.name} className="grid grid-cols-[10rem_1fr] items-baseline gap-4 px-4 py-3">
+                <span className={t.cls + " text-ink"}>{t.name}</span>
+                <span className="font-mono text-micro uppercase tracking-[0.06em] text-ink-3">{t.note}</span>
+              </div>
+            ))}
           </div>
         </Section>
 

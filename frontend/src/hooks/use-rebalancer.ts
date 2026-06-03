@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { calculateRebalancing } from "@/lib/rebalancer-calc";
-import { PortfolioState } from "@/lib/portfolio-state";
 import type {
   PortfolioData,
   RebalanceMode,
   RebalancedPortfolio,
 } from "@/types/portfolio";
+import type { PortfolioOption } from "@/types/performance";
 
 interface UseRebalancerReturn {
   portfolioData: PortfolioData | null;
@@ -18,26 +19,27 @@ interface UseRebalancerReturn {
   investmentAmount: number;
   setInvestmentAmount: (amount: number) => void;
   selectedPortfolio: string;
-  setSelectedPortfolio: (name: string) => void;
   isLoading: boolean;
   error: string | null;
 }
 
 export function useRebalancer(): UseRebalancerReturn {
+  const searchParams = useSearchParams();
+  // Picker writes `?portfolio=<id>`. The detailed-overview lookup expects
+  // a portfolio name, so we translate against the fetched portfolio list.
+  // Missing or "all" → no specific portfolio selected (empty state shown).
+  const urlPortfolioId = searchParams.get("portfolio");
+
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(
     null
   );
+  // Sidecar fetch with IDs — used only to translate URL `?portfolio=<id>`
+  // into the portfolio name expected by the rebalancer's calc layer.
+  const [portfolioIndex, setPortfolioIndex] = useState<PortfolioOption[]>([]);
   const [mode, setMode] = useState<RebalanceMode>("existing-only");
   const [investmentAmount, setInvestmentAmount] = useState(0);
-  const [selectedPortfolio, setSelectedPortfolioState] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const setSelectedPortfolio = useCallback((name: string) => {
-    setSelectedPortfolioState(name);
-    // Persist cross-page selection
-    PortfolioState.set(name);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,25 +48,15 @@ export function useRebalancer(): UseRebalancerReturn {
       try {
         setIsLoading(true);
         setError(null);
-
-        const [data, savedId] = await Promise.all([
+        const [data, index] = await Promise.all([
           apiFetch<PortfolioData>("/simulator/portfolio-data"),
-          PortfolioState.get(),
+          apiFetch<PortfolioOption[]>(
+            "/portfolios?include_ids=true&has_companies=true"
+          ).catch(() => [] as PortfolioOption[]),
         ]);
-
         if (!cancelled) {
           setPortfolioData(data);
-          if (data.portfolios?.length) {
-            // Try to restore cross-page selection
-            const restored = savedId
-              ? data.portfolios.find(
-                  (p) => p.name === savedId && p.targetWeight > 0
-                )
-              : null;
-            const first =
-              restored ?? data.portfolios.find((p) => p.targetWeight > 0);
-            if (first) setSelectedPortfolioState(first.name);
-          }
+          setPortfolioIndex(index);
         }
       } catch (err) {
         if (!cancelled) {
@@ -85,6 +77,14 @@ export function useRebalancer(): UseRebalancerReturn {
     };
   }, []);
 
+  const selectedPortfolio = useMemo(() => {
+    if (!urlPortfolioId || urlPortfolioId === "all") return "";
+    const match = portfolioIndex.find(
+      (p) => String(p.id) === urlPortfolioId
+    );
+    return match?.name ?? "";
+  }, [urlPortfolioId, portfolioIndex]);
+
   const rebalanced = useMemo(() => {
     if (!portfolioData?.portfolios) return [];
     return calculateRebalancing(portfolioData.portfolios, mode, investmentAmount);
@@ -98,7 +98,6 @@ export function useRebalancer(): UseRebalancerReturn {
     investmentAmount,
     setInvestmentAmount,
     selectedPortfolio,
-    setSelectedPortfolio,
     isLoading,
     error,
   };

@@ -1,26 +1,12 @@
 "use client";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { date, eur, signedEur, signedPct } from "@/lib/format";
-import type {
-  PortfolioOption,
-  PerformancePortfolioData,
-} from "@/types/performance";
+import type { PerformancePortfolioData } from "@/types/performance";
 
 interface SummaryPanelProps {
-  portfolios: PortfolioOption[];
-  selectedPortfolioId: string;
-  onSelectPortfolio: (id: string) => void;
   portfolioData: PerformancePortfolioData | null;
   cashBalance: number;
   includeCash: boolean;
@@ -49,26 +35,11 @@ function formatPnLSummary(
 }
 
 export function SummaryPanel({
-  portfolios,
-  selectedPortfolioId,
-  onSelectPortfolio,
   portfolioData,
   cashBalance,
   includeCash,
   onIncludeCashChange,
 }: SummaryPanelProps) {
-  if (!portfolios.length) {
-    return (
-      <Alert>
-        <AlertDescription>
-          <strong>No portfolios with holdings found.</strong>
-          <br />
-          Import holdings via CSV on the Overview page.
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
   const displayValue = portfolioData
     ? includeCash
       ? portfolioData.total_value + cashBalance
@@ -88,37 +59,8 @@ export function SummaryPanel({
 
   return (
     <div className="border border-border bg-card p-4 space-y-4">
-      {/* Top row: selector + cash toggle */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Portfolio</span>
-          <Select
-            value={selectedPortfolioId}
-            onValueChange={(v) => {
-              if (v) onSelectPortfolio(v);
-            }}
-          >
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Select a portfolio">
-                {selectedPortfolioId === "all"
-                  ? "All Portfolios"
-                  : portfolios.find((p) => String(p.id) === selectedPortfolioId)?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {portfolios.length >= 2 && (
-                <SelectItem value="all">All Portfolios</SelectItem>
-              )}
-              {portfolios.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {cashBalance > 0 && (
+      {cashBalance > 0 && (
+        <div className="flex items-center">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <Checkbox
               checked={includeCash}
@@ -129,8 +71,8 @@ export function SummaryPanel({
               {eur(cashBalance)}
             </Badge>
           </label>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Summary stats */}
       {portfolioData && (

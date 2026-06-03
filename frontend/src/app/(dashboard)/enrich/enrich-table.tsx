@@ -59,7 +59,7 @@ function SortIcon({ column, sort }: { column: SortColumn; sort: SortState }) {
   const cls = active
     ? "text-cyan"
     : "text-ink-3 opacity-0 group-hover:opacity-100";
-  return <span aria-hidden className={`text-[10px] leading-none ${cls}`}>{glyph}</span>;
+  return <span aria-hidden className={`text-micro leading-none ${cls}`}>{glyph}</span>;
 }
 
 export function EnrichTable({
@@ -101,7 +101,7 @@ export function EnrichTable({
                   <SortIcon column={col.key} sort={sort} />
                   {col.healthKey && (
                     <span
-                      className={`ml-1 text-[10px] font-medium ${getHealthColorClass(columnHealth[col.healthKey])}`}
+                      className={`ml-1 text-micro font-medium ${getHealthColorClass(columnHealth[col.healthKey])}`}
                     >
                       {columnHealth[col.healthKey]}%
                     </span>

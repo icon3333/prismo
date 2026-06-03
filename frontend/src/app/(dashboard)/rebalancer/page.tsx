@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRebalancer } from "@/hooks/use-rebalancer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -24,10 +25,19 @@ import {
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
+import { PageHeader } from "@/components/shell/page-header";
 import { DetailedOverview } from "./detailed-overview";
 import { SummaryFooter } from "./summary-footer";
 
 export default function RebalancerPage() {
+  return (
+    <Suspense fallback={<RebalancerSkeleton />}>
+      <RebalancerPageInner />
+    </Suspense>
+  );
+}
+
+function RebalancerPageInner() {
   const {
     portfolioData,
     rebalanced,
@@ -36,7 +46,6 @@ export default function RebalancerPage() {
     investmentAmount,
     setInvestmentAmount,
     selectedPortfolio,
-    setSelectedPortfolio,
     isLoading,
     error,
   } = useRebalancer();
@@ -46,7 +55,7 @@ export default function RebalancerPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Rebalancer</h1>
+        <PageHeader title="Rebalancer" />
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -65,7 +74,7 @@ export default function RebalancerPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Rebalancer</h1>
+      <PageHeader title="Rebalancer" />
 
       <Tabs defaultValue="global">
         <TabsList>
@@ -149,7 +158,6 @@ export default function RebalancerPage() {
             portfolioData={portfolioData}
             rebalanced={rebalanced}
             selectedPortfolio={selectedPortfolio}
-            onSelectPortfolio={setSelectedPortfolio}
             mode={mode}
           />
         </TabsContent>

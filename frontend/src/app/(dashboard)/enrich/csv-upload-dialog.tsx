@@ -228,7 +228,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
                 Cancel
               </Button>
               <Button onClick={handleUpload} disabled={!file || isActive}>
-                {isActive && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+                {isActive && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
                 {status === "uploading" || status === "processing" ? "FETCHING…" : "Upload"}
               </Button>
             </>

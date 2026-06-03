@@ -118,7 +118,7 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Account</h1>
+      <h1 className="text-title font-bold">Account</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         {/* Left panel: Account info */}

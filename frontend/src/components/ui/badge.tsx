@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 // Terminal §9.2 — mono-uppercase outline chip, 1px colored border, no fill.
 // Callers add the live-dot for the LIVE state; this primitive doesn't render it.
 const badgeVariants = cva(
-  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border bg-transparent px-[7px] py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap transition-colors duration-[80ms] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden border bg-transparent px-[7px] py-[3px] font-mono text-micro font-semibold uppercase tracking-[0.12em] whitespace-nowrap transition-colors duration-[80ms] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {

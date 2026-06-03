@@ -160,7 +160,7 @@ export function CloneDialog({
             onClick={handleSubmit}
             disabled={!selectedPortfolioId || !name.trim() || loading}
           >
-            {loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+            {loading && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Clone
           </Button>
         </DialogFooter>

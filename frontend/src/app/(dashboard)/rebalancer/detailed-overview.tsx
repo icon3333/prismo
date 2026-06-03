@@ -2,13 +2,6 @@
 
 import { useState, useMemo } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -39,7 +32,6 @@ interface DetailedOverviewProps {
   portfolioData: PortfolioData | null;
   rebalanced: RebalancedPortfolio[];
   selectedPortfolio: string;
-  onSelectPortfolio: (name: string) => void;
   mode: RebalanceMode;
 }
 
@@ -47,17 +39,9 @@ export function DetailedOverview({
   portfolioData,
   rebalanced,
   selectedPortfolio,
-  onSelectPortfolio,
   mode,
 }: DetailedOverviewProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  const validPortfolios = rebalanced.filter(
-    (p) =>
-      p.targetWeight > 0 &&
-      p.name &&
-      !p.name.toLowerCase().includes("unknown")
-  );
 
   const selected = portfolioData?.portfolios.find(
     (p) => p.name === selectedPortfolio
@@ -89,37 +73,23 @@ export function DetailedOverview({
   return (
     <TooltipProvider>
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          <Select
-            value={selectedPortfolio}
-            onValueChange={(v) => {
-              if (v) onSelectPortfolio(v);
-            }}
-          >
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Select a portfolio" />
-            </SelectTrigger>
-            <SelectContent>
-              {validPortfolios.map((p) => (
-                <SelectItem key={p.name} value={p.name}>
-                  {p.name}
-                  {(p.currentValue || 0) === 0 ? " (Empty)" : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {!selectedPortfolio && (
+          <p className="text-sm text-muted-foreground">
+            Pick a portfolio from the header dropdown to see its detailed
+            rebalancing breakdown.
+          </p>
+        )}
 
-          {sectors.length > 0 && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={expandAll}>
-                Expand All
-              </Button>
-              <Button variant="outline" size="sm" onClick={collapseAll}>
-                Collapse All
-              </Button>
-            </div>
-          )}
-        </div>
+        {sectors.length > 0 && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={expandAll}>
+              Expand All
+            </Button>
+            <Button variant="outline" size="sm" onClick={collapseAll}>
+              Collapse All
+            </Button>
+          </div>
+        )}
 
         {selected && sectors.length > 0 && detailed ? (
           <div className="border border-border overflow-hidden">

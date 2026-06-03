@@ -32,7 +32,7 @@ export function PortfolioFilter({
     <div className="border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground mr-1">
-          Portfolios
+          Filter portfolios
         </span>
 
         <Button

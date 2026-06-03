@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartWrapper } from "@/components/domain/chart-wrapper";
 import { ConcentrationHeatmap } from "@/components/domain/concentration-heatmap";
+import { PageHeader } from "@/components/shell/page-header";
 import { PortfolioFilter } from "./portfolio-filter";
 import { DistributionBar } from "./distribution-bar";
 import { DonutChart } from "./donut-chart";
@@ -34,7 +35,7 @@ export default function ConcentrationsPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Concentrations</h1>
+        <PageHeader title="Concentrations" showPortfolioPicker={false} />
         <Skeleton className="h-16 w-full" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Skeleton className="h-80" />
@@ -49,7 +50,7 @@ export default function ConcentrationsPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Concentrations</h1>
+        <PageHeader title="Concentrations" showPortfolioPicker={false} />
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -59,7 +60,7 @@ export default function ConcentrationsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Concentrations</h1>
+      <PageHeader title="Concentrations" showPortfolioPicker={false} />
 
       <PortfolioFilter
         portfolios={portfolios}

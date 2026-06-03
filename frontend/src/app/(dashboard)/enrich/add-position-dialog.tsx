@@ -163,7 +163,7 @@ export function AddPositionDialog({
                 onBlur={handleIdentifierBlur}
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                {validation.loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+                {validation.loading && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
                 {validation.status === "valid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle" aria-hidden />}
                 {validation.status === "invalid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle" aria-hidden />}
               </div>
@@ -302,7 +302,7 @@ export function AddPositionDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+            {isSubmitting && <span className="font-mono text-micro uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Add Position
           </Button>
         </DialogFooter>

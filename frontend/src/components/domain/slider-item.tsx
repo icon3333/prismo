@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { int } from "@/lib/format";
 
 export interface SliderItemProps {
   name: string;
@@ -20,7 +21,7 @@ export function SliderItem({
   currentValue,
   constraint,
   isOverLimit = false,
-  formatValue = (v) => `${v.toLocaleString()}`,
+  formatValue = int,
   onChange,
 }: SliderItemProps) {
   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
@@ -28,24 +29,22 @@ export function SliderItem({
   return (
     <div
       className={cn(
-        "rounded-md px-4 py-2 transition-colors",
+        "border px-4 py-2 transition-colors",
         isOverLimit
-          ? "border-l-3 border-l-destructive bg-[var(--danger-light)]"
-          : "bg-aqua-500/5 hover:bg-aqua-500/10"
+          ? "border-destructive bg-[var(--danger-light)]"
+          : "border-border bg-cyan/5 hover:bg-cyan/10"
       )}
     >
       <div className="flex items-center justify-between mb-1">
         <span className="text-sm font-medium text-foreground">{name}</span>
-        <span className="text-sm text-foreground">{formatValue(value)}</span>
+        <span className="text-sm text-foreground font-mono tabular-nums">{formatValue(value)}</span>
       </div>
 
-      <div className="relative h-2 rounded-full bg-muted overflow-hidden">
+      <div className="relative h-2 overflow-hidden bg-muted">
         <div
           className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-[width] duration-300",
-            isOverLimit
-              ? "bg-gradient-to-r from-destructive to-red-400"
-              : "bg-gradient-to-r from-aqua-500 to-teal-500"
+            "absolute inset-y-0 left-0 transition-[width] duration-300",
+            isOverLimit ? "bg-destructive" : "bg-aqua-500"
           )}
           style={{ width: `${Math.min(percentage, 100)}%` }}
         />

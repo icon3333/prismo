@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,13 +11,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
-import { RefreshCw, Plus, Download, Search, Hammer, Coins, Upload, Loader2 } from "lucide-react";
 import { formatDateAgo, parseGermanNumber } from "@/lib/enrich-calc";
+import { eur } from "@/lib/format";
 import type { EnrichMetrics } from "@/types/enrich";
-
-const fmt = {
-  currency: new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }),
-};
 
 interface SummaryBarProps {
   metrics: EnrichMetrics;
@@ -60,7 +56,7 @@ export function SummaryBar({
   onSaveCash,
   onUseBuilderAsCash,
 }: SummaryBarProps) {
-  const [cashInput, setCashInput] = useState(fmt.currency.format(cashBalance));
+  const [cashInput, setCashInput] = useState(eur(cashBalance));
   const cashOriginal = useRef(cashBalance);
 
   const handleCashFocus = useCallback(() => {
@@ -71,26 +67,31 @@ export function SummaryBar({
   const handleCashBlur = useCallback(() => {
     const val = parseGermanNumber(cashInput);
     if (isNaN(val) || val < 0) {
-      setCashInput(fmt.currency.format(cashBalance));
+      setCashInput(eur(cashBalance));
       return;
     }
     if (Math.abs(val - cashOriginal.current) < 0.01) {
-      setCashInput(fmt.currency.format(cashBalance));
+      setCashInput(eur(cashBalance));
       return;
     }
     onSaveCash(val);
-    setCashInput(fmt.currency.format(val));
+    setCashInput(eur(val));
   }, [cashInput, cashBalance, onSaveCash]);
 
   // Sync cash display when cashBalance prop changes
   const prevCash = useRef(cashBalance);
-  if (prevCash.current !== cashBalance) {
-    prevCash.current = cashBalance;
-    setCashInput(fmt.currency.format(cashBalance));
-  }
+  useEffect(() => {
+    const sync = () => {
+      if (prevCash.current !== cashBalance) {
+        prevCash.current = cashBalance;
+        setCashInput(eur(cashBalance));
+      }
+    };
+    sync();
+  }, [cashBalance]);
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-card p-4">
+    <div className="space-y-3 border border-border bg-card p-4">
       {/* Row 1: Metrics */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <div>
@@ -100,7 +101,7 @@ export function SummaryBar({
         <div>
           <span className="text-muted-foreground">Holdings</span>{" "}
           <SensitiveValue className="font-semibold">
-            {fmt.currency.format(metrics.totalValue)}
+            {eur(metrics.totalValue)}
           </SensitiveValue>
         </div>
         <div className="flex items-center gap-1.5">
@@ -116,22 +117,19 @@ export function SummaryBar({
             />
           </SensitiveValue>
           {builderAvailable != null && (
-            <>
-              <button
-                onClick={onUseBuilderAsCash}
-                className="text-muted-foreground hover:text-aqua-400 transition-colors"
-                title={`Use ${fmt.currency.format(builderAvailable)} from Builder`}
-              >
-                <Coins className="size-3.5" />
-              </button>
-              <span title="Builder configured"><Hammer className="size-3 text-muted-foreground" /></span>
-            </>
+            <button
+              onClick={onUseBuilderAsCash}
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-2 hover:text-cyan transition-colors"
+              title={`Use ${eur(builderAvailable)} from Builder`}
+            >
+              USE BUILDER
+            </button>
           )}
         </div>
         <div>
           <span className="text-muted-foreground">Total</span>{" "}
           <SensitiveValue className="font-semibold">
-            {fmt.currency.format(portfolioTotal)}
+            {eur(portfolioTotal)}
           </SensitiveValue>
         </div>
         <div className="ml-auto text-xs text-muted-foreground">
@@ -159,9 +157,8 @@ export function SummaryBar({
         </Select>
 
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
-            className="h-8 w-48 pl-8 text-xs"
+            className="h-8 w-48 text-xs"
             placeholder="Search company..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -170,29 +167,20 @@ export function SummaryBar({
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onUpdateAll} disabled={isPriceUpdating}>
-            {isPriceUpdating ? (
-              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <RefreshCw className="size-3.5 mr-1.5" />
-            )}
             {isPriceUpdating ? "Updating..." : "Update All"}
           </Button>
           {selectedCount > 0 && (
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onUpdateSelected}>
-              <RefreshCw className="size-3.5 mr-1.5" />
               Update ({selectedCount})
             </Button>
           )}
           <Button size="sm" className="h-8 text-xs" onClick={onAddPosition}>
-            <Plus className="size-3.5 mr-1.5" />
-            Add Position
+            + Add Position
           </Button>
           <Button size="sm" className="h-8 text-xs" onClick={onCsvUpload}>
-            <Upload className="size-3.5 mr-1.5" />
             Import CSV
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onDownloadCSV}>
-            <Download className="size-3.5 mr-1.5" />
             Export
           </Button>
         </div>

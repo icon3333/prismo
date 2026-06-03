@@ -17,18 +17,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { dateTime } from "@/lib/format";
 import { toast } from "sonner";
-import {
-  User,
-  Calendar,
-  Clock,
-  Hash,
-  Download,
-  Upload,
-  Trash2,
-  RotateCcw,
-  AlertTriangle,
-} from "lucide-react";
 
 export default function AccountPage() {
   const {
@@ -120,13 +110,7 @@ export default function AccountPage() {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "Never";
     try {
-      return new Date(dateStr + "Z").toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return dateTime(dateStr + "Z");
     } catch {
       return dateStr;
     }
@@ -138,15 +122,15 @@ export default function AccountPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         {/* Left panel: Account info */}
-        <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+        <div className="border border-border/50 bg-slate-900/50 p-5">
           <h2 className="mb-4 text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Account Info
           </h2>
           <div className="space-y-4">
-            <InfoRow icon={User} label="Username" value={account?.username ?? "—"} />
-            <InfoRow icon={Hash} label="Account ID" value={String(account?.account_id ?? "—")} />
-            <InfoRow icon={Calendar} label="Created" value={formatDate(account?.created_at ?? null)} />
-            <InfoRow icon={Clock} label="Last Price Update" value={formatDate(account?.last_price_update ?? null)} />
+            <InfoRow label="Username" value={account?.username ?? "—"} />
+            <InfoRow label="Account ID" value={String(account?.account_id ?? "—")} />
+            <InfoRow label="Created" value={formatDate(account?.created_at ?? null)} />
+            <InfoRow label="Last Price Update" value={formatDate(account?.last_price_update ?? null)} />
           </div>
         </div>
 
@@ -178,7 +162,6 @@ export default function AccountPage() {
               <div className="flex flex-wrap gap-3">
                 <a href="/account/export" download>
                   <Button variant="outline">
-                    <Download className="mr-2 size-4" />
                     Export Data
                   </Button>
                 </a>
@@ -187,7 +170,6 @@ export default function AccountPage() {
                   <AlertDialogTrigger
                     render={
                       <Button variant="outline">
-                        <Upload className="mr-2 size-4" />
                         Import Data
                       </Button>
                     }
@@ -203,7 +185,7 @@ export default function AccountPage() {
                       ref={fileInputRef}
                       type="file"
                       accept=".json"
-                      className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-slate-700"
+                      className="text-sm file:mr-3 file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-slate-700"
                     />
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -223,7 +205,6 @@ export default function AccountPage() {
               title="Delete Stocks & Crypto"
               description="Remove all stock and crypto positions from this account. This cannot be undone."
               actionLabel="Delete All Positions"
-              icon={Trash2}
               onConfirm={handleDeleteStocksCrypto}
             />
 
@@ -232,16 +213,15 @@ export default function AccountPage() {
               title="Reset Account Settings"
               description="Clear all saved UI settings (expanded states, sort preferences). This cannot be undone."
               actionLabel="Reset Settings"
-              icon={RotateCcw}
               onConfirm={handleResetSettings}
             />
 
             {/* Delete Account */}
-            <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-5">
+            <div className="border border-red-500/30 bg-red-950/20 p-5">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 size-5 text-red-400 shrink-0" />
+                <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
                 <div className="flex-1">
-                  <h3 className="font-medium text-red-400">Delete Account</h3>
+                  <h3 className="font-medium text-red">Delete Account</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Permanently delete this account and all associated data. This action is irreversible.
                   </p>
@@ -255,7 +235,6 @@ export default function AccountPage() {
                     <AlertDialogTrigger
                       render={
                         <Button variant="destructive" size="sm" className="mt-3">
-                          <Trash2 className="mr-2 size-4" />
                           Delete Account
                         </Button>
                       }
@@ -295,17 +274,14 @@ export default function AccountPage() {
 }
 
 function InfoRow({
-  icon: Icon,
   label,
   value,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
 }) {
   return (
     <div className="flex items-center gap-3">
-      <Icon className="size-4 text-muted-foreground shrink-0" />
       <div className="min-w-0">
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className="text-sm font-medium truncate">{value}</div>
@@ -322,7 +298,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <h3 className="mb-3 font-medium">{title}</h3>
       {children}
     </div>
@@ -333,27 +309,24 @@ function DangerSection({
   title,
   description,
   actionLabel,
-  icon: Icon,
   onConfirm,
 }: {
   title: string;
   description: string;
   actionLabel: string;
-  icon: React.ComponentType<{ className?: string }>;
   onConfirm: () => Promise<void>;
 }) {
   return (
-    <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-5">
+    <div className="border border-red-500/30 bg-red-950/20 p-5">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 size-5 text-red-400 shrink-0" />
+        <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
         <div className="flex-1">
-          <h3 className="font-medium text-red-400">{title}</h3>
+          <h3 className="font-medium text-red">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           <AlertDialog>
             <AlertDialogTrigger
               render={
                 <Button variant="destructive" size="sm" className="mt-3">
-                  <Icon className="mr-2 size-4" />
                   {actionLabel}
                 </Button>
               }

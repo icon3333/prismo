@@ -53,7 +53,7 @@ export interface ChartWrapperProps {
 
 export function ChartWrapper({ title, children, className }: ChartWrapperProps) {
   return (
-    <div className={cn("rounded-md border border-border bg-card p-4", className)}>
+    <div className={cn("border border-border bg-card p-4", className)}>
       {title && (
         <h4 className="text-base font-semibold mb-4">{title}</h4>
       )}

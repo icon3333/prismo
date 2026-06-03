@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Loader2, CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "completed" | "failed";
@@ -159,17 +158,16 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
 
           {status === "completed" && (
             <Alert>
-              <CheckCircle2 className="size-4 text-emerald-400" />
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle mr-2" aria-hidden />
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
 
           {/* File picker */}
           <div
-            className="flex flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-border p-6 cursor-pointer hover:border-muted-foreground/50 transition-colors"
+            className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border p-6 cursor-pointer hover:border-muted-foreground/50 transition-colors"
             onClick={() => !isActive && fileInputRef.current?.click()}
           >
-            <Upload className="size-8 text-muted-foreground" />
             {file ? (
               <p className="text-sm">{file.name}</p>
             ) : (
@@ -210,7 +208,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
             <div className="space-y-2">
               <Progress value={status === "uploading" ? null : progress} />
               <p className="text-xs text-muted-foreground text-center">
-                {status === "uploading" ? "Uploading..." : message}
+                {status === "uploading" ? "FETCHING…" : message}
               </p>
             </div>
           )}
@@ -230,8 +228,8 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
                 Cancel
               </Button>
               <Button onClick={handleUpload} disabled={!file || isActive}>
-                {isActive && <Loader2 className="size-4 mr-1.5 animate-spin" />}
-                {status === "uploading" ? "Uploading..." : status === "processing" ? "Processing..." : "Upload"}
+                {isActive && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+                {status === "uploading" || status === "processing" ? "FETCHING…" : "Upload"}
               </Button>
             </>
           )}

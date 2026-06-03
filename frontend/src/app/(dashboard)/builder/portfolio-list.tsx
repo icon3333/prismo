@@ -57,13 +57,13 @@ export function PortfolioList({
   let bannerBorder: string;
 
   if (rounded === 100) {
-    bannerClass = "bg-emerald-400/10 text-emerald-400";
+    bannerClass = "bg-green/10 text-green";
     bannerBorder = "border-emerald-400/30";
   } else if (rounded < 100) {
     bannerClass = "bg-amber-400/10 text-amber-400";
     bannerBorder = "border-amber-400/30";
   } else {
-    bannerClass = "bg-red-400/10 text-red-400";
+    bannerClass = "bg-red-400/10 text-red";
     bannerBorder = "border-red-400/30";
   }
 
@@ -73,7 +73,7 @@ export function PortfolioList({
 
       {/* Allocation status banner */}
       <div
-        className={`rounded-lg border px-4 py-2 text-sm font-medium ${bannerClass} ${bannerBorder}`}
+        className={`border px-4 py-2 text-sm font-medium ${bannerClass} ${bannerBorder}`}
       >
         Total allocation: {rounded}%
       </div>

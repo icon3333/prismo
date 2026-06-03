@@ -21,7 +21,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Globe, PieChart, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
@@ -70,19 +69,13 @@ export default function RebalancerPage() {
 
       <Tabs defaultValue="global">
         <TabsList>
-          <TabsTrigger value="global" className="gap-1.5">
-            <Globe className="size-3.5" />
-            Global Overview
-          </TabsTrigger>
-          <TabsTrigger value="detailed" className="gap-1.5">
-            <PieChart className="size-3.5" />
-            Detailed Overview
-          </TabsTrigger>
+          <TabsTrigger value="global">Global Overview</TabsTrigger>
+          <TabsTrigger value="detailed">Detailed Overview</TabsTrigger>
         </TabsList>
 
         <TabsContent value="global" className="space-y-4">
           {/* Rebalance Controls */}
-          <div className="flex flex-wrap items-end gap-6 rounded-md border border-border bg-card p-4">
+          <div className="flex flex-wrap items-end gap-6 border border-border bg-card p-4">
             <RadioGroup
               value={mode}
               onValueChange={(v) => setMode(v as RebalanceMode)}
@@ -158,7 +151,6 @@ export default function RebalancerPage() {
             selectedPortfolio={selectedPortfolio}
             onSelectPortfolio={setSelectedPortfolio}
             mode={mode}
-            investmentAmount={investmentAmount}
           />
         </TabsContent>
       </Tabs>
@@ -184,7 +176,7 @@ function PortfolioTable({
 
   return (
     <TooltipProvider>
-    <div className="rounded-md border border-border overflow-hidden">
+    <div className="border border-border overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted hover:bg-muted">
@@ -240,14 +232,14 @@ function PortfolioTable({
                   <span className="flex items-center gap-1.5">
                     {p.name}
                     {(p.currentValue || 0) === 0 && (
-                      <span className="text-xs text-aqua-400">
+                      <span className="text-xs text-cyan">
                         Empty - Needs Positions
                       </span>
                     )}
                     {deficit > 0 && (p.currentValue || 0) > 0 && (
                       <Tooltip>
                         <TooltipTrigger>
-                          <AlertTriangle className="size-3.5 text-amber-400 shrink-0" />
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle shrink-0" aria-hidden />
                         </TooltipTrigger>
                         <TooltipContent>
                           Needs {deficit} more position{deficit > 1 ? "s" : ""}
@@ -306,7 +298,7 @@ function PortfolioTable({
             </TableCell>
             <TableCell className="text-right text-xs">
               {totalBuys > 0 && (
-                <span className="text-emerald-400">
+                <span className="text-green">
                   Buy:{" "}
                   <SensitiveValue>
                     {fmt.currency.format(totalBuys)}
@@ -315,7 +307,7 @@ function PortfolioTable({
               )}
               {totalBuys > 0 && totalSells > 0 && <br />}
               {totalSells > 0 && (
-                <span className="text-coral-500">
+                <span className="text-red">
                   Sell:{" "}
                   <SensitiveValue>
                     {fmt.currency.format(totalSells)}

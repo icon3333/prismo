@@ -48,7 +48,7 @@ export function AllocationCharts({ sim }: Props) {
       {/* Country chart */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-muted-foreground">Country</h3>
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-1">
+        <div className="border border-border/50 bg-card/50 p-4 space-y-1">
           {countryEntries.length === 0 ? (
             <EmptyChart mode={isPortfolioMode} />
           ) : (
@@ -87,13 +87,13 @@ export function AllocationCharts({ sim }: Props) {
       {/* Sector / Thesis chart */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-md border border-border/50 bg-muted/30 p-0.5">
+          <div className="inline-flex border border-border/50 bg-muted/30 p-0.5">
             <button
               onClick={() => sim.setCategoryMode("thesis")}
               className={cn(
-                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                "px-2.5 py-1 text-xs font-medium transition-colors",
                 sim.categoryMode === "thesis"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -102,9 +102,9 @@ export function AllocationCharts({ sim }: Props) {
             <button
               onClick={() => sim.setCategoryMode("sector")}
               className={cn(
-                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                "px-2.5 py-1 text-xs font-medium transition-colors",
                 sim.categoryMode === "sector"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -112,7 +112,7 @@ export function AllocationCharts({ sim }: Props) {
             </button>
           </div>
         </div>
-        <div className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-1">
+        <div className="border border-border/50 bg-card/50 p-4 space-y-1">
           {categoryEntries.length === 0 ? (
             <EmptyChart mode={isPortfolioMode} />
           ) : (

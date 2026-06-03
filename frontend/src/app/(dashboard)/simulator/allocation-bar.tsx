@@ -1,6 +1,5 @@
 "use client";
 
-import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -36,7 +35,7 @@ export function AllocationBar({
     const delta = percentage - baselinePercentage;
     if (Math.abs(delta) >= 0.1) {
       deltaText = `(${delta > 0 ? "+" : ""}${delta.toFixed(1)}%)`;
-      deltaClass = delta > 0 ? "text-emerald-400" : "text-red-400";
+      deltaClass = delta > 0 ? "text-green" : "text-red";
     }
   }
 
@@ -44,16 +43,14 @@ export function AllocationBar({
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-2 py-1.5 px-1 rounded-md text-left transition-colors hover:bg-muted/30",
+        "w-full flex items-center gap-2 py-1.5 px-1 text-left transition-colors hover:bg-muted/30",
         isExpanded && "bg-muted/30"
       )}
     >
       {/* Expand icon */}
-      {isExpanded ? (
-        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-      ) : (
-        <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-      )}
+      <span aria-hidden className="text-ink-2 leading-none w-3 inline-block shrink-0">
+        {isExpanded ? "▴" : "▾"}
+      </span>
 
       {/* Label */}
       <span className="text-sm truncate min-w-[80px] max-w-[120px]">

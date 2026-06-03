@@ -20,7 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2 } from "lucide-react";
 
 interface PortfolioFooterProps {
   portfolioOptions: string[];
@@ -75,7 +74,7 @@ export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: Portfol
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3">
+      <div className="flex flex-wrap items-center gap-2 border border-border bg-card p-3">
         <span className="text-xs text-muted-foreground mr-1">Portfolios</span>
 
         <Select value={action || "__none__"} onValueChange={(v) => { if (v) setAction(v === "__none__" ? "" : v); }}>
@@ -139,7 +138,7 @@ export function PortfolioFooter({ portfolioOptions, onManagePortfolio }: Portfol
 
         {action && (
           <Button size="sm" className="h-7 text-xs" disabled={!canApply || isProcessing} onClick={handleApply}>
-            {isProcessing && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+            {isProcessing && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Apply
           </Button>
         )}

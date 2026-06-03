@@ -18,7 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Check, AlertTriangle } from "lucide-react";
 import { parseGermanNumber } from "@/lib/enrich-calc";
 import type {
   AddPositionForm,
@@ -164,9 +163,9 @@ export function AddPositionDialog({
                 onBlur={handleIdentifierBlur}
               />
               <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                {validation.loading && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-                {validation.status === "valid" && <Check className="size-4 text-emerald-400" />}
-                {validation.status === "invalid" && <AlertTriangle className="size-4 text-amber-400" />}
+                {validation.loading && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
+                {validation.status === "valid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green align-middle" aria-hidden />}
+                {validation.status === "invalid" && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle" aria-hidden />}
               </div>
             </div>
           </div>
@@ -181,7 +180,7 @@ export function AddPositionDialog({
               value={form.name}
               onChange={(e) => update("name", e.target.value)}
             />
-            {errors.name && <p className="text-xs text-red-400 mt-0.5">{errors.name}</p>}
+            {errors.name && <p className="text-xs text-red mt-0.5">{errors.name}</p>}
           </div>
 
           {/* Portfolio */}
@@ -213,7 +212,7 @@ export function AddPositionDialog({
               value={form.sector}
               onChange={(e) => update("sector", e.target.value)}
             />
-            {errors.sector && <p className="text-xs text-red-400 mt-0.5">{errors.sector}</p>}
+            {errors.sector && <p className="text-xs text-red mt-0.5">{errors.sector}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -265,7 +264,7 @@ export function AddPositionDialog({
               value={form.shares}
               onChange={(e) => update("shares", e.target.value)}
             />
-            {errors.shares && <p className="text-xs text-red-400 mt-0.5">{errors.shares}</p>}
+            {errors.shares && <p className="text-xs text-red mt-0.5">{errors.shares}</p>}
           </div>
 
           {/* Total Value (conditional) */}
@@ -280,7 +279,7 @@ export function AddPositionDialog({
                 value={form.total_value}
                 onChange={(e) => update("total_value", e.target.value)}
               />
-              {errors.total_value && <p className="text-xs text-red-400 mt-0.5">{errors.total_value}</p>}
+              {errors.total_value && <p className="text-xs text-red mt-0.5">{errors.total_value}</p>}
             </div>
           )}
 
@@ -303,7 +302,7 @@ export function AddPositionDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting && <Loader2 className="size-4 mr-1.5 animate-spin" />}
+            {isSubmitting && <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber">FETCHING…</span>}
             Add Position
           </Button>
         </DialogFooter>

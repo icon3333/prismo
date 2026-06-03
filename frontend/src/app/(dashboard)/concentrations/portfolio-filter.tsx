@@ -4,12 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { cn } from "@/lib/utils";
+import { eur } from "@/lib/format";
 import type { PortfolioOption } from "@/types/performance";
-
-const fmt = new Intl.NumberFormat("de-DE", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 0,
-});
 
 interface PortfolioFilterProps {
   portfolios: PortfolioOption[];
@@ -33,7 +29,7 @@ export function PortfolioFilter({
   onIncludeCashChange,
 }: PortfolioFilterProps) {
   return (
-    <div className="rounded-md border border-border bg-card p-4">
+    <div className="border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground mr-1">
           Portfolios
@@ -43,8 +39,8 @@ export function PortfolioFilter({
           variant={isAllSelected ? "secondary" : "ghost"}
           size="sm"
           className={cn(
-            "text-xs h-7 px-3 rounded-full",
-            isAllSelected && "bg-aqua-400/20 text-aqua-400 border border-aqua-400/30"
+            "h-7 px-3 text-xs",
+            isAllSelected && "bg-cyan/20 text-cyan border border-cyan/30"
           )}
           onClick={onSelectAll}
         >
@@ -59,8 +55,8 @@ export function PortfolioFilter({
               variant={isActive ? "secondary" : "ghost"}
               size="sm"
               className={cn(
-                "text-xs h-7 px-3 rounded-full",
-                isActive && "bg-aqua-400/20 text-aqua-400 border border-aqua-400/30"
+                "h-7 px-3 text-xs",
+                isActive && "bg-cyan/20 text-cyan border border-cyan/30"
               )}
               onClick={() => onTogglePortfolio(p.name)}
             >
@@ -81,8 +77,8 @@ export function PortfolioFilter({
             Include Cash
           </label>
           {cashBalance > 0 && (
-            <span className="text-xs text-aqua-400/80">
-              <SensitiveValue>(€{fmt.format(cashBalance)})</SensitiveValue>
+            <span className="text-xs text-cyan/80 font-mono tabular-nums">
+              <SensitiveValue>({eur(cashBalance)})</SensitiveValue>
             </span>
           )}
         </div>

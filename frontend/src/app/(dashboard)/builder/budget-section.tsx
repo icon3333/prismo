@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { formatNumber } from "@/lib/builder-calc";
+import { parseGermanNumber } from "@/lib/enrich-calc";
 import type { BudgetData, PortfolioMetrics } from "@/types/builder";
 
 interface BudgetSectionProps {
@@ -49,7 +50,7 @@ function BudgetInput({
 
   const handleBlur = useCallback(() => {
     setEditing(false);
-    const parsed = parseFloat(rawValue.replace(/,/g, ""));
+    const parsed = parseGermanNumber(rawValue);
     onChange(isNaN(parsed) ? 0 : parsed);
   }, [rawValue, onChange]);
 
@@ -88,7 +89,7 @@ function ReadOnlyField({
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="text-sm font-medium text-foreground">{label}</div>
-      <div className="text-sm font-semibold text-aqua-400 tabular-nums">
+      <div className="text-sm font-semibold text-cyan tabular-nums">
         <SensitiveValue>
           &euro;{formatNumber(value)}
         </SensitiveValue>
@@ -104,7 +105,7 @@ export function BudgetSection({
   portfolioMetrics,
 }: BudgetSectionProps) {
   return (
-    <div className="rounded-xl border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border/50 bg-slate-900/50 p-5">
       <h2 className="mb-4 text-lg font-semibold">Budget</h2>
       <div className="space-y-3">
         {budgetFields.map((field) => (
@@ -118,7 +119,7 @@ export function BudgetSection({
                     <button
                       type="button"
                       onClick={populateAlreadyInvested}
-                      className="ml-2 text-xs text-aqua-400 hover:text-aqua-300 transition-colors"
+                      className="ml-2 text-xs text-cyan hover:text-cyan-1 transition-colors"
                     >
                       (use{" "}
                       <SensitiveValue>

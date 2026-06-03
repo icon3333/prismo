@@ -101,7 +101,8 @@
 
 /* ============================================================
    Terminal raw tokens (README §5, §6, §7) + shadcn aliases.
-   Dark-only — next-themes is forced to dark in app/layout.tsx.
+   Dark is the default (`:root`); `.light` flips the canvas/ink
+   and re-tones the accents for AA contrast on a paper canvas.
    ============================================================ */
 
 :root {
@@ -264,8 +265,8 @@
 
 /* ============================================================
    .dark — kept so .dark variant utilities still bind.
-   No overrides needed (dark-only system). next-themes forces
-   .dark on <html> via forcedTheme="dark" in app/layout.tsx.
+   :root already carries the dark palette; this just sets
+   color-scheme for native form controls and scrollbars.
    ============================================================ */
 
 .dark {
@@ -273,12 +274,66 @@
 }
 
 /* ============================================================
-   Base
+   .light — paper canvas inversion. Accents are re-toned so
+   cyan/amber/green/red remain AA-readable on light bg.
    ============================================================ */
 
-html {
-  color-scheme: dark;
+.light {
+  color-scheme: light;
+
+  /* Canvas (inverted tonal depth — lightest bg, darker panels) */
+  --bg:       #FFFFFF;
+  --bg-1:     #F6F7F8;
+  --bg-2:     #EDEFF1;
+  --bg-3:     #E2E5E8;
+  --bg-4:     #D4D8DC;
+
+  /* Rules */
+  --rule:     #DEE2E6;
+  --rule-2:   #CDD2D7;
+  --rule-3:   #AEB4BB;
+
+  /* Ink */
+  --ink:      #0B0D0E;
+  --ink-1:    #2D343B;
+  --ink-2:    #5A6168;
+  --ink-3:    #868E96;
+  --ink-inv:  #FFFFFF;
+
+  /* Accents — darker variants for contrast on light canvas */
+  --cyan:     #007A85;
+  --cyan-1:   #009BAB;
+  --cyan-2:   #005961;
+
+  --amber:    #A66A00;
+  --amber-1:  #C68500;
+  --amber-2:  #7F5100;
+
+  --green:    #007A45;
+  --green-1:  #009458;
+
+  --red:      #C42839;
+  --red-1:    #A11D2C;
+
+  --violet:   #5A48C7;
+
+  /* Sector palette overrides — keep recognisable, re-toned for paper */
+  --sec-finance:  #C13A85;
+  --sec-health:   #0A86C9;
+  --sec-cash:     var(--ink-3);
+
+  /* Tints (re-keyed to slightly stronger alpha for light bg) */
+  --primary-light: rgba(0, 122, 133, 0.10);
+  --danger-light:  rgba(196, 40, 57, 0.10);
+  --success-light: rgba(0, 122, 69, 0.10);
+  --warning-light: rgba(166, 106, 0, 0.12);
+
+  /* Focus ring picks up the new cyan automatically via var(--cyan) */
 }
+
+/* ============================================================
+   Base
+   ============================================================ */
 
 @layer base {
   * {

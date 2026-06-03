@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAccount } from "@/hooks/use-account";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
@@ -73,6 +74,7 @@ export function Masthead() {
   const router = useRouter();
   const { account } = useAccount();
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
+  const { resolvedTheme, setTheme } = useTheme();
   const now = useNowEvery30s();
 
   const pageName = pageNameFor(pathname);
@@ -95,7 +97,7 @@ export function Masthead() {
       : truncate(username, 12);
 
   return (
-    <header className="w-full border-b border-rule bg-bg">
+    <header className="sticky top-0 z-40 w-full border-b border-rule bg-bg">
       {/* Row 1 — 40px */}
       <div className="flex h-10 items-stretch bg-bg-1 border-b border-rule">
         {/* Brand */}
@@ -156,6 +158,17 @@ export function Masthead() {
           ANON
         </button>
 
+        {/* Theme toggle */}
+        <button
+          type="button"
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          aria-label="Toggle theme"
+          aria-pressed={mounted ? resolvedTheme === "light" : false}
+          className="flex items-center px-3 border-l border-rule font-mono uppercase text-[11px] tracking-[0.06em] text-ink-2 bg-transparent hover:text-ink transition-colors duration-[80ms]"
+        >
+          {mounted ? (resolvedTheme === "dark" ? "DARK" : "LIGHT") : "DARK"}
+        </button>
+
         {/* Account */}
         <Link
           href="/account"
@@ -178,7 +191,18 @@ export function Masthead() {
             <span aria-hidden className="text-[14px] leading-none">⋮</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={4}>
-            <DropdownMenuItem onClick={() => router.push("/auth/select")}>
+            <DropdownMenuItem
+              onClick={async () => {
+                try {
+                  await fetch("/auth/logout", {
+                    method: "POST",
+                    credentials: "include",
+                  });
+                } finally {
+                  window.location.reload();
+                }
+              }}
+            >
               Switch account
             </DropdownMenuItem>
             <DropdownMenuItem

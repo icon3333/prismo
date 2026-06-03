@@ -15,7 +15,7 @@ export function AccountPicker() {
   const [loading, setLoading] = useState(true);
 
   async function selectAccount(id: number, opts: { reload?: boolean } = { reload: true }) {
-    const res = await fetch(`/api/select_account/${id}`, {
+    const res = await fetch(`/auth/select/${id}`, {
       method: "POST",
       credentials: "include",
     });
@@ -30,7 +30,7 @@ export function AccountPicker() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const res = await fetch("/api/accounts", { credentials: "include" });
+      const res = await fetch("/auth/accounts", { credentials: "include" });
       const data = await res.json();
       if (cancelled) return;
       const list: Account[] = data.accounts ?? [];

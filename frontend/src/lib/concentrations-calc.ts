@@ -1,10 +1,8 @@
 import type { PerformanceCompany } from "@/types/performance";
+import { cashSlice } from "./cash-inclusion";
+import { groupAndAggregate, type AggregateItem } from "./aggregation-utils";
 
-export interface DistributionItem {
-  name: string;
-  value: number;
-  percentage: number;
-}
+export type DistributionItem = AggregateItem;
 
 /**
  * Filter companies by selected portfolio names.
@@ -33,32 +31,25 @@ export function groupByDimension(
   cashBalance: number
 ): DistributionItem[] {
   const totalHoldings = companies.reduce((s, c) => s + (c.current_value || 0), 0);
-  const cash = includeCash && cashBalance > 0 ? cashBalance : 0;
-  const total = totalHoldings + cash;
+  const { cash, total } = cashSlice(totalHoldings, includeCash, cashBalance);
   if (total <= 0) return [];
 
-  const groups: Record<string, number> = {};
-  for (const c of companies) {
-    let key: string;
-    if (field === "country") {
-      key = getDisplayCountry(c);
-    } else {
-      key = ((c[field] as string) || "").trim() || "Unknown";
-    }
-    groups[key] = (groups[key] || 0) + (c.current_value || 0);
-  }
+  const keyFn =
+    field === "country"
+      ? getDisplayCountry
+      : (c: PerformanceCompany) => ((c[field] as string) || "").trim() || "Unknown";
+
+  let items = groupAndAggregate(
+    companies,
+    keyFn,
+    (c) => c.current_value || 0,
+    total,
+  );
 
   if (cash > 0) {
-    groups["Cash"] = (groups["Cash"] || 0) + cash;
+    items.push({ name: "Cash", value: cash, percentage: (cash / total) * 100 });
+    items.sort((a, b) => b.value - a.value);
   }
-
-  let items = Object.entries(groups)
-    .map(([name, value]) => ({
-      name,
-      value,
-      percentage: (value / total) * 100,
-    }))
-    .sort((a, b) => b.value - a.value);
 
   // Top 8 + any >= 1%, Unknown/Cash last
   const top8 = new Set(items.slice(0, 8).map((i) => i.name));
@@ -84,8 +75,7 @@ export function topHoldings(
   cashBalance: number
 ): DistributionItem[] {
   const totalHoldings = companies.reduce((s, c) => s + (c.current_value || 0), 0);
-  const cash = includeCash && cashBalance > 0 ? cashBalance : 0;
-  const total = totalHoldings + cash;
+  const { cash, total } = cashSlice(totalHoldings, includeCash, cashBalance);
   if (total <= 0) return [];
 
   const sorted = [...companies].sort(
@@ -119,26 +109,21 @@ export function portfolioDistribution(
   cashBalance: number
 ): DistributionItem[] {
   const totalHoldings = companies.reduce((s, c) => s + (c.current_value || 0), 0);
-  const cash = includeCash && cashBalance > 0 ? cashBalance : 0;
-  const total = totalHoldings + cash;
+  const { cash, total } = cashSlice(totalHoldings, includeCash, cashBalance);
   if (total <= 0) return [];
 
-  const groups: Record<string, number> = {};
-  for (const c of companies) {
-    const key = c.portfolio_name || "Unknown";
-    groups[key] = (groups[key] || 0) + (c.current_value || 0);
-  }
+  const items = groupAndAggregate(
+    companies,
+    (c) => c.portfolio_name || "Unknown",
+    (c) => c.current_value || 0,
+    total,
+  );
 
   if (cash > 0) {
-    groups["Cash"] = (groups["Cash"] || 0) + cash;
+    items.push({ name: "Cash", value: cash, percentage: (cash / total) * 100 });
+    items.sort((a, b) => b.value - a.value);
   }
 
-  return Object.entries(groups)
-    .map(([name, value]) => ({
-      name,
-      value,
-      percentage: (value / total) * 100,
-    }))
-    .sort((a, b) => b.value - a.value);
+  return items;
 }
 

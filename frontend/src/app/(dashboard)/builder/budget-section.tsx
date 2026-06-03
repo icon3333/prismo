@@ -105,7 +105,7 @@ export function BudgetSection({
   portfolioMetrics,
 }: BudgetSectionProps) {
   return (
-    <div className="border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border bg-card p-4">
       <h2 className="mb-4 text-lg font-semibold">Budget</h2>
       <div className="space-y-3">
         {budgetFields.map((field) => (
@@ -140,7 +140,7 @@ export function BudgetSection({
           />
         ))}
 
-        <div className="my-3 border-t border-border/30" />
+        <div className="my-3 border-t border-border" />
 
         <ReadOnlyField
           label="Total Investable Capital"

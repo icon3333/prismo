@@ -97,7 +97,7 @@ export default function AccountPage() {
 
   if (loading) {
     return (
-      <div className="space-y-4 p-6">
+      <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
           <Skeleton className="h-48" />
@@ -117,12 +117,12 @@ export default function AccountPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <h1 className="text-2xl font-bold">Account</h1>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
         {/* Left panel: Account info */}
-        <div className="border border-border/50 bg-slate-900/50 p-5">
+        <div className="border border-border bg-card p-4">
           <h2 className="mb-4 text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Account Info
           </h2>
@@ -185,7 +185,7 @@ export default function AccountPage() {
                       ref={fileInputRef}
                       type="file"
                       accept=".json"
-                      className="text-sm file:mr-3 file:border-0 file:bg-slate-800 file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-slate-700"
+                      className="text-sm file:mr-3 file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-accent"
                     />
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -217,7 +217,7 @@ export default function AccountPage() {
             />
 
             {/* Delete Account */}
-            <div className="border border-red-500/30 bg-red-950/20 p-5">
+            <div className="border border-red-400/30 bg-red-400/10 p-4">
               <div className="flex items-start gap-3">
                 <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
                 <div className="flex-1">
@@ -254,9 +254,9 @@ export default function AccountPage() {
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
+                          variant="destructive"
                           disabled={deleteConfirmation !== "DELETE"}
                           onClick={handleDeleteAccount}
-                          className="bg-red-600 hover:bg-red-700"
                         >
                           Delete Account
                         </AlertDialogAction>
@@ -298,7 +298,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-border/50 bg-slate-900/50 p-5">
+    <div className="border border-border bg-card p-4">
       <h3 className="mb-3 font-medium">{title}</h3>
       {children}
     </div>
@@ -317,7 +317,7 @@ function DangerSection({
   onConfirm: () => Promise<void>;
 }) {
   return (
-    <div className="border border-red-500/30 bg-red-950/20 p-5">
+    <div className="border border-red-400/30 bg-red-400/10 p-4">
       <div className="flex items-start gap-3">
         <span className="mt-2 inline-block w-1.5 h-1.5 rounded-full bg-red shrink-0" aria-hidden />
         <div className="flex-1">
@@ -338,10 +338,7 @@ function DangerSection({
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={onConfirm}
-                  className="bg-red-600 hover:bg-red-700"
-                >
+                <AlertDialogAction variant="destructive" onClick={onConfirm}>
                   Confirm
                 </AlertDialogAction>
               </AlertDialogFooter>

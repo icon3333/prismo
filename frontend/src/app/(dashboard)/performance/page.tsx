@@ -8,7 +8,6 @@ import { PanelLayout } from "@/components/domain/panel-layout";
 import { SummaryPanel } from "./summary-panel";
 import { AllocationTable } from "./allocation-table";
 import { PerformanceChart } from "./performance-chart";
-import { ConcentrationHeatmap } from "./concentration-heatmap";
 import type { ChartSelection } from "@/types/performance";
 
 export default function PerformancePage() {
@@ -106,12 +105,6 @@ export default function PerformancePage() {
               portfolioId={selectedPortfolioId}
             />
           </PanelLayout>
-
-          <ConcentrationHeatmap
-            companies={portfolioData.companies}
-            includeCash={includeCash}
-            cashBalance={cashBalance}
-          />
         </>
       )}
     </div>

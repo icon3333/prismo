@@ -4,7 +4,7 @@ import { useConcentrations } from "@/hooks/use-concentrations";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChartWrapper } from "@/components/domain/chart-wrapper";
-import { ConcentrationHeatmap } from "@/app/(dashboard)/performance/concentration-heatmap";
+import { ConcentrationHeatmap } from "@/components/domain/concentration-heatmap";
 import { PortfolioFilter } from "./portfolio-filter";
 import { DistributionBar } from "./distribution-bar";
 import { DonutChart } from "./donut-chart";

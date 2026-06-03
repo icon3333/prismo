@@ -8,6 +8,7 @@ import type {
   RebalancerData,
 } from "@/types/overview";
 import { calculatePositionValue } from "@/lib/position-value";
+import { groupAndAggregate } from "@/lib/aggregation-utils";
 
 function calculateItemValue(item: PortfolioDataItem): number {
   return calculatePositionValue(item);
@@ -40,61 +41,34 @@ export function calculateViolations(
 
   const violations: Violation[] = [];
 
-  if (rules.maxPerStock && rules.maxPerStock > 0) {
-    const groups: Record<string, number> = {};
-    for (const item of items) {
-      const name = item.company || item.name || "Unknown";
-      groups[name] = (groups[name] || 0) + calculateItemValue(item);
-    }
-    for (const [name, value] of Object.entries(groups)) {
-      const pct = (value / totalValue) * 100;
-      if (pct > rules.maxPerStock) {
+  const collect = (
+    type: Violation["type"],
+    limit: number,
+    keyFn: (item: PortfolioDataItem) => string,
+  ) => {
+    const aggregated = groupAndAggregate(items, keyFn, calculateItemValue, totalValue);
+    for (const { name, percentage } of aggregated) {
+      if (percentage > limit) {
         violations.push({
-          type: "stock",
+          type,
           name,
-          currentPercentage: pct,
-          maxPercentage: rules.maxPerStock,
+          currentPercentage: percentage,
+          maxPercentage: limit,
         });
       }
     }
+  };
+
+  if (rules.maxPerStock && rules.maxPerStock > 0) {
+    collect("stock", rules.maxPerStock, (item) => item.company || item.name || "Unknown");
   }
 
   if (rules.maxPerSector && rules.maxPerSector > 0) {
-    const groups: Record<string, number> = {};
-    for (const item of items) {
-      const key = item.sector || "Unknown";
-      groups[key] = (groups[key] || 0) + calculateItemValue(item);
-    }
-    for (const [name, value] of Object.entries(groups)) {
-      const pct = (value / totalValue) * 100;
-      if (pct > rules.maxPerSector) {
-        violations.push({
-          type: "sector",
-          name,
-          currentPercentage: pct,
-          maxPercentage: rules.maxPerSector,
-        });
-      }
-    }
+    collect("sector", rules.maxPerSector, (item) => item.sector || "Unknown");
   }
 
   if (rules.maxPerCountry && rules.maxPerCountry > 0) {
-    const groups: Record<string, number> = {};
-    for (const item of items) {
-      const key = item.country || "Unknown";
-      groups[key] = (groups[key] || 0) + calculateItemValue(item);
-    }
-    for (const [name, value] of Object.entries(groups)) {
-      const pct = (value / totalValue) * 100;
-      if (pct > rules.maxPerCountry) {
-        violations.push({
-          type: "country",
-          name,
-          currentPercentage: pct,
-          maxPercentage: rules.maxPerCountry,
-        });
-      }
-    }
+    collect("country", rules.maxPerCountry, (item) => item.country || "Unknown");
   }
 
   violations.sort(

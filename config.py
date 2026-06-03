@@ -51,15 +51,9 @@ class Config:
 
     # Market data settings (configurable via environment variables)
     PRICE_UPDATE_INTERVAL = timedelta(hours=int(os.environ.get('PRICE_UPDATE_INTERVAL_HOURS', '24')))
-    BATCH_SIZE = int(os.environ.get('BATCH_SIZE', '5'))  # Number of tickers to fetch in a batch
 
     # Upload settings (configurable via environment variables)
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', str(16 * 1024 * 1024)))  # 16MB max upload default
-    UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join('app', 'uploads'))
-    ALLOWED_EXTENSIONS = {'csv'}
-
-    # Default number of items to show in pagination (configurable via environment variables)
-    PER_PAGE = int(os.environ.get('PER_PAGE', '20'))
 
 
 class DevelopmentConfig(Config):

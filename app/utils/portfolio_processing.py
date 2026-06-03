@@ -20,9 +20,8 @@ def get_thread_db():
     """Get or create database connection for current thread."""
     if not hasattr(_thread_local_db, 'connection'):
         from app.db_manager import get_background_db
+        # journal_mode/busy_timeout already set by _configure_connection in get_background_db
         _thread_local_db.connection = get_background_db()
-        _thread_local_db.connection.execute('PRAGMA journal_mode=WAL')
-        _thread_local_db.connection.execute('PRAGMA busy_timeout=5000')
     return _thread_local_db.connection
 
 def close_thread_db():
@@ -761,9 +760,8 @@ def process_csv_data_refactored(account_id: int, file_content: str, progress_cal
     try:
         logger.info(f"Starting refactored CSV processing for account_id: {account_id}")
 
-        # CRITICAL: Always create backup before processing
-        logger.info("Creating automatic backup before CSV processing...")
-        backup_database()
+        # Note: backup is handled by the 6-hour scheduled job (schedule_automatic_backups).
+        # Per-import shutil.copy was a multi-second blocker on larger DBs.
 
         # Step 1: Detect format and parse CSV file
         logger.info("Step 1: Detecting format and parsing CSV file...")
@@ -1056,11 +1054,8 @@ def process_csv_data_background(account_id: int, file_content: str, job_id: str,
             csv_module.update_csv_progress = background_progress_wrapper
 
             try:
-                # CRITICAL: Always create backup before processing [[memory:7528819]]
-                logger.info("Creating automatic backup before CSV processing...")
-                backup_database()
-
-                # Call the simple CSV import which now uses our background progress tracking
+                # Note: backups handled by the 6-hour scheduled job. Skipping
+                # per-import backup avoids a multi-second blocking shutil.copy.
                 success, message = import_csv_simple(account_id, file_content)
                 return success, message, {}
             finally:

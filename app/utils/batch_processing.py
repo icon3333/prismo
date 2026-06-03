@@ -10,16 +10,42 @@ import time
 from flask import current_app
 
 from app.utils.yfinance_utils import get_isin_data
-from app.utils.db_utils import update_price_in_db_background, query_background_db, execute_background_db
+from app.utils.db_utils import (
+    update_price_in_db_background,
+    query_background_db,
+    execute_background_db,
+    bulk_update_accounts_last_price_update,
+    close_thread_conn,
+)
 from app.db_manager import get_db
 from app.exceptions import PriceFetchError, DatabaseError
 from app.repositories.price_repository import PriceRepository
 
 logger = logging.getLogger(__name__)
 
-# Threshold for async processing - use threads only for batches >= this size
-# For single-user homeserver, small batches are faster with synchronous processing
-ASYNC_THRESHOLD = 20
+# Use async (thread pool) once we have more than a handful of identifiers.
+# yfinance is HTTP-bound so the cost is wall time, not CPU; even a 6-item batch
+# wins from parallelism.
+ASYNC_THRESHOLD = 5
+
+# Persistent thread pool — recreating the executor per batch wastes startup.
+# 10 workers is comfortably below yfinance's anti-abuse heuristics for a
+# single-user homeserver.
+_BATCH_POOL_MAX_WORKERS = 10
+_batch_pool: ThreadPoolExecutor | None = None
+_batch_pool_lock = threading.Lock()
+
+
+def _get_batch_pool() -> ThreadPoolExecutor:
+    global _batch_pool
+    if _batch_pool is None:
+        with _batch_pool_lock:
+            if _batch_pool is None:
+                _batch_pool = ThreadPoolExecutor(
+                    max_workers=_BATCH_POOL_MAX_WORKERS,
+                    thread_name_prefix='price-batch',
+                )
+    return _batch_pool
 
 
 def _extract_price_data(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -354,11 +380,19 @@ def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
             _update_job_progress_background(job_id, processed_count)
             last_update_time = current_time
 
+    # One bulk timestamp update for all affected accounts.
+    try:
+        bulk_update_accounts_last_price_update(identifiers)
+    except Exception as e:
+        logger.warning(f"Bulk last_price_update failed for batch {job_id}: {e}")
+
     # Final update with summary
     summary = _create_job_summary(
         total_items, success_count, failure_count, failed_identifiers, 'synchronous'
     )
     _update_job_final_background(job_id, total_items, summary)
+
+    close_thread_conn()
 
     logger.info(f"Batch job {job_id} complete (SYNC). Success: {success_count}, Failed: {failure_count}")
     if failed_identifiers:
@@ -383,34 +417,44 @@ def _run_batch_async(job_id: str, identifiers: List[str], total_items: int):
     failed_identifiers = []
     last_update_time = time.time()
 
-    # Process identifiers in parallel with thread pool
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_identifier = {
-            executor.submit(_process_single_identifier, identifier): identifier
-            for identifier in identifiers
-        }
+    # Submit to the persistent pool — do not close it between batches.
+    executor = _get_batch_pool()
+    future_to_identifier = {
+        executor.submit(_process_single_identifier, identifier): identifier
+        for identifier in identifiers
+    }
 
-        for future in as_completed(future_to_identifier):
-            result = future.result()
+    for future in as_completed(future_to_identifier):
+        result = future.result()
 
-            # Track result
-            success_count, failure_count, failed_identifiers = _track_batch_result(
-                result, success_count, failure_count, failed_identifiers
-            )
+        success_count, failure_count, failed_identifiers = _track_batch_result(
+            result, success_count, failure_count, failed_identifiers
+        )
 
-            processed_count += 1
+        processed_count += 1
 
-            # Throttled progress updates (every 2 seconds)
-            current_time = time.time()
-            if current_time - last_update_time > 2:
-                _update_job_progress_background(job_id, processed_count)
-                last_update_time = current_time
+        # Throttled progress updates (every 2 seconds)
+        current_time = time.time()
+        if current_time - last_update_time > 2:
+            _update_job_progress_background(job_id, processed_count)
+            last_update_time = current_time
+
+    # One bulk timestamp update for all affected accounts (replaces the per-
+    # identifier UPDATE that used to fire inside update_price_in_db_background).
+    try:
+        bulk_update_accounts_last_price_update(identifiers)
+    except Exception as e:
+        logger.warning(f"Bulk last_price_update failed for batch {job_id}: {e}")
 
     # Final update with summary
     summary = _create_job_summary(
         total_items, success_count, failure_count, failed_identifiers, 'asynchronous'
     )
     _update_job_final_background(job_id, total_items, summary)
+
+    # Release this thread's connection; workers in the persistent pool keep
+    # theirs for the next batch.
+    close_thread_conn()
 
     logger.info(f"Batch job {job_id} complete (ASYNC). Success: {success_count}, Failed: {failure_count}")
     if failed_identifiers:

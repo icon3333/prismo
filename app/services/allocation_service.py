@@ -619,17 +619,17 @@ class AllocationService:
         """
         logger.info(f"Calculating allocation targets for total value: {total_current_value}")
 
+        # Build name → target dict once, instead of doing a linear `next(...)`
+        # scan inside the per-portfolio loop below (was quadratic in portfolio count).
+        targets_by_name = {p['name']: p for p in target_allocations if p.get('name')}
+
         result_portfolios = []
 
         for portfolio_id, pdata in portfolio_map.items():
             portfolio_name = pdata['name']
 
-            # Get target weight for this portfolio - match by NAME for reliable matching
-            portfolio_target_weight = 0
-            target_portfolio = next(
-                (p for p in target_allocations if p.get('name') == portfolio_name), None)
-            if target_portfolio:
-                portfolio_target_weight = target_portfolio.get('allocation', 0)
+            target_portfolio = targets_by_name.get(portfolio_name)
+            portfolio_target_weight = target_portfolio.get('allocation', 0) if target_portfolio else 0
 
             # Get builder data - keyed by portfolio NAME for reliable matching
             builder_data = portfolio_builder_data.get(portfolio_name, {})

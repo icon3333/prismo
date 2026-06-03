@@ -29,7 +29,9 @@ def _configure_connection(db, include_wal_optimizations=True):
         include_wal_optimizations: If True, include additional WAL mode optimizations
     """
     if include_wal_optimizations:
-        # Full optimization set for normal connections
+        # Full optimization set for normal connections.
+        # mmap_size enables memory-mapped reads (256 MB cap); on hot pages this
+        # turns repeated reads into pointer derefs instead of file I/O.
         db.executescript('''
             PRAGMA foreign_keys = ON;
             PRAGMA journal_mode = WAL;
@@ -37,6 +39,7 @@ def _configure_connection(db, include_wal_optimizations=True):
             PRAGMA synchronous = NORMAL;
             PRAGMA temp_store = MEMORY;
             PRAGMA cache_size = -64000;
+            PRAGMA mmap_size = 268435456;
         ''')
     else:
         # Minimal set for new database creation (before WAL is stable)
@@ -167,9 +170,10 @@ def init_db(app):
         
         db = get_db()
 
-        # Perform all initialization in a single transaction for atomicity
+        # Perform all initialization in a single transaction for atomicity.
+        # schema.sql is the single source of truth for tables/indexes/triggers;
+        # the only extra step here is the schema_version bootstrap.
         with db:
-            # Load schema from the version-controlled file in app directory
             try:
                 with app.open_resource('schema.sql', mode='r') as f:
                     db.cursor().executescript(f.read())
@@ -177,36 +181,6 @@ def init_db(app):
             except FileNotFoundError:
                 logger.warning("app/schema.sql not found - will use fallback table creation")
 
-            # Add the identifier_mappings table if it doesn't exist
-            db.execute('''
-                CREATE TABLE IF NOT EXISTS identifier_mappings (
-                    id INTEGER PRIMARY KEY,
-                    account_id INTEGER NOT NULL,
-                    csv_identifier TEXT NOT NULL,
-                    preferred_identifier TEXT NOT NULL,
-                    company_name TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (account_id) REFERENCES accounts (id),
-                    UNIQUE (account_id, csv_identifier)
-                )
-            ''')
-
-            # Add the background_jobs table if it doesn't exist
-            db.execute('''
-                CREATE TABLE IF NOT EXISTS background_jobs (
-                    id TEXT PRIMARY KEY,
-                    name TEXT,
-                    status TEXT,
-                    progress INTEGER,
-                    total INTEGER,
-                    result TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            # Create schema_version table for migration tracking
             db.execute('''
                 CREATE TABLE IF NOT EXISTS schema_version (
                     version INTEGER PRIMARY KEY,
@@ -214,16 +188,11 @@ def init_db(app):
                 )
             ''')
 
-            # Initialize version to 0 if table is empty
             cursor = db.cursor()
             cursor.execute('SELECT version FROM schema_version LIMIT 1')
             if not cursor.fetchone():
                 db.execute('INSERT INTO schema_version (version) VALUES (0)')
 
-            # Drop old auto-update trigger (cleanup from previous version)
-            db.execute('DROP TRIGGER IF EXISTS update_background_jobs_timestamp')
-
-        # Transaction committed automatically by 'with' block
         logger.info("Database tables initialized successfully")
 
         try:

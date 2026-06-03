@@ -128,8 +128,8 @@ CREATE TABLE IF NOT EXISTS simulations (
 );
 
 -- Create indexes for market_prices (only if they don't exist)
+-- Note: identifier is PRIMARY KEY so an explicit index would be redundant.
 CREATE INDEX IF NOT EXISTS idx_market_prices_last_updated ON market_prices(last_updated);
-CREATE INDEX IF NOT EXISTS idx_market_prices_identifier ON market_prices(identifier);
 -- Create indexes for expanded_state
 CREATE INDEX IF NOT EXISTS idx_state_lookup ON expanded_state(account_id, page_name, variable_name);
 CREATE INDEX IF NOT EXISTS idx_state_type ON expanded_state(variable_type);

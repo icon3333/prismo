@@ -15,7 +15,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 export function generateItemId(): string {
-  return "sim_" + Math.random().toString(36).substr(2, 9);
+  return "sim_" + Math.random().toString(36).substring(2, 11);
 }
 
 export function normalizeLabel(label: string): string {

@@ -15,25 +15,43 @@ export function AccountPicker() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/auth/accounts", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => {
-        setAccounts(data.accounts ?? []);
-        setCurrentId(data.current_account_id ?? null);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/accounts", { credentials: "include" });
+      const data = await res.json();
+      if (cancelled) return;
+      const list: Account[] = data.accounts ?? [];
+      const current: number | null = data.current_account_id ?? null;
+      // Single-user homeserver: auto-select when there's exactly one account
+      // and nothing's selected yet. Skips the picker entirely on fresh boot.
+      if (!current && list.length === 1) {
+        const ok = await selectAccount(list[0].id, { reload: false });
+        if (ok) {
+          setCurrentId(list[0].id);
+          setLoading(false);
+          return;
+        }
+      }
+      setAccounts(list);
+      setCurrentId(current);
+      setLoading(false);
+    })().catch(() => setLoading(false));
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function selectAccount(id: number) {
-    const res = await fetch(`/auth/select/${id}`, {
+  async function selectAccount(id: number, opts: { reload?: boolean } = { reload: true }) {
+    const res = await fetch(`/api/select_account/${id}`, {
       method: "POST",
       credentials: "include",
     });
     if (res.ok) {
       setCurrentId(id);
-      window.location.reload();
+      if (opts.reload !== false) window.location.reload();
+      return true;
     }
+    return false;
   }
 
   if (loading) return null;

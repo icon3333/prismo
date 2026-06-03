@@ -12,7 +12,7 @@ main_bp = Blueprint('main', __name__)
 def api_accounts():
     """JSON API: list available accounts"""
     accounts = query_db(
-        'SELECT id, username FROM accounts WHERE username != "_global" ORDER BY username')
+        'SELECT id, username FROM accounts ORDER BY username')
     current = session.get('account_id')
     return jsonify({
         'accounts': [dict(a) for a in accounts] if accounts else [],

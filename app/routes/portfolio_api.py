@@ -434,9 +434,10 @@ def manage_state():
         page_name = data['page']
 
         try:
-            # Create backup before making changes
-            backup_database()
-
+            # No backup here: UI expand/collapse state is non-critical and
+            # reconstructable, and a full-DB copy on every state save adds I/O
+            # and lengthens this hot, frequently-called write. Real data
+            # mutations still back up at their own callsites.
             with get_db() as db:
                 cursor = db.cursor()
 

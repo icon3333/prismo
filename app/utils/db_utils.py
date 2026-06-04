@@ -160,7 +160,7 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
 
         conn.commit()
 
-        # Auto-categorize investment type if not already set (separate transaction, non-critical)
+        # Auto-categorize investment type if not already set (non-critical).
         try:
             from app.utils.yfinance_utils import auto_categorize_investment_type
 
@@ -172,11 +172,25 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
                     WHERE identifier = ? AND investment_type IS NULL
                 ''', [investment_type, identifier])
                 if cursor.rowcount > 0:
-                    conn.commit()
                     logger.info(f"Auto-categorized {cursor.rowcount} companies with identifier {identifier} as {investment_type}")
+                # CRITICAL: commit even when 0 rows matched. A write statement opens a
+                # transaction and takes SQLite's WAL write lock the moment it runs —
+                # before it knows the row count. Skipping commit on rowcount == 0 leaves
+                # that transaction open, and since batch-pool worker connections are
+                # long-lived, the write lock is then held indefinitely, blocking ALL
+                # other writers (e.g. UI state saves) with "database is locked".
+                conn.commit()
         except Exception as e:
             # Don't fail the entire price update if auto-categorization fails
             logger.warning(f"Auto-categorization failed for {identifier}: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+        # Safety net: never leave this long-lived connection holding the write lock.
+        if conn.in_transaction:
+            conn.commit()
 
         logger.info(f"Updated price for {identifier}: {price} {currency} ({price_eur} EUR) country={country}")
         return True

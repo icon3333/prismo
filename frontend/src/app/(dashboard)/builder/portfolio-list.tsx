@@ -69,7 +69,7 @@ export function PortfolioList({
 
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-semibold">Portfolios</h2>
+      <h2 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">Portfolios</h2>
 
       {/* Allocation status banner */}
       <div

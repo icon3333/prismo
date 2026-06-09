@@ -277,7 +277,7 @@ export function PerformanceChart({
   return (
     <div className="border border-border bg-card p-4">
       <div className="mb-3">
-        <h3 className="text-base font-semibold mb-2">
+        <h3 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink mb-2">
           {selection ? `${selection.groupName} Returns` : "Returns"}
         </h3>
         <div className="flex flex-wrap gap-2">

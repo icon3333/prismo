@@ -106,7 +106,7 @@ export function BudgetSection({
 }: BudgetSectionProps) {
   return (
     <div className="border border-border bg-card p-4">
-      <h2 className="mb-4 text-lg font-semibold">Budget</h2>
+      <h2 className="mb-4 font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">Budget</h2>
       <div className="space-y-3">
         {budgetFields.map((field) => (
           <BudgetInput

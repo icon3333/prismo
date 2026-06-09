@@ -23,7 +23,7 @@ const ruleFields: {
 export function RulesSection({ rules, setRule }: RulesSectionProps) {
   return (
     <div className="border border-border bg-card p-4">
-      <h2 className="mb-4 text-lg font-semibold">Allocation Rules</h2>
+      <h2 className="mb-4 font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">Allocation Rules</h2>
       <div className="space-y-3">
         {ruleFields.map((field) => (
           <div key={field.key} className="flex items-center justify-between gap-4">

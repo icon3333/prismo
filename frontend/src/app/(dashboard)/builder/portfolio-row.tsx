@@ -138,11 +138,12 @@ export function PortfolioRow({
                 if (!isNaN(v) && v > 0) onSetDesiredPositions(v);
               }}
             />
+            <span className="text-muted-foreground">#</span>
           </div>
 
           {/* Current Positions */}
           <span
-            className={`text-xs ${currentBelow ? "text-red" : "text-muted-foreground"}`}
+            className={`w-20 text-right text-xs ${currentBelow ? "text-red" : "text-muted-foreground"}`}
           >
             {currentPositions} current
           </span>

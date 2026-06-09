@@ -58,7 +58,7 @@ export function AllocationSummary({
   return (
     <div className="border border-border bg-card p-4">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Allocation Summary</h2>
+        <h2 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">Allocation Summary</h2>
         <div className="flex gap-2">
           <Button
             variant="outline"

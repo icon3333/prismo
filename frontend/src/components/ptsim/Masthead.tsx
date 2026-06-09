@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import { useAccount } from "@/hooks/use-account";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
 import { cetTime } from "@/lib/format";
 import { LiveDot } from "./LiveDot";
@@ -35,10 +34,6 @@ function isTabActive(pathname: string, href: string): boolean {
   return pathname.startsWith(href);
 }
 
-function truncate(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max)}…` : s;
-}
-
 function useNowEvery30s(): number {
   const [now, setNow] = useState<number>(() => Date.now());
   useEffect(() => {
@@ -50,12 +45,9 @@ function useNowEvery30s(): number {
 
 export function Masthead() {
   const pathname = usePathname();
-  const { account } = useAccount();
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
   const { resolvedTheme, setTheme } = useTheme();
   const now = useNowEvery30s();
-
-  const navLabel = pathname === "/" ? "AGGREGATE NAV" : "NAV";
 
   // Render-time-stable timestamp for SSR/hydration: only render the time on
   // the client to avoid mismatches.
@@ -64,13 +56,6 @@ export function Masthead() {
   const liveLabel = mounted
     ? `LIVE · EUR · ${cetTime(now)}`
     : "LIVE · EUR";
-
-  const username = account?.username ?? "—";
-  // §17.2 — anon mode masks the account name to first letter + ellipsis dots.
-  const displayUser =
-    isAnonymous && username && username !== "—"
-      ? `${username[0]}•••`
-      : truncate(username, 12);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-rule bg-bg">
@@ -89,16 +74,6 @@ export function Masthead() {
 
         {/* Spacer */}
         <div className="flex-1 border-l border-rule" />
-
-        {/* NAV */}
-        <div className="flex items-center gap-2 px-3 border-l border-rule">
-          <span className="font-mono uppercase text-chrome tracking-[0.06em] text-ink-2">
-            {navLabel}
-          </span>
-          <span className="font-mono tabular-nums text-chrome text-ink">
-            —
-          </span>
-        </div>
 
         {/* Live */}
         <div className="flex items-center gap-2 px-3 border-l border-rule">
@@ -133,14 +108,6 @@ export function Masthead() {
         >
           {mounted ? (resolvedTheme === "dark" ? "DARK" : "LIGHT") : "DARK"}
         </button>
-
-        {/* Account */}
-        <Link
-          href="/account"
-          className="flex items-center px-3 border-l border-rule font-mono uppercase text-chrome tracking-[0.06em] text-ink-2 hover:text-ink transition-colors duration-[80ms]"
-        >
-          ACCT · {displayUser}
-        </Link>
 
         {/* Kebab */}
         <DropdownMenu>
@@ -205,7 +172,7 @@ export function Masthead() {
                   key={tab.href}
                   href={tab.href}
                   className={cn(
-                    "px-4 h-8 inline-flex items-center font-mono uppercase text-chrome tracking-[0.06em] transition-colors duration-[80ms]",
+                    "px-4 h-8 inline-flex items-center font-mono uppercase text-chrome tracking-[0.1em] transition-colors duration-[80ms]",
                     active
                       ? "text-cyan border-b-2 border-cyan -mb-px"
                       : "text-ink-2 hover:text-ink",

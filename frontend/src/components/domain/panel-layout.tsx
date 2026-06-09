@@ -43,7 +43,7 @@ export function Panel({
       )}
     >
       <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
-        <h4 className="text-base font-semibold flex items-center gap-1">
+        <h4 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink flex items-center gap-1">
           {icon}
           {title}
         </h4>

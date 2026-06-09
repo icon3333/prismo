@@ -35,7 +35,7 @@ export function ConcentrationHeatmap({
   if (data.countries.length === 0 || data.dims.length === 0) {
     return (
       <div className="border border-border bg-card p-4">
-        <h3 className="text-base font-semibold mb-3">{title}</h3>
+        <h3 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink mb-3">{title}</h3>
         <div className="h-40 flex items-center justify-center text-muted-foreground">
           No data to display
         </div>
@@ -138,7 +138,7 @@ export function ConcentrationHeatmap({
   return (
     <div className="border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-semibold">{title}</h3>
+        <h3 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">{title}</h3>
         <div className="flex gap-0.5 border border-border bg-muted p-0.5">
           {(["sector", "thesis"] as HeatmapMode[]).map((m) => (
             <Button

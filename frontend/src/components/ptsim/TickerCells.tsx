@@ -88,8 +88,8 @@ export function TickerCells({ cells, className }: TickerCellsProps) {
             </div>
             <div
               className={cn(
-                "font-mono leading-none tracking-[-0.02em] text-ink",
-                isHero ? "text-[40px]" : "text-display text-ink-1",
+                "font-mono leading-none tracking-[-0.02em] text-display",
+                isHero ? "text-ink" : "text-ink-1",
               )}
             >
               {cell.value}

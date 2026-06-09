@@ -1,5 +1,32 @@
 # PRD: Typography Scale & Layout Rhythm
 
+## v2 — Collapsed to Four Styles (current)
+
+> Supersedes the 8-token scale below. The 8-role ladder fixed the "two parallel
+> systems" problem but still encoded *role as size* — ~10 visible text styles.
+> A terminal earns hierarchy from **CASE, COLOR, and WEIGHT**, not a size ramp.
+> So the whole app now uses **four sizes**, chosen by role, not by "how big".
+
+| Style | px / line | Font | Treatment | Role |
+| --- | --- | --- | --- | --- |
+| **Label** | 11 / 16 | mono | UPPERCASE · tracked · medium | the chrome frame: nav tabs, buttons, badges, table headers, field labels, menu/group labels, **section headings** (Label + rule line) |
+| **Body** | 13 / 18 | mono *or* sans | normal | the one readable tier — **mono** for data/numbers/cells/inputs, **sans** for prose. Secondary text = **dimmer ink**, never a smaller size |
+| **Title** | 20 / 26 | sans | semibold/bold | the single page `<h1>` (via `PageHeader`) and dialog/sheet titles |
+| **Display** | 28 / 32 | mono | tabular-nums | the one hero metric per view |
+
+**How it's enforced (zero-churn):** the legacy role tokens (`text-micro/chrome/
+data/body-sm/body/section/title/display`) all collapse onto these four values in
+`globals.css`, and Tailwind's default `text-xs/sm/base/lg/xl/2xl/3xl` are
+overridden to the same four. Every existing class snaps to the scale at once.
+Then a few treatment fixes: input/select/dropdown **values** → Body (mono),
+in-page **section headings** → Label, modal **titles** → Title, and Overview's
+bespoke mono-caps `<h1>` → the standard sans Title so every page matches.
+
+**Rule of thumb:** mono = chrome, sans = content; floor is Label (11px), and only
+there as an uppercase, letter-spaced label.
+
+---
+
 ## Problem Statement
 
 The app has **two parallel type systems and no governing scale**. `globals.css` tokenizes

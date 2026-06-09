@@ -17,29 +17,58 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
 
-  /* --- Type scale (the single governing typography ladder) ---
-     RULE: mono = chrome (the terminal frame: nav, controls, tables, labels,
-     metrics). sans = content (what the user reads/writes: prose, headings).
-     Small text never drops below `text-micro` (10px), and only there when it's
-     an uppercase, letter-spaced label. `text-body`/`text-body-sm` intentionally
-     equal Tailwind's `text-sm`/`text-xs` (14/12px) — those aliases stay valid
-     for sans content; new code prefers the semantic names. */
-  --text-micro:                10px;  /* mono — eyebrow caps: badges, tags, table heads, menu labels */
-  --text-micro--line-height:   14px;
-  --text-chrome:               12px;  /* mono — interactive chrome: masthead, nav, buttons, inputs, menus */
+  /* --- Type scale — FOUR styles only (terminal hierarchy) ---
+     A terminal doesn't have a size ladder; it has one or two fonts and earns
+     hierarchy from CASE, COLOR, and WEIGHT. So the whole app uses just four
+     sizes, and which one you reach for is decided by ROLE, not by "how big":
+
+       LABEL    11px  mono · UPPERCASE · tracked → the chrome frame:
+                      nav tabs, buttons, badges, table headers, field labels,
+                      menu/group labels, section headings (Label + rule line).
+       BODY     13px  the one readable tier. font = the machine/human split:
+                      MONO for data/numbers/cells/inputs, SANS for prose.
+                      Secondary text is a DIMMER ink, never a smaller size.
+       TITLE    20px  sans · semibold → the single page <h1> and dialog titles.
+       DISPLAY  28px  mono · tabular-nums → the one hero metric per view.
+
+     Implementation: the legacy role tokens below all collapse onto these four
+     values, and Tailwind's default text-xs/sm/base/lg/… are overridden to the
+     same four, so every existing class snaps to the scale with no churn.
+     RULE OF THUMB: mono = chrome, sans = content; floor is LABEL (11px), and
+     only there as an uppercase, letter-spaced label. */
+
+  /* LABEL (11) — chrome caps */
+  --text-micro:                11px;
+  --text-micro--line-height:   16px;
+  --text-chrome:               11px;
   --text-chrome--line-height:  16px;
-  --text-data:                 13px;  /* mono — table body cells, tab-panel data */
+
+  /* BODY (13) — the readable tier (mono = data, sans = prose) */
+  --text-data:                 13px;
   --text-data--line-height:    18px;
-  --text-body-sm:              12px;  /* sans — secondary / muted content (≡ text-xs) */
-  --text-body-sm--line-height: 16px;
-  --text-body:                 14px;  /* sans — default content prose (≡ text-sm) */
-  --text-body--line-height:    20px;
-  --text-section:              16px;  /* sans — section headings, dialog titles */
-  --text-section--line-height: 22px;
-  --text-title:                20px;  /* sans — page <h1> (PageHeader) */
+  --text-body-sm:              13px;
+  --text-body-sm--line-height: 18px;
+  --text-body:                 13px;
+  --text-body--line-height:    18px;
+
+  /* TITLE (20) — page + dialog headings */
+  --text-section:              20px;  /* legacy alias → TITLE */
+  --text-section--line-height: 26px;
+  --text-title:                20px;
   --text-title--line-height:   26px;
-  --text-display:              22px;  /* mono — hero metric numbers */
-  --text-display--line-height: 26px;
+
+  /* DISPLAY (28) — hero metric numbers */
+  --text-display:              28px;
+  --text-display--line-height: 32px;
+
+  /* --- Collapse Tailwind's default size ramp onto the same four styles --- */
+  --text-xs:                   13px;  --text-xs--line-height:   18px;  /* → BODY */
+  --text-sm:                   13px;  --text-sm--line-height:   18px;  /* → BODY */
+  --text-base:                 13px;  --text-base--line-height: 18px;  /* → BODY */
+  --text-lg:                   20px;  --text-lg--line-height:   26px;  /* → TITLE */
+  --text-xl:                   20px;  --text-xl--line-height:   26px;  /* → TITLE */
+  --text-2xl:                  20px;  --text-2xl--line-height:  26px;  /* → TITLE */
+  --text-3xl:                  28px;  --text-3xl--line-height:  32px;  /* → DISPLAY */
 
   /* --- Disable all box shadows — Terminal §2 rule 2: depth is tonal --- */
   --shadow-2xs: none;
@@ -376,6 +405,19 @@
   :focus-visible {
     outline: none;
     box-shadow: var(--focus);
+  }
+
+  /* Suppress native number-input spin buttons. They overlap right-aligned
+     digits in narrow fields (clipping "30" to "3(") and clash with the
+     terminal aesthetic — entry is by typing. */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 }
 

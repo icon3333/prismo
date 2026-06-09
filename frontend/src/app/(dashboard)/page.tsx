@@ -136,8 +136,8 @@ export default function OverviewPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="font-mono text-title font-semibold uppercase">
-          PORTFOLIO STATUS
+        <h1 className="text-title font-bold">
+          Portfolio Status
         </h1>
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -148,8 +148,8 @@ export default function OverviewPage() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="font-mono text-title font-semibold uppercase">
-          PORTFOLIO STATUS
+        <h1 className="text-title font-bold">
+          Portfolio Status
         </h1>
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -171,8 +171,8 @@ export default function OverviewPage() {
             <div className="font-mono text-chrome uppercase text-muted-foreground">
               OPERATOR OVERVIEW
             </div>
-            <h1 className="mt-1 font-mono text-title font-semibold uppercase tracking-normal">
-              PORTFOLIO STATUS
+            <h1 className="mt-1 text-title font-bold">
+              Portfolio Status
             </h1>
           </div>
           <div className="flex items-center gap-2 border border-border bg-bg px-3 py-2 font-mono text-xs uppercase">

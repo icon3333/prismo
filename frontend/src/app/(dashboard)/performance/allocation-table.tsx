@@ -200,7 +200,7 @@ export function AllocationTable({
   return (
     <div className="border border-border bg-card p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-semibold">
+        <h3 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">
           {modeLabels[mode]} Allocation
         </h3>
         <div className="flex gap-0.5 border border-border bg-muted p-0.5">

@@ -84,7 +84,7 @@ function Section({
 }) {
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-semibold tracking-tight border-b border-border pb-2">
+      <h2 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink border-b border-border pb-2">
         {title}
       </h2>
       {children}
@@ -109,7 +109,7 @@ export default function ThemePage() {
       />
       <div className="min-h-screen p-8 max-w-6xl mx-auto space-y-12">
         <div>
-          <h1 className="text-3xl font-bold text-primary">
+          <h1 className="text-title font-bold text-primary">
             Ocean Depth Design System
           </h1>
           <p className="text-muted-foreground mt-1">
@@ -146,18 +146,15 @@ export default function ThemePage() {
         {/* Typography */}
         <Section title="Type Scale">
           <p className="font-mono text-micro uppercase tracking-[0.12em] text-ink-2">
-            Rule: mono = chrome · sans = content. Floor = text-micro (10px).
+            Four styles. mono = chrome · sans = content. Sizes 11 · 13 · 20 · 28 — hierarchy from font, CASE, color, weight, not size.
           </p>
           <div className="divide-y divide-border border border-border bg-card">
             {[
-              { cls: "text-micro font-mono uppercase tracking-[0.12em]", name: "text-micro", note: "10 · mono — eyebrow caps: badges, tags, table heads, menu labels" },
-              { cls: "text-chrome font-mono uppercase tracking-[0.06em]", name: "text-chrome", note: "12 · mono — interactive chrome: masthead, nav, buttons, inputs, menus" },
-              { cls: "text-data font-mono", name: "text-data", note: "13 · mono — table body cells, tab-panel data" },
-              { cls: "text-body-sm", name: "text-body-sm", note: "12 · sans — secondary / muted content (≡ text-xs)" },
-              { cls: "text-body", name: "text-body", note: "14 · sans — default content prose (≡ text-sm)" },
-              { cls: "text-section font-semibold", name: "text-section", note: "16 · sans — section headings, dialog titles" },
-              { cls: "text-title font-bold", name: "text-title", note: "20 · sans — page <h1> (PageHeader)" },
-              { cls: "text-display font-mono", name: "text-display", note: "22 · mono — hero metric numbers" },
+              { cls: "font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink", name: "Label", note: "11 · mono caps — nav, buttons, badges, table heads, field labels, section headings" },
+              { cls: "font-mono text-data text-ink", name: "Body · mono", note: "13 · mono — data, numbers, table cells, input values" },
+              { cls: "text-body text-ink", name: "Body · sans", note: "13 · sans — prose, descriptions (secondary = dimmer ink, same size)" },
+              { cls: "text-title font-bold text-ink", name: "Title", note: "20 · sans — the single page <h1> and dialog titles" },
+              { cls: "font-mono text-display text-ink", name: "Display", note: "28 · mono — the one hero metric per view" },
             ].map((t) => (
               <div key={t.name} className="grid grid-cols-[10rem_1fr] items-baseline gap-4 px-4 py-3">
                 <span className={t.cls + " text-ink"}>{t.name}</span>
@@ -513,7 +510,7 @@ export default function ThemePage() {
 
         {/* Domain Components */}
         <div className="pt-4">
-          <h1 className="text-2xl font-bold text-primary mb-8">
+          <h1 className="text-title font-bold text-primary mb-8">
             Domain Components
           </h1>
         </div>

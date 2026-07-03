@@ -65,38 +65,27 @@ def _apply_company_update(cursor, company_id, data, account_id):
     if 'thesis' in data:
         data['thesis'] = normalize_thesis(data.get('thesis'))
 
+    # Resolve the target portfolio on the caller's cursor so the whole update
+    # stays in one transaction (PortfolioRepository.get_or_create_portfolio
+    # commits internally, which would break atomicity here).
+    # No portfolio specified -> '-' default, consistent with CSV processing.
     portfolio_name = normalize_portfolio(data.get('portfolio'))
-    if portfolio_name and portfolio_name != 'None':
-        portfolio = query_db(
-            'SELECT id FROM portfolios WHERE name = ? AND account_id = ?',
-            [portfolio_name, account_id],
-            one=True
-        )
-        if not portfolio:
-            cursor.execute(
-                'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
-                [portfolio_name, account_id]
-            )
-            portfolio_id = cursor.lastrowid
-        else:
-            portfolio_id = portfolio['id'] if isinstance(portfolio, dict) else None
+    if not portfolio_name or portfolio_name == 'None':
+        portfolio_name = '-'
+    portfolio = query_db(
+        'SELECT id FROM portfolios WHERE name = ? AND account_id = ?',
+        [portfolio_name, account_id],
+        one=True
+    )
+    if portfolio:
+        portfolio_id = portfolio['id']
     else:
-        # Assign to '-' portfolio if no portfolio is specified (consistent with CSV processing)
-        default_portfolio = query_db(
-            'SELECT id FROM portfolios WHERE name = ? AND account_id = ?',
-            ['-', account_id], one=True)
-
-        if not default_portfolio:
-            # Create '-' portfolio if it doesn't exist
-            cursor.execute(
-                'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
-                ['-', account_id]
-            )
-            portfolio_id = cursor.lastrowid
-            logger.info(
-                f"Created '-' portfolio for account_id: {account_id}")
-        else:
-            portfolio_id = default_portfolio['id'] if isinstance(default_portfolio, dict) else None
+        cursor.execute(
+            'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
+            [portfolio_name, account_id]
+        )
+        portfolio_id = cursor.lastrowid
+        logger.info(f"Created portfolio '{portfolio_name}' for account_id: {account_id}")
 
     # Check if identifier is being changed to trigger price update and mapping storage
     identifier_changed = False

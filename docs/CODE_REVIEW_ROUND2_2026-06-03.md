@@ -14,9 +14,23 @@
 
 **Deferred** (each marked **[DEFER]** below):
 - R2-08, R2-14 — yfinance call placement / caching (auto_categorize already cached via `get_yfinance_info`; benefit smaller than originally estimated — re-evaluate).
-- R2-22, R2-23, R2-24, R2-25 — frontend perf wins, measurement-gated.
-- R2-28 — replace inline `get_or_create_portfolio` in `_apply_company_update` (transaction semantics risk).
+- R2-23 — chart downsampling (still measurement-gated).
 - R2-29 — `AllocationService` static-methods → module functions (style only).
+
+**Follow-up pass (2026-07-03, after test suite landed)**:
+- R2-22 + R2-24 **DONE** — `calculateExposureData` rewritten single-pass with no per-row
+  spread allocations; call site was already memoized. Guarded by
+  `frontend/src/lib/__tests__/performance-calc.test.ts`.
+- R2-25 **RESOLVED (dead code)** — `portfolio-state.ts` had zero call sites; selection
+  persistence already goes through the debounced fire-and-forget
+  `usePagePersistence` hook. File deleted.
+- R2-28 **DONE (amended)** — the two duplicated get-or-create branches in
+  `_apply_company_update` were collapsed into one cursor-scoped lookup. The original
+  recommendation (call `PortfolioRepository.get_or_create_portfolio`) was rejected:
+  that method commits internally, which would break the caller's transaction —
+  the very risk this item was deferred for. Note the normalization gap it flagged
+  had already been fixed (`normalize_portfolio` is applied). Guarded by
+  `tests/test_company_update.py`.
 
 **Latest pass adds**: R2-10 (thread-local SQLite for BG helpers — `_bg_local`, `_get_thread_conn`, `_reset_thread_conn_on_error`, `close_thread_conn` in `db_utils.py`; batch workers in the persistent pool now keep one connection each, main batch thread closes its connection on completion) and R2-26 (`@app.after_request` hook in `main.py` adds `ETag` + `Cache-Control: private, max-age=30` to GET JSON responses and returns 304 via `Response.make_conditional`).
 

@@ -8,22 +8,21 @@ from app.routes.portfolio_account_api import (
     set_account_cash,
     update_account_username,
 )
-from app.routes.portfolio_api import (
-    cancel_csv_upload,
-    csv_upload_progress,
+from app.routes.portfolio_capacity_api import (
     get_country_capacity_data,
     get_effective_capacity_data,
+    get_sector_capacity_data,
+)
+from app.routes.portfolio_company_api import manage_portfolios, update_portfolio_api
+from app.routes.portfolio_data_api import (
     get_investment_type_distribution,
     get_portfolio_data_api,
     get_portfolio_metrics,
     get_portfolios_api,
-    get_sector_capacity_data,
     get_simulator_portfolio_data,
     get_single_portfolio_data_api,
-    manage_portfolios,
-    manage_state,
-    update_portfolio_api,
 )
+from app.routes.portfolio_state_api import manage_state
 from app.routes.portfolio_builder_api import builder_investment_targets
 from app.routes.portfolio_manual_api import (
     add_company,
@@ -108,14 +107,6 @@ def register_upload_routes(portfolio_bp):
         "simple_upload_progress",
         get_simple_upload_progress,
         methods=["GET", "DELETE"],
-    )
-    portfolio_bp.add_url_rule(
-        "/api/csv_upload_progress",
-        view_func=csv_upload_progress,
-        methods=["GET", "DELETE"],
-    )
-    portfolio_bp.add_url_rule(
-        "/api/cancel_csv_upload", view_func=cancel_csv_upload, methods=["POST"]
     )
 
 

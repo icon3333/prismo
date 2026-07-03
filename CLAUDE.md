@@ -79,7 +79,7 @@ All routes live under blueprints registered in `app/main.py`:
 - `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/rebalancer`, `/build` → `/builder`, `/risk_overview` → `/concentrations`)
 - `admin_bp`: admin endpoints
 
-`portfolio_api.py` is the big one — import/CSV upload, simulator CRUD, builder targets, cash balance, identifier validation, price fetch progress, investment type distribution, etc. `portfolio_updates.py` handles price-fetch endpoints. Most expensive reads are wrapped in `@cache.memoize(timeout=…)` and invalidated via `invalidate_portfolio_cache(account_id)`.
+Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_capacity_api.py` (concentration headroom), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)` and invalidated via `invalidate_portfolio_cache(account_id)` after any write.
 
 ## Frontend → Backend
 

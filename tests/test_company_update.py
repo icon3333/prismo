@@ -1,6 +1,6 @@
 """
 Tests for the portfolio-resolution part of _apply_company_update
-(app/routes/portfolio_api.py) — consolidated as part of R2-28.
+(app/routes/portfolio_company_api.py) — consolidated as part of R2-28.
 
 Avoids the identifier-change path, which triggers price fetches.
 """
@@ -21,7 +21,7 @@ def account(db):
 
 
 def apply_update(db, account, data):
-    from app.routes.portfolio_api import _apply_company_update
+    from app.routes.portfolio_company_api import _apply_company_update
 
     cursor = db.cursor()
     _apply_company_update(cursor, account["company_id"], data, account["id"])

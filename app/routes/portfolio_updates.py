@@ -293,7 +293,7 @@ def update_single_portfolio_api(company_id):
         # Apply the update
         with get_db() as db:
             cursor = db.cursor()
-            from .portfolio_api import _apply_company_update
+            from .portfolio_company_api import _apply_company_update
             _apply_company_update(cursor, company_id, data, account_id)
             db.commit()
 
@@ -336,7 +336,7 @@ def bulk_update():
         errors = []
         with get_db() as db:
             cursor = db.cursor()
-            from .portfolio_api import _apply_company_update
+            from .portfolio_company_api import _apply_company_update
             for item in data:
                 cid = item.get('id')
                 if not cid:

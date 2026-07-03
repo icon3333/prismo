@@ -22,7 +22,9 @@ FLASK_ENV=development python3 run.py --port 8065
 cd frontend && npm run dev                     # Next.js on :3000, proxies /api → :8065
 
 # Testing
-pytest                                         # No tests/ directory exists yet — pytest is installed but there is no test suite
+./test.sh                                      # Full suite: backend pytest + frontend vitest
+python3 -m pytest tests/ -q                    # Backend only — value calc, allocation, CSV import (in-memory SQLite, no network)
+cd frontend && npm test                        # Frontend only — vitest on src/lib/*-calc pure modules
 cd frontend && npm run lint                    # ESLint for Next.js
 
 # Production

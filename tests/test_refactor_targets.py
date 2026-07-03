@@ -59,7 +59,8 @@ class RefactorTargetTests(unittest.TestCase):
         self.assertNotIn("Your portfolio at a glance", overview)
         self.assertNotIn("rounded-full", overview)
         self.assertNotIn("border-l-4", overview)
-        self.assertIn("PORTFOLIO STATUS", overview)
+        self.assertIn("OPERATOR OVERVIEW", overview)
+        self.assertIn("Portfolio Status", overview)
 
     def test_date_formatting_is_centralized(self):
         allowed = {

@@ -1,5 +1,4 @@
 import logging
-import re
 
 from flask import g, jsonify, request
 
@@ -165,8 +164,9 @@ def get_historical_prices_api():
     Returns JSON with series keyed by original identifiers.
     """
     from app.utils.yfinance_utils import get_historical_prices, VALID_PERIODS
-    from app.utils.identifier_mapping import get_preferred_identifier
     import re
+
+    from app.utils.identifier_mapping import get_preferred_identifier
 
     account_id = g.account_id
 

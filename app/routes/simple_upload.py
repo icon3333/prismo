@@ -4,12 +4,11 @@ Uses background threads with database-based progress tracking for real-time upda
 """
 
 import logging
-import threading
 from flask import request, session, jsonify, g
 from app.utils.csv_import_simple import validate_csv_format
 from app.utils.batch_processing import start_csv_processing_job
 from app.decorators import require_auth
-from app.utils.response_helpers import success_response, error_response, not_found_response, validation_error_response
+from app.utils.response_helpers import success_response, error_response, validation_error_response
 
 logger = logging.getLogger(__name__)
 

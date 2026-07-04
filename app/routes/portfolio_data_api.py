@@ -11,7 +11,7 @@ from app.exceptions import ValidationError, DataIntegrityError
 from app.utils.value_calculator import calculate_portfolio_total, calculate_item_value, has_price_or_custom_value
 from app.utils.portfolio_totals import get_portfolio_totals
 from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_default
-from app.services.allocation_service import AllocationService
+from app.services import allocation_service
 from app.repositories.portfolio_repository import PortfolioRepository
 from app.cache import cache
 
@@ -136,10 +136,10 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse rules JSON: {e}")
 
-    # Use AllocationService to process the data
+    # Use the allocation service to process the data
     try:
         # Step 1: Get portfolio positions with current values
-        portfolio_map, portfolio_builder_data = AllocationService.get_portfolio_positions(
+        portfolio_map, portfolio_builder_data = allocation_service.get_portfolio_positions(
             portfolio_data=data or [],
             target_allocations=target_allocations,
             rules=rules
@@ -150,7 +150,7 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
         logger.info(f"Total current value across all portfolios: {total_current_value}")
 
         # Step 2: Calculate allocation targets with type constraints
-        portfolios_with_targets = AllocationService.calculate_allocation_targets_with_type_constraints(
+        portfolios_with_targets = allocation_service.calculate_allocation_targets_with_type_constraints(
             portfolio_map=portfolio_map,
             portfolio_builder_data=portfolio_builder_data,
             target_allocations=target_allocations,
@@ -159,7 +159,7 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
         )
 
         # Step 3: Generate rebalancing plan
-        result = AllocationService.generate_rebalancing_plan(
+        result = allocation_service.generate_rebalancing_plan(
             portfolios_with_targets=portfolios_with_targets
         )
 
@@ -167,7 +167,7 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
         return result
 
     except ImportError as e:
-        logger.error(f"Failed to import AllocationService: {e}")
+        logger.error(f"Failed to import allocation service: {e}")
         raise ValidationError('Allocation service unavailable')
     except (ValidationError, DataIntegrityError):
         # Re-raise these so caller can handle them

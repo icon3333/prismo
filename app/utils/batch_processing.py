@@ -12,14 +12,12 @@ from flask import current_app
 from app.utils.yfinance_utils import get_isin_data
 from app.utils.db_utils import (
     update_price_in_db_background,
-    query_background_db,
+    
     execute_background_db,
     bulk_update_accounts_last_price_update,
     close_thread_conn,
 )
 from app.db_manager import get_db
-from app.exceptions import PriceFetchError, DatabaseError
-from app.repositories.price_repository import PriceRepository
 
 logger = logging.getLogger(__name__)
 

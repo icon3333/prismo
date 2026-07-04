@@ -12,10 +12,19 @@
 
 **Done from this report**: R2-01 (4 broken methods deleted), R2-02 (`db_utils.get_portfolios` deleted), R2-03 (3 unused config items deleted), R2-04 (preliminary check queries dropped), R2-05 (exchange-rate caches collapsed — `ExchangeRateRepository` no longer caches, `value_calculator._exchange_rates_cache` is the single reader-side cache, yfinance HTTP source still cached separately), R2-09 (foreground `update_price_in_db` unified to single `INSERT OR REPLACE`), R2-12 (per-CSV `backup_database` calls removed; 6h scheduled backup is the safety net), R2-13 (`ASYNC_THRESHOLD` 20→5, pool 5→10 workers, persistent module-level executor), R2-15 (`targets_by_name` dict in AllocationService), R2-21 (`last_price_update` now ONE bulk UPDATE per batch via new `bulk_update_accounts_last_price_update` helper, called from `_run_batch_sync` and `_run_batch_async`), R2-30 (auth WARN demoted to INFO).
 
-**Deferred** (each marked **[DEFER]** below):
-- R2-08, R2-14 — yfinance call placement / caching (auto_categorize already cached via `get_yfinance_info`; benefit smaller than originally estimated — re-evaluate).
-- R2-23 — chart downsampling (still measurement-gated).
-- R2-29 — `AllocationService` static-methods → module functions (style only).
+**Deferred**:
+- R2-08, R2-14 — **CLOSED (won't do)**: re-evaluated 2026-07-04; `auto_categorize_investment_type`
+  goes through `get_yfinance_info`, which is `@cache.memoize`-cached, so repeat network cost is
+  already zero. Remaining dispatch overhead is negligible.
+
+**Second follow-up pass (2026-07-04)**:
+- R2-23 **DONE** — `buildChartSeries` stride-downsamples display series above 2,000 points
+  (first/last preserved). Guarded by `downsampleSeries` tests in
+  `frontend/src/lib/__tests__/performance-calc.test.ts`.
+- R2-29 **DONE** — `AllocationService` dissolved: the four production-called functions are
+  module-level in `allocation_service.py`; the instance API (rebalancing modes,
+  validate/normalize, `AllocationRule`, `RebalancingRecommendation`) had zero production
+  callers and was deleted.
 
 **Follow-up pass (2026-07-03, after test suite landed)**:
 - R2-22 + R2-24 **DONE** — `calculateExposureData` rewritten single-pass with no per-row

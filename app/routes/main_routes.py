@@ -1,6 +1,5 @@
 from app.db_manager import query_db
 from flask import Blueprint, session, jsonify
-from app.decorators.auth import require_auth
 import logging
 
 logger = logging.getLogger(__name__)

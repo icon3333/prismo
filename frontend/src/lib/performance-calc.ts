@@ -136,7 +136,30 @@ interface NormalizedSeries {
 }
 
 /**
+ * ApexCharts renders every point it is given; multi-year daily series with
+ * several positions can reach tens of thousands of points and make pan/zoom
+ * sluggish. Above this cap, series are stride-downsampled for display.
+ */
+export const MAX_CHART_POINTS = 2000;
+
+/** Pick every k-th point so length <= max, always keeping first and last. */
+export function downsampleSeries(
+  points: { x: number; y: number }[],
+  max: number = MAX_CHART_POINTS
+): { x: number; y: number }[] {
+  if (points.length <= max) return points;
+  const stride = Math.ceil((points.length - 1) / (max - 1));
+  const sampled: { x: number; y: number }[] = [];
+  for (let i = 0; i < points.length; i += stride) sampled.push(points[i]);
+  if (sampled[sampled.length - 1] !== points[points.length - 1]) {
+    sampled.push(points[points.length - 1]);
+  }
+  return sampled;
+}
+
+/**
  * Build chart series from historical data. Normalizes to base 100.
+ * Display series longer than MAX_CHART_POINTS are downsampled.
  */
 export function buildChartSeries(
   seriesData: Record<string, { date: string; close: number }[]>,
@@ -196,7 +219,7 @@ export function buildChartSeries(
     displaySeries.push({ name: allSeries[0].name, data: allSeries[0].data });
   }
 
-  return displaySeries;
+  return displaySeries.map((s) => ({ ...s, data: downsampleSeries(s.data) }));
 }
 
 /**

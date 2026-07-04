@@ -180,7 +180,7 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str, mode: str
                 _update_csv_job_final(job_id, 100, "CSV processing completed successfully")
                 # Invalidate portfolio cache after successful CSV import
                 try:
-                    from app.routes.portfolio_api import invalidate_portfolio_cache
+                    from app.routes.portfolio_data_api import invalidate_portfolio_cache
                     invalidate_portfolio_cache(account_id)
                     logger.debug(f"Cache invalidated after CSV processing for account_id: {account_id}")
                 except Exception as cache_error:

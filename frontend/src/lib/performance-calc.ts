@@ -312,18 +312,27 @@ function computeChainLinkedAggregate(
   return { name: "Weighted Avg", data: aggData };
 }
 
-/**
- * Detect if a company is crypto based on identifier pattern.
- */
-function getDisplayCountry(company: PerformanceCompany): string {
-  if (company.investment_type === "Crypto") {
-    return "Crypto";
+/** Keep top 8 + anything >= 1%, sorted desc, "Unknown" moved to the end. */
+function rankAxis(percentages: Record<string, number>): string[] {
+  const sorted = Object.entries(percentages)
+    .sort((a, b) => b[1] - a[1])
+    .map((e) => e[0]);
+  const kept = sorted.filter((key, idx) => idx < 8 || percentages[key] >= 1.0);
+  const idx = kept.indexOf("Unknown");
+  if (idx !== -1) {
+    kept.splice(idx, 1);
+    kept.push("Unknown");
   }
-  return (company.effective_country || "").trim() || "Unknown";
+  return kept;
 }
 
 /**
  * Calculate exposure data for the heatmap.
+ *
+ * Single pass over the companies: totals, the country x dimension exposure
+ * matrix, and per-cell company details are all accumulated in one loop
+ * (this re-runs on every filter change, so it stays O(n) with no
+ * intermediate per-row allocations).
  */
 export function calculateExposureData(
   companies: PerformanceCompany[],
@@ -339,128 +348,58 @@ export function calculateExposureData(
     metadata: { totalValue: 0, countryPercentages: {}, dimensionPercentages: {} },
   };
 
-  // Build company list with computed values, add virtual cash if needed
-  const allCompanies: (PerformanceCompany & { currentValue: number; effective_country: string; sector: string })[] = companies.map((c) => ({
-    ...c,
-    currentValue: c.current_value || 0,
-    effective_country: c.effective_country || c.country || "Unknown",
-    sector: c.sector || "Unknown",
-  }));
-
-  if (includeCash && cashBalance > 0) {
-    allCompanies.push({
-      name: "Cash",
-      currentValue: cashBalance,
-      sector: "Cash",
-      thesis: "Cash",
-      country: "Cash",
-      effective_country: "Cash",
-      investment_type: "Stock",
-      identifier: null,
-      current_value: cashBalance,
-      pnl_absolute: null,
-      pnl_percentage: null,
-      total_invested: null,
-      first_bought_date: null,
-    });
-  }
-
-  if (allCompanies.length === 0) return empty;
-
-  const totalValue = allCompanies.reduce((sum, c) => sum + (c.currentValue || 0), 0);
-
   const exposure: Record<string, Record<string, number>> = {};
   const countryTotals: Record<string, number> = {};
   const dimensionTotals: Record<string, number> = {};
   const companyDetails: Record<string, Record<string, { name: string; value: number; percentage: number }[]>> = {};
+  let totalValue = 0;
 
-  for (const company of allCompanies) {
-    const country = getDisplayCountry(company as PerformanceCompany);
-    const dimValue = (company[dimension as keyof typeof company] as string || "").trim() || "Unknown";
-    const value = company.currentValue || 0;
+  const accumulate = (name: string, country: string, dimValue: string, value: number) => {
+    totalValue += value;
+    (exposure[country] ??= {})[dimValue] = (exposure[country][dimValue] || 0) + value;
+    countryTotals[country] = (countryTotals[country] || 0) + value;
+    dimensionTotals[dimValue] = (dimensionTotals[dimValue] || 0) + value;
+    ((companyDetails[country] ??= {})[dimValue] ??= []).push({ name, value, percentage: 0 });
+  };
 
-    if (!exposure[country]) exposure[country] = {};
-    if (!exposure[country][dimValue]) exposure[country][dimValue] = 0;
-    if (!countryTotals[country]) countryTotals[country] = 0;
-    if (!dimensionTotals[dimValue]) dimensionTotals[dimValue] = 0;
-    if (!companyDetails[country]) companyDetails[country] = {};
-    if (!companyDetails[country][dimValue]) companyDetails[country][dimValue] = [];
+  for (const c of companies) {
+    const country =
+      c.investment_type === "Crypto"
+        ? "Crypto"
+        : (c.effective_country || c.country || "").trim() || "Unknown";
+    const dimValue = ((c[dimension] as string) || "").trim() || "Unknown";
+    accumulate(c.name, country, dimValue, c.current_value || 0);
+  }
 
-    exposure[country][dimValue] += value;
-    countryTotals[country] += value;
-    dimensionTotals[dimValue] += value;
-
-    companyDetails[country][dimValue].push({
-      name: company.name,
-      value,
-      percentage: 0,
-    });
+  if (includeCash && cashBalance > 0) {
+    accumulate("Cash", "Cash", "Cash", cashBalance);
   }
 
   if (Object.keys(exposure).length === 0) return empty;
 
-  // Convert to percentages
-  for (const country in exposure) {
-    for (const dim in exposure[country]) {
-      exposure[country][dim] =
-        totalValue > 0 ? (exposure[country][dim] / totalValue) * 100 : 0;
-    }
-  }
+  const toPct = (value: number) => (totalValue > 0 ? (value / totalValue) * 100 : 0);
 
   const countryPercentages: Record<string, number> = {};
-  const dimensionPercentages: Record<string, number> = {};
-
   for (const country in countryTotals) {
-    countryPercentages[country] =
-      totalValue > 0 ? (countryTotals[country] / totalValue) * 100 : 0;
+    countryPercentages[country] = toPct(countryTotals[country]);
   }
+  const dimensionPercentages: Record<string, number> = {};
   for (const dim in dimensionTotals) {
-    dimensionPercentages[dim] =
-      totalValue > 0 ? (dimensionTotals[dim] / totalValue) * 100 : 0;
+    dimensionPercentages[dim] = toPct(dimensionTotals[dim]);
   }
 
-  // Calculate per-company percentages and sort
   for (const country in companyDetails) {
     for (const dim in companyDetails[country]) {
-      companyDetails[country][dim].forEach((c) => {
-        c.percentage = totalValue > 0 ? (c.value / totalValue) * 100 : 0;
-      });
+      for (const c of companyDetails[country][dim]) c.percentage = toPct(c.value);
       companyDetails[country][dim].sort((a, b) => b.value - a.value);
     }
   }
 
-  // Filter: top 8 + any >= 1%, Unknown last
-  const significanceThreshold = 1.0;
-
-  const moveUnknownToEnd = (arr: string[]) => {
-    const idx = arr.indexOf("Unknown");
-    if (idx !== -1) {
-      arr.splice(idx, 1);
-      arr.push("Unknown");
-    }
-    return arr;
-  };
-
-  let sortedCountries = Object.entries(countryPercentages)
-    .sort((a, b) => b[1] - a[1])
-    .map((e) => e[0]);
-  const topCountries = sortedCountries.slice(0, Math.min(8, sortedCountries.length));
-  sortedCountries = sortedCountries.filter(
-    (c) => topCountries.includes(c) || countryPercentages[c] >= significanceThreshold
-  );
-  sortedCountries = moveUnknownToEnd(sortedCountries);
-
-  let sortedDimensions = Object.entries(dimensionPercentages)
-    .sort((a, b) => b[1] - a[1])
-    .map((e) => e[0]);
-  const topDimensions = sortedDimensions.slice(0, Math.min(8, sortedDimensions.length));
-  sortedDimensions = sortedDimensions.filter(
-    (d) => topDimensions.includes(d) || dimensionPercentages[d] >= significanceThreshold
-  );
-  sortedDimensions = moveUnknownToEnd(sortedDimensions);
+  const sortedCountries = rankAxis(countryPercentages);
+  const sortedDimensions = rankAxis(dimensionPercentages);
 
   const z = sortedCountries.map((country) =>
-    sortedDimensions.map((dim) => exposure[country]?.[dim] || 0)
+    sortedDimensions.map((dim) => toPct(exposure[country]?.[dim] || 0))
   );
 
   if (z.length === 0 || z[0].length === 0) return empty;

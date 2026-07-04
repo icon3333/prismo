@@ -17,6 +17,10 @@ class RefactorTargetTests(unittest.TestCase):
             "app/routes/portfolio_builder_api.py",
             "app/routes/portfolio_manual_api.py",
             "app/routes/portfolio_simulator_api.py",
+            "app/routes/portfolio_state_api.py",
+            "app/routes/portfolio_data_api.py",
+            "app/routes/portfolio_capacity_api.py",
+            "app/routes/portfolio_company_api.py",
         ]
         for module in expected_modules:
             self.assertTrue((REPO_ROOT / module).exists(), module)
@@ -26,19 +30,8 @@ class RefactorTargetTests(unittest.TestCase):
             module_name = module.removesuffix(".py").replace("/", ".")
             self.assertIn(module_name, routes)
 
-        monolith = read("app/routes/portfolio_api.py")
-        moved_endpoint_names = [
-            "simulator_simulations_list",
-            "simulator_simulation_create",
-            "simulator_clone_portfolio",
-            "builder_investment_targets",
-            "get_account_cash",
-            "api_import_account_data",
-            "add_company",
-            "validate_identifier",
-        ]
-        for name in moved_endpoint_names:
-            self.assertNotRegex(monolith, rf"^def {name}\(", name)
+        # The old monolith is fully dissolved
+        self.assertFalse((REPO_ROOT / "app/routes/portfolio_api.py").exists())
 
     def test_hooks_delegate_autosave_and_export_logic(self):
         simulator_hook = read("frontend/src/hooks/use-simulator.ts")
@@ -59,7 +52,8 @@ class RefactorTargetTests(unittest.TestCase):
         self.assertNotIn("Your portfolio at a glance", overview)
         self.assertNotIn("rounded-full", overview)
         self.assertNotIn("border-l-4", overview)
-        self.assertIn("PORTFOLIO STATUS", overview)
+        self.assertIn("OPERATOR OVERVIEW", overview)
+        self.assertIn("Portfolio Status", overview)
 
     def test_date_formatting_is_centralized(self):
         allowed = {

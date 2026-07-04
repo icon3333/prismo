@@ -5,11 +5,8 @@ Pure Python - no Flask dependencies.
 Philosophy: Simple, clear allocation calculations with flexible modes.
 """
 
-from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
-from decimal import Decimal
 import logging
-import json
 from app.utils.value_calculator import calculate_item_value
 
 logger = logging.getLogger(__name__)
@@ -179,705 +176,447 @@ def _apply_type_constraints_recursive(
     return positions
 
 
-@dataclass
-class AllocationRule:
-    """Rules for portfolio allocation limits"""
-    max_stock_percentage: float = 5.0
-    max_etf_percentage: float = 10.0
-    max_sector_percentage: float = 25.0
-    max_country_percentage: float = 10.0
-
-
-@dataclass
-class RebalancingRecommendation:
-    """Single rebalancing recommendation"""
-    company_name: str
-    identifier: str
-    current_value: Decimal
-    target_value: Decimal
-    amount_to_buy: Decimal
-    shares_to_buy: Decimal
-    current_price: Decimal
-
-
-class AllocationService:
+def get_portfolio_positions(
+    portfolio_data: List[Dict],
+    target_allocations: List[Dict],
+    rules: Dict = None
+) -> Tuple[Dict[str, List[Dict]], Dict[str, Dict]]:
     """
-    Service for calculating portfolio allocations and rebalancing.
+    Get current positions grouped by portfolio with prices.
 
-    All methods are pure functions - no database or session access.
-    Takes data as input, returns calculations as output.
+    Processes raw portfolio data from repository and target allocations
+    from expanded_state into structured format ready for calculations.
+
+    Args:
+        portfolio_data: List of dicts from database query (portfolios, companies, shares, prices)
+        target_allocations: List of target portfolio configs from expanded_state
+        rules: Dict with maxPerStock, maxPerETF, etc. (optional)
+
+    Returns:
+        Tuple of (portfolio_map, portfolio_builder_data):
+            - portfolio_map: Dict mapping portfolio_id to portfolio data with categories and positions
+            - portfolio_builder_data: Dict mapping portfolio_id to builder configuration
     """
+    logger.info(f"Processing portfolio positions from {len(portfolio_data)} data rows")
 
-    def __init__(self, rules: Optional[AllocationRule] = None):
-        self.rules = rules or AllocationRule()
+    # Extract default weights from rules
+    default_stock_weight = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
+    default_etf_weight = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
+    default_crypto_weight = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
 
-    def calculate_rebalancing(
-        self,
-        portfolio_data: List[Dict],
-        target_allocations: Dict[str, float],
-        investment_amount: Decimal,
-        mode: str = "proportional"
-    ) -> List[RebalancingRecommendation]:
-        """
-        Calculate rebalancing recommendations.
+    # Build mapping of company names to investment types from portfolio_data
+    company_investment_types = {}
+    for row in portfolio_data:
+        if isinstance(row, dict) and row.get('company_name'):
+            company_investment_types[row['company_name']] = row.get('investment_type')
 
-        Args:
-            portfolio_data: List of current holdings
-            target_allocations: Dict of {company_id: target_percentage}
-            investment_amount: Amount to invest
-            mode: "proportional", "target_weights", or "equal_weight"
-
-        Returns:
-            List of RebalancingRecommendation objects
-        """
-        logger.info(f"Calculating rebalancing: mode={mode}, amount={investment_amount}")
-
-        # Pure calculation logic here
-        # No database calls, no session access
-
-        if mode == "proportional":
-            return self._calculate_proportional(
-                portfolio_data, target_allocations, investment_amount
-            )
-        elif mode == "target_weights":
-            return self._calculate_target_weights(
-                portfolio_data, target_allocations, investment_amount
-            )
-        elif mode == "equal_weight":
-            return self._calculate_equal_weight(
-                portfolio_data, investment_amount
-            )
+    # Helper function to get default weight based on investment type
+    # NOTE: When no explicit position weights are set in the Build page,
+    # we use the maxPerStock/maxPerETF rules as the TARGET allocation.
+    # This means: "Give each Stock/ETF this percentage of the portfolio"
+    # The same rules also serve as CAPS (enforced by type constraints later)
+    def get_default_weight(company_name: str) -> float:
+        investment_type = company_investment_types.get(company_name)
+        if investment_type == 'Stock':
+            return default_stock_weight
+        elif investment_type == 'ETF':
+            return default_etf_weight
+        elif investment_type == 'Crypto':
+            return default_crypto_weight
         else:
-            raise ValueError(f"Unknown allocation mode: {mode}")
+            # For unknown types, return 0 (no default)
+            return 0.0
 
-    def _calculate_proportional(
-        self,
-        portfolio_data: List[Dict],
-        target_allocations: Dict[str, float],
-        investment_amount: Decimal
-    ) -> List[RebalancingRecommendation]:
-        """Distribute investment proportionally to target allocations"""
-        recommendations = []
+    # Create position target weights map
+    position_target_weights = {}
+    portfolio_builder_data = {}
 
-        for company_id, target_pct in target_allocations.items():
-            # Find company in portfolio
-            company = next(
-                (c for c in portfolio_data if c['id'] == company_id),
-                None
-            )
+    for portfolio in target_allocations:
+        portfolio_name = portfolio.get('name')
+        if not portfolio_name:
+            continue
 
-            if not company or not company.get('price_eur'):
-                continue
-
-            # Calculate allocation
-            allocation_amount = investment_amount * Decimal(target_pct / 100)
-            current_price = Decimal(str(company['price_eur']))
-            shares_to_buy = allocation_amount / current_price
-
-            recommendation = RebalancingRecommendation(
-                company_name=company['name'],
-                identifier=company['identifier'],
-                current_value=Decimal(str(company.get('current_value', 0))),
-                target_value=allocation_amount,
-                amount_to_buy=allocation_amount,
-                shares_to_buy=shares_to_buy,
-                current_price=current_price
-            )
-
-            recommendations.append(recommendation)
-
-        return recommendations
-
-    def _calculate_target_weights(
-        self,
-        portfolio_data: List[Dict],
-        target_allocations: Dict[str, float],
-        investment_amount: Decimal
-    ) -> List[RebalancingRecommendation]:
-        """
-        Calculate to reach specific target weights.
-
-        This mode calculates how much to buy to bring the portfolio
-        closer to target weights after adding the investment amount.
-        """
-        recommendations = []
-
-        # Calculate current total value
-        current_total_value = sum(
-            Decimal(str(c.get('current_value', 0)))
-            for c in portfolio_data
-        )
-
-        # New total value after investment
-        new_total_value = current_total_value + investment_amount
-
-        for company_id, target_pct in target_allocations.items():
-            # Find company in portfolio
-            company = next(
-                (c for c in portfolio_data if c['id'] == company_id),
-                None
-            )
-
-            if not company or not company.get('price_eur'):
-                continue
-
-            current_value = Decimal(str(company.get('current_value', 0)))
-            target_value = new_total_value * Decimal(target_pct / 100)
-
-            # Amount to buy to reach target
-            amount_to_buy = max(Decimal('0'), target_value - current_value)
-
-            if amount_to_buy > 0:
-                current_price = Decimal(str(company['price_eur']))
-                shares_to_buy = amount_to_buy / current_price
-
-                recommendation = RebalancingRecommendation(
-                    company_name=company['name'],
-                    identifier=company['identifier'],
-                    current_value=current_value,
-                    target_value=target_value,
-                    amount_to_buy=amount_to_buy,
-                    shares_to_buy=shares_to_buy,
-                    current_price=current_price
-                )
-
-                recommendations.append(recommendation)
-
-        return recommendations
-
-    def _calculate_equal_weight(
-        self,
-        portfolio_data: List[Dict],
-        investment_amount: Decimal
-    ) -> List[RebalancingRecommendation]:
-        """Distribute investment equally across all holdings"""
-        recommendations = []
-
-        # Filter holdings with valid prices
-        valid_holdings = [
-            c for c in portfolio_data
-            if c.get('price_eur') and Decimal(str(c['price_eur'])) > 0
-        ]
-
-        if not valid_holdings:
-            return recommendations
-
-        # Equal amount per holding
-        amount_per_holding = investment_amount / len(valid_holdings)
-
-        for company in valid_holdings:
-            current_price = Decimal(str(company['price_eur']))
-            shares_to_buy = amount_per_holding / current_price
-
-            recommendation = RebalancingRecommendation(
-                company_name=company['name'],
-                identifier=company['identifier'],
-                current_value=Decimal(str(company.get('current_value', 0))),
-                target_value=Decimal(str(company.get('current_value', 0))) + amount_per_holding,
-                amount_to_buy=amount_per_holding,
-                shares_to_buy=shares_to_buy,
-                current_price=current_price
-            )
-
-            recommendations.append(recommendation)
-
-        return recommendations
-
-    def validate_allocations(
-        self,
-        allocations: Dict[str, float]
-    ) -> tuple[bool, Optional[str]]:
-        """
-        Validate that allocations meet constraints.
-
-        Args:
-            allocations: Dict of {company_id: percentage}
-
-        Returns:
-            (is_valid, error_message)
-        """
-        total = sum(allocations.values())
-
-        # Allow small floating point errors
-        if abs(total - 100.0) > 0.01:
-            return False, f"Allocations must sum to 100% (got {total:.2f}%)"
-
-        for company_id, pct in allocations.items():
-            # Default max is 5%, but {1: 60%, 2: 40%} exceeds this
-            # The test expects this to pass, so we need to check the logic
-            if pct > self.rules.max_stock_percentage:
-                return False, f"Stock allocation {pct}% exceeds max {self.rules.max_stock_percentage}%"
-
-        return True, None
-
-    def normalize_allocations(
-        self,
-        allocations: Dict[str, float]
-    ) -> Dict[str, float]:
-        """
-        Normalize allocations to sum to 100%.
-
-        Args:
-            allocations: Dict of {company_id: percentage}
-
-        Returns:
-            Normalized allocations
-        """
-        total = sum(allocations.values())
-
-        if total == 0:
-            return allocations
-
-        return {
-            company_id: (pct / total) * 100
-            for company_id, pct in allocations.items()
+        # Store complete builder configuration - keyed by NAME for reliable matching
+        # (Portfolio IDs in saved state can become stale; names are unique per account)
+        portfolio_builder_data[portfolio_name] = {
+            'minPositions': portfolio.get('minPositions') or 0,
+            'desiredPositions': portfolio.get('desiredPositions'),  # User's desired position count
+            'allocation': portfolio.get('allocation', 0),
+            'positions': portfolio.get('positions', []),
+            'name': portfolio_name
         }
 
-    @staticmethod
-    def get_portfolio_positions(
-        portfolio_data: List[Dict],
-        target_allocations: List[Dict],
-        rules: Dict = None
-    ) -> Tuple[Dict[str, List[Dict]], Dict[str, Dict]]:
-        """
-        Get current positions grouped by portfolio with prices.
+        # Check if portfolio has ONLY placeholders (no explicit positions)
+        # This indicates user wants equal distribution using placeholder weight
+        real_positions = [p for p in portfolio.get('positions', []) if not p.get('isPlaceholder')]
+        placeholder_positions = [p for p in portfolio.get('positions', []) if p.get('isPlaceholder')]
+        has_only_placeholders = len(real_positions) == 0 and len(placeholder_positions) > 0
 
-        Processes raw portfolio data from repository and target allocations
-        from expanded_state into structured format ready for calculations.
+        # Extract placeholder weight if it exists
+        placeholder_weight = None
+        if has_only_placeholders and placeholder_positions:
+            placeholder_weight = placeholder_positions[0].get('weight')
 
-        Args:
-            portfolio_data: List of dicts from database query (portfolios, companies, shares, prices)
-            target_allocations: List of target portfolio configs from expanded_state
-            rules: Dict with maxPerStock, maxPerETF, etc. (optional)
+        # Store target weights for real positions
+        # Priority: explicit weight from Build page > placeholder weight > type-based default
+        # Key by (portfolio_name, company_name) for reliable matching
+        for position in portfolio.get('positions', []):
+            if not position.get('isPlaceholder'):
+                company_name = position.get('companyName')
+                position_key = (portfolio_name, company_name)
 
-        Returns:
-            Tuple of (portfolio_map, portfolio_builder_data):
-                - portfolio_map: Dict mapping portfolio_id to portfolio data with categories and positions
-                - portfolio_builder_data: Dict mapping portfolio_id to builder configuration
-        """
-        logger.info(f"Processing portfolio positions from {len(portfolio_data)} data rows")
+                # Use explicit weight if provided
+                explicit_weight = position.get('weight')
+                if explicit_weight is not None and explicit_weight > 0:
+                    position_target_weights[position_key] = float(explicit_weight)
+                else:
+                    default_weight = get_default_weight(company_name)
+                    position_target_weights[position_key] = default_weight
 
-        # Extract default weights from rules
-        default_stock_weight = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
-        default_etf_weight = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
-        default_crypto_weight = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
+        # If portfolio has only placeholders, mark it for equal distribution
+        if has_only_placeholders and placeholder_weight and portfolio_name in portfolio_builder_data:
+            portfolio_builder_data[portfolio_name]['use_placeholder_weight'] = True
+            portfolio_builder_data[portfolio_name]['placeholder_weight'] = placeholder_weight
 
-        # Build mapping of company names to investment types from portfolio_data
-        company_investment_types = {}
+    # Group data by portfolio and sector
+    portfolio_map = {}
+
+    # NOTE: We no longer pre-initialize portfolio_map from target_allocations
+    # This caused duplicate entries when portfolio IDs changed (recreated portfolios)
+    # Instead, we only populate from actual database data and look up targets by NAME
+
+    # Process actual positions from database
+    if portfolio_data:
         for row in portfolio_data:
-            if isinstance(row, dict) and row.get('company_name'):
-                company_investment_types[row['company_name']] = row.get('investment_type')
+            if isinstance(row, dict):
+                pid = row['portfolio_id']
+                pname = row['portfolio_name']
 
-        # Helper function to get default weight based on investment type
-        # NOTE: When no explicit position weights are set in the Build page,
-        # we use the maxPerStock/maxPerETF rules as the TARGET allocation.
-        # This means: "Give each Stock/ETF this percentage of the portfolio"
-        # The same rules also serve as CAPS (enforced by type constraints later)
-        def get_default_weight(company_name: str) -> float:
-            investment_type = company_investment_types.get(company_name)
-            if investment_type == 'Stock':
-                return default_stock_weight
-            elif investment_type == 'ETF':
-                return default_etf_weight
-            elif investment_type == 'Crypto':
-                return default_crypto_weight
-            else:
-                # For unknown types, return 0 (no default)
-                return 0.0
+                # Ensure portfolio exists in map (may already be initialized above)
+                portfolio = portfolio_map.setdefault(
+                    pid, {'name': pname, 'sectors': {}, 'currentValue': 0})
 
-        # Create position target weights map
-        position_target_weights = {}
-        portfolio_builder_data = {}
+                if row['company_name']:
+                    # Use 'Uncategorized' as default sector
+                    sector_name = row['sector'] if row['sector'] else 'Uncategorized'
+                    cat = portfolio['sectors'].setdefault(
+                        sector_name, {'positions': [], 'currentValue': 0})
 
-        for portfolio in target_allocations:
-            portfolio_name = portfolio.get('name')
-            if not portfolio_name:
-                continue
+                    # Use centralized value calculator for consistency
+                    pos_value = float(calculate_item_value(row))
 
-            # Store complete builder configuration - keyed by NAME for reliable matching
-            # (Portfolio IDs in saved state can become stale; names are unique per account)
-            portfolio_builder_data[portfolio_name] = {
-                'minPositions': portfolio.get('minPositions') or 0,
-                'desiredPositions': portfolio.get('desiredPositions'),  # User's desired position count
-                'allocation': portfolio.get('allocation', 0),
-                'positions': portfolio.get('positions', []),
-                'name': portfolio_name
+                    portfolio['currentValue'] += pos_value
+                    cat['currentValue'] += pos_value
+
+                    # Look up by portfolio NAME (not ID) for reliable matching
+                    lookup_key = (pname, row['company_name'])
+                    target_weight = position_target_weights.get(lookup_key, 0)
+
+                    # Check if this portfolio uses placeholder-based equal distribution
+                    builder_config = portfolio_builder_data.get(pname, {})
+                    use_placeholder_weight = builder_config.get('use_placeholder_weight', False)
+                    placeholder_weight_value = builder_config.get('placeholder_weight', None)
+
+                    # If no target weight from Build page, determine default
+                    if target_weight == 0:
+                        # Priority: placeholder weight > type-based default
+                        if use_placeholder_weight and placeholder_weight_value:
+                            target_weight = float(placeholder_weight_value)
+                        else:
+                            target_weight = get_default_weight(row['company_name'])
+
+                    position_data = {
+                        'name': row['company_name'],
+                        'currentValue': pos_value,
+                        'targetAllocation': target_weight,
+                        'identifier': row['identifier'],
+                        'investment_type': row.get('investment_type')
+                    }
+                    cat['positions'].append(position_data)
+
+    logger.info(f"Processed {len(portfolio_map)} portfolios with positions")
+    return portfolio_map, portfolio_builder_data
+
+def calculate_allocation_targets(
+    portfolio_map: Dict[str, Dict],
+    portfolio_builder_data: Dict[str, Dict],
+    target_allocations: List[Dict],
+    total_current_value: float
+) -> List[Dict]:
+    """
+    Calculate target allocations for each position based on portfolio targets.
+
+    Applies portfolio-level target weights and position-level target weights
+    to calculate exact target values for each position.
+
+    Args:
+        portfolio_map: Dict of portfolio data with current positions
+        portfolio_builder_data: Dict of builder configuration per portfolio
+        target_allocations: List of target portfolio allocations
+        total_current_value: Total value across all portfolios
+
+    Returns:
+        List of portfolio dicts with calculated target values for all positions
+    """
+    logger.info(f"Calculating allocation targets for total value: {total_current_value}")
+
+    # Build name → target dict once, instead of doing a linear `next(...)`
+    # scan inside the per-portfolio loop below (was quadratic in portfolio count).
+    targets_by_name = {p['name']: p for p in target_allocations if p.get('name')}
+
+    result_portfolios = []
+
+    for portfolio_id, pdata in portfolio_map.items():
+        portfolio_name = pdata['name']
+
+        target_portfolio = targets_by_name.get(portfolio_name)
+        portfolio_target_weight = target_portfolio.get('allocation', 0) if target_portfolio else 0
+
+        # Get builder data - keyed by portfolio NAME for reliable matching
+        builder_data = portfolio_builder_data.get(portfolio_name, {})
+
+        # Calculate effective positions (user's desired, falling back to calculated minimum)
+        desired_positions = builder_data.get('desiredPositions')
+        min_positions = builder_data.get('minPositions') or 0
+        effective_positions = desired_positions if desired_positions is not None else min_positions
+
+        portfolio_entry = {
+            'name': portfolio_name,
+            'currentValue': pdata['currentValue'],
+            'targetWeight': portfolio_target_weight,
+            'color': '',
+            'sectors': [],
+            'minPositions': min_positions,
+            'desiredPositions': desired_positions,
+            'effectivePositions': effective_positions,
+            'builderPositions': builder_data.get('positions', []),
+            'builderAllocation': builder_data.get('allocation', 0)
+        }
+
+        # Add sectors with positions
+        for sector_name, sector_data in pdata['sectors'].items():
+            sector_entry = {
+                'name': sector_name,
+                'positions': sector_data['positions'],
+                'currentValue': sector_data['currentValue'],
+                'positionCount': len(sector_data['positions'])
             }
+            portfolio_entry['sectors'].append(sector_entry)
 
-            # Check if portfolio has ONLY placeholders (no explicit positions)
-            # This indicates user wants equal distribution using placeholder weight
-            real_positions = [p for p in portfolio.get('positions', []) if not p.get('isPlaceholder')]
-            placeholder_positions = [p for p in portfolio.get('positions', []) if p.get('isPlaceholder')]
-            has_only_placeholders = len(real_positions) == 0 and len(placeholder_positions) > 0
+        # Add placeholder positions based on builder configuration
+        builder_positions = builder_data.get('positions', [])
 
-            # Extract placeholder weight if it exists
-            placeholder_weight = None
-            if has_only_placeholders and placeholder_positions:
-                placeholder_weight = placeholder_positions[0].get('weight')
+        # Count current real positions
+        current_positions_count = sum(
+            len(sector_data['positions']) for sector_data in pdata['sectors'].values())
+        placeholder_position = next(
+            (pos for pos in builder_positions if pos.get('isPlaceholder')), None)
 
-            # Store target weights for real positions
-            # Priority: explicit weight from Build page > placeholder weight > type-based default
-            # Key by (portfolio_name, company_name) for reliable matching
-            for position in portfolio.get('positions', []):
-                if not position.get('isPlaceholder'):
-                    company_name = position.get('companyName')
-                    position_key = (portfolio_name, company_name)
+        # Check if real positions already sum to 100%
+        real_builder_positions = [
+            pos for pos in builder_positions if not pos.get('isPlaceholder', False)]
+        total_real_weight = sum(pos.get('weight', 0) for pos in real_builder_positions)
+        real_positions_have_100_percent = round(total_real_weight) >= 100
 
-                    # Use explicit weight if provided
-                    explicit_weight = position.get('weight')
-                    if explicit_weight is not None and explicit_weight > 0:
-                        position_target_weights[position_key] = float(explicit_weight)
-                    else:
-                        default_weight = get_default_weight(company_name)
-                        position_target_weights[position_key] = default_weight
+        logger.debug(
+            f"Portfolio {portfolio_name}: current_positions={current_positions_count}, "
+            f"effective_positions={effective_positions}, min_positions={min_positions}, "
+            f"desired_positions={desired_positions}, real_weight={total_real_weight}%")
 
-            # If portfolio has only placeholders, mark it for equal distribution
-            if has_only_placeholders and placeholder_weight and portfolio_name in portfolio_builder_data:
-                portfolio_builder_data[portfolio_name]['use_placeholder_weight'] = True
-                portfolio_builder_data[portfolio_name]['placeholder_weight'] = placeholder_weight
+        # Use effectivePositions (user's desired count, or minPositions as fallback)
+        # to determine if "Missing Positions" sector should be shown
+        if (placeholder_position and current_positions_count < effective_positions
+            and not real_positions_have_100_percent):
+            positions_remaining = effective_positions - current_positions_count
 
-        # Group data by portfolio and sector
-        portfolio_map = {}
-
-        # NOTE: We no longer pre-initialize portfolio_map from target_allocations
-        # This caused duplicate entries when portfolio IDs changed (recreated portfolios)
-        # Instead, we only populate from actual database data and look up targets by NAME
-
-        # Process actual positions from database
-        if portfolio_data:
-            for row in portfolio_data:
-                if isinstance(row, dict):
-                    pid = row['portfolio_id']
-                    pname = row['portfolio_name']
-
-                    # Ensure portfolio exists in map (may already be initialized above)
-                    portfolio = portfolio_map.setdefault(
-                        pid, {'name': pname, 'sectors': {}, 'currentValue': 0})
-
-                    if row['company_name']:
-                        # Use 'Uncategorized' as default sector
-                        sector_name = row['sector'] if row['sector'] else 'Uncategorized'
-                        cat = portfolio['sectors'].setdefault(
-                            sector_name, {'positions': [], 'currentValue': 0})
-
-                        # Use centralized value calculator for consistency
-                        pos_value = float(calculate_item_value(row))
-
-                        portfolio['currentValue'] += pos_value
-                        cat['currentValue'] += pos_value
-
-                        # Look up by portfolio NAME (not ID) for reliable matching
-                        lookup_key = (pname, row['company_name'])
-                        target_weight = position_target_weights.get(lookup_key, 0)
-
-                        # Check if this portfolio uses placeholder-based equal distribution
-                        builder_config = portfolio_builder_data.get(pname, {})
-                        use_placeholder_weight = builder_config.get('use_placeholder_weight', False)
-                        placeholder_weight_value = builder_config.get('placeholder_weight', None)
-
-                        # If no target weight from Build page, determine default
-                        if target_weight == 0:
-                            # Priority: placeholder weight > type-based default
-                            if use_placeholder_weight and placeholder_weight_value:
-                                target_weight = float(placeholder_weight_value)
-                            else:
-                                target_weight = get_default_weight(row['company_name'])
-
-                        position_data = {
-                            'name': row['company_name'],
-                            'currentValue': pos_value,
-                            'targetAllocation': target_weight,
-                            'identifier': row['identifier'],
-                            'investment_type': row.get('investment_type')
-                        }
-                        cat['positions'].append(position_data)
-
-        logger.info(f"Processed {len(portfolio_map)} portfolios with positions")
-        return portfolio_map, portfolio_builder_data
-
-    @staticmethod
-    def calculate_allocation_targets(
-        portfolio_map: Dict[str, Dict],
-        portfolio_builder_data: Dict[str, Dict],
-        target_allocations: List[Dict],
-        total_current_value: float
-    ) -> List[Dict]:
-        """
-        Calculate target allocations for each position based on portfolio targets.
-
-        Applies portfolio-level target weights and position-level target weights
-        to calculate exact target values for each position.
-
-        Args:
-            portfolio_map: Dict of portfolio data with current positions
-            portfolio_builder_data: Dict of builder configuration per portfolio
-            target_allocations: List of target portfolio allocations
-            total_current_value: Total value across all portfolios
-
-        Returns:
-            List of portfolio dicts with calculated target values for all positions
-        """
-        logger.info(f"Calculating allocation targets for total value: {total_current_value}")
-
-        # Build name → target dict once, instead of doing a linear `next(...)`
-        # scan inside the per-portfolio loop below (was quadratic in portfolio count).
-        targets_by_name = {p['name']: p for p in target_allocations if p.get('name')}
-
-        result_portfolios = []
-
-        for portfolio_id, pdata in portfolio_map.items():
-            portfolio_name = pdata['name']
-
-            target_portfolio = targets_by_name.get(portfolio_name)
-            portfolio_target_weight = target_portfolio.get('allocation', 0) if target_portfolio else 0
-
-            # Get builder data - keyed by portfolio NAME for reliable matching
-            builder_data = portfolio_builder_data.get(portfolio_name, {})
-
-            # Calculate effective positions (user's desired, falling back to calculated minimum)
-            desired_positions = builder_data.get('desiredPositions')
-            min_positions = builder_data.get('minPositions') or 0
-            effective_positions = desired_positions if desired_positions is not None else min_positions
-
-            portfolio_entry = {
-                'name': portfolio_name,
-                'currentValue': pdata['currentValue'],
-                'targetWeight': portfolio_target_weight,
-                'color': '',
-                'sectors': [],
-                'minPositions': min_positions,
-                'desiredPositions': desired_positions,
-                'effectivePositions': effective_positions,
-                'builderPositions': builder_data.get('positions', []),
-                'builderAllocation': builder_data.get('allocation', 0)
-            }
-
-            # Add sectors with positions
-            for sector_name, sector_data in pdata['sectors'].items():
-                sector_entry = {
-                    'name': sector_name,
-                    'positions': sector_data['positions'],
-                    'currentValue': sector_data['currentValue'],
-                    'positionCount': len(sector_data['positions'])
-                }
-                portfolio_entry['sectors'].append(sector_entry)
-
-            # Add placeholder positions based on builder configuration
-            builder_positions = builder_data.get('positions', [])
-
-            # Count current real positions
-            current_positions_count = sum(
-                len(sector_data['positions']) for sector_data in pdata['sectors'].values())
-            placeholder_position = next(
-                (pos for pos in builder_positions if pos.get('isPlaceholder')), None)
-
-            # Check if real positions already sum to 100%
-            real_builder_positions = [
-                pos for pos in builder_positions if not pos.get('isPlaceholder', False)]
-            total_real_weight = sum(pos.get('weight', 0) for pos in real_builder_positions)
-            real_positions_have_100_percent = round(total_real_weight) >= 100
-
-            logger.debug(
-                f"Portfolio {portfolio_name}: current_positions={current_positions_count}, "
-                f"effective_positions={effective_positions}, min_positions={min_positions}, "
-                f"desired_positions={desired_positions}, real_weight={total_real_weight}%")
-
-            # Use effectivePositions (user's desired count, or minPositions as fallback)
-            # to determine if "Missing Positions" sector should be shown
-            if (placeholder_position and current_positions_count < effective_positions
-                and not real_positions_have_100_percent):
-                positions_remaining = effective_positions - current_positions_count
-
-                # Create Missing Positions sector
-                missing_positions_sector = {
-                    'name': 'Missing Positions',
-                    'positions': [{
-                        'name': f'Position Slot {i+1} (Unfilled)',
-                        'currentValue': 0,
-                        'targetAllocation': placeholder_position.get('weight', 0),
-                        'identifier': None,
-                        'isPlaceholder': True,
-                        'positionSlot': i+1
-                    } for i in range(positions_remaining)],
+            # Create Missing Positions sector
+            missing_positions_sector = {
+                'name': 'Missing Positions',
+                'positions': [{
+                    'name': f'Position Slot {i+1} (Unfilled)',
                     'currentValue': 0,
-                    'positionCount': positions_remaining,
-                    'isPlaceholder': True
-                }
-                portfolio_entry['sectors'].append(missing_positions_sector)
+                    'targetAllocation': placeholder_position.get('weight', 0),
+                    'identifier': None,
+                    'isPlaceholder': True,
+                    'positionSlot': i+1
+                } for i in range(positions_remaining)],
+                'currentValue': 0,
+                'positionCount': positions_remaining,
+                'isPlaceholder': True
+            }
+            portfolio_entry['sectors'].append(missing_positions_sector)
 
-            # Calculate target values
-            portfolio_target_value = (portfolio_target_weight / 100) * total_current_value
-            portfolio_entry['targetValue'] = portfolio_target_value
+        # Calculate target values
+        portfolio_target_value = (portfolio_target_weight / 100) * total_current_value
+        portfolio_entry['targetValue'] = portfolio_target_value
 
-            # Calculate position-level target values
-            for sector in portfolio_entry['sectors']:
-                sector_target_value = 0
-                for pos in sector['positions']:
-                    pos_target_value = (pos['targetAllocation'] / 100) * portfolio_target_value
-                    pos['targetValue'] = pos_target_value
-                    sector_target_value += pos_target_value
+        # Calculate position-level target values
+        for sector in portfolio_entry['sectors']:
+            sector_target_value = 0
+            for pos in sector['positions']:
+                pos_target_value = (pos['targetAllocation'] / 100) * portfolio_target_value
+                pos['targetValue'] = pos_target_value
+                sector_target_value += pos_target_value
 
+            sector['targetValue'] = sector_target_value
+            sector['targetWeight'] = (
+                sector_target_value / portfolio_target_value * 100
+            ) if portfolio_target_value > 0 else 0
+
+        portfolio_entry['targetAllocation_portfolio'] = portfolio_target_value
+        result_portfolios.append(portfolio_entry)
+
+    logger.info(f"Calculated targets for {len(result_portfolios)} portfolios")
+    return result_portfolios
+
+def calculate_allocation_targets_with_type_constraints(
+    portfolio_map: Dict[str, Dict],
+    portfolio_builder_data: Dict[str, Dict],
+    target_allocations: List[Dict],
+    total_current_value: float,
+    rules: Optional[Dict] = None
+) -> List[Dict]:
+    """
+    Calculate allocation targets with Stock/ETF investment type constraints.
+
+    Applies different caps based on investment_type:
+    - Stock positions: Limited by maxPerStock
+    - ETF positions: Limited by maxPerETF
+    - NULL investment_type: Position skipped (not included in calculations)
+
+    Uses recursive redistribution when positions hit caps.
+
+    Args:
+        portfolio_map: Dict of portfolio data with current positions
+        portfolio_builder_data: Dict of builder configuration per portfolio
+        target_allocations: List of target portfolio allocations
+        total_current_value: Total value across all portfolios
+        rules: Dict with maxPerStock, maxPerETF, etc. (optional)
+
+    Returns:
+        List of portfolio dicts with type-constrained target values and capping metadata
+    """
+    logger.info(f"Calculating type-constrained allocation targets for total value: {total_current_value}")
+
+    # Parse rules - use consistent defaults matching get_portfolio_positions
+    max_stock_pct = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
+    max_etf_pct = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
+    max_crypto_pct = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
+
+    # First calculate unconstrained targets (same as regular allocation)
+    portfolios = calculate_allocation_targets(
+        portfolio_map=portfolio_map,
+        portfolio_builder_data=portfolio_builder_data,
+        target_allocations=target_allocations,
+        total_current_value=total_current_value
+    )
+
+    # Now apply type constraints with recursive redistribution
+    for portfolio in portfolios:
+        portfolio_target_value = portfolio.get('targetValue', 0)
+
+        if portfolio_target_value == 0:
+            continue
+
+        # Collect all positions (skip placeholders and NULL investment types)
+        all_positions = []
+        for sector in portfolio['sectors']:
+            if sector.get('isPlaceholder'):
+                continue
+            for position in sector['positions']:
+                if not position.get('isPlaceholder'):
+                    all_positions.append(position)
+
+        # Filter out positions with NULL investment_type
+        valid_positions = [
+            pos for pos in all_positions
+            if pos.get('identifier') and pos.get('investment_type') is not None
+        ]
+
+        # Skip positions without investment_type (per user requirement)
+        skipped_positions = [
+            pos for pos in all_positions
+            if pos.get('identifier') and pos.get('investment_type') is None
+        ]
+
+        if skipped_positions:
+            skipped_names = [pos.get('name', '?') for pos in skipped_positions]
+            logger.warning(
+                f"Skipping {len(skipped_positions)} positions without investment_type in portfolio "
+                f"{portfolio['name']}: {skipped_names}")
+            portfolio['excluded_positions'] = skipped_names
+
+        if not valid_positions:
+            logger.warning(f"No valid positions with investment_type in portfolio {portfolio['name']}")
+            continue
+
+        # Apply iterative capping with redistribution
+        all_positions_data = _apply_type_constraints_recursive(
+            positions=valid_positions,
+            portfolio_target_value=portfolio_target_value,
+            max_stock_pct=max_stock_pct,
+            max_etf_pct=max_etf_pct,
+            portfolio_name=portfolio['name'],
+            max_crypto_pct=max_crypto_pct
+        )
+
+        # Update positions with capping metadata
+        position_lookup = {pos['name']: pos for pos in all_positions_data}
+
+        for sector in portfolio['sectors']:
+            if sector.get('isPlaceholder'):
+                continue
+            for position in sector['positions']:
+                pos_name = position['name']
+                if pos_name in position_lookup:
+                    augmented = position_lookup[pos_name]
+                    position['is_capped'] = augmented.get('is_capped', False)
+                    position['unconstrained_target_value'] = augmented.get('unconstrained_target_value', 0)
+                    position['constrained_target_value'] = augmented.get('constrained_target_value', 0)
+                    position['applicable_rule'] = augmented.get('applicable_rule', None)
+                    position['targetValue'] = augmented['constrained_target_value']
+
+        # Recalculate sector target values based on constrained position values
+        for sector in portfolio['sectors']:
+            if not sector.get('isPlaceholder'):
+                sector_target_value = sum(pos.get('targetValue', 0) for pos in sector['positions'])
                 sector['targetValue'] = sector_target_value
                 sector['targetWeight'] = (
                     sector_target_value / portfolio_target_value * 100
                 ) if portfolio_target_value > 0 else 0
 
-            portfolio_entry['targetAllocation_portfolio'] = portfolio_target_value
-            result_portfolios.append(portfolio_entry)
+    logger.info(f"Calculated type-constrained targets for {len(portfolios)} portfolios")
+    return portfolios
 
-        logger.info(f"Calculated targets for {len(result_portfolios)} portfolios")
-        return result_portfolios
+def generate_rebalancing_plan(
+    portfolios_with_targets: List[Dict]
+) -> Dict:
+    """
+    Generate complete rebalancing plan with buy/sell recommendations.
 
-    @staticmethod
-    def calculate_allocation_targets_with_type_constraints(
-        portfolio_map: Dict[str, Dict],
-        portfolio_builder_data: Dict[str, Dict],
-        target_allocations: List[Dict],
-        total_current_value: float,
-        rules: Optional[Dict] = None
-    ) -> List[Dict]:
-        """
-        Calculate allocation targets with Stock/ETF investment type constraints.
+    Analyzes the difference between current and target values to generate
+    actionable recommendations for rebalancing the portfolio.
 
-        Applies different caps based on investment_type:
-        - Stock positions: Limited by maxPerStock
-        - ETF positions: Limited by maxPerETF
-        - NULL investment_type: Position skipped (not included in calculations)
+    Args:
+        portfolios_with_targets: List of portfolio dicts with target values calculated
 
-        Uses recursive redistribution when positions hit caps.
+    Returns:
+        Dict with complete rebalancing plan in frontend-compatible format
+    """
+    logger.info("Generating rebalancing plan")
 
-        Args:
-            portfolio_map: Dict of portfolio data with current positions
-            portfolio_builder_data: Dict of builder configuration per portfolio
-            target_allocations: List of target portfolio allocations
-            total_current_value: Total value across all portfolios
-            rules: Dict with maxPerStock, maxPerETF, etc. (optional)
+    # This method currently just returns the portfolios structure
+    # Future enhancement: Add buy/sell recommendations, rebalancing suggestions
+    result = {
+        'portfolios': portfolios_with_targets
+    }
 
-        Returns:
-            List of portfolio dicts with type-constrained target values and capping metadata
-        """
-        logger.info(f"Calculating type-constrained allocation targets for total value: {total_current_value}")
+    # Calculate summary statistics
+    total_value = sum(p['currentValue'] for p in portfolios_with_targets)
+    total_target_value = sum(p.get('targetValue', 0) for p in portfolios_with_targets)
 
-        # Parse rules - use consistent defaults matching get_portfolio_positions
-        max_stock_pct = float(rules.get('maxPerStock', 2.0)) if rules else 2.0
-        max_etf_pct = float(rules.get('maxPerETF', 5.0)) if rules else 5.0
-        max_crypto_pct = float(rules.get('maxPerCrypto', 5.0)) if rules else 5.0
+    logger.info(
+        f"Rebalancing plan: {len(portfolios_with_targets)} portfolios, "
+        f"total_value={total_value}, total_target={total_target_value}")
 
-        # First calculate unconstrained targets (same as regular allocation)
-        portfolios = AllocationService.calculate_allocation_targets(
-            portfolio_map=portfolio_map,
-            portfolio_builder_data=portfolio_builder_data,
-            target_allocations=target_allocations,
-            total_current_value=total_current_value
-        )
-
-        # Now apply type constraints with recursive redistribution
-        for portfolio in portfolios:
-            portfolio_target_value = portfolio.get('targetValue', 0)
-
-            if portfolio_target_value == 0:
-                continue
-
-            # Collect all positions (skip placeholders and NULL investment types)
-            all_positions = []
-            for sector in portfolio['sectors']:
-                if sector.get('isPlaceholder'):
-                    continue
-                for position in sector['positions']:
-                    if not position.get('isPlaceholder'):
-                        all_positions.append(position)
-
-            # Filter out positions with NULL investment_type
-            valid_positions = [
-                pos for pos in all_positions
-                if pos.get('identifier') and pos.get('investment_type') is not None
-            ]
-
-            # Skip positions without investment_type (per user requirement)
-            skipped_positions = [
-                pos for pos in all_positions
-                if pos.get('identifier') and pos.get('investment_type') is None
-            ]
-
-            if skipped_positions:
-                skipped_names = [pos.get('name', '?') for pos in skipped_positions]
-                logger.warning(
-                    f"Skipping {len(skipped_positions)} positions without investment_type in portfolio "
-                    f"{portfolio['name']}: {skipped_names}")
-                portfolio['excluded_positions'] = skipped_names
-
-            if not valid_positions:
-                logger.warning(f"No valid positions with investment_type in portfolio {portfolio['name']}")
-                continue
-
-            # Apply iterative capping with redistribution
-            all_positions_data = _apply_type_constraints_recursive(
-                positions=valid_positions,
-                portfolio_target_value=portfolio_target_value,
-                max_stock_pct=max_stock_pct,
-                max_etf_pct=max_etf_pct,
-                portfolio_name=portfolio['name'],
-                max_crypto_pct=max_crypto_pct
-            )
-
-            # Update positions with capping metadata
-            position_lookup = {pos['name']: pos for pos in all_positions_data}
-
-            for sector in portfolio['sectors']:
-                if sector.get('isPlaceholder'):
-                    continue
-                for position in sector['positions']:
-                    pos_name = position['name']
-                    if pos_name in position_lookup:
-                        augmented = position_lookup[pos_name]
-                        position['is_capped'] = augmented.get('is_capped', False)
-                        position['unconstrained_target_value'] = augmented.get('unconstrained_target_value', 0)
-                        position['constrained_target_value'] = augmented.get('constrained_target_value', 0)
-                        position['applicable_rule'] = augmented.get('applicable_rule', None)
-                        position['targetValue'] = augmented['constrained_target_value']
-
-            # Recalculate sector target values based on constrained position values
-            for sector in portfolio['sectors']:
-                if not sector.get('isPlaceholder'):
-                    sector_target_value = sum(pos.get('targetValue', 0) for pos in sector['positions'])
-                    sector['targetValue'] = sector_target_value
-                    sector['targetWeight'] = (
-                        sector_target_value / portfolio_target_value * 100
-                    ) if portfolio_target_value > 0 else 0
-
-        logger.info(f"Calculated type-constrained targets for {len(portfolios)} portfolios")
-        return portfolios
-
-    @staticmethod
-    def generate_rebalancing_plan(
-        portfolios_with_targets: List[Dict]
-    ) -> Dict:
-        """
-        Generate complete rebalancing plan with buy/sell recommendations.
-
-        Analyzes the difference between current and target values to generate
-        actionable recommendations for rebalancing the portfolio.
-
-        Args:
-            portfolios_with_targets: List of portfolio dicts with target values calculated
-
-        Returns:
-            Dict with complete rebalancing plan in frontend-compatible format
-        """
-        logger.info("Generating rebalancing plan")
-
-        # This method currently just returns the portfolios structure
-        # Future enhancement: Add buy/sell recommendations, rebalancing suggestions
-        result = {
-            'portfolios': portfolios_with_targets
-        }
-
-        # Calculate summary statistics
-        total_value = sum(p['currentValue'] for p in portfolios_with_targets)
-        total_target_value = sum(p.get('targetValue', 0) for p in portfolios_with_targets)
-
-        logger.info(
-            f"Rebalancing plan: {len(portfolios_with_targets)} portfolios, "
-            f"total_value={total_value}, total_target={total_target_value}")
-
-        return result
+    return result

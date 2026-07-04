@@ -1,18 +1,18 @@
 """
 Characterization tests for app/services/allocation_service.py.
 
-Covers the rebalancer's core math: target allocation, type-constraint capping
-with recursive redistribution, and the three rebalancing modes.
-All functions under test are pure (no DB access).
+Covers the rebalancer's core math: target allocation and type-constraint
+capping with recursive redistribution. All functions under test are pure
+(no DB access).
 """
-
-from decimal import Decimal
 
 import pytest
 
 from app.services.allocation_service import (
-    AllocationService,
     _apply_type_constraints_recursive,
+    calculate_allocation_targets,
+    calculate_allocation_targets_with_type_constraints,
+    get_portfolio_positions,
 )
 
 
@@ -152,7 +152,7 @@ class TestGetPortfolioPositions:
             make_row(1, "Growth", "B", 20.0, 5, sector="Health"),  # 100
             make_row(2, "Core", "C", 50.0, 4),  # 200
         ]
-        portfolio_map, builder_data = AllocationService.get_portfolio_positions(
+        portfolio_map, builder_data = get_portfolio_positions(
             rows, target_allocations=[], rules=None
         )
         assert portfolio_map[1]["currentValue"] == pytest.approx(200.0)
@@ -168,7 +168,7 @@ class TestGetPortfolioPositions:
                 "positions": [{"companyName": "A", "weight": 7.5}],
             }
         ]
-        portfolio_map, _ = AllocationService.get_portfolio_positions(
+        portfolio_map, _ = get_portfolio_positions(
             rows, targets, rules={"maxPerStock": 2.0}
         )
         pos = portfolio_map[1]["sectors"]["Tech"]["positions"][0]
@@ -179,7 +179,7 @@ class TestGetPortfolioPositions:
             make_row(1, "P", "A", 10.0, 10, investment_type="Stock"),
             make_row(1, "P", "B", 10.0, 10, investment_type="ETF"),
         ]
-        portfolio_map, _ = AllocationService.get_portfolio_positions(
+        portfolio_map, _ = get_portfolio_positions(
             rows, [], rules={"maxPerStock": 2.0, "maxPerETF": 5.0}
         )
         positions = portfolio_map[1]["sectors"]["Tech"]["positions"]
@@ -188,7 +188,7 @@ class TestGetPortfolioPositions:
 
     def test_null_investment_type_defaults_to_zero_weight(self):
         rows = [make_row(1, "P", "A", 10.0, 10, investment_type=None)]
-        portfolio_map, _ = AllocationService.get_portfolio_positions(rows, [], None)
+        portfolio_map, _ = get_portfolio_positions(rows, [], None)
         pos = portfolio_map[1]["sectors"]["Tech"]["positions"][0]
         assert pos["targetAllocation"] == 0.0
 
@@ -209,14 +209,14 @@ class TestCalculateAllocationTargets:
                 ],
             }
         ]
-        portfolio_map, builder_data = AllocationService.get_portfolio_positions(
+        portfolio_map, builder_data = get_portfolio_positions(
             rows, targets, rules=None
         )
         return portfolio_map, builder_data, targets
 
     def test_position_targets_derive_from_portfolio_target(self):
         portfolio_map, builder_data, targets = self._basic_inputs()
-        result = AllocationService.calculate_allocation_targets(
+        result = calculate_allocation_targets(
             portfolio_map, builder_data, targets, total_current_value=1000.0
         )
         assert len(result) == 1
@@ -241,10 +241,10 @@ class TestCalculateAllocationTargets:
                 ],
             }
         ]
-        portfolio_map, builder_data = AllocationService.get_portfolio_positions(
+        portfolio_map, builder_data = get_portfolio_positions(
             rows, targets, rules=None
         )
-        result = AllocationService.calculate_allocation_targets(
+        result = calculate_allocation_targets(
             portfolio_map, builder_data, targets, total_current_value=1000.0
         )
         sector_names = [s["name"] for s in result[0]["sectors"]]
@@ -254,7 +254,7 @@ class TestCalculateAllocationTargets:
 
     def test_with_type_constraints_caps_positions(self):
         portfolio_map, builder_data, targets = self._basic_inputs()
-        result = AllocationService.calculate_allocation_targets_with_type_constraints(
+        result = calculate_allocation_targets_with_type_constraints(
             portfolio_map,
             builder_data,
             targets,
@@ -270,87 +270,3 @@ class TestCalculateAllocationTargets:
         assert positions["A"]["is_capped"] is True
         assert positions["A"]["targetValue"] == pytest.approx(20.0)
         assert positions["B"]["targetValue"] == pytest.approx(20.0)
-
-
-class TestRebalancingModes:
-    PORTFOLIO = [
-        {"id": "1", "name": "A", "identifier": "A", "price_eur": 10.0, "current_value": 100.0},
-        {"id": "2", "name": "B", "identifier": "B", "price_eur": 20.0, "current_value": 300.0},
-        {"id": "3", "name": "NoPrice", "identifier": "N", "price_eur": None, "current_value": 50.0},
-    ]
-
-    def test_proportional_mode(self):
-        service = AllocationService()
-        recs = service.calculate_rebalancing(
-            self.PORTFOLIO, {"1": 60.0, "2": 40.0}, Decimal("1000"), mode="proportional"
-        )
-        by_name = {r.company_name: r for r in recs}
-        assert by_name["A"].amount_to_buy == pytest.approx(Decimal("600"))
-        assert by_name["A"].shares_to_buy == pytest.approx(Decimal("60"))
-        assert by_name["B"].amount_to_buy == pytest.approx(Decimal("400"))
-
-    def test_proportional_skips_companies_without_price(self):
-        service = AllocationService()
-        recs = service.calculate_rebalancing(
-            self.PORTFOLIO, {"3": 100.0}, Decimal("1000"), mode="proportional"
-        )
-        assert recs == []
-
-    def test_target_weights_mode_buys_toward_target(self):
-        service = AllocationService()
-        # current total 450, +550 invest = 1000 new total
-        recs = service.calculate_rebalancing(
-            self.PORTFOLIO, {"1": 50.0, "2": 30.0}, Decimal("550"), mode="target_weights"
-        )
-        by_name = {r.company_name: r for r in recs}
-        # A: target 500, current 100 -> buy 400
-        assert by_name["A"].amount_to_buy == pytest.approx(Decimal("400"))
-        # B: target 300, current 300 -> nothing to buy, no recommendation
-        assert "B" not in by_name
-
-    def test_equal_weight_mode(self):
-        service = AllocationService()
-        recs = service.calculate_rebalancing(
-            self.PORTFOLIO, {}, Decimal("500"), mode="equal_weight"
-        )
-        # NoPrice filtered out, 500 split across A and B
-        assert len(recs) == 2
-        for r in recs:
-            assert r.amount_to_buy == pytest.approx(Decimal("250"))
-
-    def test_unknown_mode_raises(self):
-        service = AllocationService()
-        with pytest.raises(ValueError):
-            service.calculate_rebalancing(self.PORTFOLIO, {}, Decimal("1"), mode="bogus")
-
-
-class TestAllocationValidation:
-    def test_validate_requires_sum_100(self):
-        service = AllocationService()
-        ok, err = service.validate_allocations({"1": 50.0, "2": 40.0})
-        assert ok is False
-        assert "sum to 100" in err
-
-    def test_validate_enforces_max_stock_percentage(self):
-        service = AllocationService()  # default max_stock_percentage = 5.0
-        ok, err = service.validate_allocations({"1": 60.0, "2": 40.0})
-        assert ok is False
-        assert "exceeds max" in err
-
-    def test_validate_passes_within_limits(self):
-        from app.services.allocation_service import AllocationRule
-
-        service = AllocationService(AllocationRule(max_stock_percentage=60.0))
-        ok, err = service.validate_allocations({"1": 60.0, "2": 40.0})
-        assert ok is True
-        assert err is None
-
-    def test_normalize_scales_to_100(self):
-        service = AllocationService()
-        result = service.normalize_allocations({"1": 1.0, "2": 3.0})
-        assert result["1"] == pytest.approx(25.0)
-        assert result["2"] == pytest.approx(75.0)
-
-    def test_normalize_zero_total_returns_unchanged(self):
-        service = AllocationService()
-        assert service.normalize_allocations({"1": 0.0}) == {"1": 0.0}

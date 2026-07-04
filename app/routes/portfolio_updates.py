@@ -1,10 +1,10 @@
-from flask import request, session, jsonify, g
-from app.db_manager import query_db, backup_database, get_db
+from flask import request, jsonify, g
+from app.db_manager import query_db, get_db
 from app.utils.portfolio_utils import get_stock_info
 from app.utils.db_utils import update_price_in_db
 from app.utils.batch_processing import start_batch_process, get_job_status, get_latest_job_progress
 from app.decorators import require_auth
-from app.utils.response_helpers import success_response, error_response, not_found_response, validation_error_response, service_unavailable_response
+from app.utils.response_helpers import success_response, error_response, not_found_response, service_unavailable_response
 from app.exceptions import (
     ValidationError, DataIntegrityError, ExternalAPIError, NotFoundError,
     PriceFetchError

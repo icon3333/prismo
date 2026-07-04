@@ -4,6 +4,8 @@ import {
   getSincePurchaseDateInfo,
   buildChartSeries,
   calculateExposureData,
+  downsampleSeries,
+  MAX_CHART_POINTS,
 } from "@/lib/performance-calc";
 import type {
   PerformanceCompany,
@@ -250,5 +252,44 @@ describe("calculateExposureData", () => {
     calculateExposureData(input, "sector", true, 50);
     expect(input).toEqual(snapshot);
     expect(input).toHaveLength(1); // virtual cash row must not leak in
+  });
+});
+
+describe("downsampleSeries", () => {
+  const mkPoints = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ x: i, y: i * 2 }));
+
+  it("returns short series untouched (same reference)", () => {
+    const points = mkPoints(100);
+    expect(downsampleSeries(points, 2000)).toBe(points);
+  });
+
+  it("caps long series at max, preserving first and last points", () => {
+    const points = mkPoints(12_500);
+    const result = downsampleSeries(points, 2000);
+    expect(result.length).toBeLessThanOrEqual(2000);
+    expect(result.length).toBeGreaterThan(1500);
+    expect(result[0]).toEqual(points[0]);
+    expect(result.at(-1)).toEqual(points.at(-1));
+  });
+
+  it("sampled points are an ordered subset of the input", () => {
+    const points = mkPoints(5000);
+    const result = downsampleSeries(points, 1000);
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i].x).toBeGreaterThan(result[i - 1].x);
+    }
+    for (const p of result) expect(points[p.x]).toEqual(p);
+  });
+
+  it("buildChartSeries output is capped at MAX_CHART_POINTS", () => {
+    const dates = Array.from({ length: 5000 }, (_, i) => {
+      const d = new Date(2010, 0, 1);
+      d.setDate(d.getDate() + i);
+      return { date: d.toISOString().slice(0, 10), close: 100 + (i % 7) };
+    });
+    const result = buildChartSeries({ A: dates }, ["A"], ["Alpha"], [1], "detail", null);
+    expect(result[0].data.length).toBeLessThanOrEqual(MAX_CHART_POINTS);
+    expect(result[0].data.length).toBeGreaterThan(1000);
   });
 });

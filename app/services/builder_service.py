@@ -7,7 +7,7 @@ Pure Python - no Flask dependencies.
 
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 

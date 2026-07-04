@@ -6,8 +6,8 @@ Just direct, straightforward CSV processing with automatic backups.
 
 import logging
 import io
-from typing import Dict, Any, Tuple, Optional
-from app.db_manager import query_db, execute_db, backup_database, get_db
+from typing import Dict, Any, Tuple
+from app.db_manager import get_db
 from app.utils.yfinance_utils import get_exchange_rate
 from app.utils.db_utils import update_price_in_db
 
@@ -609,7 +609,6 @@ def import_csv_simple(account_id: int, file_content: str) -> Tuple[bool, str]:
         # Process transactions concurrently for faster execution
         import concurrent.futures
         import threading
-        from queue import Queue
         
         # Thread-safe counters and progress tracking
         progress_lock = threading.Lock()

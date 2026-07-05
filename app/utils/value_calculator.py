@@ -118,7 +118,12 @@ def calculate_item_value(item: Dict[str, Any]) -> float:
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return float(item.get('custom_total_value') or 0)
 
-    shares_value = item.get('effective_shares') or item.get('shares') or 0
+    # Nullish fallback (not `or`): an explicit 0 override means the position
+    # is zeroed out and must value as 0 — matching the SQL path's
+    # COALESCE(override_share, shares, 0) and the frontend's `?? ` semantics.
+    shares_value = item.get('effective_shares')
+    if shares_value is None:
+        shares_value = item.get('shares')
     shares = float(shares_value or 0)
 
     # Priority 2: native currency conversion

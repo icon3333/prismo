@@ -520,9 +520,13 @@ def update_portfolio_api():
                 original_identifier = company_result.get('identifier')
                 new_identifier = item.get('identifier', '')
 
-                # Handle portfolio assignment
-                portfolio_name = normalize_portfolio(item.get('portfolio'))
-                if portfolio_name and portfolio_name != 'None':
+                # Handle portfolio assignment — only when the payload names one.
+                # A partial update must not silently move the company to '-'.
+                portfolio_id = None
+                if 'portfolio' in item:
+                    portfolio_name = normalize_portfolio(item.get('portfolio'))
+                    if not portfolio_name or portfolio_name == 'None':
+                        portfolio_name = '-'
                     portfolio_id = portfolio_map.get(portfolio_name)
                     if portfolio_id is None:
                         cursor.execute(
@@ -531,28 +535,22 @@ def update_portfolio_api():
                         )
                         portfolio_id = cursor.lastrowid
                         portfolio_map[portfolio_name] = portfolio_id
-                else:
-                    portfolio_id = portfolio_map.get('-')
-                    if portfolio_id is None:
-                        cursor.execute(
-                            'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
-                            ['-', account_id]
-                        )
-                        portfolio_id = cursor.lastrowid
-                        portfolio_map['-'] = portfolio_id
 
                 # Update company
-                # Build dynamic UPDATE based on which fields are provided
+                # Partial-update semantics: only fields present in the payload
+                # are written; omitted fields keep their current values.
                 update_fields = []
                 update_values = []
 
-                # Always update these fields
-                update_fields.append('identifier = ?')
-                update_values.append(new_identifier)
-                update_fields.append('sector = ?')
-                update_values.append(normalize_sector(item.get('sector', '')))
-                update_fields.append('portfolio_id = ?')
-                update_values.append(portfolio_id)
+                if 'identifier' in item:
+                    update_fields.append('identifier = ?')
+                    update_values.append(new_identifier)
+                if 'sector' in item:
+                    update_fields.append('sector = ?')
+                    update_values.append(normalize_sector(item.get('sector', '')))
+                if portfolio_id is not None:
+                    update_fields.append('portfolio_id = ?')
+                    update_values.append(portfolio_id)
 
                 # Conditionally update investment_type if provided
                 if 'investment_type' in item:
@@ -572,14 +570,13 @@ def update_portfolio_api():
                             status=400
                         )
 
-                # Add company_id for WHERE clause
-                update_values.append(company_id)
-
-                cursor.execute(f'''
-                    UPDATE companies
-                    SET {', '.join(update_fields)}
-                    WHERE id = ?
-                ''', update_values)
+                if update_fields:
+                    update_values.append(company_id)
+                    cursor.execute(f'''
+                        UPDATE companies
+                        SET {', '.join(update_fields)}
+                        WHERE id = ?
+                    ''', update_values)
 
                 # Handle identifier changes (cleanup and fetch price with cascade)
                 if new_identifier and new_identifier != original_identifier:

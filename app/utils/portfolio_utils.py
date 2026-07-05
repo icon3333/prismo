@@ -3,7 +3,6 @@ from app.utils.db_utils import load_portfolio_data
 from app.utils.yfinance_utils import get_isin_data
 from app.repositories.portfolio_repository import PortfolioRepository
 import logging
-from .portfolio_processing import process_csv_data
 
 # Set up logger
 logger = logging.getLogger(__name__)

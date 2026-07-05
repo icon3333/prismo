@@ -4,7 +4,7 @@ Refactored from monolithic process_csv_data() function.
 Supports both Parqet and IBKR CSV formats with auto-detection.
 """
 
-from .parser import parse_csv_file, detect_csv_format, parse_ibkr_csv
+from .parser import parse_csv_file, detect_csv_format, parse_ibkr_csv, validate_csv_format
 from .company_processor import process_companies, process_companies_snapshot
 from .portfolio_handler import assign_portfolios
 from .share_calculator import calculate_share_changes, calculate_share_changes_snapshot
@@ -15,6 +15,7 @@ __all__ = [
     'parse_csv_file',
     'detect_csv_format',
     'parse_ibkr_csv',
+    'validate_csv_format',
     'process_companies',
     'process_companies_snapshot',
     'assign_portfolios',

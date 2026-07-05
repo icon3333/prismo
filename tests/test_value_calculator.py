@@ -56,12 +56,16 @@ class TestCalculateItemValue:
         item = {"price": 10.0, "currency": "EUR", "shares": 100, "effective_shares": 7}
         assert vc.calculate_item_value(item) == pytest.approx(70.0)
 
-    def test_zero_effective_shares_falls_back_to_shares(self, rates):
-        # Characterization: `item.get('effective_shares') or item.get('shares')`
-        # means an explicit 0 override is IGNORED and raw shares are used.
-        # If a user zeroes out a position via override, it is valued at the
-        # full CSV share count. Possibly surprising, but current behavior.
+    def test_zero_effective_shares_values_position_at_zero(self, rates):
+        # An explicit 0 override means the position is zeroed out — matching
+        # the SQL COALESCE path and the frontend's nullish (??) semantics.
+        # (Previously the Python path used `or` and silently valued the
+        # position at the full CSV share count.)
         item = {"price": 10.0, "currency": "EUR", "shares": 100, "effective_shares": 0}
+        assert vc.calculate_item_value(item) == 0.0
+
+    def test_none_effective_shares_falls_back_to_shares(self, rates):
+        item = {"price": 10.0, "currency": "EUR", "shares": 100, "effective_shares": None}
         assert vc.calculate_item_value(item) == pytest.approx(1000.0)
 
     def test_legacy_price_eur_fallback(self, rates):

@@ -10,7 +10,6 @@ from app.exceptions import ValidationError, DataIntegrityError
 from app.utils.identifier_mapping import store_identifier_mapping
 from app.utils.identifier_normalization import normalize_identifier
 from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis, normalize_portfolio
-from app.routes.portfolio_data_api import invalidate_portfolio_cache
 
 import logging
 from typing import Dict, List
@@ -662,10 +661,8 @@ def update_portfolio_api():
                 updated_count += 1
 
             # Commit transaction if all updates successful
+            # (cache invalidation happens in the blueprint-wide after_request hook)
             db.commit()
-
-            # Invalidate cache after portfolio data modifications
-            invalidate_portfolio_cache(account_id)
 
             logger.info(f"Successfully committed {updated_count} updates")
             return success_response(message=f'Successfully updated {updated_count} items')
@@ -724,7 +721,6 @@ def manage_portfolios():
                 'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
                 [portfolio_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" added successfully', 'portfolios': _get_portfolio_names()})
 
         elif action == 'rename':
@@ -746,7 +742,6 @@ def manage_portfolios():
                 'UPDATE portfolios SET name = ? WHERE name = ? AND account_id = ?',
                 [new_name, old_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio renamed from "{old_name}" to "{new_name}"', 'portfolios': _get_portfolio_names()})
 
         elif action == 'delete':
@@ -768,7 +763,6 @@ def manage_portfolios():
                 'DELETE FROM portfolios WHERE name = ? AND account_id = ?',
                 [portfolio_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" deleted successfully', 'portfolios': _get_portfolio_names()})
 
     except (DataIntegrityError, ValidationError) as e:
@@ -777,7 +771,6 @@ def manage_portfolios():
         logger.exception("Unexpected error managing portfolios")
         return jsonify({'success': False, 'message': 'An unexpected error occurred'}), 500
 
-    invalidate_portfolio_cache(account_id)
     return jsonify({'success': False, 'message': 'Invalid action'}), 400
 
 

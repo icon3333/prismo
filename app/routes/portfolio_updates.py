@@ -279,43 +279,41 @@ def price_update_status(job_id):
 
 @require_auth
 def update_single_portfolio_api(company_id):
-    """API endpoint to update a single portfolio item"""
-    try:
-        account_id = g.account_id
-        data = request.json or {}
-        if not isinstance(data, dict):
-            return error_response('Invalid data format', 400)
-        company = query_db('SELECT id FROM companies WHERE id = ? AND account_id = ?', [
-                           company_id, account_id], one=True)
-        if not company:
-            return not_found_response('Company', company_id)
-        
-        # Apply the update
-        with get_db() as db:
-            cursor = db.cursor()
-            from .portfolio_company_api import _apply_company_update
-            _apply_company_update(cursor, company_id, data, account_id)
-            db.commit()
+    """API endpoint to update a single portfolio item.
 
-        from app.routes.portfolio_data_api import invalidate_portfolio_cache
-        invalidate_portfolio_cache(account_id)
+    Typed exceptions (ValidationError, NotFoundError, DataIntegrityError, …)
+    propagate to the global handlers in app/errors.py.
+    """
+    account_id = g.account_id
+    data = request.json or {}
+    if not isinstance(data, dict):
+        return error_response('Invalid data format', 400)
+    company = query_db('SELECT id FROM companies WHERE id = ? AND account_id = ?', [
+                       company_id, account_id], one=True)
+    if not company:
+        return not_found_response('Company', company_id)
 
-        # Return the updated item so clients can apply the server-computed
-        # valuation (current_value, value_source, effective_*) directly
-        # instead of re-deriving it locally. item is null when the position
-        # no longer appears in holdings (e.g. shares zeroed out).
-        from app.utils.portfolio_utils import get_portfolio_data
-        portfolio_data = get_portfolio_data(account_id)
-        updated_company = next((item for item in portfolio_data if item['id'] == company_id), None)
+    # Apply the update
+    with get_db() as db:
+        cursor = db.cursor()
+        from .portfolio_company_api import _apply_company_update
+        _apply_company_update(cursor, company_id, data, account_id)
+        db.commit()
 
-        return success_response(data={'item': updated_company}, message='Company updated successfully')
-    except (DataIntegrityError, ValidationError, NotFoundError) as e:
-        logger.error(f"Error updating company {company_id}: {str(e)}")
-        status_code = 400 if isinstance(e, ValidationError) else 404 if isinstance(e, NotFoundError) else 500
-        return error_response(str(e), status_code)
-    except Exception as e:
-        logger.exception(f"Unexpected error updating company {company_id}")
-        return error_response('Internal server error', 500)
+    # Invalidate before the re-read below — the after_request hook fires too
+    # late for data fetched while building this response.
+    from app.routes.portfolio_data_api import invalidate_portfolio_cache
+    invalidate_portfolio_cache(account_id)
+
+    # Return the updated item so clients can apply the server-computed
+    # valuation (current_value, value_source, effective_*) directly
+    # instead of re-deriving it locally. item is null when the position
+    # no longer appears in holdings (e.g. shares zeroed out).
+    from app.utils.portfolio_utils import get_portfolio_data
+    portfolio_data = get_portfolio_data(account_id)
+    updated_company = next((item for item in portfolio_data if item['id'] == company_id), None)
+
+    return success_response(data={'item': updated_company}, message='Company updated successfully')
 
 
 @require_auth

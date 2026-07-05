@@ -96,6 +96,9 @@ def create_app(config_name=None):
     from app.routes.admin_routes import admin_bp
     app.register_blueprint(admin_bp)
 
+    from app.errors import register_error_handlers
+    register_error_handlers(app)
+
     if _show_timing:
         _blueprint_time = time.time() - _blueprint_start
         print(f"  ⏱️  Blueprints registered: {_blueprint_time:.3f}s")

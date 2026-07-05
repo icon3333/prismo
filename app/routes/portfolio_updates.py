@@ -297,24 +297,18 @@ def update_single_portfolio_api(company_id):
             _apply_company_update(cursor, company_id, data, account_id)
             db.commit()
 
-        # If this is a country reset, fetch and return the updated company data
-        if data.get('reset_country', False):
-            from app.utils.portfolio_utils import get_portfolio_data
-            portfolio_data = get_portfolio_data(account_id)
-            
-            # Find the updated company in the portfolio data
-            updated_company = next((item for item in portfolio_data if item['id'] == company_id), None)
-            
-            if updated_company:
-                return success_response(
-                    data={
-                        'effective_country': updated_company['effective_country'],
-                        'country_manually_edited': updated_company['country_manually_edited']
-                    },
-                    message='Company updated successfully'
-                )
+        from app.routes.portfolio_data_api import invalidate_portfolio_cache
+        invalidate_portfolio_cache(account_id)
 
-        return success_response(message='Company updated successfully')
+        # Return the updated item so clients can apply the server-computed
+        # valuation (current_value, value_source, effective_*) directly
+        # instead of re-deriving it locally. item is null when the position
+        # no longer appears in holdings (e.g. shares zeroed out).
+        from app.utils.portfolio_utils import get_portfolio_data
+        portfolio_data = get_portfolio_data(account_id)
+        updated_company = next((item for item in portfolio_data if item['id'] == company_id), None)
+
+        return success_response(data={'item': updated_company}, message='Company updated successfully')
     except (DataIntegrityError, ValidationError, NotFoundError) as e:
         logger.error(f"Error updating company {company_id}: {str(e)}")
         status_code = 400 if isinstance(e, ValidationError) else 404 if isinstance(e, NotFoundError) else 500

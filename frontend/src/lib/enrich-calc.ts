@@ -8,7 +8,7 @@ import { date as formatDate } from "@/lib/format";
 // --- Value calculations ---
 
 export function calculateItemValue(item: EnrichItem): number {
-  return calculatePositionValue(item, { preferCurrentValue: false });
+  return calculatePositionValue(item);
 }
 
 export function calculatePortfolioTotal(items: EnrichItem[]): number {
@@ -16,8 +16,7 @@ export function calculatePortfolioTotal(items: EnrichItem[]): number {
 }
 
 export function getValueSource(item: EnrichItem): "custom" | "market" | "none" {
-  const source = getPositionValueSource(item, { preferCurrentValue: false });
-  return source === "current" ? "market" : source;
+  return getPositionValueSource(item);
 }
 
 // --- Health calculations ---

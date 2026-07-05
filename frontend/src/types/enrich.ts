@@ -38,6 +38,8 @@ export interface EnrichItem {
   custom_total_value: number | null;
   is_custom_value: boolean;
   total_value: number;
+  current_value?: number;
+  value_source?: "custom" | "market" | "none";
   total_invested: number | null;
   last_updated: string | null;
   first_bought_date: string | null;

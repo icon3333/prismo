@@ -537,3 +537,53 @@ def _map_ibkr_asset_type(category) -> str:
     elif cat in ('crypto', 'cryptocurrency'):
         return 'Crypto'
     return None
+
+
+def validate_csv_format(file_content: str) -> tuple:
+    """
+    Quick validation of CSV format before processing.
+
+    Checks that the file is non-empty, uses a supported delimiter, and
+    matches either the Parqet or IBKR column layout.
+
+    Returns:
+        Tuple[bool, str]: (valid, message)
+    """
+    try:
+        if not file_content.strip():
+            return False, "CSV file is empty"
+
+        # Try parsing first few lines
+        lines = file_content.split('\n')[:5]
+        if len(lines) < 2:
+            return False, "CSV must have at least header and one data row"
+
+        # Check for common delimiters
+        header = lines[0].lower()
+        has_semicolon = ';' in header
+        has_comma = ',' in header
+
+        if not (has_semicolon or has_comma):
+            return False, "CSV must use semicolon (;) or comma (,) as delimiter"
+
+        # Check for required column names (Parqet or IBKR format)
+        header_words = header.replace(';', ',').split(',')
+        header_set = set(w.strip() for w in header_words)
+
+        # Parqet columns
+        parqet_required = ['identifier', 'holdingname', 'shares', 'type']
+        parqet_missing = [r for r in parqet_required if not any(r in w for w in header_set)]
+
+        # IBKR columns
+        ibkr_indicators = ['symbol', 'quantity', 'assetclass', 'currencyprimary', 'positionvalue']
+        ibkr_matches = sum(1 for col in ibkr_indicators if any(col in w for w in header_set))
+
+        if not parqet_missing:
+            return True, "CSV format is valid (Parqet)"
+        elif ibkr_matches >= 3:
+            return True, "CSV format is valid (IBKR)"
+        else:
+            return False, f"Missing required columns: {parqet_missing}"
+
+    except Exception as e:
+        return False, f"CSV validation error: {str(e)}"

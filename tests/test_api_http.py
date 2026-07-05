@@ -131,6 +131,21 @@ class TestPortfolioApi:
         company = next(c for c in after["companies"] if c["name"] == "HttpCo")
         assert company["sector"] == "Infrastructure"
 
+    def test_batch_update_is_partial(self, client, account):
+        """A sector-only batch update must not wipe identifier or move the
+        company to the default portfolio (regression: fields not present in
+        the payload used to be overwritten with empty defaults)."""
+        resp = client.post(
+            "/portfolio/api/update_portfolio",
+            json=[{"company": "HttpCo", "sector": "Shipping"}],
+        )
+        assert resp.status_code == 200, resp.get_json()
+
+        items = client.get("/portfolio/api/portfolio_data").get_json()
+        item = next(i for i in items if i["company"] == "HttpCo")
+        assert item["sector"] == "Shipping"
+        assert item["identifier"] == "HTTP"
+
     def test_state_roundtrip(self, client, account):
         resp = client.post(
             "/portfolio/api/state",
@@ -156,3 +171,61 @@ class TestPortfolioApi:
         assert client.get("/portfolio/api/portfolios").status_code == 401
         # Restore session for any later tests
         client.post(f"/api/select_account/{account['id']}")
+
+
+class TestCanonicalValuation:
+    """The backend is the single source of truth for position values:
+    every holdings item carries current_value + value_source, and writes
+    return the recomputed item so clients never re-derive values."""
+
+    def test_portfolio_data_carries_server_computed_value(self, client, account):
+        items = client.get("/portfolio/api/portfolio_data").get_json()
+        item = next(i for i in items if i["company"] == "HttpCo")
+        assert item["current_value"] == pytest.approx(100.0)  # 4 shares x 25 EUR
+        assert item["value_source"] == "market"
+
+    def test_update_returns_recomputed_item_and_invalidates_cache(self, client, account):
+        cid = account["company_id"]
+        # Prime the memoized read
+        client.get("/portfolio/api/portfolio_data")
+
+        resp = client.post(
+            f"/portfolio/api/update_portfolio/{cid}",
+            json={
+                "custom_total_value": 500.0,
+                "custom_price_eur": 125.0,
+                "is_custom_value_edit": True,
+            },
+        )
+        assert resp.status_code == 200, resp.get_json()
+        returned = resp.get_json()["data"]["item"]
+        assert returned["id"] == cid
+        assert returned["current_value"] == pytest.approx(500.0)
+        assert returned["value_source"] == "custom"
+
+        # The very next read must see the same value (cache invalidated)
+        items = client.get("/portfolio/api/portfolio_data").get_json()
+        item = next(i for i in items if i["id"] == cid)
+        assert item["current_value"] == pytest.approx(500.0)
+        assert item["value_source"] == "custom"
+
+        # Back to market pricing
+        resp = client.post(
+            f"/portfolio/api/update_portfolio/{cid}", json={"reset_custom_value": True}
+        )
+        assert resp.get_json()["data"]["item"]["value_source"] == "market"
+
+    def test_update_returns_null_item_when_position_drops_out(self, client, account):
+        cid = account["company_id"]
+        resp = client.post(
+            f"/portfolio/api/update_portfolio/{cid}",
+            json={"override_share": 0, "is_user_edit": True},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        assert resp.get_json()["data"]["item"] is None
+
+        resp = client.post(
+            f"/portfolio/api/update_portfolio/{cid}", json={"reset_shares": True}
+        )
+        item = resp.get_json()["data"]["item"]
+        assert item["effective_shares"] == 4

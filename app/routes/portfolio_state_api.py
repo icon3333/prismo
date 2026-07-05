@@ -5,7 +5,6 @@ from app.db_manager import query_db, get_db
 from app.decorators import require_auth
 from app.utils.response_helpers import success_response, error_response
 from app.exceptions import ValidationError, DataIntegrityError
-from app.routes.portfolio_data_api import invalidate_portfolio_cache
 
 import logging
 
@@ -103,11 +102,8 @@ def manage_state():
                     ''', [account_id, page_name, key, var_type, value])
 
                 # Commit transaction
+                # (cache invalidation happens in the blueprint-wide after_request hook)
                 db.commit()
-
-                # Invalidate cache if build page state was modified (affects allocation calculations)
-                if page_name == 'builder':
-                    invalidate_portfolio_cache(account_id)
 
             logger.info(
                 f"State saved successfully for account {account_id}, page {page_name}")

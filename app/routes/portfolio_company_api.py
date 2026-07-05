@@ -10,7 +10,6 @@ from app.exceptions import ValidationError, DataIntegrityError
 from app.utils.identifier_mapping import store_identifier_mapping
 from app.utils.identifier_normalization import normalize_identifier
 from app.utils.text_normalization import normalize_sector, normalize_country, normalize_thesis, normalize_portfolio
-from app.routes.portfolio_data_api import invalidate_portfolio_cache
 
 import logging
 from typing import Dict, List
@@ -520,9 +519,13 @@ def update_portfolio_api():
                 original_identifier = company_result.get('identifier')
                 new_identifier = item.get('identifier', '')
 
-                # Handle portfolio assignment
-                portfolio_name = normalize_portfolio(item.get('portfolio'))
-                if portfolio_name and portfolio_name != 'None':
+                # Handle portfolio assignment — only when the payload names one.
+                # A partial update must not silently move the company to '-'.
+                portfolio_id = None
+                if 'portfolio' in item:
+                    portfolio_name = normalize_portfolio(item.get('portfolio'))
+                    if not portfolio_name or portfolio_name == 'None':
+                        portfolio_name = '-'
                     portfolio_id = portfolio_map.get(portfolio_name)
                     if portfolio_id is None:
                         cursor.execute(
@@ -531,28 +534,22 @@ def update_portfolio_api():
                         )
                         portfolio_id = cursor.lastrowid
                         portfolio_map[portfolio_name] = portfolio_id
-                else:
-                    portfolio_id = portfolio_map.get('-')
-                    if portfolio_id is None:
-                        cursor.execute(
-                            'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
-                            ['-', account_id]
-                        )
-                        portfolio_id = cursor.lastrowid
-                        portfolio_map['-'] = portfolio_id
 
                 # Update company
-                # Build dynamic UPDATE based on which fields are provided
+                # Partial-update semantics: only fields present in the payload
+                # are written; omitted fields keep their current values.
                 update_fields = []
                 update_values = []
 
-                # Always update these fields
-                update_fields.append('identifier = ?')
-                update_values.append(new_identifier)
-                update_fields.append('sector = ?')
-                update_values.append(normalize_sector(item.get('sector', '')))
-                update_fields.append('portfolio_id = ?')
-                update_values.append(portfolio_id)
+                if 'identifier' in item:
+                    update_fields.append('identifier = ?')
+                    update_values.append(new_identifier)
+                if 'sector' in item:
+                    update_fields.append('sector = ?')
+                    update_values.append(normalize_sector(item.get('sector', '')))
+                if portfolio_id is not None:
+                    update_fields.append('portfolio_id = ?')
+                    update_values.append(portfolio_id)
 
                 # Conditionally update investment_type if provided
                 if 'investment_type' in item:
@@ -572,14 +569,13 @@ def update_portfolio_api():
                             status=400
                         )
 
-                # Add company_id for WHERE clause
-                update_values.append(company_id)
-
-                cursor.execute(f'''
-                    UPDATE companies
-                    SET {', '.join(update_fields)}
-                    WHERE id = ?
-                ''', update_values)
+                if update_fields:
+                    update_values.append(company_id)
+                    cursor.execute(f'''
+                        UPDATE companies
+                        SET {', '.join(update_fields)}
+                        WHERE id = ?
+                    ''', update_values)
 
                 # Handle identifier changes (cleanup and fetch price with cascade)
                 if new_identifier and new_identifier != original_identifier:
@@ -665,10 +661,8 @@ def update_portfolio_api():
                 updated_count += 1
 
             # Commit transaction if all updates successful
+            # (cache invalidation happens in the blueprint-wide after_request hook)
             db.commit()
-
-            # Invalidate cache after portfolio data modifications
-            invalidate_portfolio_cache(account_id)
 
             logger.info(f"Successfully committed {updated_count} updates")
             return success_response(message=f'Successfully updated {updated_count} items')
@@ -727,7 +721,6 @@ def manage_portfolios():
                 'INSERT INTO portfolios (name, account_id) VALUES (?, ?)',
                 [portfolio_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" added successfully', 'portfolios': _get_portfolio_names()})
 
         elif action == 'rename':
@@ -749,7 +742,6 @@ def manage_portfolios():
                 'UPDATE portfolios SET name = ? WHERE name = ? AND account_id = ?',
                 [new_name, old_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio renamed from "{old_name}" to "{new_name}"', 'portfolios': _get_portfolio_names()})
 
         elif action == 'delete':
@@ -771,7 +763,6 @@ def manage_portfolios():
                 'DELETE FROM portfolios WHERE name = ? AND account_id = ?',
                 [portfolio_name, account_id]
             )
-            invalidate_portfolio_cache(account_id)
             return jsonify({'success': True, 'message': f'Portfolio "{portfolio_name}" deleted successfully', 'portfolios': _get_portfolio_names()})
 
     except (DataIntegrityError, ValidationError) as e:
@@ -780,7 +771,6 @@ def manage_portfolios():
         logger.exception("Unexpected error managing portfolios")
         return jsonify({'success': False, 'message': 'An unexpected error occurred'}), 500
 
-    invalidate_portfolio_cache(account_id)
     return jsonify({'success': False, 'message': 'Invalid action'}), 400
 
 

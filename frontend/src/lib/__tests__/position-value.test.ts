@@ -5,7 +5,7 @@ import {
 } from "@/lib/position-value";
 
 describe("calculatePositionValue", () => {
-  it("prefers backend current_value by default", () => {
+  it("prefers backend current_value over everything else", () => {
     const item = {
       current_value: 1234,
       is_custom_value: true,
@@ -16,15 +16,14 @@ describe("calculatePositionValue", () => {
     expect(calculatePositionValue(item)).toBe(1234);
   });
 
-  it("uses custom value when current_value preference is off", () => {
+  it("falls back to custom value without a server current_value", () => {
     const item = {
-      current_value: 1234,
       is_custom_value: true,
       custom_total_value: 999,
       price_eur: 10,
       shares: 5,
     };
-    expect(calculatePositionValue(item, { preferCurrentValue: false })).toBe(999);
+    expect(calculatePositionValue(item)).toBe(999);
   });
 
   it("falls back to price_eur x effective_shares", () => {
@@ -56,8 +55,16 @@ describe("calculatePositionValue", () => {
 });
 
 describe("getPositionValueSource", () => {
-  it("reports current > custom > market > none", () => {
-    expect(getPositionValueSource({ current_value: 5 })).toBe("current");
+  it("prefers the server-reported value_source", () => {
+    expect(
+      getPositionValueSource({ value_source: "custom", price_eur: 5 })
+    ).toBe("custom");
+    expect(
+      getPositionValueSource({ value_source: "none", price_eur: 5 })
+    ).toBe("none");
+  });
+
+  it("derives custom > market > none without a server source", () => {
     expect(
       getPositionValueSource({ is_custom_value: true, custom_total_value: 5 })
     ).toBe("custom");

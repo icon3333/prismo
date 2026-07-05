@@ -8,6 +8,7 @@ Philosophy: Single source of truth for data access, optimized queries.
 from typing import List, Dict, Optional
 from app.db_manager import query_db, execute_db, get_db
 from app.cache import cache
+from app.utils.value_calculator import calculate_item_value, get_value_source
 import logging
 
 # Cache timeout for portfolio summary (5 minutes)
@@ -380,6 +381,10 @@ class PortfolioRepository:
                     'source': row.get('source', 'parqet'),  # 'parqet', 'ibkr', or 'manual'
                     'first_bought_date': row.get('first_bought_date')
                 }
+                # Canonical valuation: clients must consume these instead of
+                # re-deriving from price/shares (see app/utils/value_calculator.py)
+                item['current_value'] = float(calculate_item_value(item))
+                item['value_source'] = get_value_source(item)
                 portfolio_data.append(item)
             except Exception as e:
                 logger.error(f"Error processing row: {row}")

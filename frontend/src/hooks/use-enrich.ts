@@ -129,14 +129,15 @@ export function useEnrich() {
 
   const saveField = useCallback(
     async (id: number, payload: Record<string, unknown>) => {
-      const res = await apiFetch<{ success: boolean; error?: string; data?: Partial<EnrichItem> }>(
-        `/update_portfolio/${id}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await apiFetch<{
+        success: boolean;
+        error?: string;
+        data?: { item: EnrichItem | null };
+      }>(`/update_portfolio/${id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       if (!res.success) throw new Error(res.error || "Update failed");
       return res;
     },
@@ -146,6 +147,24 @@ export function useEnrich() {
   const updateItemLocal = useCallback((id: number, updates: Partial<EnrichItem>) => {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...updates } : i)));
   }, []);
+
+  // Apply the authoritative item returned by the update endpoint (including
+  // server-computed current_value/value_source). An explicit null means the
+  // position no longer appears in holdings (e.g. shares zeroed out), so the
+  // row is removed — matching what a refetch would show. The optimistic
+  // fallback only applies if the server returned no item payload at all.
+  const applyServerItem = useCallback(
+    (id: number, data: { item: EnrichItem | null } | undefined, fallback: Partial<EnrichItem>) => {
+      if (data && data.item && data.item.id === id) {
+        updateItemLocal(id, data.item);
+      } else if (data && data.item === null) {
+        setItems((prev) => prev.filter((i) => i.id !== id));
+      } else {
+        updateItemLocal(id, fallback);
+      }
+    },
+    [updateItemLocal]
+  );
 
   // --- Field saves ---
 
@@ -237,17 +256,16 @@ export function useEnrich() {
         return;
       }
       const res = await saveField(id, { override_share: shares, is_user_edit: true });
-      const effectiveShares = res.data?.override_share ?? shares;
-      updateItemLocal(id, {
+      applyServerItem(id, res.data, {
         is_manually_edited: true,
         csv_modified_after_edit: false,
         override_share: shares,
-        effective_shares: effectiveShares as number,
+        effective_shares: shares,
         manual_edit_date: new Date().toISOString(),
       });
       toast.success("Shares updated");
     },
-    [saveField, updateItemLocal]
+    [saveField, applyServerItem]
   );
 
   const saveTotalValueChange = useCallback(
@@ -259,19 +277,21 @@ export function useEnrich() {
       }
       const item = items.find((i) => i.id === id);
       const customPrice = item && item.effective_shares > 0 ? totalValue / item.effective_shares : 0;
-      await saveField(id, {
+      const res = await saveField(id, {
         custom_total_value: totalValue,
         custom_price_eur: customPrice,
         is_custom_value_edit: true,
       });
-      updateItemLocal(id, {
+      applyServerItem(id, res.data, {
         custom_total_value: totalValue,
         custom_price_eur: customPrice,
         is_custom_value: true,
+        current_value: totalValue,
+        value_source: "custom",
       });
       toast.success("Total value updated");
     },
-    [saveField, updateItemLocal, items]
+    [saveField, applyServerItem, items]
   );
 
   // --- Resets ---
@@ -288,39 +308,34 @@ export function useEnrich() {
   const resetCountry = useCallback(
     async (id: number) => {
       const res = await saveField(id, { reset_country: true });
-      if (res.data) {
-        updateItemLocal(id, {
-          effective_country: (res.data as Record<string, string>).effective_country,
-          country_manually_edited: false,
-          country_manual_edit_date: null,
-        });
-      }
+      applyServerItem(id, res.data, {
+        country_manually_edited: false,
+        country_manual_edit_date: null,
+      });
       toast.success("Country reset");
     },
-    [saveField, updateItemLocal]
+    [saveField, applyServerItem]
   );
 
   const resetShares = useCallback(
     async (id: number) => {
-      await saveField(id, { reset_shares: true });
+      const res = await saveField(id, { reset_shares: true });
       const item = items.find((i) => i.id === id);
-      if (item) {
-        updateItemLocal(id, {
-          override_share: null,
-          effective_shares: item.shares,
-          is_manually_edited: false,
-          csv_modified_after_edit: false,
-        });
-      }
+      applyServerItem(id, res.data, {
+        override_share: null,
+        effective_shares: item ? item.shares : 0,
+        is_manually_edited: false,
+        csv_modified_after_edit: false,
+      });
       toast.success("Shares reset");
     },
-    [saveField, updateItemLocal, items]
+    [saveField, applyServerItem, items]
   );
 
   const resetCustomValue = useCallback(
     async (id: number) => {
-      await saveField(id, { reset_custom_value: true });
-      updateItemLocal(id, {
+      const res = await saveField(id, { reset_custom_value: true });
+      applyServerItem(id, res.data, {
         custom_total_value: null,
         custom_price_eur: null,
         is_custom_value: false,
@@ -328,7 +343,7 @@ export function useEnrich() {
       const item = items.find((i) => i.id === id);
       toast.success(item?.price_eur ? "Reset to market price" : "Custom value cleared");
     },
-    [saveField, updateItemLocal, items]
+    [saveField, applyServerItem, items]
   );
 
   // --- Cash ---

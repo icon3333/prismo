@@ -79,7 +79,7 @@ All routes live under blueprints registered in `app/main.py`:
 - `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/rebalancer`, `/build` → `/builder`, `/risk_overview` → `/concentrations`)
 - `admin_bp`: admin endpoints
 
-Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_capacity_api.py` (concentration headroom), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)` and invalidated via `invalidate_portfolio_cache(account_id)` after any write.
+Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_capacity_api.py` (concentration headroom), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)`; a `portfolio_bp.after_request` hook invalidates the account's memoized reads on every successful write, so write endpoints don't call `invalidate_portfolio_cache()` themselves — except mid-request before re-reading, and in background jobs that outlive the request.
 
 ## Frontend → Backend
 
@@ -120,6 +120,12 @@ All routes use `@require_auth` decorator (`app/decorators/auth.py`):
 
 Structured exceptions in `app/exceptions.py`: `ValidationError`, `NotFoundError`, `DatabaseError`, `CSVProcessingError`, `PriceFetchError`, `AuthenticationError`.
 
+Global JSON error handlers in `app/errors.py` (registered in `create_app`) map typed exceptions to status codes (400/401/403/404/409/502) and return JSON for everything, including 404/405 and unexpected 500s. Routes should raise typed exceptions and let them propagate instead of wrapping handlers in try/except boilerplate.
+
+## Position Valuation
+
+The backend is the single source of truth: every holdings item from `/portfolio_data` carries `current_value` and `value_source` (`custom`/`market`/`none`), computed in `app/utils/value_calculator.py`. `POST /update_portfolio/<id>` returns the recomputed item as `data.item` (null if the position dropped out of holdings). The frontend (`frontend/src/lib/position-value.ts`) reads these fields; it only derives values locally for rows without a server value (e.g. simulator sandbox items).
+
 ## Simulator Modes
 
 Two modes toggled in the header:
@@ -137,7 +143,7 @@ Environment variables via `.env` (auto-generated on first run). See `config.py`.
 
 Two caching layers:
 - **Flask-Caching (SimpleCache, in-memory)** — 15-min for stock prices, 1-hour for exchange rates (`app/cache.py`)
-- **`@cache.memoize`** on hot portfolio-data endpoints (30–60s) — invalidated by `invalidate_portfolio_cache(account_id)` after any write
+- **`@cache.memoize`** on hot portfolio-data endpoints (30–60s) — invalidated automatically by the `portfolio_bp.after_request` hook on every successful write (see Routes section)
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

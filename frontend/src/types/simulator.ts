@@ -5,6 +5,13 @@ export type CategoryMode = "sector" | "thesis";
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
 export type CloneValueMode = "with-values" | "zeroed";
 
+/** Data about the matching real portfolio position (from ticker lookup). */
+export interface PortfolioPositionData {
+  value: number;
+  id?: number;
+  name?: string;
+}
+
 export interface SimulatorItem {
   id: string;
   ticker: string;
@@ -17,7 +24,7 @@ export interface SimulatorItem {
   source: ItemSource;
   portfolio_id: number | null;
   existsInPortfolio?: boolean;
-  portfolioData?: { value: number } | null;
+  portfolioData?: PortfolioPositionData | null;
   targetWarning?: string | null;
 }
 
@@ -36,6 +43,7 @@ export interface SimulationFull extends SimulationSummary {
   items: SimulatorItem[];
   global_value_mode: string;
   total_amount: number;
+  cloned_from_portfolio_id: number | null;
   cloned_from_name: string | null;
   deploy_lump_sum: number;
   deploy_monthly: number;
@@ -128,7 +136,7 @@ export interface TickerLookupResult {
   thesis: string;
   country: string;
   existsInPortfolio: boolean;
-  portfolioData: { value: number } | null;
+  portfolioData: PortfolioPositionData | null;
 }
 
 export interface SearchResult {

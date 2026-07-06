@@ -1,6 +1,5 @@
 import os
 import sqlite3
-import shutil
 from datetime import datetime
 from pathlib import Path
 import logging
@@ -296,40 +295,75 @@ def create_default_data(db):
     db.commit()
     logger.info("Default global account created.")
 
-def backup_database():
+def backup_database(prefix='backup'):
     """
     Create a backup of the current database.
+
+    Uses SQLite's online backup API instead of a file copy: the database runs
+    in WAL mode, so a plain copy can miss committed-but-uncheckpointed WAL
+    data or tear mid-write. The backup API produces a consistent snapshot
+    even while other connections hold the database open.
+
+    Args:
+        prefix: Backup filename prefix. Each prefix gets its own retention
+                pool (e.g. 'pre_import' snapshots don't evict scheduled
+                'backup' files).
+
+    Returns:
+        str | None: Path of the backup file, or None on failure.
     """
+    backup_filename = None
     try:
         db_path = current_app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
-        # Use backups folder in instance
-        backup_dir = os.path.join('instance', 'backups')
-        
+        backup_dir = current_app.config.get('DB_BACKUP_DIR') or os.path.join('instance', 'backups')
+
+        # sqlite3.connect would silently create an empty DB for a bad path,
+        # producing a "successful" backup of nothing
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Database file not found: {db_path}")
+
         # Create backup directory if it doesn't exist
         os.makedirs(backup_dir, exist_ok=True)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_filename = os.path.join(backup_dir, f"backup_{timestamp}.db")
 
-        shutil.copy(db_path, backup_filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_filename = os.path.join(backup_dir, f"{prefix}_{timestamp}.db")
+
+        src = sqlite3.connect(db_path)
+        try:
+            src.execute('PRAGMA busy_timeout = 5000')
+            dest = sqlite3.connect(backup_filename)
+            try:
+                src.backup(dest)
+            finally:
+                dest.close()
+        finally:
+            src.close()
+
         logger.info(f"Database backed up successfully to {backup_filename}")
 
         # Clean up old backups
-        cleanup_old_backups(backup_dir, current_app.config.get('MAX_BACKUP_FILES', 10))
+        cleanup_old_backups(backup_dir, current_app.config.get('MAX_BACKUP_FILES', 10), prefix=prefix)
         return backup_filename
     except Exception as e:
         logger.error(f"Database backup failed: {e}")
+        # Never leave a partial snapshot behind that could be mistaken for a good backup
+        if backup_filename and os.path.exists(backup_filename):
+            try:
+                os.remove(backup_filename)
+            except OSError:
+                pass
         return None
 
-def cleanup_old_backups(directory, max_files=10):
+def cleanup_old_backups(directory, max_files=10, prefix='backup'):
     """
     Remove older backup files to maintain a limit on the number of backups.
-    Keeps the most recent 'max_files' backup files.
+    Keeps the most recent 'max_files' files for the given prefix; other
+    prefixes are left untouched so backup families don't evict each other.
     """
     try:
         backup_files = [
             os.path.join(directory, f) for f in os.listdir(directory)
-            if f.endswith(".db") and os.path.isfile(os.path.join(directory, f))
+            if f.startswith(f"{prefix}_") and f.endswith(".db") and os.path.isfile(os.path.join(directory, f))
         ]
         backup_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
 

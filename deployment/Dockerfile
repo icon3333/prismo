@@ -44,5 +44,6 @@ HEALTHCHECK --interval=300s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8065/health || exit 1
 
 # Set entrypoint and default command
+# (build context is the repo root, so the gunicorn config sits in deployment/)
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "run:app"] 
+CMD ["gunicorn", "--config", "deployment/gunicorn.conf.py", "run:app"] 

@@ -17,10 +17,15 @@ _price_cache_keys_lock = threading.Lock()
 
 
 def _cache_price_entry(key: str, value: Any, timeout: int) -> None:
-    """cache.set for price data, recording the key for selective clearing."""
-    cache.set(key, value, timeout=timeout)
+    """cache.set for price data, recording the key for selective clearing.
+
+    Registers before setting: if a bulk clear runs in between, the worst case
+    is a registered key with no entry (a no-op delete later), never a cached
+    entry the registry doesn't know about.
+    """
     with _price_cache_keys_lock:
         _price_cache_keys.add(key)
+    cache.set(key, value, timeout=timeout)
 
 
 # Lazy import yfinance to speed up module loading (yfinance takes 3-5 seconds to import)

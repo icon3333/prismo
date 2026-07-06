@@ -8,14 +8,8 @@ from app.routes.portfolio_account_api import (
     set_account_cash,
     update_account_username,
 )
-from app.routes.portfolio_capacity_api import (
-    get_country_capacity_data,
-    get_effective_capacity_data,
-    get_sector_capacity_data,
-)
 from app.routes.portfolio_company_api import manage_portfolios, update_portfolio_api
 from app.routes.portfolio_data_api import (
-    get_investment_type_distribution,
     get_portfolio_data_api,
     get_portfolio_metrics,
     get_portfolios_api,
@@ -83,13 +77,16 @@ def register_core_routes(portfolio_bp):
     portfolio_bp.add_url_rule(
         "/manage_portfolios", view_func=manage_portfolios, methods=["POST"]
     )
+    # /api alias so the frontend reaches it through the standard /api proxy
+    # path in production (the bare path only worked via a Next dev rewrite).
     portfolio_bp.add_url_rule(
-        "/api/portfolio_metrics", view_func=get_portfolio_metrics, methods=["GET"]
+        "/api/manage_portfolios",
+        endpoint="manage_portfolios_api",
+        view_func=manage_portfolios,
+        methods=["POST"],
     )
     portfolio_bp.add_url_rule(
-        "/api/investment_type_distribution",
-        view_func=get_investment_type_distribution,
-        methods=["GET"],
+        "/api/portfolio_metrics", view_func=get_portfolio_metrics, methods=["GET"]
     )
     portfolio_bp.add_url_rule(
         "/api/portfolio_data/<portfolio_id>",
@@ -150,15 +147,6 @@ def register_price_update_routes(portfolio_bp):
 def register_simulator_routes(portfolio_bp):
     portfolio_bp.add_url_rule(
         "/api/simulator/portfolio-data", view_func=get_simulator_portfolio_data
-    )
-    portfolio_bp.add_url_rule(
-        "/api/simulator/country-capacity", view_func=get_country_capacity_data
-    )
-    portfolio_bp.add_url_rule(
-        "/api/simulator/sector-capacity", view_func=get_sector_capacity_data
-    )
-    portfolio_bp.add_url_rule(
-        "/api/simulator/effective-capacity", view_func=get_effective_capacity_data
     )
     portfolio_bp.add_url_rule(
         "/api/simulator/ticker-lookup",

@@ -19,7 +19,6 @@ class RefactorTargetTests(unittest.TestCase):
             "app/routes/portfolio_simulator_api.py",
             "app/routes/portfolio_state_api.py",
             "app/routes/portfolio_data_api.py",
-            "app/routes/portfolio_capacity_api.py",
             "app/routes/portfolio_company_api.py",
         ]
         for module in expected_modules:

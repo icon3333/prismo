@@ -92,7 +92,7 @@ export function DetailedOverview({
         )}
 
         {selected && sectors.length > 0 && detailed ? (
-          <div className="border border-border overflow-hidden">
+          <div className="border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">

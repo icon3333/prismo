@@ -78,7 +78,10 @@ function RebalancerPageInner() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Rebalancer" showPortfolioPicker={activeTab === "detailed"} />
+      {/* Picker stays visible on both tabs so the header doesn't jump when
+          switching; the selection drives the Detailed tab and carries the
+          ?portfolio= param across pages. */}
+      <PageHeader title="Rebalancer" showPortfolioPicker />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(String(v))}>
         <TabsList>
@@ -188,7 +191,7 @@ function PortfolioTable({
 
   return (
     <TooltipProvider>
-    <div className="border border-border overflow-hidden">
+    <div className="border border-border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted hover:bg-muted">

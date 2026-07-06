@@ -23,8 +23,7 @@ const ROW2_GROUPS = [
     { href: "/performance", label: "Performance" },
   ],
   [
-    { href: "/builder", label: "Builder" },
-    { href: "/rebalancer", label: "Rebalancer" },
+    { href: "/plan", label: "Plan" },
     { href: "/simulator", label: "Simulator" },
   ],
 ];
@@ -35,8 +34,7 @@ const PORTFOLIO_PARAM_ROUTES = [
   "/enrich",
   "/concentrations",
   "/performance",
-  "/builder",
-  "/rebalancer",
+  "/plan",
 ];
 
 function isTabActive(pathname: string, href: string): boolean {

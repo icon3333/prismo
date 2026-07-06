@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useApiQuery } from "@/lib/api-cache";
+import { usePagePersistence } from "@/hooks/use-page-persistence";
 import type {
   PortfolioData,
   RebalanceMode,
@@ -39,9 +40,51 @@ export function useRebalancer(): UseRebalancerReturn {
   // Missing or "all" → no specific portfolio selected (empty state shown).
   const urlPortfolioId = searchParams.get("portfolio");
 
-  const [mode, setMode] = useState<RebalanceMode>("existing-only");
-  const [investmentAmount, setInvestmentAmount] = useState(0);
+  // Capital mode + amount are part of the plan — persisted server-side
+  // under their own page key so they survive reloads and devices. Local
+  // edits override the saved values; the saved values seed the initial view.
+  const { persistState, hydrate } = usePagePersistence<{
+    capitalMode: string;
+    investmentAmount: string;
+  }>("plan");
+  const planStateQuery = useApiQuery<{
+    capitalMode?: string;
+    investmentAmount?: string;
+  }>("/state?page=plan");
+
+  useEffect(() => {
+    if (planStateQuery.data) hydrate(planStateQuery.data);
+  }, [planStateQuery.data, hydrate]);
+
+  const [edited, setEdited] = useState<{
+    mode?: RebalanceMode;
+    amount?: number;
+  }>({});
+
+  const savedMode = planStateQuery.data?.capitalMode;
+  const mode: RebalanceMode =
+    edited.mode ??
+    (savedMode === "existing-only" ||
+    savedMode === "new-only" ||
+    savedMode === "new-with-sells"
+      ? savedMode
+      : "existing-only");
+
+  const savedAmount = parseFloat(planStateQuery.data?.investmentAmount ?? "");
+  const investmentAmount =
+    edited.amount ??
+    (Number.isFinite(savedAmount) && savedAmount >= 0 ? savedAmount : 0);
+
   const debouncedAmount = useDebouncedValue(investmentAmount, 400);
+
+  const setMode = (m: RebalanceMode) => {
+    setEdited((prev) => ({ ...prev, mode: m }));
+    persistState({ capitalMode: m });
+  };
+  const setInvestmentAmount = (amount: number) => {
+    setEdited((prev) => ({ ...prev, amount }));
+    persistState({ investmentAmount: String(amount) });
+  };
 
   // The capital-mode plan is computed server-side (rebalance_service) —
   // mode/amount are query params, each combination a cached key.
@@ -57,10 +100,13 @@ export function useRebalancer(): UseRebalancerReturn {
   const portfolioData = dataQuery.data ?? null;
 
   // Keep showing the previous plan while a new mode/amount key loads, so
-  // toggling the mode radio doesn't flash the page skeleton.
-  const lastDataRef = useRef<PortfolioData | null>(null);
-  if (portfolioData) lastDataRef.current = portfolioData;
-  const effectiveData = portfolioData ?? lastDataRef.current;
+  // toggling the mode radio doesn't flash the page skeleton. Uses React's
+  // adjust-state-during-render pattern (no refs, no effect).
+  const [lastData, setLastData] = useState<PortfolioData | null>(null);
+  if (portfolioData && portfolioData !== lastData) {
+    setLastData(portfolioData);
+  }
+  const effectiveData = portfolioData ?? lastData;
 
   const selectedPortfolio = useMemo(() => {
     if (!urlPortfolioId || urlPortfolioId === "all") return "";
@@ -79,7 +125,9 @@ export function useRebalancer(): UseRebalancerReturn {
     setInvestmentAmount,
     selectedPortfolio,
     isLoading:
-      (dataQuery.isLoading && !lastDataRef.current) || indexQuery.isLoading,
+      (dataQuery.isLoading && !effectiveData) ||
+      indexQuery.isLoading ||
+      planStateQuery.isLoading,
     error: dataQuery.error,
   };
 }

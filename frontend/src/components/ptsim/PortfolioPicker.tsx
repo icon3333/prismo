@@ -16,8 +16,7 @@ const PER_PORTFOLIO_ROUTES = [
   "/enrich",
   "/concentrations",
   "/performance",
-  "/builder",
-  "/rebalancer",
+  "/plan",
 ];
 
 // When a per-portfolio page is selected from Overview, default landing page.

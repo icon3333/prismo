@@ -297,7 +297,7 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
 
         if use_async:
             logger.info(f"Processing {total_items} identifiers ASYNC (>= {ASYNC_THRESHOLD})")
-            _run_batch_async(job_id, identifiers, total_items)
+            _run_batch_async(app, job_id, identifiers, total_items)
         else:
             logger.info(f"Processing {total_items} identifiers SYNC (< {ASYNC_THRESHOLD})")
             _run_batch_sync(job_id, identifiers, total_items)
@@ -420,7 +420,21 @@ def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
         logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
 
 
-def _run_batch_async(job_id: str, identifiers: List[str], total_items: int):
+def _process_single_identifier_with_context(app, identifier: str) -> Dict[str, Any]:
+    """
+    Pool-worker entry point: pushes an app context before delegating.
+
+    Persistent pool threads outlive the request/job that submitted work to
+    them and never inherit Flask's app context, but _process_single_identifier
+    reaches code that needs it (e.g. ExchangeRateRepository's query_db() for
+    FX-rate lookups during currency conversion). Without this, every non-EUR
+    identifier fails with "Working outside of application context".
+    """
+    with app.app_context():
+        return _process_single_identifier(identifier)
+
+
+def _run_batch_async(app, job_id: str, identifiers: List[str], total_items: int):
     """
     Process identifiers asynchronously (ThreadPoolExecutor).
 
@@ -428,6 +442,8 @@ def _run_batch_async(job_id: str, identifiers: List[str], total_items: int):
     More efficient with parallel execution.
 
     Args:
+        app: Flask app, pushed as each worker's app context (see
+            _process_single_identifier_with_context)
         job_id: Job ID for tracking
         identifiers: List of identifiers to process
         total_items: Total number of items
@@ -441,7 +457,7 @@ def _run_batch_async(job_id: str, identifiers: List[str], total_items: int):
     # Submit to the persistent pool — do not close it between batches.
     executor = _get_batch_pool()
     future_to_identifier = {
-        executor.submit(_process_single_identifier, identifier): identifier
+        executor.submit(_process_single_identifier_with_context, app, identifier): identifier
         for identifier in identifiers
     }
 

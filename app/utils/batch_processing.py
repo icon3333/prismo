@@ -280,27 +280,37 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
         # tickers, so the per-identifier loop below mostly gets cache hits.
         # Any failure here is non-fatal — everything falls back to the
         # normal per-identifier fetch.
+        warmed_count = 0
         try:
             from app.utils.yfinance_utils import warm_price_cache_bulk
             stats = warm_price_cache_bulk(identifiers)
+            warmed_count = len(stats['warmed'])
             if stats['attempted']:
                 logger.info(
-                    f"BULK: warmed {len(stats['warmed'])}/{total_items} identifiers "
+                    f"BULK: warmed {warmed_count}/{total_items} identifiers "
                     f"in {stats['duration']:.1f}s via yf.download; "
                     f"fallback for {stats['fallback'] or 'none'}")
         except Exception as e:
             logger.warning(
                 f"BULK: bulk price warm failed, using per-identifier fetch for all: {e}")
 
+        # The warm pass can take a couple of seconds during which the loop
+        # hasn't started; report the warmed identifiers as immediate progress
+        # so the job isn't observably stuck at 0% (they're already fetched —
+        # the loop only persists them, near-instantly, from cache). Passed as
+        # a floor so the loop's own counter never regresses below it.
+        if warmed_count:
+            _update_job_progress_background(job_id, warmed_count)
+
         # Decide execution mode based on batch size
         use_async = total_items >= ASYNC_THRESHOLD
 
         if use_async:
             logger.info(f"Processing {total_items} identifiers ASYNC (>= {ASYNC_THRESHOLD})")
-            _run_batch_async(app, job_id, identifiers, total_items)
+            _run_batch_async(app, job_id, identifiers, total_items, progress_floor=warmed_count)
         else:
             logger.info(f"Processing {total_items} identifiers SYNC (< {ASYNC_THRESHOLD})")
-            _run_batch_sync(job_id, identifiers, total_items)
+            _run_batch_sync(job_id, identifiers, total_items, progress_floor=warmed_count)
 
 
 def _track_batch_result(
@@ -366,7 +376,8 @@ def _create_job_summary(
     return json.dumps(summary)
 
 
-def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
+def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int,
+                    progress_floor: int = 0):
     """
     Process identifiers synchronously (simple loop).
 
@@ -377,6 +388,8 @@ def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
         job_id: Job ID for tracking
         identifiers: List of identifiers to process
         total_items: Total number of items
+        progress_floor: Progress already reported for the bulk-warm pre-pass;
+            never write a lower value (would look like the bar went backwards).
     """
     processed_count = 0
     success_count = 0
@@ -398,7 +411,7 @@ def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
         # Throttled progress updates (every 2 seconds)
         current_time = time.time()
         if current_time - last_update_time > 2:
-            _update_job_progress_background(job_id, processed_count)
+            _update_job_progress_background(job_id, max(processed_count, progress_floor))
             last_update_time = current_time
 
     # One bulk timestamp update for all affected accounts.
@@ -420,9 +433,45 @@ def _run_batch_sync(job_id: str, identifiers: List[str], total_items: int):
         logger.warning(f"Failed identifiers: {', '.join(f['identifier'] for f in failed_identifiers)}")
 
 
+# One long-lived Flask app context per persistent pool worker. Pushing a
+# fresh `with app.app_context()` per task (the previous approach) gave each
+# task its own `g`, so get_db() opened AND closed a brand-new SQLite
+# connection — full connect + PRAGMA executescript + close — for every
+# non-EUR identifier's FX-rate lookup. Reusing one context per worker keeps a
+# single g.db read connection alive for the worker's lifetime, exactly the
+# persistent-connection design db_utils already uses for the write path
+# (_get_thread_conn). Workers are reused across jobs, so this context is
+# intentionally never popped — the daemon threads die with the process.
+_worker_app_ctx = threading.local()
+
+
+def _ensure_worker_app_context(app) -> None:
+    """Ensure the current pool worker has a live app context for `app`.
+
+    Pushed once per worker and kept. If a different app instance submits work
+    to the same worker (only across tests — production runs one app), the
+    stale context is popped (closing its g.db connection) and replaced.
+    """
+    existing = getattr(_worker_app_ctx, 'ctx', None)
+    if existing is not None:
+        if getattr(_worker_app_ctx, 'app', None) is app:
+            return
+        try:
+            existing.pop()
+        except Exception:
+            logger.warning("Could not pop stale worker app context", exc_info=True)
+        _worker_app_ctx.ctx = None
+        _worker_app_ctx.app = None
+
+    ctx = app.app_context()
+    ctx.push()
+    _worker_app_ctx.ctx = ctx
+    _worker_app_ctx.app = app
+
+
 def _process_single_identifier_with_context(app, identifier: str) -> Dict[str, Any]:
     """
-    Pool-worker entry point: pushes an app context before delegating.
+    Pool-worker entry point: ensures a live app context before delegating.
 
     Persistent pool threads outlive the request/job that submitted work to
     them and never inherit Flask's app context, but _process_single_identifier
@@ -430,11 +479,12 @@ def _process_single_identifier_with_context(app, identifier: str) -> Dict[str, A
     FX-rate lookups during currency conversion). Without this, every non-EUR
     identifier fails with "Working outside of application context".
     """
-    with app.app_context():
-        return _process_single_identifier(identifier)
+    _ensure_worker_app_context(app)
+    return _process_single_identifier(identifier)
 
 
-def _run_batch_async(app, job_id: str, identifiers: List[str], total_items: int):
+def _run_batch_async(app, job_id: str, identifiers: List[str], total_items: int,
+                     progress_floor: int = 0):
     """
     Process identifiers asynchronously (ThreadPoolExecutor).
 
@@ -447,6 +497,8 @@ def _run_batch_async(app, job_id: str, identifiers: List[str], total_items: int)
         job_id: Job ID for tracking
         identifiers: List of identifiers to process
         total_items: Total number of items
+        progress_floor: Progress already reported for the bulk-warm pre-pass;
+            never write a lower value (would look like the bar went backwards).
     """
     processed_count = 0
     success_count = 0
@@ -473,7 +525,7 @@ def _run_batch_async(app, job_id: str, identifiers: List[str], total_items: int)
         # Throttled progress updates (every 2 seconds)
         current_time = time.time()
         if current_time - last_update_time > 2:
-            _update_job_progress_background(job_id, processed_count)
+            _update_job_progress_background(job_id, max(processed_count, progress_floor))
             last_update_time = current_time
 
     # One bulk timestamp update for all affected accounts (replaces the per-

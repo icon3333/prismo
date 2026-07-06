@@ -11,9 +11,6 @@ from app.cache import cache
 from app.utils.value_calculator import calculate_item_value, get_value_source
 import logging
 
-# Cache timeout for portfolio summary (5 minutes)
-CACHE_TIMEOUT_PORTFOLIO_SUMMARY = 300
-
 logger = logging.getLogger(__name__)
 
 
@@ -62,38 +59,6 @@ class PortfolioRepository:
 
         results = query_db(query, [account_id])
         return [r['identifier'] for r in results]
-
-    @staticmethod
-    @cache.memoize(timeout=CACHE_TIMEOUT_PORTFOLIO_SUMMARY)
-    def get_portfolio_summary(account_id: int) -> List[Dict]:
-        """
-        Get portfolio summary with aggregated values.
-
-        Cached for 5 minutes to reduce database load on frequently accessed data.
-
-        Args:
-            account_id: Account ID
-
-        Returns:
-            List of portfolio summaries
-        """
-        query = '''
-            SELECT
-                p.id,
-                p.name,
-                COUNT(DISTINCT c.id) as num_holdings,
-                COALESCE(SUM(cs.shares * mp.price_eur), 0) as total_value,
-                COUNT(DISTINCT CASE WHEN c.id IS NOT NULL AND mp.price_eur IS NULL THEN c.id END) as num_missing_prices
-            FROM portfolios p
-            LEFT JOIN companies c ON p.id = c.portfolio_id
-            LEFT JOIN company_shares cs ON c.id = cs.company_id
-            LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-            WHERE p.account_id = ?
-            GROUP BY p.id, p.name
-            ORDER BY p.name
-        '''
-
-        return query_db(query, [account_id])
 
     @staticmethod
     def get_holdings_without_prices(account_id: int) -> List[Dict]:
@@ -213,7 +178,7 @@ class PortfolioRepository:
     @staticmethod
     def delete_portfolio(portfolio_id: int, account_id: int) -> bool:
         """
-        Delete a portfolio and optionally its holdings.
+        Delete a portfolio, detaching its companies (portfolio_id set to NULL).
 
         Args:
             portfolio_id: Portfolio ID
@@ -224,12 +189,18 @@ class PortfolioRepository:
         """
         logger.warning(f"Deleting portfolio {portfolio_id} for account {account_id}")
 
-        # This will only delete the portfolio, not the companies
-        # Companies will need portfolio_id set to NULL or reassigned
-        execute_db(
+        # Same transaction: companies.portfolio_id has an FK with no ON DELETE
+        # action and foreign_keys is ON, so children must be detached first
+        db = get_db()
+        db.execute(
+            'UPDATE companies SET portfolio_id = NULL WHERE portfolio_id = ? AND account_id = ?',
+            [portfolio_id, account_id]
+        )
+        db.execute(
             'DELETE FROM portfolios WHERE id = ? AND account_id = ?',
             [portfolio_id, account_id]
         )
+        db.commit()
 
         return True
 

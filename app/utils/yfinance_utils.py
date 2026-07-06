@@ -22,23 +22,23 @@ def _get_yfinance():
 logger = logging.getLogger(__name__)
 
 # Cache timeout constants (in seconds)
-CACHE_TIMEOUT_EXCHANGE_RATES = 3600  # 1 hour - exchange rates change infrequently
 CACHE_TIMEOUT_STOCK_PRICES = 900      # 15 minutes - balance between freshness and API usage
 CACHE_TIMEOUT_FAILED_LOOKUP = 300     # 5 minutes - prevent retry storms for invalid tickers
 
 # --- Helper Functions ---
 
 
-@cache.memoize(timeout=CACHE_TIMEOUT_EXCHANGE_RATES)
-def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
-    """
-    Fetch the exchange rate between two currencies.
+# How fresh a stored rate must be to skip the network entirely. Matches the
+# 24h startup refresh cycle, so in normal operation requests never hit yfinance.
+FRESH_RATE_MAX_AGE_HOURS = 24
 
-    Cached for 1 hour to reduce API calls. Exchange rates don't change frequently
-    enough to require real-time updates for a homeserver portfolio app.
-    """
-    logger.info(f"Fetching exchange rate (not cached): {from_currency} → {to_currency}")
 
+def fetch_exchange_rate_from_network(from_currency: str, to_currency: str = "EUR") -> Optional[float]:
+    """
+    Fetch an exchange rate from yfinance. Returns None on any failure —
+    callers decide the fallback (get_exchange_rate uses the newest stored
+    DB rate; startup refresh skips the currency).
+    """
     if from_currency == to_currency:
         return 1.0
 
@@ -46,37 +46,92 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> float:
     if from_currency == 'GBp':
         from_currency = 'GBP'
         base_rate = 0.01
+        if from_currency == to_currency:
+            return base_rate
     else:
         base_rate = 1.0
 
+    logger.info(f"Fetching exchange rate from network: {from_currency} → {to_currency}")
     try:
-        # Construct the currency pair ticker
         ticker = f"{from_currency}{to_currency}=X"
         yf = _get_yfinance()
-        rate_data = yf.Ticker(ticker)
-
-        # Get the current price
-        rate = rate_data.history(period='1d')['Close'].iloc[0]
-        if rate:
-            return rate * base_rate
-        else:
-            logger.warning(
-                f"Could not retrieve exchange rate for {from_currency}-{to_currency}")
-            return 1.0 * base_rate  # Fallback
+        rate = yf.Ticker(ticker).history(period='1d')['Close'].iloc[0]
+        if rate and rate > 0:
+            return float(rate) * base_rate
+        logger.warning(f"Could not retrieve exchange rate for {from_currency}-{to_currency}")
+        return None
     except (KeyError, IndexError, ValueError) as e:
         # Expected errors - missing data, empty dataframe, invalid values
         logger.warning(
             f"Exchange rate data issue: {from_currency}→{to_currency}: {e.__class__.__name__}: {e}",
             extra={'currency_from': from_currency, 'currency_to': to_currency}
         )
-        return 1.0 * base_rate  # Fallback
-    except Exception as e:
+        return None
+    except Exception:
         # Unexpected errors - log with full traceback
         logger.exception(
             f"Unexpected error fetching exchange rate: {from_currency}→{to_currency}"
         )
-        # For single-user homeserver, log but don't crash - return fallback
-        return 1.0 * base_rate
+        return None
+
+
+def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[float]:
+    """
+    Get the exchange rate between two currencies, DB-first.
+
+    Lookup order:
+    1. Fresh DB rate (updated within FRESH_RATE_MAX_AGE_HOURS) — no network.
+       Startup refreshes rates daily, so this is the hot path.
+    2. yfinance fetch; successful fetches are persisted to the DB. Failures
+       are negative-cached briefly to avoid retry storms — never long enough
+       to block a good rate, since a fresh DB rate short-circuits above.
+    3. Most recent stored rate regardless of age, with a staleness warning.
+
+    Returns None only when no rate was ever stored AND the network fails.
+    Never silently falls back to 1.0 — valuing a USD/GBP holding 1:1 to EUR
+    is worse than reporting no value at all.
+    """
+    if from_currency == to_currency:
+        return 1.0
+
+    # yfinance uses 'GBp' for pence; rates are stored per whole-GBP pair
+    if from_currency == 'GBp':
+        from_currency = 'GBP'
+        base_rate = 0.01
+        if from_currency == to_currency:
+            return base_rate
+    else:
+        base_rate = 1.0
+
+    from app.repositories.exchange_rate_repository import ExchangeRateRepository
+
+    rate = ExchangeRateRepository.get_fresh_rate(
+        from_currency, to_currency, max_age_hours=FRESH_RATE_MAX_AGE_HOURS)
+    if rate is not None:
+        return rate * base_rate
+
+    fail_key = f"fx_fail_{from_currency}_{to_currency}"
+    if not cache.get(fail_key):
+        fetched = fetch_exchange_rate_from_network(from_currency, to_currency)
+        if fetched is not None:
+            ExchangeRateRepository.upsert_rate(from_currency, fetched, to_currency)
+            # value_calculator caches DB rates module-wide; force a re-read
+            from app.utils.value_calculator import clear_exchange_rate_cache
+            clear_exchange_rate_cache()
+            return fetched * base_rate
+        cache.set(fail_key, True, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+
+    stale_rate = ExchangeRateRepository.get_rate(from_currency, to_currency)
+    if stale_rate is not None:
+        logger.warning(
+            f"Using stale exchange rate {from_currency}→{to_currency} = {stale_rate} "
+            f"(network unavailable, rate older than {FRESH_RATE_MAX_AGE_HOURS}h)")
+        return stale_rate * base_rate
+
+    logger.error(
+        f"No exchange rate available for {from_currency}→{to_currency}: "
+        f"never stored and network fetch failed")
+    return None
 
 # --- Helper Functions for Identifier Detection ---
 
@@ -200,9 +255,16 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         # Convert price to EUR if not already
         if price is not None and currency != 'EUR':
             exchange_rate = get_exchange_rate(currency, "EUR")
-            data['priceEUR'] = price * exchange_rate
-            logger.info(
-                f"Converted {price:.2f} {currency} to {data['priceEUR']:.2f} EUR (rate: {exchange_rate})")
+            if exchange_rate is None:
+                # No rate ever stored and network down: surface an unconverted
+                # price (priceEUR=None) instead of a silently wrong 1:1 value
+                data['priceEUR'] = None
+                logger.warning(
+                    f"No {currency}→EUR rate available; cannot convert price for {identifier}")
+            else:
+                data['priceEUR'] = price * exchange_rate
+                logger.info(
+                    f"Converted {price:.2f} {currency} to {data['priceEUR']:.2f} EUR (rate: {exchange_rate})")
         elif price is not None:
             data['priceEUR'] = price  # Already in EUR
 
@@ -217,9 +279,18 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
             'modified_identifier': effective_identifier
         }
 
-        # Only cache successful responses (15 minutes)
-        cache.set(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
-        logger.debug(f"Cached successful result for {identifier}")
+        # Cache successful responses for 15 minutes. A result whose EUR
+        # conversion failed is cached only under the short failed-lookup TTL:
+        # long enough to prevent a re-fetch storm during an FX outage (bulk
+        # updates would otherwise hit the network on every call), short enough
+        # that conversion is retried soon after a rate becomes available.
+        if price is not None and result['data']['priceEUR'] is None:
+            cache.set(cache_key, result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+            logger.debug(
+                f"Cached unconverted result for {identifier} (short TTL): EUR conversion unavailable")
+        else:
+            cache.set(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
+            logger.debug(f"Cached successful result for {identifier}")
 
         return result
 
@@ -319,21 +390,29 @@ def _fetch_yfinance_data_robust(identifier: str) -> Optional[Dict[str, Any]]:
 # --- Other Utility Functions (can be expanded) ---
 
 
-@cache.memoize(timeout=CACHE_TIMEOUT_STOCK_PRICES)  # Cache for 15 minutes
 def get_yfinance_info(identifier: str) -> Dict[str, Any]:
     """
     Simple wrapper to get the full info dictionary from yfinance.
 
-    Cached for 15 minutes to reduce API load.
+    Successful lookups are cached for 15 minutes; failures only for 5, so a
+    transient error doesn't block a working lookup for the full window.
     """
+    cache_key = f"yf_info_{identifier}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     logger.info(f"Fetching yfinance info (not cached) for: {identifier}")
     try:
         yf = _get_yfinance()
-        ticker = yf.Ticker(identifier)
-        return ticker.info
+        info = yf.Ticker(identifier).info or {}
+        cache.set(cache_key, info, timeout=CACHE_TIMEOUT_STOCK_PRICES)
+        return info
     except Exception as e:
         logger.error(f"Could not get yfinance info for {identifier}: {e}")
-        return {'error': str(e)}
+        fail_result = {'error': str(e)}
+        cache.set(cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        return fail_result
 
 
 def auto_categorize_investment_type(identifier: str) -> Optional[str]:
@@ -527,10 +606,10 @@ def clear_price_cache(identifier: str = None):
         clear_price_cache()        # Clear all price caches
     """
     if identifier:
-        # Clear specific identifier - both manual cache key, negative cache, and memoized
+        # Clear specific identifier - price data, negative cache, and info cache
         cache.delete(f"isin_data_{identifier}")
         cache.delete(f"isin_fail_{identifier}")
-        cache.delete_memoized(get_yfinance_info, identifier)
+        cache.delete(f"yf_info_{identifier}")
         logger.info(f"✓ Cleared price cache for: {identifier}")
     else:
         # Clear entire cache (SimpleCache doesn't support pattern delete)

@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useConcentrations } from "@/hooks/use-concentrations";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +11,32 @@ import { PortfolioFilter } from "./portfolio-filter";
 import { DistributionBar } from "./distribution-bar";
 import { DonutChart } from "./donut-chart";
 
+// useConcentrations reads useSearchParams (to seed the filter from
+// ?portfolio=), which suspends during prerender.
 export default function ConcentrationsPage() {
+  return (
+    <Suspense fallback={<ConcentrationsSkeleton />}>
+      <ConcentrationsPageInner />
+    </Suspense>
+  );
+}
+
+function ConcentrationsSkeleton() {
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Concentrations" showPortfolioPicker={false} />
+      <Skeleton className="h-16 w-full" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Skeleton className="h-80" />
+        <Skeleton className="h-80" />
+        <Skeleton className="h-80" />
+        <Skeleton className="h-80" />
+      </div>
+    </div>
+  );
+}
+
+function ConcentrationsPageInner() {
   const {
     portfolios,
     selectedPortfolios,
@@ -33,18 +59,7 @@ export default function ConcentrationsPage() {
   } = useConcentrations();
 
   if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Concentrations" showPortfolioPicker={false} />
-        <Skeleton className="h-16 w-full" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
-      </div>
-    );
+    return <ConcentrationsSkeleton />;
   }
 
   if (error) {

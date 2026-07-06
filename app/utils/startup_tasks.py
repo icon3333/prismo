@@ -12,6 +12,66 @@ logger = logging.getLogger(__name__)
 # Common currencies to fetch exchange rates for
 COMMON_CURRENCIES = ['USD', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD', 'SEK', 'NOK', 'DKK', 'HKD', 'SGD', 'NZD']
 
+# start_background_tasks must be exactly-once per process: dev reloader,
+# repeated create_app calls, and the gunicorn hook all funnel through here.
+_background_tasks_started = False
+_background_tasks_lock = threading.Lock()
+
+
+def run_startup_tasks(app):
+    """
+    Run one-time startup tasks: exchange-rate refresh, price auto-update,
+    and the periodic backup scheduler. Each task is isolated so one failure
+    doesn't block the others.
+    """
+    with app.app_context():
+        try:
+            refresh_exchange_rates_if_needed()
+        except Exception as e:
+            logger.error(f"Exchange rate refresh failed: {e}")
+
+        try:
+            result = auto_update_prices_if_needed()
+            if result and result.get('status') == 'error':
+                logger.error(f"STARTUP: Price update failed: {result.get('error')}")
+            elif result:
+                logger.info(f"STARTUP: Price update result: {result.get('status')}")
+        except Exception as e:
+            logger.error(f"Automatic price update failed: {e}")
+
+        try:
+            schedule_automatic_backups()
+        except Exception as e:
+            logger.error(f"Automatic backup setup failed: {e}")
+
+
+def start_background_tasks(app):
+    """
+    Start the startup tasks in a daemon thread, exactly once per process.
+
+    Callers:
+    - dev (python3 run.py): create_app in the reloader child process
+    - production (gunicorn): the when_ready hook in deployment/gunicorn.conf.py,
+      which runs in the master so the scheduler survives worker restarts;
+      PRISMO_DEFER_STARTUP_TASKS=1 keeps create_app from also starting them.
+    """
+    global _background_tasks_started
+    with _background_tasks_lock:
+        if _background_tasks_started:
+            logger.info("Background startup tasks already started - skipping")
+            return
+        _background_tasks_started = True
+
+    def _worker():
+        # Small delay so the server finishes initializing (and, under gunicorn,
+        # forking workers) before this thread starts doing DB/network work.
+        time.sleep(1)
+        run_startup_tasks(app)
+
+    thread = threading.Thread(target=_worker, daemon=True, name='prismo-startup-tasks')
+    thread.start()
+    logger.info("Startup tasks scheduled in background thread")
+
 
 def refresh_exchange_rates_if_needed() -> bool:
     """
@@ -100,12 +160,15 @@ def _fetch_exchange_rates(currencies: List[str]) -> Dict[str, float]:
     Returns:
         Dict mapping currency -> EUR exchange rate
     """
-    from app.utils.yfinance_utils import get_exchange_rate
+    # Network-only fetch: get_exchange_rate() falls back to stale stored
+    # rates, which this refresh would re-upsert with a fresh timestamp and
+    # mask real staleness.
+    from app.utils.yfinance_utils import fetch_exchange_rate_from_network
 
     rates = {}
     for currency in currencies:
         try:
-            rate = get_exchange_rate(currency, 'EUR')
+            rate = fetch_exchange_rate_from_network(currency, 'EUR')
             if rate and rate > 0:
                 rates[currency] = rate
                 logger.info(f"  {currency}/EUR: {rate:.6f}")

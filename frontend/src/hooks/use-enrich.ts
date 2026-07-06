@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, apiPostForm, ApiError } from "@/lib/api";
+import { useApiQuery, invalidateApiCache } from "@/lib/api-cache";
 import {
   filterItems,
   sortItems,
@@ -23,14 +24,67 @@ import type {
 } from "@/types/enrich";
 import { toast } from "sonner";
 
+interface BuilderTargetsResponse {
+  data?: { budget?: { availableToInvest?: number } };
+  partialData?: { budget?: { availableToInvest?: number } };
+}
+
 export function useEnrich() {
+  // Shared cached reads — served instantly when cached, revalidated in the
+  // background; every successful write through the api layer refreshes them.
+  const itemsQuery = useApiQuery<EnrichItem[]>("/portfolio_data");
+  const portfoliosQuery = useApiQuery<string[]>("/portfolios");
+  const cashQuery = useApiQuery<{ success: boolean; cash: number }>("/account/cash");
+  const builderQuery = useApiQuery<BuilderTargetsResponse>("/builder/investment-targets");
+  const dropdownQuery = useApiQuery<{ success: boolean; portfolios: PortfolioDropdownItem[] }>(
+    "/portfolios_dropdown"
+  );
+  const { refetch: refetchItems } = itemsQuery;
+
+  // Local copy of holdings so inline saves can update rows optimistically;
+  // re-synced from the cache whenever a refetch lands.
   const [items, setItems] = useState<EnrichItem[]>([]);
-  const [portfolioOptions, setPortfolioOptions] = useState<string[]>([]);
-  const [portfolioDropdown, setPortfolioDropdown] = useState<PortfolioDropdownItem[]>([]);
+  const { data: serverItems } = itemsQuery;
+  useEffect(() => {
+    const sync = () => {
+      if (serverItems) setItems(serverItems);
+    };
+    sync();
+  }, [serverItems]);
+
+  const portfolioOptions = useMemo(
+    () => (portfoliosQuery.data ?? []).filter((p) => p && p !== "-"),
+    [portfoliosQuery.data]
+  );
+  const portfolioDropdown = useMemo(
+    () => dropdownQuery.data?.portfolios ?? [],
+    [dropdownQuery.data]
+  );
+
+  // Cash keeps a local shadow so saveCash can apply the server-confirmed
+  // value immediately without waiting for the invalidation refetch.
   const [cashBalance, setCashBalance] = useState(0);
-  const [builderAvailable, setBuilderAvailable] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const serverCash = cashQuery.data?.cash;
+  useEffect(() => {
+    const sync = () => {
+      if (serverCash !== undefined) setCashBalance(serverCash || 0);
+    };
+    sync();
+  }, [serverCash]);
+
+  const builderAvailable = useMemo<number | null>(() => {
+    const builderData = builderQuery.data;
+    if (!builderData) return null;
+    const bd = builderData.data || builderData;
+    const partial = "partialData" in builderData ? builderData.partialData : null;
+    const budget = (bd as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
+    const partialBudget = (partial as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
+    const avail = budget?.availableToInvest ?? partialBudget?.availableToInvest ?? null;
+    return typeof avail === "number" ? avail : null;
+  }, [builderQuery.data]);
+
+  const isLoading = itemsQuery.isLoading || portfoliosQuery.isLoading;
+  const error = itemsQuery.error ?? portfoliosQuery.error;
 
   // Filters & sort.
   // selectedPortfolio (name) is derived from `?portfolio=<id>` in the URL,
@@ -44,49 +98,6 @@ export function useEnrich() {
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const lastCheckedIndex = useRef<number | null>(null);
-
-  // --- Data loading ---
-
-  const fetchData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Critical fetches — unblock table rendering
-      const [itemsData, portfolios] = await Promise.all([
-        apiFetch<EnrichItem[]>("/portfolio_data"),
-        apiFetch<string[]>("/portfolios"),
-      ]);
-      setItems(itemsData);
-      setPortfolioOptions(portfolios.filter((p) => p && p !== "-"));
-      setIsLoading(false);
-
-      // Deferred fetches — summary bar & add-position dialog
-      Promise.all([
-        apiFetch<{ success: boolean; cash: number }>("/account/cash").catch(() => ({ success: false, cash: 0 })),
-        apiFetch<{ data?: { budget?: { availableToInvest?: number } }; partialData?: { budget?: { availableToInvest?: number } } }>("/builder/investment-targets").catch(() => null),
-        apiFetch<{ success: boolean; portfolios: PortfolioDropdownItem[] }>("/portfolios_dropdown").catch(() => ({ success: false, portfolios: [] })),
-      ]).then(([cashData, builderData, dropdownData]) => {
-        setCashBalance(cashData.cash || 0);
-        if (dropdownData?.portfolios) setPortfolioDropdown(dropdownData.portfolios);
-
-        // Extract builder available
-        const bd = builderData?.data || builderData;
-        const partial = builderData && "partialData" in builderData ? builderData.partialData : null;
-        const budget = (bd as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
-        const partialBudget = (partial as Record<string, unknown>)?.budget as Record<string, unknown> | undefined;
-        const avail = budget?.availableToInvest ?? partialBudget?.availableToInvest ?? null;
-        setBuilderAvailable(typeof avail === "number" ? avail : null);
-      });
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load data");
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void Promise.resolve().then(fetchData);
-  }, [fetchData]);
 
   // --- Derived state ---
 
@@ -118,14 +129,10 @@ export function useEnrich() {
 
   // --- Actions ---
 
-  const refreshData = useCallback(async () => {
-    const [itemsData, portfolios] = await Promise.all([
-      apiFetch<EnrichItem[]>("/portfolio_data"),
-      apiFetch<string[]>("/portfolios"),
-    ]);
-    setItems(itemsData);
-    setPortfolioOptions(portfolios.filter((p) => p && p !== "-"));
-  }, []);
+  // Full refresh: drop every cached read and refetch the subscribed ones.
+  // Used after background jobs (CSV import, price updates) that change data
+  // outside a request the api layer could observe.
+  const refreshData = useCallback(() => invalidateApiCache(), []);
 
   const saveField = useCallback(
     async (id: number, payload: Record<string, unknown>) => {
@@ -168,6 +175,11 @@ export function useEnrich() {
 
   // --- Field saves ---
 
+  // Every save follows the same shape: optimistic local update on success,
+  // toast.error + refetch (roll back to server truth) on failure. Saves
+  // driven by useInlineEdit re-throw so the cell reverts immediately even
+  // when the refetched server value is unchanged.
+
   const savePortfolioChange = useCallback(
     async (id: number, portfolio: string) => {
       try {
@@ -176,46 +188,70 @@ export function useEnrich() {
         toast.success("Portfolio updated");
       } catch {
         toast.error("Failed to update portfolio");
+        void refetchItems();
       }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveIdentifierChange = useCallback(
     async (id: number, identifier: string) => {
-      await saveField(id, { identifier: identifier || "", is_identifier_user_edit: true });
-      updateItemLocal(id, { identifier });
-      toast.success("Identifier updated");
-      refreshData();
+      try {
+        await saveField(id, { identifier: identifier || "", is_identifier_user_edit: true });
+        updateItemLocal(id, { identifier });
+        toast.success("Identifier updated");
+      } catch (err) {
+        toast.error("Failed to update identifier");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, updateItemLocal, refreshData]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveSectorChange = useCallback(
     async (id: number, sector: string) => {
-      await saveField(id, { sector: sector || "" });
-      updateItemLocal(id, { sector });
-      toast.success("Sector updated");
+      try {
+        await saveField(id, { sector: sector || "" });
+        updateItemLocal(id, { sector });
+        toast.success("Sector updated");
+      } catch (err) {
+        toast.error("Failed to update sector");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveThesisChange = useCallback(
     async (id: number, thesis: string) => {
-      await saveField(id, { thesis: thesis || "" });
-      updateItemLocal(id, { thesis });
-      toast.success("Thesis updated");
+      try {
+        await saveField(id, { thesis: thesis || "" });
+        updateItemLocal(id, { thesis });
+        toast.success("Thesis updated");
+      } catch (err) {
+        toast.error("Failed to update thesis");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveCompanyChange = useCallback(
     async (id: number, name: string) => {
-      await saveField(id, { name: name || "" });
-      updateItemLocal(id, { company: name });
-      toast.success("Company name updated");
+      try {
+        await saveField(id, { name: name || "" });
+        updateItemLocal(id, { company: name });
+        toast.success("Company name updated");
+      } catch (err) {
+        toast.error("Failed to update company name");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveInvestmentTypeChange = useCallback(
@@ -226,9 +262,10 @@ export function useEnrich() {
         toast.success(`Type updated to ${investment_type}`);
       } catch {
         toast.error("Failed to update type");
+        void refetchItems();
       }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveCountryChange = useCallback(
@@ -243,9 +280,10 @@ export function useEnrich() {
         toast.success("Country updated");
       } catch {
         toast.error("Failed to update country");
+        void refetchItems();
       }
     },
-    [saveField, updateItemLocal]
+    [saveField, updateItemLocal, refetchItems]
   );
 
   const saveSharesChange = useCallback(
@@ -255,17 +293,23 @@ export function useEnrich() {
         toast.error("Shares must be a valid number");
         return;
       }
-      const res = await saveField(id, { override_share: shares, is_user_edit: true });
-      applyServerItem(id, res.data, {
-        is_manually_edited: true,
-        csv_modified_after_edit: false,
-        override_share: shares,
-        effective_shares: shares,
-        manual_edit_date: new Date().toISOString(),
-      });
-      toast.success("Shares updated");
+      try {
+        const res = await saveField(id, { override_share: shares, is_user_edit: true });
+        applyServerItem(id, res.data, {
+          is_manually_edited: true,
+          csv_modified_after_edit: false,
+          override_share: shares,
+          effective_shares: shares,
+          manual_edit_date: new Date().toISOString(),
+        });
+        toast.success("Shares updated");
+      } catch (err) {
+        toast.error("Failed to update shares");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, applyServerItem]
+    [saveField, applyServerItem, refetchItems]
   );
 
   const saveTotalValueChange = useCallback(
@@ -277,86 +321,114 @@ export function useEnrich() {
       }
       const item = items.find((i) => i.id === id);
       const customPrice = item && item.effective_shares > 0 ? totalValue / item.effective_shares : 0;
-      const res = await saveField(id, {
-        custom_total_value: totalValue,
-        custom_price_eur: customPrice,
-        is_custom_value_edit: true,
-      });
-      applyServerItem(id, res.data, {
-        custom_total_value: totalValue,
-        custom_price_eur: customPrice,
-        is_custom_value: true,
-        current_value: totalValue,
-        value_source: "custom",
-      });
-      toast.success("Total value updated");
+      try {
+        const res = await saveField(id, {
+          custom_total_value: totalValue,
+          custom_price_eur: customPrice,
+          is_custom_value_edit: true,
+        });
+        applyServerItem(id, res.data, {
+          custom_total_value: totalValue,
+          custom_price_eur: customPrice,
+          is_custom_value: true,
+          current_value: totalValue,
+          value_source: "custom",
+        });
+        toast.success("Total value updated");
+      } catch (err) {
+        toast.error("Failed to update total value");
+        void refetchItems();
+        throw err;
+      }
     },
-    [saveField, applyServerItem, items]
+    [saveField, applyServerItem, items, refetchItems]
   );
 
   // --- Resets ---
 
   const resetIdentifier = useCallback(
     async (id: number) => {
-      await saveField(id, { reset_identifier: true });
-      toast.success("Identifier reset");
-      refreshData();
+      try {
+        await saveField(id, { reset_identifier: true });
+        toast.success("Identifier reset");
+      } catch {
+        toast.error("Failed to reset identifier");
+        void refetchItems();
+      }
     },
-    [saveField, refreshData]
+    [saveField, refetchItems]
   );
 
   const resetCountry = useCallback(
     async (id: number) => {
-      const res = await saveField(id, { reset_country: true });
-      applyServerItem(id, res.data, {
-        country_manually_edited: false,
-        country_manual_edit_date: null,
-      });
-      toast.success("Country reset");
+      try {
+        const res = await saveField(id, { reset_country: true });
+        applyServerItem(id, res.data, {
+          country_manually_edited: false,
+          country_manual_edit_date: null,
+        });
+        toast.success("Country reset");
+      } catch {
+        toast.error("Failed to reset country");
+        void refetchItems();
+      }
     },
-    [saveField, applyServerItem]
+    [saveField, applyServerItem, refetchItems]
   );
 
   const resetShares = useCallback(
     async (id: number) => {
-      const res = await saveField(id, { reset_shares: true });
-      const item = items.find((i) => i.id === id);
-      applyServerItem(id, res.data, {
-        override_share: null,
-        effective_shares: item ? item.shares : 0,
-        is_manually_edited: false,
-        csv_modified_after_edit: false,
-      });
-      toast.success("Shares reset");
+      try {
+        const res = await saveField(id, { reset_shares: true });
+        const item = items.find((i) => i.id === id);
+        applyServerItem(id, res.data, {
+          override_share: null,
+          effective_shares: item ? item.shares : 0,
+          is_manually_edited: false,
+          csv_modified_after_edit: false,
+        });
+        toast.success("Shares reset");
+      } catch {
+        toast.error("Failed to reset shares");
+        void refetchItems();
+      }
     },
-    [saveField, applyServerItem, items]
+    [saveField, applyServerItem, items, refetchItems]
   );
 
   const resetCustomValue = useCallback(
     async (id: number) => {
-      const res = await saveField(id, { reset_custom_value: true });
-      applyServerItem(id, res.data, {
-        custom_total_value: null,
-        custom_price_eur: null,
-        is_custom_value: false,
-      });
-      const item = items.find((i) => i.id === id);
-      toast.success(item?.price_eur ? "Reset to market price" : "Custom value cleared");
+      try {
+        const res = await saveField(id, { reset_custom_value: true });
+        applyServerItem(id, res.data, {
+          custom_total_value: null,
+          custom_price_eur: null,
+          is_custom_value: false,
+        });
+        const item = items.find((i) => i.id === id);
+        toast.success(item?.price_eur ? "Reset to market price" : "Custom value cleared");
+      } catch {
+        toast.error("Failed to reset custom value");
+        void refetchItems();
+      }
     },
-    [saveField, applyServerItem, items]
+    [saveField, applyServerItem, items, refetchItems]
   );
 
   // --- Cash ---
 
   const saveCash = useCallback(async (amount: number) => {
-    const res = await apiFetch<{ success: boolean; cash: number }>("/account/cash", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cash: amount }),
-    });
-    if (res.success) {
+    try {
+      const res = await apiFetch<{ success: boolean; cash: number }>("/account/cash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cash: amount }),
+      });
+      if (!res.success) throw new Error("Update failed");
       setCashBalance(res.cash);
       toast.success("Cash balance updated");
+    } catch {
+      toast.error("Failed to update cash balance");
     }
   }, []);
 
@@ -386,17 +458,21 @@ export function useEnrich() {
         return update;
       });
 
-      const res = await apiFetch<{ success: boolean; error?: string }>("/bulk_update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updateData),
-      });
-      if (!res.success) throw new Error(res.error || "Bulk update failed");
-      toast.success(`Updated ${ids.length} items`);
-      await refreshData();
-      setSelectedIds(new Set());
+      try {
+        const res = await apiFetch<{ success: boolean; error?: string }>("/bulk_update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updateData),
+        });
+        if (!res.success) throw new Error(res.error || "Bulk update failed");
+        toast.success(`Updated ${ids.length} items`);
+        setSelectedIds(new Set());
+      } catch {
+        toast.error("Failed to update items");
+        void refetchItems();
+      }
     },
-    [items, refreshData]
+    [items, refetchItems]
   );
 
   const deleteCompanies = useCallback(
@@ -406,18 +482,22 @@ export function useEnrich() {
         .map((i) => i.id);
       if (manualIds.length === 0) return;
 
-      const res = await apiFetch<{ success: boolean; deleted_count: number }>("/delete_companies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_ids: manualIds }),
-      });
-      if (res.success) {
+      try {
+        const res = await apiFetch<{ success: boolean; deleted_count: number }>("/delete_companies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ company_ids: manualIds }),
+        });
+        if (!res.success) throw new Error("Delete failed");
         setItems((prev) => prev.filter((i) => !manualIds.includes(i.id)));
         setSelectedIds(new Set());
         toast.success(`Deleted ${res.deleted_count} position(s)`);
+      } catch {
+        toast.error("Failed to delete positions");
+        void refetchItems();
       }
     },
-    [items]
+    [items, refetchItems]
   );
 
   // --- Identifier validation ---
@@ -461,31 +541,37 @@ export function useEnrich() {
         payload.total_invested = parseGermanNumber(form.total_invested);
       }
 
-      const res = await apiFetch<{
-        success: boolean;
-        message?: string;
-        error?: string;
-        existing?: { name: string; portfolio_name: string };
-      }>("/add_company", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      try {
+        const res = await apiFetch<{
+          success: boolean;
+          message?: string;
+          error?: string;
+          existing?: { name: string; portfolio_name: string };
+        }>("/add_company", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (res.success) {
-        toast.success(res.message || "Position added");
-        await refreshData();
-        return { success: true as const };
-      }
-      if (res.error === "duplicate") {
+        if (res.success) {
+          toast.success(res.message || "Position added");
+          return { success: true as const };
+        }
+        if (res.error === "duplicate") {
+          return {
+            success: false as const,
+            error: `A company named "${res.existing?.name}" already exists in portfolio "${res.existing?.portfolio_name}". Please edit the existing entry instead.`,
+          };
+        }
+        return { success: false as const, error: res.error || "Failed to add position" };
+      } catch (err) {
         return {
           success: false as const,
-          error: `A company named "${res.existing?.name}" already exists in portfolio "${res.existing?.portfolio_name}". Please edit the existing entry instead.`,
+          error: err instanceof ApiError ? err.message : "Failed to add position",
         };
       }
-      return { success: false as const, error: res.error || "Failed to add position" };
     },
-    [refreshData]
+    []
   );
 
   // --- Portfolio management ---
@@ -496,23 +582,24 @@ export function useEnrich() {
       formData.append("action", action);
       Object.entries(params).forEach(([k, v]) => formData.append(k, v));
 
-      const res = await fetch("/manage-portfolios", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      const result = await res.json();
-      if (result.success) {
-        if (result.portfolios) setPortfolioOptions(result.portfolios);
-        toast.success(result.message);
-        await refreshData();
-      } else {
-        toast.error(result.message || "Action failed");
+      try {
+        const result = await apiPostForm<{ success: boolean; message?: string; error?: string }>(
+          "/api/manage_portfolios",
+          formData
+        );
+        if (result.success) {
+          toast.success(result.message || "Portfolios updated");
+        } else {
+          // Flask auth/typed-exception failures report via `error`, not `message`.
+          toast.error(result.message || result.error || "Action failed");
+        }
+        return result;
+      } catch {
+        toast.error("Failed to manage portfolios");
+        return { success: false };
       }
-      return result;
     },
-    [refreshData]
+    []
   );
 
   // --- Price updates ---
@@ -538,7 +625,9 @@ export function useEnrich() {
         if (progress.status === "completed" || progress.status === "failed") {
           stopPricePolling();
           setIsPriceUpdating(false);
-          await refreshData();
+          // Background job changed prices outside a tracked write — drop the
+          // whole cache so every page picks up the new values.
+          await invalidateApiCache();
           toast.success(
             progress.status === "completed"
               ? "Prices updated successfully"
@@ -550,7 +639,7 @@ export function useEnrich() {
         setIsPriceUpdating(false);
       }
     }, 1500);
-  }, [refreshData, stopPricePolling]);
+  }, [stopPricePolling]);
 
   // Cleanup polling on unmount
   useEffect(() => stopPricePolling, [stopPricePolling]);

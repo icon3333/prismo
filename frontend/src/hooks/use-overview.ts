@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { apiFetch } from "@/lib/api";
+import { useMemo } from "react";
+import { useApiQuery } from "@/lib/api-cache";
 import {
   computeMetricsFromItems,
   calculateViolations,
@@ -17,64 +17,45 @@ import type {
 import type { PortfolioOption } from "@/types/performance";
 
 export function useOverview() {
-  const [metrics, setMetrics] = useState<PortfolioMetrics | null>(null);
-  const [portfolios, setPortfolios] = useState<PortfolioOption[]>([]);
-  const [cashBalance, setCashBalance] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shared cached reads — instant render when another page already loaded
+  // them, revalidated in the background.
+  const itemsQuery = useApiQuery<PortfolioDataItem[]>("/portfolio_data");
+  const portfoliosQuery = useApiQuery<PortfolioOption[]>(
+    "/portfolios?include_ids=true&has_companies=true"
+  );
+  const cashQuery = useApiQuery<{ cash: number }>("/account/cash");
+  const stateQuery = useApiQuery<{ rules?: string }>("/state?page=builder");
+  const rebalQuery = useApiQuery<RebalancerData>("/simulator/portfolio-data");
 
-  const [portfolioItems, setPortfolioItems] = useState<PortfolioDataItem[]>([]);
-  const [rules, setRules] = useState<AllocationRules | null>(null);
-  const [rebalancerData, setRebalancerData] = useState<RebalancerData | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
+  const isLoading =
+    itemsQuery.isLoading ||
+    portfoliosQuery.isLoading ||
+    cashQuery.isLoading ||
+    stateQuery.isLoading ||
+    rebalQuery.isLoading;
 
-  useEffect(() => {
-    let cancelled = false;
+  // Only the portfolio list fetch surfaces as a page error (matching the
+  // previous behavior where the other fetches had empty fallbacks).
+  const error = portfoliosQuery.error;
 
-    async function init() {
-      try {
-        setIsLoading(true);
-        setDataLoading(true);
-        setError(null);
+  const portfolioItems = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
+  const portfolios = useMemo(() => portfoliosQuery.data ?? [], [portfoliosQuery.data]);
+  const cashBalance = cashQuery.data?.cash ?? 0;
+  const rebalancerData = rebalQuery.data ?? null;
 
-        const [items, portfolioList, cashData, stateData, rebalData] = await Promise.all([
-          apiFetch<PortfolioDataItem[]>("/portfolio_data").catch(() => [] as PortfolioDataItem[]),
-          apiFetch<PortfolioOption[]>("/portfolios?include_ids=true&has_companies=true"),
-          apiFetch<{ cash: number }>("/account/cash").catch(() => ({ cash: 0 })),
-          apiFetch<{ rules?: string }>("/state?page=builder").catch((): { rules?: string } => ({})),
-          apiFetch<RebalancerData>("/simulator/portfolio-data").catch(() => null),
-        ]);
+  const metrics = useMemo<PortfolioMetrics | null>(
+    () => (isLoading ? null : computeMetricsFromItems(portfolioItems)),
+    [isLoading, portfolioItems]
+  );
 
-        if (cancelled) return;
-
-        setMetrics(computeMetricsFromItems(items));
-        setPortfolios(portfolioList);
-        setCashBalance(cashData.cash || 0);
-        setPortfolioItems(items);
-        setRebalancerData(rebalData);
-
-        if (stateData?.rules) {
-          try {
-            setRules(JSON.parse(stateData.rules));
-          } catch {
-            // Invalid JSON
-          }
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load data");
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-          setDataLoading(false);
-        }
-      }
+  const rules = useMemo<AllocationRules | null>(() => {
+    if (!stateQuery.data?.rules) return null;
+    try {
+      return JSON.parse(stateQuery.data.rules);
+    } catch {
+      return null; // Invalid JSON
     }
-
-    init();
-    return () => { cancelled = true; };
-  }, []);
+  }, [stateQuery.data]);
 
   const violations = useMemo(
     () => calculateViolations(portfolioItems, rules),
@@ -109,7 +90,7 @@ export function useOverview() {
     portfolios,
     cashBalance,
     isLoading,
-    dataLoading,
+    dataLoading: isLoading,
     error,
     violations,
     healthStatus,

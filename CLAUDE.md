@@ -68,8 +68,8 @@ The old Jinja `templates/` and `static/` directories were deleted in commit `488
 - `app/utils/csv_processing/`: Modular CSV import (parser → company_processor → share_calculator → portfolio_handler)
 - `app/utils/value_calculator.py`: Central value calculation — priority: custom value → native currency × exchange rate → legacy price_eur
 - `app/utils/yfinance_utils.py`: Market data with 15-min cache
-- `app/utils/batch_processing.py`: Sync (<20 items) / async (≥20 items) execution
-- `app/utils/startup_tasks.py`: Runs on boot in a background thread — refreshes exchange rates, auto-updates prices, schedules backups
+- `app/utils/batch_processing.py`: Sync (<5 items) / async (≥5 items) execution via a persistent thread pool
+- `app/utils/startup_tasks.py`: Refreshes exchange rates, auto-updates prices, schedules backups — runs in a background thread started once per process: in dev via `create_app`, in production via the gunicorn `when_ready` hook (master process; `PRISMO_DEFER_STARTUP_TASKS=1` keeps workers from double-starting them)
 
 ## Routes
 
@@ -79,7 +79,7 @@ All routes live under blueprints registered in `app/main.py`:
 - `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/rebalancer`, `/build` → `/builder`, `/risk_overview` → `/concentrations`)
 - `admin_bp`: admin endpoints
 
-Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_capacity_api.py` (concentration headroom), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)`; a `portfolio_bp.after_request` hook invalidates the account's memoized reads on every successful write, so write endpoints don't call `invalidate_portfolio_cache()` themselves — except mid-request before re-reading, and in background jobs that outlive the request.
+Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)`; a `portfolio_bp.after_request` hook invalidates the account's memoized reads on every successful write, so write endpoints don't call `invalidate_portfolio_cache()` themselves — except mid-request before re-reading, and in background jobs that outlive the request.
 
 ## Frontend → Backend
 

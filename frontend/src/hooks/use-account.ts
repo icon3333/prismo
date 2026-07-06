@@ -8,10 +8,12 @@ import { toast } from "sonner";
 export function useAccount() {
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchAccount = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await apiFetch<AccountInfo & { success: boolean }>("/account");
       setAccount({
         username: data.username,
@@ -20,8 +22,7 @@ export function useAccount() {
         last_price_update: data.last_price_update,
       });
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Failed to load account";
-      toast.error(msg);
+      setError(e instanceof ApiError ? e.message : "Failed to load account");
     } finally {
       setLoading(false);
     }
@@ -75,6 +76,7 @@ export function useAccount() {
   return {
     account,
     loading,
+    error,
     updateUsername,
     resetSettings,
     deleteStocksCrypto,

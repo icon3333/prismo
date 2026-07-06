@@ -699,8 +699,10 @@ def simulator_search_investments():
         ''', [account_id, search_pattern, search_pattern])
 
         # Rank by the Python-computed value, so limit in Python too.
+        for r in (results or []):
+            r['value'] = calculate_item_value(r)
         matches = sorted(
-            (results or []), key=lambda r: calculate_item_value(r), reverse=True
+            (results or []), key=lambda r: r['value'], reverse=True
         )[:limit]
 
         investments = []
@@ -711,7 +713,7 @@ def simulator_search_investments():
                 'sector': r['sector'] or 'Unknown',
                 'thesis': (r['thesis'] or '').strip() or 'Unassigned',
                 'country': r['country'] or 'Unknown',
-                'value': round(calculate_item_value(r), 2),
+                'value': round(r['value'], 2),
                 'portfolio_name': r['portfolio_name'] or 'Unassigned',
                 'portfolio_id': r['portfolio_id']
             })

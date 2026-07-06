@@ -120,6 +120,10 @@ def update_all_prices():
         logger.info(
             f"Found {len(identifiers)} unique identifiers to update: {identifiers}")
 
+        # A user-requested update must hit the network, not the 15-min cache.
+        from app.utils.yfinance_utils import clear_price_cache
+        clear_price_cache()
+
         # Start the batch processing job
         try:
             job_id = start_batch_process(identifiers)
@@ -192,6 +196,11 @@ def update_selected_prices():
 
         identifiers = [company['identifier'] for company in companies]
         logger.info(f"Found {len(identifiers)} unique identifiers to update: {identifiers}")
+
+        # A user-requested update must hit the network, not the 15-min cache.
+        from app.utils.yfinance_utils import clear_price_cache
+        for identifier in identifiers:
+            clear_price_cache(identifier)
 
         # Start the batch processing job (reuse existing batch process)
         try:

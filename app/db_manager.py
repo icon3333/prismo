@@ -326,7 +326,11 @@ def backup_database(prefix='backup'):
         os.makedirs(backup_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_filename = os.path.join(backup_dir, f"{prefix}_{timestamp}.db")
+        final_filename = os.path.join(backup_dir, f"{prefix}_{timestamp}.db")
+        # Write to a temp name and rename only once the snapshot is complete,
+        # so a hard shutdown mid-backup never leaves a torn *.db file that
+        # looks like a valid backup. cleanup_old_backups ignores *.tmp.
+        backup_filename = final_filename + '.tmp'
 
         src = sqlite3.connect(db_path)
         try:
@@ -338,6 +342,9 @@ def backup_database(prefix='backup'):
                 dest.close()
         finally:
             src.close()
+
+        os.rename(backup_filename, final_filename)
+        backup_filename = final_filename
 
         logger.info(f"Database backed up successfully to {backup_filename}")
 
@@ -361,10 +368,21 @@ def cleanup_old_backups(directory, max_files=10, prefix='backup'):
     prefixes are left untouched so backup families don't evict each other.
     """
     try:
-        backup_files = [
+        entries = [
             os.path.join(directory, f) for f in os.listdir(directory)
-            if f.startswith(f"{prefix}_") and f.endswith(".db") and os.path.isfile(os.path.join(directory, f))
+            if f.startswith(f"{prefix}_") and os.path.isfile(os.path.join(directory, f))
         ]
+
+        # Completed backups end in .db; *.tmp files are in-progress or torn
+        # snapshots — never counted as backups, and stale ones are removed.
+        backup_files = [p for p in entries if p.endswith(".db")]
+        for stale_tmp in (p for p in entries if p.endswith(".tmp")):
+            try:
+                os.remove(stale_tmp)
+                logger.info(f"Removed stale temp backup: {stale_tmp}")
+            except OSError:
+                pass
+
         backup_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
 
         for old_backup in backup_files[max_files:]:

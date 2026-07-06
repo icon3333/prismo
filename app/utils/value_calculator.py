@@ -20,11 +20,19 @@ Philosophy: Simple, Modular, Elegant, Efficient, Robust
 """
 from typing import Dict, Any, List, Optional
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for exchange rates (loaded once per request cycle)
+# Module-level cache for exchange rates with a TTL. Rates change at most once
+# a day, but long-lived gunicorn workers (max_requests=0) would otherwise keep
+# first-request rates forever: the master process refreshes the DB, and the
+# worker's module-level cache is never invalidated cross-process. The TTL
+# bounds staleness to a few minutes; clear_exchange_rate_cache() still forces
+# an immediate in-process reload.
 _exchange_rates_cache: Optional[Dict[str, float]] = None
+_exchange_rates_loaded_at: float = 0.0
+_EXCHANGE_RATES_TTL_SECONDS = 300
 
 # Hardcoded fallback rates (approximate) for common currencies when DB rates unavailable
 # These are rough estimates - actual rates should come from the database
@@ -59,20 +67,24 @@ def _get_exchange_rate(currency: str) -> float:
     Returns:
         Exchange rate to EUR, or fallback rate if not found
     """
-    global _exchange_rates_cache
+    global _exchange_rates_cache, _exchange_rates_loaded_at
 
     if currency == 'EUR' or not currency:
         return 1.0
 
-    # Lazy load rates on first access
-    if _exchange_rates_cache is None:
+    # Lazy load rates on first access, and reload after the TTL expires so
+    # long-lived workers pick up rates refreshed by other processes.
+    if (_exchange_rates_cache is None
+            or time.monotonic() - _exchange_rates_loaded_at > _EXCHANGE_RATES_TTL_SECONDS):
         try:
             from app.repositories.exchange_rate_repository import ExchangeRateRepository
             _exchange_rates_cache = ExchangeRateRepository.get_all_rates('EUR')
             logger.debug(f"Loaded {len(_exchange_rates_cache)} exchange rates for value calculation")
         except Exception as e:
             logger.error(f"Failed to load exchange rates from database: {e}. Using fallback rates.")
-            _exchange_rates_cache = _FALLBACK_RATES.copy()
+            if _exchange_rates_cache is None:
+                _exchange_rates_cache = _FALLBACK_RATES.copy()
+        _exchange_rates_loaded_at = time.monotonic()
 
     rate = _exchange_rates_cache.get(currency)
     if rate is None:
@@ -96,8 +108,9 @@ def clear_exchange_rate_cache() -> None:
     Call this when exchange rates are refreshed to ensure
     subsequent calculations use the new rates.
     """
-    global _exchange_rates_cache
+    global _exchange_rates_cache, _exchange_rates_loaded_at
     _exchange_rates_cache = None
+    _exchange_rates_loaded_at = 0.0
     logger.debug("Cleared value_calculator exchange rate cache")
 
 

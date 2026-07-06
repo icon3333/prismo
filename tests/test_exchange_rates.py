@@ -123,7 +123,9 @@ class TestGetExchangeRate:
 
 class TestGetIsinDataFxContract:
     """get_isin_data must surface priceEUR=None (not a 1:1 value) when no
-    rate exists, and must not cache that result so conversion recovers."""
+    rate exists. That unconverted result is cached only under the short
+    failed-lookup TTL (prevents re-fetch storms during an FX outage) so
+    conversion recovers shortly after a rate becomes available."""
 
     @pytest.fixture
     def price_fetch(self, monkeypatch):
@@ -135,7 +137,7 @@ class TestGetIsinDataFxContract:
             lambda identifier: {"price": 100.0, "currency": "USD"},
         )
 
-    def test_missing_rate_yields_unconverted_price_and_no_cache(
+    def test_missing_rate_yields_unconverted_price_with_short_lived_cache(
         self, db, fx_cache, monkeypatch, price_fetch
     ):
         monkeypatch.setattr(yfu, "get_exchange_rate", lambda *a, **k: None)
@@ -144,8 +146,14 @@ class TestGetIsinDataFxContract:
         assert result["data"]["currentPrice"] == 100.0
         assert result["data"]["priceEUR"] is None
 
-        # Rate becomes available → next call converts (result wasn't cached)
+        # Within the short TTL the unconverted result is served from cache
+        # (no re-fetch storm while FX is unavailable)
         monkeypatch.setattr(yfu, "get_exchange_rate", lambda *a, **k: 0.9)
+        result = yfu.get_isin_data("TEST-FX")
+        assert result["data"]["priceEUR"] is None
+
+        # Once the short-TTL entry expires, conversion recovers
+        yfu.cache.delete("isin_data_TEST-FX")
         result = yfu.get_isin_data("TEST-FX")
         assert result["data"]["priceEUR"] == pytest.approx(90.0)
 

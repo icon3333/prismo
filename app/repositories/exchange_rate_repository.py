@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 # lock) on top of value_calculator's `_exchange_rates_cache`. Two caches for
 # ~10 rows of data was redundant and the lock cost was paid per call in the
 # value-calc inner loop. value_calculator is now the sole reader-side cache;
-# this repository is a thin DB shim. The HTTP-source cache lives on
-# yfinance_utils.get_exchange_rate (@cache.memoize).
+# this repository is a thin DB shim. yfinance_utils.get_exchange_rate is
+# DB-first: it reads fresh rates from here and only hits the network (and
+# persists back via upsert_rate) when the stored rate is stale or missing.
 
 
 class ExchangeRateRepository:
@@ -39,6 +40,33 @@ class ExchangeRateRepository:
             WHERE from_currency = ? AND to_currency = ?
             ''',
             [from_currency, to_currency],
+            one=True
+        )
+        return result['rate'] if result else None
+
+    @staticmethod
+    def get_fresh_rate(
+        from_currency: str,
+        to_currency: str = 'EUR',
+        max_age_hours: int = 24
+    ) -> Optional[float]:
+        """
+        Get the stored rate only if it was updated within max_age_hours.
+
+        Returns None when the rate is missing or stale, signalling that the
+        caller should refresh from the network (see yfinance_utils.get_exchange_rate).
+        """
+        if from_currency == to_currency:
+            return 1.0
+
+        result = query_db(
+            '''
+            SELECT rate
+            FROM exchange_rates
+            WHERE from_currency = ? AND to_currency = ?
+            AND datetime(last_updated) >= datetime('now', '-' || ? || ' hours')
+            ''',
+            [from_currency, to_currency, max_age_hours],
             one=True
         )
         return result['rate'] if result else None

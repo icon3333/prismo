@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useApiQuery } from "@/lib/api-cache";
-import { calculateRebalancing } from "@/lib/rebalancer-calc";
 import type {
   PortfolioData,
   RebalanceMode,
@@ -23,6 +22,16 @@ interface UseRebalancerReturn {
   error: string | null;
 }
 
+/** Debounce keystrokes in the amount field before they become a query key. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export function useRebalancer(): UseRebalancerReturn {
   const searchParams = useSearchParams();
   // Picker writes `?portfolio=<id>`. The detailed-overview lookup expects
@@ -30,18 +39,28 @@ export function useRebalancer(): UseRebalancerReturn {
   // Missing or "all" → no specific portfolio selected (empty state shown).
   const urlPortfolioId = searchParams.get("portfolio");
 
-  // Shared cached reads — instant render when cached, background revalidate.
-  const dataQuery = useApiQuery<PortfolioData>("/simulator/portfolio-data");
+  const [mode, setMode] = useState<RebalanceMode>("existing-only");
+  const [investmentAmount, setInvestmentAmount] = useState(0);
+  const debouncedAmount = useDebouncedValue(investmentAmount, 400);
+
+  // The capital-mode plan is computed server-side (rebalance_service) —
+  // mode/amount are query params, each combination a cached key.
+  const dataQuery = useApiQuery<PortfolioData>(
+    `/simulator/portfolio-data?mode=${mode}&amount=${debouncedAmount}`
+  );
   // Sidecar fetch with IDs — used only to translate URL `?portfolio=<id>`
-  // into the portfolio name expected by the rebalancer's calc layer.
+  // into the portfolio name expected by the detailed view.
   const indexQuery = useApiQuery<PortfolioOption[]>(
     "/portfolios?include_ids=true&has_companies=true"
   );
 
-  const [mode, setMode] = useState<RebalanceMode>("existing-only");
-  const [investmentAmount, setInvestmentAmount] = useState(0);
-
   const portfolioData = dataQuery.data ?? null;
+
+  // Keep showing the previous plan while a new mode/amount key loads, so
+  // toggling the mode radio doesn't flash the page skeleton.
+  const lastDataRef = useRef<PortfolioData | null>(null);
+  if (portfolioData) lastDataRef.current = portfolioData;
+  const effectiveData = portfolioData ?? lastDataRef.current;
 
   const selectedPortfolio = useMemo(() => {
     if (!urlPortfolioId || urlPortfolioId === "all") return "";
@@ -51,20 +70,16 @@ export function useRebalancer(): UseRebalancerReturn {
     return match?.name ?? "";
   }, [urlPortfolioId, indexQuery.data]);
 
-  const rebalanced = useMemo(() => {
-    if (!portfolioData?.portfolios) return [];
-    return calculateRebalancing(portfolioData.portfolios, mode, investmentAmount);
-  }, [portfolioData, mode, investmentAmount]);
-
   return {
-    portfolioData,
-    rebalanced,
+    portfolioData: effectiveData,
+    rebalanced: effectiveData?.rebalanced ?? [],
     mode,
     setMode,
     investmentAmount,
     setInvestmentAmount,
     selectedPortfolio,
-    isLoading: dataQuery.isLoading || indexQuery.isLoading,
+    isLoading:
+      (dataQuery.isLoading && !lastDataRef.current) || indexQuery.isLoading,
     error: dataQuery.error,
   };
 }

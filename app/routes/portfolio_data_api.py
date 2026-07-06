@@ -18,6 +18,7 @@ from app.services import allocation_service
 from app.repositories.portfolio_repository import PortfolioRepository
 from app.cache import cache
 
+import copy
 import logging
 import json
 from typing import Dict, Any
@@ -245,12 +246,35 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
 
 @require_auth
 def get_simulator_portfolio_data():
-    """API endpoint to get structured portfolio data for the rebalancing feature"""
+    """Structured portfolio data for rebalancing.
+
+    Optional query params `mode` (existing-only | new-only | new-with-sells)
+    and `amount` add a `rebalanced` array: portfolio-level actions plus a
+    per-portfolio position-level `detailed` plan, computed by
+    rebalance_service (the single capital-mode engine).
+    """
     logger.info("API request for allocate portfolio data")
 
     try:
         account_id = g.account_id
         result = _get_simulator_portfolio_data_internal(account_id)
+
+        mode = request.args.get('mode')
+        if mode:
+            from app.services.rebalance_service import (
+                VALID_MODES, calculate_rebalancing, calculate_detailed_rebalancing)
+            if mode not in VALID_MODES:
+                raise ValidationError(f'Invalid mode: {mode}')
+            amount = request.args.get('amount', 0, type=float) or 0
+            # The memoized base tree must not be mutated.
+            result = copy.deepcopy(result)
+            rebalanced = calculate_rebalancing(
+                result.get('portfolios') or [], mode, amount)
+            for entry in rebalanced:
+                entry['detailed'] = calculate_detailed_rebalancing(
+                    entry, entry.get('action') or 0, mode)
+            result['rebalanced'] = rebalanced
+
         return jsonify(result)
 
     except ValidationError as e:

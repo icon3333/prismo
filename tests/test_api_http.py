@@ -229,3 +229,26 @@ class TestCanonicalValuation:
         )
         item = resp.get_json()["data"]["item"]
         assert item["effective_shares"] == 4
+
+
+class TestRebalanceModeParam:
+    def test_portfolio_data_without_mode_has_no_rebalanced(self, client, account):
+        resp = client.get("/portfolio/api/simulator/portfolio-data")
+        assert resp.status_code == 200
+        assert "rebalanced" not in resp.get_json()
+
+    def test_mode_param_returns_server_computed_plan(self, client, account):
+        resp = client.get(
+            "/portfolio/api/simulator/portfolio-data?mode=new-with-sells&amount=100")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "rebalanced" in data
+        for entry in data["rebalanced"]:
+            assert {"targetValue", "discrepancy", "action", "detailed"} <= set(entry)
+            detailed = entry["detailed"]
+            assert {"sectors", "totalBuys", "totalSells",
+                    "portfolioTargetValue"} <= set(detailed)
+
+    def test_invalid_mode_rejected(self, client, account):
+        resp = client.get("/portfolio/api/simulator/portfolio-data?mode=bogus")
+        assert resp.status_code == 400

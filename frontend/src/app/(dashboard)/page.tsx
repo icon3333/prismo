@@ -221,10 +221,10 @@ export default function OverviewPage() {
               </p>
             </div>
             <Link
-              href="/builder"
+              href="/plan"
               className="border border-red px-3 py-2 font-mono text-xs uppercase text-red hover:bg-red/10"
             >
-              Open Builder
+              Open Plan
             </Link>
           </div>
           <div className="divide-y divide-red/30">

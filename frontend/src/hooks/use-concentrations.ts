@@ -44,6 +44,12 @@ export function useConcentrations() {
   const searchParams = useSearchParams();
   const portfolioIdFromUrl = searchParams.get("portfolio");
   const mountUrlParamRef = useRef(portfolioIdFromUrl);
+  // Saved multi-select kept aside while a URL param is pending, so it can be
+  // restored if the URL id doesn't resolve to a known portfolio.
+  const persistedSelectionRef = useRef<string[] | null>(null);
+  // null = URL id not yet checked against the portfolio list; true = matched
+  // and applied; false = checked and unmatched (persisted filter may restore).
+  const urlResolvedRef = useRef<boolean | null>(null);
 
   const setIncludeCash = useCallback(
     (v: boolean) => {
@@ -92,11 +98,18 @@ export function useConcentrations() {
       }
 
       // A ?portfolio= URL selection takes precedence over the saved filter.
-      if (savedState.selectedPortfolios && !mountUrlParamRef.current) {
+      // Stash the parsed selection either way so the URL effect below can fall
+      // back to it if the URL id turns out not to match any portfolio.
+      if (savedState.selectedPortfolios) {
         try {
           const parsed = JSON.parse(savedState.selectedPortfolios);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setSelectedPortfolios(new Set(parsed));
+            persistedSelectionRef.current = parsed;
+            // Skip the restore only while a URL selection is pending or has
+            // actually been applied — an unmatched URL id doesn't suppress it.
+            if (!mountUrlParamRef.current || urlResolvedRef.current === false) {
+              setSelectedPortfolios(new Set(parsed));
+            }
           }
         } catch {
           // Invalid JSON
@@ -120,14 +133,20 @@ export function useConcentrations() {
       if (!portfolioIdFromUrl || portfolioIdFromUrl === lastAppliedUrlId.current) return;
       if (portfolioIdFromUrl === "all") {
         lastAppliedUrlId.current = portfolioIdFromUrl;
+        urlResolvedRef.current = true;
         setSelectedPortfolios(new Set());
         return;
       }
       if (!portfolioList) return;
+      lastAppliedUrlId.current = portfolioIdFromUrl;
       const match = portfolioList.find((p) => String(p.id) === portfolioIdFromUrl);
+      urlResolvedRef.current = match !== undefined;
       if (match) {
-        lastAppliedUrlId.current = portfolioIdFromUrl;
         setSelectedPortfolios(new Set([match.name]));
+      } else if (persistedSelectionRef.current) {
+        // The URL id doesn't resolve (deleted portfolio, or one without
+        // companies) — fall back to the persisted filter it suppressed.
+        setSelectedPortfolios(new Set(persistedSelectionRef.current));
       }
     };
     applyUrlSelection();

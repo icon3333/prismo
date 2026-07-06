@@ -75,8 +75,18 @@ async function doFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const method = (init?.method ?? "GET").toUpperCase();
+export interface ApiFetchOptions extends RequestInit {
+  /**
+   * Bypass *serving* from the TTL cache and inflight dedupe so the request
+   * always hits the network (the fresh response still populates the cache).
+   * Used by the SWR layer, whose revalidation must never be a cache no-op.
+   */
+  noStore?: boolean;
+}
+
+export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
+  const { noStore, ...init } = options ?? {};
+  const method = (init.method ?? "GET").toUpperCase();
   const url = `${API_BASE}${path}`;
 
   if (method !== "GET") {
@@ -86,14 +96,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     return data;
   }
 
-  const cached = cache.get(url);
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    return cached.data as T;
-  }
+  if (!noStore) {
+    const cached = cache.get(url);
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return cached.data as T;
+    }
 
-  const pending = inflight.get(url);
-  if (pending) {
-    return (await pending) as T;
+    const pending = inflight.get(url);
+    if (pending) {
+      return (await pending) as T;
+    }
   }
 
   const epochAtStart = cacheEpoch;
@@ -113,7 +125,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     cache.delete(url);
     throw e;
   } finally {
-    inflight.delete(url);
+    // A noStore request may have replaced this key with a newer in-flight
+    // promise — only clean up our own entry.
+    if (inflight.get(url) === promise) inflight.delete(url);
   }
 }
 

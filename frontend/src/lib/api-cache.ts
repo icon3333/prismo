@@ -21,6 +21,8 @@ interface Entry {
   hasData: boolean;
   error: string | null;
   promise: Promise<void> | null;
+  /** Bumped on every invalidation; in-flight fetches from an older epoch discard their result. */
+  epoch: number;
   subscribers: Set<() => void>;
   /** Stable object handed to useSyncExternalStore; replaced on every change. */
   snapshot: ApiQueryState<unknown>;
@@ -45,6 +47,7 @@ function getEntry(path: string): Entry {
       hasData: false,
       error: null,
       promise: null,
+      epoch: 0,
       subscribers: new Set(),
       snapshot: { data: undefined, error: null, isLoading: true, isValidating: false },
     };
@@ -80,13 +83,19 @@ export function revalidateApiQuery(path: string): Promise<void> {
   const entry = getEntry(path);
   if (entry.promise) return entry.promise;
 
-  const promise = apiFetch<unknown>(path)
+  // If the entry is invalidated while this fetch is in flight, its result may
+  // predate the write — discard it and let the chained refetch (started by
+  // invalidateApiCache) be the only committer.
+  const epochAtStart = entry.epoch;
+  const promise = apiFetch<unknown>(path, { noStore: true })
     .then((data) => {
+      if (entry.epoch !== epochAtStart) return;
       entry.data = data;
       entry.hasData = true;
       entry.error = null;
     })
     .catch((err: unknown) => {
+      if (entry.epoch !== epochAtStart) return;
       if (!entry.hasData) {
         entry.error = err instanceof Error ? err.message : "Request failed";
       }
@@ -112,6 +121,9 @@ export function invalidateApiCache(prefix = ""): Promise<void> {
   const refetches: Promise<void>[] = [];
   for (const [path, entry] of entries) {
     if (!path.startsWith(prefix)) continue;
+    // Any in-flight fetch for this key may predate the write — make sure its
+    // late result is discarded rather than committed over post-write data.
+    entry.epoch++;
     if (entry.subscribers.size === 0) continue;
     // A fetch already in flight may predate the write that triggered this
     // invalidation — chain a fresh one behind it instead of deduping into it.

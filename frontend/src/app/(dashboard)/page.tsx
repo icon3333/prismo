@@ -123,7 +123,6 @@ export default function OverviewPage() {
     portfolios,
     cashBalance,
     isLoading,
-    dataLoading,
     error,
     healthStatus,
     missingPositions,
@@ -208,97 +207,82 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      {dataLoading ? (
-        <Skeleton className="h-24 w-full" />
-      ) : (
-        missingPositions.length > 0 && (
-          <section className="border border-red bg-red/10">
-            <div className="flex items-center justify-between gap-4 border-b border-red/40 px-5 py-4">
-              <div>
-                <h2 className="font-mono text-sm font-semibold uppercase text-red">
-                  BUILDER POSITIONS REQUIRED
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {int(missingPositions.length)} portfolio allocation plan
-                  {missingPositions.length === 1 ? " needs" : "s need"} more
-                  positions.
-                </p>
-              </div>
-              <Link
-                href="/builder"
-                className="border border-red px-3 py-2 font-mono text-xs uppercase text-red hover:bg-red/10"
-              >
-                Open Builder
-              </Link>
-            </div>
-            <div className="divide-y divide-red/30">
-              {missingPositions.map((portfolio) => (
-                <div
-                  key={portfolio.name}
-                  className="grid gap-2 px-5 py-3 text-sm md:grid-cols-[1fr_auto]"
-                >
-                  <span className="font-medium text-foreground">
-                    {portfolio.name}
-                  </span>
-                  <span className="font-mono text-red">
-                    {int(portfolio.missing_count)} missing |{" "}
-                    {int(portfolio.current_positions)}/
-                    {int(portfolio.effective_positions)} filled
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )
-      )}
-
-      {dataLoading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-20 w-full" />
-          <div className="grid gap-4 md:grid-cols-3">
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
-          </div>
-        </div>
-      ) : (
-        <section className="border border-border bg-card">
-          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+      {missingPositions.length > 0 && (
+        <section className="border border-red bg-red/10">
+          <div className="flex items-center justify-between gap-4 border-b border-red/40 px-5 py-4">
             <div>
-              <h2 className="font-mono text-sm font-semibold uppercase">
-                CONCENTRATION WATCH
+              <h2 className="font-mono text-sm font-semibold uppercase text-red">
+                BUILDER POSITIONS REQUIRED
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {healthStatus.subtitle}. {int(totalViolations)} active exception
-                {totalViolations === 1 ? "" : "s"}.
+                {int(missingPositions.length)} portfolio allocation plan
+                {missingPositions.length === 1 ? " needs" : "s need"} more
+                positions.
               </p>
             </div>
             <Link
-              href="/concentrations"
-              className="border border-border px-3 py-2 font-mono text-xs uppercase text-cyan hover:bg-cyan/10"
+              href="/builder"
+              className="border border-red px-3 py-2 font-mono text-xs uppercase text-red hover:bg-red/10"
             >
-              View Details
+              Open Builder
             </Link>
           </div>
-          <div className="grid gap-px bg-border md:grid-cols-3">
-            <ViolationPanel
-              title="Stock Limits"
-              violations={stockViolations}
-              hasRule={!!rules?.maxPerStock && rules.maxPerStock > 0}
-            />
-            <ViolationPanel
-              title="Sector Limits"
-              violations={sectorViolations}
-              hasRule={!!rules?.maxPerSector && rules.maxPerSector > 0}
-            />
-            <ViolationPanel
-              title="Country Limits"
-              violations={countryViolations}
-              hasRule={!!rules?.maxPerCountry && rules.maxPerCountry > 0}
-            />
+          <div className="divide-y divide-red/30">
+            {missingPositions.map((portfolio) => (
+              <div
+                key={portfolio.name}
+                className="grid gap-2 px-5 py-3 text-sm md:grid-cols-[1fr_auto]"
+              >
+                <span className="font-medium text-foreground">
+                  {portfolio.name}
+                </span>
+                <span className="font-mono text-red">
+                  {int(portfolio.missing_count)} missing |{" "}
+                  {int(portfolio.current_positions)}/
+                  {int(portfolio.effective_positions)} filled
+                </span>
+              </div>
+            ))}
           </div>
         </section>
       )}
+
+      <section className="border border-border bg-card">
+        <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <h2 className="font-mono text-sm font-semibold uppercase">
+              CONCENTRATION WATCH
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {healthStatus.subtitle}. {int(totalViolations)} active exception
+              {totalViolations === 1 ? "" : "s"}.
+            </p>
+          </div>
+          <Link
+            href="/concentrations"
+            className="border border-border px-3 py-2 font-mono text-xs uppercase text-cyan hover:bg-cyan/10"
+          >
+            View Details
+          </Link>
+        </div>
+        <div className="grid gap-px bg-border md:grid-cols-3">
+          <ViolationPanel
+            title="Stock Limits"
+            violations={stockViolations}
+            hasRule={!!rules?.maxPerStock && rules.maxPerStock > 0}
+          />
+          <ViolationPanel
+            title="Sector Limits"
+            violations={sectorViolations}
+            hasRule={!!rules?.maxPerSector && rules.maxPerSector > 0}
+          />
+          <ViolationPanel
+            title="Country Limits"
+            violations={countryViolations}
+            hasRule={!!rules?.maxPerCountry && rules.maxPerCountry > 0}
+          />
+        </div>
+      </section>
     </div>
   );
 }

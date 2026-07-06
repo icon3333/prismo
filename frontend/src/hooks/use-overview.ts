@@ -90,7 +90,6 @@ export function useOverview() {
     portfolios,
     cashBalance,
     isLoading,
-    dataLoading: isLoading,
     error,
     violations,
     healthStatus,

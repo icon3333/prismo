@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
@@ -23,8 +23,7 @@ const ROW2_GROUPS = [
     { href: "/performance", label: "Performance" },
   ],
   [
-    { href: "/builder", label: "Builder" },
-    { href: "/rebalancer", label: "Rebalancer" },
+    { href: "/plan", label: "Plan" },
     { href: "/simulator", label: "Simulator" },
   ],
 ];
@@ -35,8 +34,7 @@ const PORTFOLIO_PARAM_ROUTES = [
   "/enrich",
   "/concentrations",
   "/performance",
-  "/builder",
-  "/rebalancer",
+  "/plan",
 ];
 
 function isTabActive(pathname: string, href: string): boolean {
@@ -105,6 +103,7 @@ function useNowEvery30s(): number {
 export function Masthead() {
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
   const { resolvedTheme, setTheme } = useTheme();
+  const router = useRouter();
   const now = useNowEvery30s();
 
   // Render-time-stable timestamp for SSR/hydration: only render the time on
@@ -181,19 +180,8 @@ export function Masthead() {
             <span aria-hidden className="text-[14px] leading-none">⋮</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={4}>
-            <DropdownMenuItem
-              onClick={async () => {
-                try {
-                  await fetch("/auth/logout", {
-                    method: "POST",
-                    credentials: "include",
-                  });
-                } finally {
-                  window.location.reload();
-                }
-              }}
-            >
-              Switch account
+            <DropdownMenuItem onClick={() => router.push("/account")}>
+              Account settings
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={async () => {
@@ -207,7 +195,7 @@ export function Masthead() {
                 }
               }}
             >
-              Logout
+              Switch account
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

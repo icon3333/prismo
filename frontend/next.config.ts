@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/auth/select", destination: "/", permanent: false },
+      // Builder and Rebalancer merged into Plan
+      { source: "/builder", destination: "/plan", permanent: true },
+      { source: "/rebalancer", destination: "/plan", permanent: true },
     ];
   },
   async rewrites() {

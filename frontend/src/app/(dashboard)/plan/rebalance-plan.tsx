@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { useRebalancer } from "@/hooks/use-rebalancer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -25,19 +25,16 @@ import {
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
-import { PageHeader } from "@/components/shell/page-header";
 import { DetailedOverview } from "./detailed-overview";
 import { SummaryFooter } from "./summary-footer";
 
-export default function RebalancerPage() {
-  return (
-    <Suspense fallback={<RebalancerSkeleton />}>
-      <RebalancerPageInner />
-    </Suspense>
-  );
-}
-
-function RebalancerPageInner() {
+/**
+ * The rebalance plan for the targets configured above it on the Plan page.
+ * Targets come from Builder state; the buy/sell math is computed server-side
+ * by rebalance_service and re-fetched automatically after target edits (every
+ * successful /state write invalidates the portfolio cache).
+ */
+export function RebalancePlan() {
   const {
     portfolioData,
     rebalanced,
@@ -50,24 +47,23 @@ function RebalancerPageInner() {
     error,
   } = useRebalancer();
 
-  // The portfolio picker only affects the Detailed tab, so it's hidden while
-  // the Global tab is active.
   const [activeTab, setActiveTab] = useState("global");
 
-  if (isLoading) return <RebalancerSkeleton />;
+  if (isLoading) return <RebalancePlanSkeleton />;
 
   if (error) {
     return (
-      <div className="space-y-4">
-        <PageHeader title="Rebalancer" showPortfolioPicker={false} />
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
     );
   }
 
-  const totalCurrentValue = rebalanced.reduce(
+  // zeroTarget entries exist only to feed the Detailed tab — the plan table
+  // and totals cover portfolios with a target allocation.
+  const active = rebalanced.filter((p) => !p.zeroTarget);
+
+  const totalCurrentValue = active.reduce(
     (sum, p) => sum + (p.currentValue || 0),
     0
   );
@@ -77,8 +73,10 @@ function RebalancerPageInner() {
       : totalCurrentValue + investmentAmount;
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Rebalancer" showPortfolioPicker={activeTab === "detailed"} />
+    <section className="space-y-4">
+      <h2 className="font-mono text-micro font-medium uppercase tracking-[0.1em] text-ink">
+        Rebalance Plan
+      </h2>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(String(v))}>
         <TabsList>
@@ -134,22 +132,22 @@ function RebalancerPageInner() {
           </div>
 
           {/* Portfolio Table */}
-          {rebalanced.length === 0 ? (
+          {active.length === 0 ? (
             <Alert>
               <AlertDescription>
-                No portfolios with target allocations found. Configure
-                allocations in the Builder first.
+                No portfolios with target allocations found. Set the
+                allocations above first.
               </AlertDescription>
             </Alert>
           ) : (
             <>
               <PortfolioTable
-                portfolios={rebalanced}
+                portfolios={active}
                 totalCurrentValue={totalCurrentValue}
                 newTotalValue={newTotalValue}
               />
               <SummaryFooter
-                rebalanced={rebalanced}
+                rebalanced={active}
                 mode={mode}
                 investmentAmount={investmentAmount}
               />
@@ -162,11 +160,10 @@ function RebalancerPageInner() {
             portfolioData={portfolioData}
             rebalanced={rebalanced}
             selectedPortfolio={selectedPortfolio}
-            mode={mode}
           />
         </TabsContent>
       </Tabs>
-    </div>
+    </section>
   );
 }
 
@@ -188,7 +185,7 @@ function PortfolioTable({
 
   return (
     <TooltipProvider>
-    <div className="border border-border overflow-hidden">
+    <div className="border border-border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="bg-muted hover:bg-muted">
@@ -344,10 +341,9 @@ function PortfolioTable({
   );
 }
 
-function RebalancerSkeleton() {
+function RebalancePlanSkeleton() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-8 w-48" />
+    <div className="space-y-4">
       <Skeleton className="h-10 w-80" />
       <Skeleton className="h-64 w-full" />
     </div>

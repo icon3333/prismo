@@ -63,6 +63,8 @@ export interface Portfolio {
 export interface PortfolioData {
   portfolios: Portfolio[];
   total_value: number;
+  /** Present when the request carried ?mode= — server-computed plan. */
+  rebalanced?: RebalancedPortfolio[];
 }
 
 export type RebalanceMode = "existing-only" | "new-only" | "new-with-sells";
@@ -71,6 +73,13 @@ export interface RebalancedPortfolio extends Portfolio {
   targetValue: number;
   discrepancy: number;
   action: number;
+  /** Position-level plan, computed server-side by rebalance_service. */
+  detailed?: DetailedRebalancing;
+  /**
+   * True for portfolios without a target allocation — included only so the
+   * Detailed tab has a plan; excluded from the plan table and totals.
+   */
+  zeroTarget?: boolean;
 }
 
 export interface DetailedSector {

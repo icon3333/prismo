@@ -1,10 +1,32 @@
 import logging
 import requests
+import threading
 from datetime import datetime
 from typing import Dict, Any, Optional
 import warnings
 from app.exceptions import PriceFetchError
 from app.cache import cache
+
+# Registry of price-related cache keys set by this module. SimpleCache has no
+# pattern delete, and the same cache instance also backs the memoized
+# portfolio reads — so clear_price_cache() must delete exactly these keys
+# rather than cache.clear() the whole thing. SimpleCache is per-process, so a
+# per-process registry stays in sync with it.
+_price_cache_keys: set = set()
+_price_cache_keys_lock = threading.Lock()
+
+
+def _cache_price_entry(key: str, value: Any, timeout: int) -> None:
+    """cache.set for price data, recording the key for selective clearing.
+
+    Registers before setting: if a bulk clear runs in between, the worst case
+    is a registered key with no entry (a no-op delete later), never a cached
+    entry the registry doesn't know about.
+    """
+    with _price_cache_keys_lock:
+        _price_cache_keys.add(key)
+    cache.set(key, value, timeout=timeout)
+
 
 # Lazy import yfinance to speed up module loading (yfinance takes 3-5 seconds to import)
 _yf = None
@@ -119,7 +141,7 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[
             from app.utils.value_calculator import clear_exchange_rate_cache
             clear_exchange_rate_cache()
             return fetched * base_rate
-        cache.set(fail_key, True, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        _cache_price_entry(fail_key, True, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
 
     stale_rate = ExchangeRateRepository.get_rate(from_currency, to_currency)
     if stale_rate is not None:
@@ -234,7 +256,7 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
             error_msg = f"Cascade returned empty data for identifier {identifier}"
             logger.error(f"❌ {error_msg}")
             fail_result = {'success': False, 'error': error_msg}
-            cache.set(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+            _cache_price_entry(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
             return fail_result
 
         logger.debug(f"Cascade returned data keys: {list(data.keys())}")
@@ -285,11 +307,11 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         # updates would otherwise hit the network on every call), short enough
         # that conversion is retried soon after a rate becomes available.
         if price is not None and result['data']['priceEUR'] is None:
-            cache.set(cache_key, result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+            _cache_price_entry(cache_key, result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
             logger.debug(
                 f"Cached unconverted result for {identifier} (short TTL): EUR conversion unavailable")
         else:
-            cache.set(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
+            _cache_price_entry(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
             logger.debug(f"Cached successful result for {identifier}")
 
         return result
@@ -298,7 +320,7 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
         error_msg = f"Exception in get_isin_data for {identifier}: {str(e)}"
         logger.exception(error_msg)
         fail_result = {'success': False, 'error': error_msg}
-        cache.set(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        _cache_price_entry(neg_cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
         return fail_result
 
 
@@ -406,12 +428,12 @@ def get_yfinance_info(identifier: str) -> Dict[str, Any]:
     try:
         yf = _get_yfinance()
         info = yf.Ticker(identifier).info or {}
-        cache.set(cache_key, info, timeout=CACHE_TIMEOUT_STOCK_PRICES)
+        _cache_price_entry(cache_key, info, timeout=CACHE_TIMEOUT_STOCK_PRICES)
         return info
     except Exception as e:
         logger.error(f"Could not get yfinance info for {identifier}: {e}")
         fail_result = {'error': str(e)}
-        cache.set(cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        _cache_price_entry(cache_key, fail_result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
         return fail_result
 
 
@@ -607,13 +629,20 @@ def clear_price_cache(identifier: str = None):
     """
     if identifier:
         # Clear specific identifier - price data, negative cache, and info cache
-        cache.delete(f"isin_data_{identifier}")
-        cache.delete(f"isin_fail_{identifier}")
-        cache.delete(f"yf_info_{identifier}")
+        keys = [f"isin_data_{identifier}", f"isin_fail_{identifier}", f"yf_info_{identifier}"]
+        with _price_cache_keys_lock:
+            _price_cache_keys.difference_update(keys)
+        for key in keys:
+            cache.delete(key)
         logger.info(f"✓ Cleared price cache for: {identifier}")
     else:
-        # Clear entire cache (SimpleCache doesn't support pattern delete)
-        cache.clear()
-        logger.info(f"✓ Cleared entire price cache")
+        # Delete only the keys this module has set — cache.clear() would also
+        # wipe the memoized portfolio reads sharing the same SimpleCache.
+        with _price_cache_keys_lock:
+            keys = list(_price_cache_keys)
+            _price_cache_keys.clear()
+        for key in keys:
+            cache.delete(key)
+        logger.info(f"✓ Cleared {len(keys)} price cache entries")
 
 

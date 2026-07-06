@@ -48,7 +48,7 @@ Repositories (app/repositories/) → Data access, parameterized SQL, account_id 
 SQLite (app/schema.sql + migrations in app/db_manager.py)
 ```
 
-**Frontend** (Next.js 16, React 19, shadcn/ui, Tailwind): lives entirely in `frontend/`. Calls the Flask JSON API. App Router structure under `frontend/src/app/(dashboard)/` — one folder per page (performance, rebalancer, simulator, builder, enrich, concentrations, account). Client-side calc logic in `frontend/src/lib/*-calc.ts` mirrors the domain logic the Flask routes expose.
+**Frontend** (Next.js 16, React 19, shadcn/ui, Tailwind): lives entirely in `frontend/`. Calls the Flask JSON API. App Router structure under `frontend/src/app/(dashboard)/` — one folder per page (performance, plan, simulator, enrich, concentrations, account). The former Builder and Rebalancer pages are merged into `/plan` (targets on top, server-computed rebalance plan below); `/builder` and `/rebalancer` 301 to it. Client-side calc in `frontend/src/lib/*-calc.ts` is display shaping — the capital-mode rebalancing engine lives server-side in `app/services/rebalance_service.py` (exposed via `/simulator/portfolio-data?mode=&amount=`, parity-tested in `tests/test_rebalance_service.py`).
 
 The old Jinja `templates/` and `static/` directories were deleted in commit `4889844`. Don't look for them.
 
@@ -76,7 +76,7 @@ The old Jinja `templates/` and `static/` directories were deleted in commit `488
 All routes live under blueprints registered in `app/main.py`:
 - `main_bp` (`/`): account selection/switching API (`/api/accounts`, `/api/select_account/<id>`)
 - `account_bp` (`/account`): account management
-- `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/rebalancer`, `/build` → `/builder`, `/risk_overview` → `/concentrations`)
+- `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/plan`, `/build` → `/plan`, `/risk_overview` → `/concentrations`)
 - `admin_bp`: admin endpoints
 
 Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)`; a `portfolio_bp.after_request` hook invalidates the account's memoized reads on every successful write, so write endpoints don't call `invalidate_portfolio_cache()` themselves — except mid-request before re-reading, and in background jobs that outlive the request.
@@ -97,7 +97,7 @@ Key tables and notable columns:
 - `market_prices`: Native currency `price` + `price_eur` (legacy)
 - `exchange_rates`: Daily rates, refreshed on startup if >24h old
 - `simulations`: Allocation scenarios with `type` (overlay/portfolio), `scope` (global/portfolio), JSON `items`
-- `expanded_state`: UI state persistence (page_name values: `performance`, `builder`, `enrich`, `risk_overview`)
+- `expanded_state`: UI state persistence (page_name values: `performance`, `builder` (Plan targets), `plan` (capital mode/amount), `enrich`, `risk_overview`, `simulator`)
 - `accounts`: Has `cash` column for cash balance tracking
 
 UNIQUE constraint on `(account_id, name)` in `companies` — prevents duplicate positions.

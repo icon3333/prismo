@@ -23,10 +23,10 @@ export function InvestmentProgress({ sim }: Props) {
           <span>
             Set up your investment targets in the{" "}
             <a
-              href="/builder"
+              href="/plan"
               className="text-cyan-400 hover:underline"
             >
-              Builder
+              Plan
             </a>{" "}
             to see your progress here.
           </span>

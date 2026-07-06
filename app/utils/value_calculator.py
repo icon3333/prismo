@@ -154,42 +154,17 @@ def calculate_portfolio_total(items: List[Dict[str, Any]]) -> float:
     return sum((calculate_item_value(item) for item in items), 0.0)
 
 
-def get_value_calculation_sql() -> str:
-    """
-    Get SQL expression for calculating item value in database queries.
-
-    Use this in SELECT statements to ensure consistent calculation
-    at the database level. This is particularly useful for aggregations
-    and when you need calculated values in the query result.
-
-    The SQL assumes standard table aliases:
-    - c: companies table
-    - cs: company_shares table
-    - mp: market_prices table
-
-    Returns:
-        str: SQL CASE statement for value calculation
-
-    Example:
-        >>> from app.utils.value_calculator import get_value_calculation_sql
-        >>> sql = f'''
-        ...     SELECT
-        ...         c.name,
-        ...         {get_value_calculation_sql()} as item_value
-        ...     FROM companies c
-        ...     LEFT JOIN company_shares cs ON c.id = cs.company_id
-        ...     LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-        ... '''
-    """
-    # Note: Uses price_eur (pre-computed during price fetch) rather than joining
-    # exchange_rates table. This stays in sync because price_eur is updated every
-    # time prices are refreshed. Minor drift possible between refreshes if exchange
-    # rates change independently, but acceptable for daily-refresh homeserver use.
-    return """CASE
-            WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-            THEN c.custom_total_value
-            ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-        END"""
+# SQL fragment selecting the inputs calculate_item_value() needs, for queries
+# joining companies c / company_shares cs / market_prices mp. Every endpoint
+# computes values through calculate_item_value() in Python rather than
+# re-implementing the formula in SQL — a SQL shares×price_eur copy drifts from
+# the native price × daily FX path between price refreshes, so the same
+# portfolio would show different totals on different pages.
+VALUE_INPUT_COLUMNS_SQL = (
+    "c.is_custom_value, c.custom_total_value, "
+    "COALESCE(cs.override_share, cs.shares, 0) AS effective_shares, "
+    "mp.price, mp.currency, mp.price_eur"
+)
 
 
 def get_value_source(item: Dict[str, Any]) -> str:

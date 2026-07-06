@@ -11,10 +11,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { parseSimValue, formatSimValue } from "@/lib/simulator-calc";
+import {
+  resolveTargetPortfolioId,
+  computeAppliedPositions,
+} from "@/lib/apply-to-plan";
 import { SaveDialog } from "./save-dialog";
 import { CloneDialog } from "./clone-dialog";
+import { ApplyToPlanDialog } from "./apply-to-plan-dialog";
 import type { UseSimulatorReturn } from "@/hooks/use-simulator";
 
 interface Props {
@@ -25,9 +36,23 @@ export function SimulatorHeader({ sim }: Props) {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveDialogMode, setSaveDialogMode] = useState<"save" | "rename">("save");
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const isPortfolioMode = sim.mode === "portfolio";
+
+  // Apply to Plan is only possible when the sandbox resolves to a single
+  // target portfolio (cloned-from wins, else a common portfolio_id).
+  const applyTargetId = resolveTargetPortfolioId(
+    sim.currentClonedFromPortfolioId,
+    sim.items
+  );
+  const applyTargetName =
+    applyTargetId != null
+      ? (sim.portfolios.find((p) => String(p.id) === String(applyTargetId))
+          ?.name ?? sim.currentClonedFromName ?? `Portfolio ${applyTargetId}`)
+      : "";
+  const applyMapping = computeAppliedPositions(sim.items);
 
   return (
     <div className="space-y-3">
@@ -221,6 +246,31 @@ export function SimulatorHeader({ sim }: Props) {
             Clone Portfolio
           </Button>
         )}
+
+        {/* Apply to Plan (sandbox only) */}
+        {isPortfolioMode &&
+          (applyTargetId != null ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setApplyDialogOpen(true)}
+            >
+              Apply to Plan
+            </Button>
+          ) : (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger render={<span className="inline-flex" />}>
+                  <Button variant="outline" size="sm" disabled>
+                    Apply to Plan
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[240px]">
+                  Only single-portfolio sandbox simulations can be applied
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ))}
       </div>
 
       {/* Allocation summary (sandbox with totalAmount) */}
@@ -247,6 +297,18 @@ export function SimulatorHeader({ sim }: Props) {
           if (ok) setSaveDialogOpen(false);
           return ok;
         }}
+      />
+
+      <ApplyToPlanDialog
+        open={applyDialogOpen}
+        onOpenChange={setApplyDialogOpen}
+        targetPortfolioName={applyTargetName}
+        mapping={applyMapping}
+        onConfirm={() =>
+          applyTargetId != null
+            ? sim.applyToPlan(applyTargetId, applyMapping.applied)
+            : Promise.resolve(false)
+        }
       />
 
       <CloneDialog

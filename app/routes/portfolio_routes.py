@@ -48,12 +48,12 @@ def analyse_redirect():
 @portfolio_bp.route('/build')
 @require_auth
 def build_redirect():
-    return redirect('/portfolio/builder', code=301)
+    return redirect('/portfolio/plan', code=301)
 
 @portfolio_bp.route('/allocate')
 @require_auth
 def allocate_redirect():
-    return redirect('/portfolio/rebalancer', code=301)
+    return redirect('/portfolio/plan', code=301)
 
 @portfolio_bp.route('/risk_overview')
 @require_auth

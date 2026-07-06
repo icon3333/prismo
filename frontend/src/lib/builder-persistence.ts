@@ -1,9 +1,4 @@
-import type {
-  AllocationRules,
-  BudgetData,
-  BuilderPortfolio,
-  SortOptions,
-} from "@/types/builder";
+import type { BuilderPortfolio } from "@/types/builder";
 
 export interface BuilderPersistedState {
   budgetData?: string;
@@ -11,14 +6,6 @@ export interface BuilderPersistedState {
   portfolios?: string;
   expandedPortfolios?: string;
   sortOptions?: string;
-}
-
-export interface BuilderPendingState {
-  budget: BudgetData;
-  rules: AllocationRules;
-  portfolios: BuilderPortfolio[];
-  expandedPortfolios: Record<string, boolean>;
-  sortOptions: SortOptions;
 }
 
 export function tryParse<T>(json: string | undefined, fallback: T): T {
@@ -40,15 +27,4 @@ export function stripRuntimeFields(
     delete persisted.selectedPosition;
     return persisted;
   });
-}
-
-export function serializeBuilderState(payload: BuilderPendingState) {
-  return {
-    page: "builder",
-    budgetData: JSON.stringify(payload.budget),
-    rules: JSON.stringify(payload.rules),
-    portfolios: JSON.stringify(stripRuntimeFields(payload.portfolios)),
-    expandedPortfolios: JSON.stringify(payload.expandedPortfolios),
-    sortOptions: JSON.stringify(payload.sortOptions),
-  };
 }

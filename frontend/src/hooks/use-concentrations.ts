@@ -153,7 +153,6 @@ export function useConcentrations() {
   }, [portfolioIdFromUrl, portfolioList]);
 
   const isLoading = allQuery.isLoading || !stateLoaded;
-  const dataLoading = isLoading;
   const error = allQuery.error;
 
   const allCompanies = useMemo<PerformanceCompany[]>(
@@ -212,7 +211,6 @@ export function useConcentrations() {
     includeCash,
     setIncludeCash,
     isLoading,
-    dataLoading,
     error,
     // Chart data
     sectorData,

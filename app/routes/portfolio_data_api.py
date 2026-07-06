@@ -8,7 +8,10 @@ from app.db_manager import query_db, execute_db
 from app.decorators import require_auth
 from app.utils.response_helpers import error_response, not_found_response
 from app.exceptions import ValidationError, DataIntegrityError
-from app.utils.value_calculator import calculate_portfolio_total, calculate_item_value, has_price_or_custom_value
+from app.utils.value_calculator import (
+    calculate_portfolio_total, calculate_item_value, has_price_or_custom_value,
+    VALUE_INPUT_COLUMNS_SQL,
+)
 from app.utils.portfolio_totals import get_portfolio_totals
 from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_default
 from app.services import allocation_service
@@ -81,6 +84,8 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
                 cs.shares,
                 cs.override_share,
                 COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
+                mp.price,
+                mp.currency,
                 mp.price_eur,
                 c.custom_total_value,
                 c.custom_price_eur,
@@ -879,27 +884,21 @@ def get_portfolios_api():
                     else:
                         logger.error("Failed to create '-' portfolio - execute_db returned None")
 
-            # Add portfolio values if requested
+            # Add portfolio values if requested — summed via calculate_item_value()
+            # so this endpoint agrees with every other holdings endpoint.
             if include_values and portfolios:
-                portfolio_values = query_db('''
-                    SELECT p.id, COALESCE(SUM(
-                        CASE
-                            WHEN c.is_custom_value = 1 THEN c.custom_total_value
-                            ELSE COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)
-                        END
-                    ), 0) as total_value
-                    FROM portfolios p
-                    LEFT JOIN companies c ON p.id = c.portfolio_id
+                company_rows = query_db(f'''
+                    SELECT c.portfolio_id, {VALUE_INPUT_COLUMNS_SQL}
+                    FROM companies c
                     LEFT JOIN company_shares cs ON c.id = cs.company_id
                     LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-                    WHERE p.account_id = ? AND p.name IS NOT NULL
-                    GROUP BY p.id
+                    WHERE c.account_id = ? AND c.portfolio_id IS NOT NULL
                 ''', [account_id])
 
-                # Create a lookup dict for portfolio values
                 value_lookup = {}
-                if portfolio_values:
-                    value_lookup = {pv['id']: pv['total_value'] for pv in portfolio_values if isinstance(pv, dict)}
+                for row in (company_rows or []):
+                    pid = row['portfolio_id']
+                    value_lookup[pid] = value_lookup.get(pid, 0.0) + calculate_item_value(row)
 
                 # Add total_value to each portfolio
                 for portfolio in portfolios:

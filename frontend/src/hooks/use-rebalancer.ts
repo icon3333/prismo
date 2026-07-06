@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useApiQuery } from "@/lib/api-cache";
 import { calculateRebalancing } from "@/lib/rebalancer-calc";
 import type {
   PortfolioData,
@@ -30,60 +30,26 @@ export function useRebalancer(): UseRebalancerReturn {
   // Missing or "all" → no specific portfolio selected (empty state shown).
   const urlPortfolioId = searchParams.get("portfolio");
 
-  const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(
-    null
-  );
+  // Shared cached reads — instant render when cached, background revalidate.
+  const dataQuery = useApiQuery<PortfolioData>("/simulator/portfolio-data");
   // Sidecar fetch with IDs — used only to translate URL `?portfolio=<id>`
   // into the portfolio name expected by the rebalancer's calc layer.
-  const [portfolioIndex, setPortfolioIndex] = useState<PortfolioOption[]>([]);
+  const indexQuery = useApiQuery<PortfolioOption[]>(
+    "/portfolios?include_ids=true&has_companies=true"
+  );
+
   const [mode, setMode] = useState<RebalanceMode>("existing-only");
   const [investmentAmount, setInvestmentAmount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const [data, index] = await Promise.all([
-          apiFetch<PortfolioData>("/simulator/portfolio-data"),
-          apiFetch<PortfolioOption[]>(
-            "/portfolios?include_ids=true&has_companies=true"
-          ).catch(() => [] as PortfolioOption[]),
-        ]);
-        if (!cancelled) {
-          setPortfolioData(data);
-          setPortfolioIndex(index);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiError
-              ? err.message
-              : "Failed to load portfolio data"
-          );
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    fetchData();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const portfolioData = dataQuery.data ?? null;
 
   const selectedPortfolio = useMemo(() => {
     if (!urlPortfolioId || urlPortfolioId === "all") return "";
-    const match = portfolioIndex.find(
+    const match = (indexQuery.data ?? []).find(
       (p) => String(p.id) === urlPortfolioId
     );
     return match?.name ?? "";
-  }, [urlPortfolioId, portfolioIndex]);
+  }, [urlPortfolioId, indexQuery.data]);
 
   const rebalanced = useMemo(() => {
     if (!portfolioData?.portfolios) return [];
@@ -98,7 +64,7 @@ export function useRebalancer(): UseRebalancerReturn {
     investmentAmount,
     setInvestmentAmount,
     selectedPortfolio,
-    isLoading,
-    error,
+    isLoading: dataQuery.isLoading || indexQuery.isLoading,
+    error: dataQuery.error,
   };
 }

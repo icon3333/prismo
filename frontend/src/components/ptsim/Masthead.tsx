@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
@@ -29,9 +29,68 @@ const ROW2_GROUPS = [
   ],
 ];
 
+// Pages that read `?portfolio=` — the param is carried across them so a
+// selected portfolio survives tab switches.
+const PORTFOLIO_PARAM_ROUTES = [
+  "/enrich",
+  "/concentrations",
+  "/performance",
+  "/builder",
+  "/rebalancer",
+];
+
 function isTabActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname.startsWith(href);
+}
+
+function NavTabs({ portfolioId }: { portfolioId: string | null }) {
+  const pathname = usePathname();
+
+  const hrefFor = (href: string) =>
+    portfolioId && PORTFOLIO_PARAM_ROUTES.includes(href)
+      ? `${href}?portfolio=${encodeURIComponent(portfolioId)}`
+      : href;
+
+  return (
+    <>
+      {ROW2_GROUPS.map((group, gi) => (
+        <div
+          key={gi}
+          className={cn(
+            "flex shrink-0 items-stretch",
+            gi > 0 && "border-l border-rule-2",
+          )}
+        >
+          {group.map((tab) => {
+            const active = isTabActive(pathname, tab.href);
+            return (
+              <Link
+                key={tab.href}
+                href={hrefFor(tab.href)}
+                className={cn(
+                  "px-4 h-8 inline-flex items-center font-mono uppercase text-chrome tracking-[0.1em] transition-colors duration-[80ms]",
+                  active
+                    ? "text-cyan border-b-2 border-cyan -mb-px"
+                    : "text-ink-2 hover:text-ink",
+                )}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+    </>
+  );
+}
+
+// useSearchParams() suspends during prerender (same pattern as the
+// PortfolioPicker), so the param-aware tabs sit behind Suspense with a
+// param-less fallback that renders identical chrome.
+function NavTabsWithParams() {
+  const searchParams = useSearchParams();
+  return <NavTabs portfolioId={searchParams.get("portfolio")} />;
 }
 
 function useNowEvery30s(): number {
@@ -44,7 +103,6 @@ function useNowEvery30s(): number {
 }
 
 export function Masthead() {
-  const pathname = usePathname();
   const { isAnonymous, toggle: toggleAnonymous } = useAnonymousMode();
   const { resolvedTheme, setTheme } = useTheme();
   const now = useNowEvery30s();
@@ -155,35 +213,12 @@ export function Masthead() {
         </DropdownMenu>
       </div>
 
-      {/* Row 2 — 32px */}
-      <nav className="flex h-8 items-stretch bg-bg-1 border-b border-rule">
-        {ROW2_GROUPS.map((group, gi) => (
-          <div
-            key={gi}
-            className={cn(
-              "flex items-stretch",
-              gi > 0 && "border-l border-rule-2",
-            )}
-          >
-            {group.map((tab) => {
-              const active = isTabActive(pathname, tab.href);
-              return (
-                <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={cn(
-                    "px-4 h-8 inline-flex items-center font-mono uppercase text-chrome tracking-[0.1em] transition-colors duration-[80ms]",
-                    active
-                      ? "text-cyan border-b-2 border-cyan -mb-px"
-                      : "text-ink-2 hover:text-ink",
-                  )}
-                >
-                  {tab.label}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+      {/* Row 2 — 32px. Scrolls horizontally on phones (7 tabs ≈ 770px);
+          md:overflow-visible restores the active tab's -mb-px underline overlap. */}
+      <nav className="flex h-8 items-stretch bg-bg-1 border-b border-rule overflow-x-auto overflow-y-hidden md:overflow-visible">
+        <Suspense fallback={<NavTabs portfolioId={null} />}>
+          <NavTabsWithParams />
+        </Suspense>
       </nav>
     </header>
   );

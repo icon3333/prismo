@@ -11,6 +11,7 @@ from app.utils.response_helpers import (
     success_response,
     validation_error_response,
 )
+from app.utils.value_calculator import calculate_item_value, VALUE_INPUT_COLUMNS_SQL
 from app.utils.yfinance_utils import get_yfinance_info
 
 
@@ -46,7 +47,7 @@ def simulator_ticker_lookup():
         logger.info(f"Simulator ticker lookup for: {ticker}")
 
         # Check if ticker exists in user's portfolio
-        existing_position = query_db('''
+        existing_position = query_db(f'''
             SELECT
                 c.id,
                 c.name,
@@ -55,11 +56,7 @@ def simulator_ticker_lookup():
                 c.thesis,
                 COALESCE(c.override_country, mp.country) as country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-                        THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as value
+                {VALUE_INPUT_COLUMNS_SQL}
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
@@ -67,6 +64,8 @@ def simulator_ticker_lookup():
             AND UPPER(c.identifier) = ?
             LIMIT 1
         ''', [account_id, ticker], one=True)
+        if existing_position:
+            existing_position['value'] = calculate_item_value(existing_position)
 
         # Fetch info from yfinance (uses 15-minute cache)
         info = get_yfinance_info(ticker)
@@ -182,12 +181,7 @@ def simulator_portfolio_allocations():
                 c.thesis,
                 COALESCE(c.override_country, mp.country) as country,
                 COALESCE(cs.override_share, cs.shares, 0) as shares,
-                mp.price_eur,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-                        THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as value
+                {VALUE_INPUT_COLUMNS_SQL}
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
@@ -197,10 +191,13 @@ def simulator_portfolio_allocations():
                 (COALESCE(cs.override_share, cs.shares, 0) > 0)
                 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
             )
-            ORDER BY value DESC
         '''
 
         positions = query_db(positions_query, params)
+        for p in (positions or []):
+            p['value'] = calculate_item_value(p)
+        if positions:
+            positions.sort(key=lambda p: p['value'], reverse=True)
 
         if not positions:
             return success_response({
@@ -676,7 +673,7 @@ def simulator_search_investments():
 
         search_pattern = f'%{query_str}%'
 
-        results = query_db('''
+        results = query_db(f'''
             SELECT
                 c.identifier,
                 c.name,
@@ -685,11 +682,7 @@ def simulator_search_investments():
                 COALESCE(c.override_country, mp.country) as country,
                 c.portfolio_id,
                 p.name as portfolio_name,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-                        THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as value
+                {VALUE_INPUT_COLUMNS_SQL}
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
@@ -703,19 +696,24 @@ def simulator_search_investments():
                 (COALESCE(cs.override_share, cs.shares, 0) > 0)
                 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
             )
-            ORDER BY value DESC
-            LIMIT ?
-        ''', [account_id, search_pattern, search_pattern, limit])
+        ''', [account_id, search_pattern, search_pattern])
+
+        # Rank by the Python-computed value, so limit in Python too.
+        for r in (results or []):
+            r['value'] = calculate_item_value(r)
+        matches = sorted(
+            (results or []), key=lambda r: r['value'], reverse=True
+        )[:limit]
 
         investments = []
-        for r in (results or []):
+        for r in matches:
             investments.append({
                 'identifier': r['identifier'],
                 'name': r['name'],
                 'sector': r['sector'] or 'Unknown',
                 'thesis': (r['thesis'] or '').strip() or 'Unassigned',
                 'country': r['country'] or 'Unknown',
-                'value': round(float(r['value'] or 0), 2),
+                'value': round(r['value'], 2),
                 'portfolio_name': r['portfolio_name'] or 'Unassigned',
                 'portfolio_id': r['portfolio_id']
             })
@@ -778,7 +776,7 @@ def simulator_clone_portfolio():
         portfolio_name = portfolio['name']
 
         # Fetch all positions from the source portfolio
-        positions = query_db('''
+        positions = query_db(f'''
             SELECT
                 c.identifier,
                 c.name,
@@ -786,11 +784,7 @@ def simulator_clone_portfolio():
                 c.thesis,
                 COALESCE(c.override_country, mp.country) as country,
                 c.portfolio_id,
-                CASE
-                    WHEN c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL
-                        THEN c.custom_total_value
-                    ELSE (COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0))
-                END as value
+                {VALUE_INPUT_COLUMNS_SQL}
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
@@ -799,8 +793,11 @@ def simulator_clone_portfolio():
                 (COALESCE(cs.override_share, cs.shares, 0) > 0)
                 OR (c.is_custom_value = 1 AND c.custom_total_value IS NOT NULL)
             )
-            ORDER BY value DESC
         ''', [account_id, portfolio_id])
+        for pos in (positions or []):
+            pos['value'] = calculate_item_value(pos)
+        if positions:
+            positions.sort(key=lambda p: p['value'], reverse=True)
 
         # Transform positions into simulation items
         items = []

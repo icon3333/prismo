@@ -383,55 +383,6 @@ def load_portfolio_data(account_id=None, portfolio_id=None):
         return []
 
 
-def process_portfolio_dataframe(df, account_id=None, portfolio_id=None):
-    """
-    Process a portfolio dataframe and calculate additional metrics.
-
-    Args:
-        df: Pandas DataFrame with portfolio data
-        account_id: Optional account ID to filter by
-        portfolio_id: Optional portfolio ID to filter by
-
-    Returns:
-        Processed DataFrame with additional columns
-    """
-    try:
-        if df.empty:
-            return df
-
-        # Make a copy to avoid SettingWithCopyWarning
-        df = df.copy()
-
-        # Calculate value in EUR
-        df['value_eur'] = df.apply(
-            lambda row: row.get('quantity', 0) * row.get('price_eur', 0)
-            if row.get('price_eur') is not None else 0,
-            axis=1
-        )
-
-        # Calculate value in original currency
-        df['value'] = df.apply(
-            lambda row: row.get('quantity', 0) * row.get('price', 0)
-            if row.get('price') is not None else 0,
-            axis=1
-        )
-
-        # Calculate totals
-        total_value_eur = df['value_eur'].sum()
-
-        # Calculate portfolio weights
-        if total_value_eur > 0:
-            df['weight'] = df['value_eur'] / total_value_eur
-        else:
-            df['weight'] = 0
-
-        return df
-
-    except Exception as e:
-        logger.error(f"Error processing portfolio dataframe: {str(e)}")
-        return df
-
-
 def update_batch_prices_in_db(results):
     """Update market prices with results from batch processing."""
     success_count = 0

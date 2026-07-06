@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -18,11 +18,9 @@ import {
 } from "@/components/ui/tooltip";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { cn } from "@/lib/utils";
-import { calculateDetailedRebalancing } from "@/lib/rebalancer-calc";
 import type {
   PortfolioData,
   RebalancedPortfolio,
-  RebalanceMode,
   DetailedSector,
   PortfolioPosition,
 } from "@/types/portfolio";
@@ -32,14 +30,12 @@ interface DetailedOverviewProps {
   portfolioData: PortfolioData | null;
   rebalanced: RebalancedPortfolio[];
   selectedPortfolio: string;
-  mode: RebalanceMode;
 }
 
 export function DetailedOverview({
   portfolioData,
   rebalanced,
   selectedPortfolio,
-  mode,
 }: DetailedOverviewProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -47,17 +43,12 @@ export function DetailedOverview({
     (p) => p.name === selectedPortfolio
   );
 
-  // Find the matching rebalanced portfolio to get the action amount
+  // The position-level plan arrives precomputed from the server
+  // (rebalance_service) on the matching rebalanced portfolio.
   const rebalancedPortfolio = rebalanced.find(
     (p) => p.name === selectedPortfolio
   );
-  const portfolioActionAmount = rebalancedPortfolio?.action ?? 0;
-
-  // Calculate detailed rebalancing
-  const detailed = useMemo(() => {
-    if (!selected) return null;
-    return calculateDetailedRebalancing(selected, portfolioActionAmount, mode);
-  }, [selected, portfolioActionAmount, mode]);
+  const detailed = rebalancedPortfolio?.detailed ?? null;
 
   const sectors = detailed?.sectors ?? [];
 
@@ -92,7 +83,7 @@ export function DetailedOverview({
         )}
 
         {selected && sectors.length > 0 && detailed ? (
-          <div className="border border-border overflow-hidden">
+          <div className="border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">

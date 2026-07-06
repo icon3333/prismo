@@ -1,6 +1,11 @@
 import type { PerformanceCompany } from "@/types/performance";
 import { cashSlice } from "./cash-inclusion";
-import { groupAndAggregate, type AggregateItem } from "./aggregation-utils";
+import {
+  groupAndAggregate,
+  appendCashItem,
+  rankTopItems,
+  type AggregateItem,
+} from "./aggregation-utils";
 
 export type DistributionItem = AggregateItem;
 
@@ -39,30 +44,14 @@ export function groupByDimension(
       ? getDisplayCountry
       : (c: PerformanceCompany) => ((c[field] as string) || "").trim() || "Unknown";
 
-  let items = groupAndAggregate(
+  const items = groupAndAggregate(
     companies,
     keyFn,
     (c) => c.current_value || 0,
     total,
   );
 
-  if (cash > 0) {
-    items.push({ name: "Cash", value: cash, percentage: (cash / total) * 100 });
-    items.sort((a, b) => b.value - a.value);
-  }
-
-  // Top 8 + any >= 1%, Unknown/Cash last
-  const top8 = new Set(items.slice(0, 8).map((i) => i.name));
-  items = items.filter((i) => top8.has(i.name) || i.percentage >= 1);
-
-  // Move Unknown to end
-  const unknownIdx = items.findIndex((i) => i.name === "Unknown");
-  if (unknownIdx > 0) {
-    const [unknown] = items.splice(unknownIdx, 1);
-    items.push(unknown);
-  }
-
-  return items;
+  return rankTopItems(appendCashItem(items, cash, total));
 }
 
 /**
@@ -88,16 +77,7 @@ export function topHoldings(
     percentage: ((c.current_value || 0) / total) * 100,
   }));
 
-  if (cash > 0) {
-    items.push({
-      name: "Cash",
-      value: cash,
-      percentage: (cash / total) * 100,
-    });
-    items.sort((a, b) => b.value - a.value);
-  }
-
-  return items;
+  return appendCashItem(items, cash, total);
 }
 
 /**
@@ -119,11 +99,6 @@ export function portfolioDistribution(
     total,
   );
 
-  if (cash > 0) {
-    items.push({ name: "Cash", value: cash, percentage: (cash / total) * 100 });
-    items.sort((a, b) => b.value - a.value);
-  }
-
-  return items;
+  return appendCashItem(items, cash, total);
 }
 

@@ -8,18 +8,83 @@ from app.db_manager import query_db, execute_db
 from app.decorators import require_auth
 from app.utils.response_helpers import error_response, not_found_response
 from app.exceptions import ValidationError, DataIntegrityError
-from app.utils.value_calculator import calculate_portfolio_total, calculate_item_value, has_price_or_custom_value
+from app.utils.value_calculator import (
+    calculate_portfolio_total, calculate_item_value, has_price_or_custom_value,
+    VALUE_INPUT_COLUMNS_SQL,
+)
 from app.utils.portfolio_totals import get_portfolio_totals
 from app.utils.portfolio_utils import get_portfolio_data, has_companies_in_default
 from app.services import allocation_service
 from app.repositories.portfolio_repository import PortfolioRepository
 from app.cache import cache
 
+import copy
 import logging
 import json
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_pnl(entry: Dict[str, Any], value_key: str = 'total_value') -> None:
+    """Set pnl_absolute/pnl_percentage on a dict from its total_invested."""
+    invested = float(entry.get('total_invested', 0) or 0)
+    value = float(entry.get(value_key, 0) or 0)
+    if invested > 0:
+        entry['pnl_absolute'] = value - invested
+        entry['pnl_percentage'] = ((value - invested) / invested) * 100
+    else:
+        entry['pnl_absolute'] = None
+        entry['pnl_percentage'] = None
+
+
+def _apply_company_percentages(companies, denominator: float) -> None:
+    """Set percentage (of denominator) and P&L on each company dict."""
+    for company in companies:
+        company['percentage'] = (
+            (float(company['current_value']) / denominator * 100)
+            if denominator > 0 else 0
+        )
+        _apply_pnl(company, value_key='current_value')
+
+
+def _finalize_groups(groups, portfolio_total: float, company_pct_within_group: bool = False):
+    """Add percentage + P&L to each group, sort companies and groups by value."""
+    result = []
+    for group in groups:
+        group['percentage'] = (
+            (group['total_value'] / portfolio_total * 100)
+            if portfolio_total > 0 else 0
+        )
+        _apply_pnl(group)
+        if company_pct_within_group:
+            _apply_company_percentages(group['companies'], group['total_value'])
+        group['companies'].sort(key=lambda c: c['current_value'], reverse=True)
+        result.append(group)
+    result.sort(key=lambda g: g['total_value'], reverse=True)
+    return result
+
+
+def _group_and_summarize(companies, key_fn, portfolio_total: float):
+    """Group companies by key_fn, aggregate value/invested, summarize each group."""
+    groups: Dict[str, Dict[str, Any]] = {}
+    for company in companies:
+        name = key_fn(company)
+        group = groups.setdefault(
+            name, {'name': name, 'companies': [], 'total_value': 0, 'total_invested': 0})
+        group['companies'].append(company)
+        group['total_value'] += float(company['current_value'])
+        group['total_invested'] += float(company.get('total_invested', 0) or 0)
+    return _finalize_groups(groups.values(), portfolio_total)
+
+
+def _sector_key(company) -> str:
+    return company['sector'] or 'Uncategorized'
+
+
+def _thesis_key(company) -> str:
+    return (company.get('thesis') or '').strip() or 'Unassigned'
+
 
 def invalidate_portfolio_cache(account_id: int) -> None:
     """
@@ -81,6 +146,8 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
                 cs.shares,
                 cs.override_share,
                 COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
+                mp.price,
+                mp.currency,
                 mp.price_eur,
                 c.custom_total_value,
                 c.custom_price_eur,
@@ -179,12 +246,47 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
 
 @require_auth
 def get_simulator_portfolio_data():
-    """API endpoint to get structured portfolio data for the rebalancing feature"""
+    """Structured portfolio data for rebalancing.
+
+    Optional query params `mode` (existing-only | new-only | new-with-sells)
+    and `amount` add a `rebalanced` array: portfolio-level actions plus a
+    per-portfolio position-level `detailed` plan, computed by
+    rebalance_service (the single capital-mode engine).
+    """
     logger.info("API request for allocate portfolio data")
 
     try:
         account_id = g.account_id
         result = _get_simulator_portfolio_data_internal(account_id)
+
+        mode = request.args.get('mode')
+        if mode:
+            from app.services.rebalance_service import (
+                VALID_MODES, calculate_rebalancing, calculate_detailed_rebalancing)
+            if mode not in VALID_MODES:
+                raise ValidationError(f'Invalid mode: {mode}')
+            amount = request.args.get('amount', 0, type=float) or 0
+            # The memoized base tree must not be mutated.
+            result = copy.deepcopy(result)
+            rebalanced = calculate_rebalancing(
+                result.get('portfolios') or [], mode, amount)
+            for entry in rebalanced:
+                entry['detailed'] = calculate_detailed_rebalancing(
+                    entry, entry.get('action') or 0, mode)
+            # Portfolios without a target allocation still get a (zero-action)
+            # detailed plan so the Detailed tab works before targets are set;
+            # zeroTarget entries are excluded from the plan table client-side.
+            included = {e['name'] for e in rebalanced}
+            for p in result.get('portfolios') or []:
+                if p.get('name') in included:
+                    continue
+                entry = dict(p)
+                entry.update({'targetValue': 0, 'discrepancy': 0,
+                              'action': 0, 'zeroTarget': True})
+                entry['detailed'] = calculate_detailed_rebalancing(entry, 0, mode)
+                rebalanced.append(entry)
+            result['rebalanced'] = rebalanced
+
         return jsonify(result)
 
     except ValidationError as e:
@@ -364,24 +466,7 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
     total_value = holdings_value  # Keep for backwards compatibility in return value
     portfolio_total = totals['total']  # Use this for percentages (includes cash)
 
-    for company in companies:
-        company['percentage'] = (
-            (float(company['current_value']) / portfolio_total * 100)
-            if portfolio_total > 0 else 0
-        )
-
-        # Calculate P&L (Profit & Loss)
-        total_invested = float(company.get('total_invested', 0) or 0)
-        current_value = float(company.get('current_value', 0) or 0)
-
-        if total_invested > 0:
-            pnl_absolute = current_value - total_invested
-            pnl_percentage = (pnl_absolute / total_invested) * 100
-            company['pnl_absolute'] = pnl_absolute
-            company['pnl_percentage'] = pnl_percentage
-        else:
-            company['pnl_absolute'] = None
-            company['pnl_percentage'] = None
+    _apply_company_percentages(companies, portfolio_total)
 
     if companies_only:
         # Fast path: skip groupings, just return companies
@@ -402,128 +487,17 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
             'portfolios': []
         }
 
-    # Group by sector
-    sectors = {}
-    for company in companies:
-        sector_name = company['sector'] or 'Uncategorized'
-        if sector_name not in sectors:
-            sectors[sector_name] = {
-                'name': sector_name,
-                'companies': [],
-                'total_value': 0,
-                'total_invested': 0
-            }
-        sectors[sector_name]['companies'].append(company)
-        sectors[sector_name]['total_value'] += float(company['current_value'])
-        sectors[sector_name]['total_invested'] += float(company.get('total_invested', 0))
-
-    # Convert sectors to list and calculate percentages (using portfolio_total which includes cash)
-    sectors_list = []
-    for sector_data in sectors.values():
-        sector_data['percentage'] = (
-            (sector_data['total_value'] / portfolio_total * 100)
-            if portfolio_total > 0 else 0
-        )
-
-        # Calculate sector P&L
-        if sector_data['total_invested'] > 0:
-            pnl_absolute = sector_data['total_value'] - sector_data['total_invested']
-            pnl_percentage = (pnl_absolute / sector_data['total_invested']) * 100
-            sector_data['pnl_absolute'] = pnl_absolute
-            sector_data['pnl_percentage'] = pnl_percentage
-        else:
-            sector_data['pnl_absolute'] = None
-            sector_data['pnl_percentage'] = None
-
-        sector_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-        sectors_list.append(sector_data)
-
-    sectors_list.sort(key=lambda x: x['total_value'], reverse=True)
-
-    # Group by thesis
-    theses = {}
-    for company in companies:
-        thesis_name = (company.get('thesis') or '').strip() or 'Unassigned'
-        if thesis_name not in theses:
-            theses[thesis_name] = {
-                'name': thesis_name,
-                'companies': [],
-                'total_value': 0,
-                'total_invested': 0
-            }
-        theses[thesis_name]['companies'].append(company)
-        theses[thesis_name]['total_value'] += float(company['current_value'])
-        theses[thesis_name]['total_invested'] += float(company.get('total_invested', 0) or 0)
-
-    # Convert theses to list and calculate percentages (using portfolio_total which includes cash)
-    theses_list = []
-    for thesis_data in theses.values():
-        thesis_data['percentage'] = (
-            (thesis_data['total_value'] / portfolio_total * 100)
-            if portfolio_total > 0 else 0
-        )
-
-        # Calculate thesis P&L
-        if thesis_data['total_invested'] > 0:
-            pnl_absolute = thesis_data['total_value'] - thesis_data['total_invested']
-            pnl_percentage = (pnl_absolute / thesis_data['total_invested']) * 100
-            thesis_data['pnl_absolute'] = pnl_absolute
-            thesis_data['pnl_percentage'] = pnl_percentage
-        else:
-            thesis_data['pnl_absolute'] = None
-            thesis_data['pnl_percentage'] = None
-
-        thesis_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-        theses_list.append(thesis_data)
-
-    theses_list.sort(key=lambda x: x['total_value'], reverse=True)
-
-    # Convert portfolios_raw to list and calculate percentages (using portfolio_total which includes cash)
-    portfolios_list = []
-    for portfolio_data in portfolios_raw.values():
-        portfolio_data['percentage'] = (
-            (portfolio_data['total_value'] / portfolio_total * 100)
-            if portfolio_total > 0 else 0
-        )
-
-        # Calculate portfolio P&L
-        if portfolio_data['total_invested'] > 0:
-            pnl_absolute = portfolio_data['total_value'] - portfolio_data['total_invested']
-            pnl_percentage = (pnl_absolute / portfolio_data['total_invested']) * 100
-            portfolio_data['pnl_absolute'] = pnl_absolute
-            portfolio_data['pnl_percentage'] = pnl_percentage
-        else:
-            portfolio_data['pnl_absolute'] = None
-            portfolio_data['pnl_percentage'] = None
-
-        # Calculate per-company percentages within portfolio
-        for company in portfolio_data['companies']:
-            company['percentage'] = (
-                (company['current_value'] / portfolio_data['total_value'] * 100)
-                if portfolio_data['total_value'] > 0 else 0
-            )
-            # P&L for each company
-            ti = float(company.get('total_invested', 0) or 0)
-            if ti > 0:
-                company['pnl_absolute'] = company['current_value'] - ti
-                company['pnl_percentage'] = (company['pnl_absolute'] / ti) * 100
-            else:
-                company['pnl_absolute'] = None
-                company['pnl_percentage'] = None
-
-        portfolio_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-        portfolios_list.append(portfolio_data)
-
-    portfolios_list.sort(key=lambda x: x['total_value'], reverse=True)
+    sectors_list = _group_and_summarize(companies, _sector_key, portfolio_total)
+    theses_list = _group_and_summarize(companies, _thesis_key, portfolio_total)
+    portfolios_list = _finalize_groups(
+        portfolios_raw.values(), portfolio_total, company_pct_within_group=True)
 
     # Calculate total portfolio P&L
     total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
-    if total_invested > 0:
-        portfolio_pnl_absolute = total_value - total_invested
-        portfolio_pnl_percentage = (portfolio_pnl_absolute / total_invested) * 100
-    else:
-        portfolio_pnl_absolute = None
-        portfolio_pnl_percentage = None
+    overall = {'total_invested': total_invested, 'total_value': total_value}
+    _apply_pnl(overall)
+    portfolio_pnl_absolute = overall['pnl_absolute']
+    portfolio_pnl_percentage = overall['pnl_percentage']
 
     # Get the most recent last_updated across all companies
     last_updated = max((c['last_updated'] for c in companies if c['last_updated']), default=None)
@@ -641,109 +615,17 @@ def get_single_portfolio_data_api(portfolio_id):
         total_value = holdings_value  # Keep for backwards compatibility in return value
         portfolio_total = totals['total']  # Use this for percentages (includes cash)
 
-        for company in companies:
-            company['percentage'] = (
-                (float(company['current_value']) / portfolio_total * 100)
-                if portfolio_total > 0 else 0
-            )
+        _apply_company_percentages(companies, portfolio_total)
 
-            # Calculate P&L (Profit & Loss)
-            total_invested = float(company.get('total_invested', 0) or 0)
-            current_value = float(company.get('current_value', 0) or 0)
-
-            if total_invested > 0:
-                pnl_absolute = current_value - total_invested
-                pnl_percentage = (pnl_absolute / total_invested) * 100
-                company['pnl_absolute'] = pnl_absolute
-                company['pnl_percentage'] = pnl_percentage
-            else:
-                company['pnl_absolute'] = None
-                company['pnl_percentage'] = None
-
-        # Group by sector
-        sectors = {}
-        for company in companies:
-            sector_name = company['sector'] or 'Uncategorized'
-            if sector_name not in sectors:
-                sectors[sector_name] = {
-                    'name': sector_name,
-                    'companies': [],
-                    'total_value': 0,
-                    'total_invested': 0
-                }
-            sectors[sector_name]['companies'].append(company)
-            sectors[sector_name]['total_value'] += float(company['current_value'])
-            sectors[sector_name]['total_invested'] += float(company.get('total_invested', 0))
-
-        # Convert to list and calculate percentages (using portfolio_total which includes cash)
-        sectors_list = []
-        for sector_data in sectors.values():
-            sector_data['percentage'] = (
-                (sector_data['total_value'] / portfolio_total * 100)
-                if portfolio_total > 0 else 0
-            )
-
-            # Calculate sector P&L
-            if sector_data['total_invested'] > 0:
-                pnl_absolute = sector_data['total_value'] - sector_data['total_invested']
-                pnl_percentage = (pnl_absolute / sector_data['total_invested']) * 100
-                sector_data['pnl_absolute'] = pnl_absolute
-                sector_data['pnl_percentage'] = pnl_percentage
-            else:
-                sector_data['pnl_absolute'] = None
-                sector_data['pnl_percentage'] = None
-
-            sector_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-            sectors_list.append(sector_data)
-
-        sectors_list.sort(key=lambda x: x['total_value'], reverse=True)
-
-        # Group by thesis (similar to sector grouping)
-        theses = {}
-        for company in companies:
-            thesis_name = (company.get('thesis') or '').strip() or 'Unassigned'
-            if thesis_name not in theses:
-                theses[thesis_name] = {
-                    'name': thesis_name,
-                    'companies': [],
-                    'total_value': 0,
-                    'total_invested': 0
-                }
-            theses[thesis_name]['companies'].append(company)
-            theses[thesis_name]['total_value'] += float(company['current_value'])
-            theses[thesis_name]['total_invested'] += float(company.get('total_invested', 0) or 0)
-
-        # Convert to list and calculate percentages for theses (using portfolio_total which includes cash)
-        theses_list = []
-        for thesis_data in theses.values():
-            thesis_data['percentage'] = (
-                (thesis_data['total_value'] / portfolio_total * 100)
-                if portfolio_total > 0 else 0
-            )
-
-            # Calculate thesis P&L
-            if thesis_data['total_invested'] > 0:
-                pnl_absolute = thesis_data['total_value'] - thesis_data['total_invested']
-                pnl_percentage = (pnl_absolute / thesis_data['total_invested']) * 100
-                thesis_data['pnl_absolute'] = pnl_absolute
-                thesis_data['pnl_percentage'] = pnl_percentage
-            else:
-                thesis_data['pnl_absolute'] = None
-                thesis_data['pnl_percentage'] = None
-
-            thesis_data['companies'].sort(key=lambda x: x['current_value'], reverse=True)
-            theses_list.append(thesis_data)
-
-        theses_list.sort(key=lambda x: x['total_value'], reverse=True)
+        sectors_list = _group_and_summarize(companies, _sector_key, portfolio_total)
+        theses_list = _group_and_summarize(companies, _thesis_key, portfolio_total)
 
         # Calculate total portfolio P&L
         total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
-        if total_invested > 0:
-            portfolio_pnl_absolute = total_value - total_invested
-            portfolio_pnl_percentage = (portfolio_pnl_absolute / total_invested) * 100
-        else:
-            portfolio_pnl_absolute = None
-            portfolio_pnl_percentage = None
+        overall = {'total_invested': total_invested, 'total_value': total_value}
+        _apply_pnl(overall)
+        portfolio_pnl_absolute = overall['pnl_absolute']
+        portfolio_pnl_percentage = overall['pnl_percentage']
 
         # Build response
         response_data = {
@@ -879,27 +761,21 @@ def get_portfolios_api():
                     else:
                         logger.error("Failed to create '-' portfolio - execute_db returned None")
 
-            # Add portfolio values if requested
+            # Add portfolio values if requested — summed via calculate_item_value()
+            # so this endpoint agrees with every other holdings endpoint.
             if include_values and portfolios:
-                portfolio_values = query_db('''
-                    SELECT p.id, COALESCE(SUM(
-                        CASE
-                            WHEN c.is_custom_value = 1 THEN c.custom_total_value
-                            ELSE COALESCE(cs.override_share, cs.shares, 0) * COALESCE(mp.price_eur, 0)
-                        END
-                    ), 0) as total_value
-                    FROM portfolios p
-                    LEFT JOIN companies c ON p.id = c.portfolio_id
+                company_rows = query_db(f'''
+                    SELECT c.portfolio_id, {VALUE_INPUT_COLUMNS_SQL}
+                    FROM companies c
                     LEFT JOIN company_shares cs ON c.id = cs.company_id
                     LEFT JOIN market_prices mp ON c.identifier = mp.identifier
-                    WHERE p.account_id = ? AND p.name IS NOT NULL
-                    GROUP BY p.id
+                    WHERE c.account_id = ? AND c.portfolio_id IS NOT NULL
                 ''', [account_id])
 
-                # Create a lookup dict for portfolio values
                 value_lookup = {}
-                if portfolio_values:
-                    value_lookup = {pv['id']: pv['total_value'] for pv in portfolio_values if isinstance(pv, dict)}
+                for row in (company_rows or []):
+                    pid = row['portfolio_id']
+                    value_lookup[pid] = value_lookup.get(pid, 0.0) + calculate_item_value(row)
 
                 # Add total_value to each portfolio
                 for portfolio in portfolios:

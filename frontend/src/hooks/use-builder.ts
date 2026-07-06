@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { usePagePersistence } from "@/hooks/use-page-persistence";
 import {
-  type BuilderPendingState,
   type BuilderPersistedState,
-  serializeBuilderState,
+  stripRuntimeFields,
   tryParse,
 } from "@/lib/builder-persistence";
 import {
@@ -58,7 +58,6 @@ const DEFAULT_METRICS: PortfolioMetrics = {
 export function useBuilder() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   const [budget, setBudget] = useState<BudgetData>(DEFAULT_BUDGET);
   const [rules, setRulesState] = useState<AllocationRules>(DEFAULT_RULES);
@@ -76,17 +75,12 @@ export function useBuilder() {
   const [metricsState, setMetricsState] =
     useState<PortfolioMetrics>(DEFAULT_METRICS);
 
-  // Debounced persist
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pendingRef = useRef<BuilderPendingState>({
-    budget: DEFAULT_BUDGET,
-    rules: DEFAULT_RULES,
-    portfolios: [],
-    expandedPortfolios: {},
-    sortOptions: { column: "weight", direction: "desc" },
-  });
+  // Debounced persist — partial updates are serialized into the persisted
+  // string fields and merged into the shared hook's accumulated state.
+  const { persistState, hydrate, isSaving } =
+    usePagePersistence<BuilderPersistedState>("builder");
 
-  const persistState = useCallback(
+  const save = useCallback(
     (updates: {
       budget?: BudgetData;
       rules?: AllocationRules;
@@ -94,43 +88,15 @@ export function useBuilder() {
       expandedPortfolios?: Record<string, boolean>;
       sortOptions?: SortOptions;
     }) => {
-      pendingRef.current = {
-        budget: updates.budget ?? pendingRef.current.budget,
-        rules: updates.rules ?? pendingRef.current.rules,
-        portfolios: updates.portfolios ?? pendingRef.current.portfolios,
-        expandedPortfolios: updates.expandedPortfolios ?? pendingRef.current.expandedPortfolios,
-        sortOptions: updates.sortOptions ?? pendingRef.current.sortOptions,
-      };
-
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(async () => {
-        const payload = pendingRef.current;
-        setIsSaving(true);
-        try {
-          await apiFetch("/state", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(serializeBuilderState(payload)),
-          });
-        } catch {
-          // Silently fail
-        } finally {
-          setIsSaving(false);
-        }
-      }, 500);
-    },
-    []
-  );
-
-  // Helper to persist current + partial update
-  const save = useCallback(
-    (partial: {
-      budget?: BudgetData;
-      rules?: AllocationRules;
-      portfolios?: BuilderPortfolio[];
-      expandedPortfolios?: Record<string, boolean>;
-      sortOptions?: SortOptions;
-    }) => {
+      const partial: Partial<BuilderPersistedState> = {};
+      if (updates.budget) partial.budgetData = JSON.stringify(updates.budget);
+      if (updates.rules) partial.rules = JSON.stringify(updates.rules);
+      if (updates.portfolios)
+        partial.portfolios = JSON.stringify(stripRuntimeFields(updates.portfolios));
+      if (updates.expandedPortfolios)
+        partial.expandedPortfolios = JSON.stringify(updates.expandedPortfolios);
+      if (updates.sortOptions)
+        partial.sortOptions = JSON.stringify(updates.sortOptions);
       persistState(partial);
     },
     [persistState]
@@ -614,14 +580,16 @@ export function useBuilder() {
         setExpandedPortfolios(savedExpanded);
         if (savedSort) setSortOptionsState(savedSort);
 
-        // Seed pending ref for future saves
-        pendingRef.current = {
-          budget: currentBudget,
-          rules: currentRules,
-          portfolios: reconciledPortfolios,
-          expandedPortfolios: savedExpanded,
-          sortOptions: savedSort ?? { column: "weight", direction: "desc" },
-        };
+        // Seed accumulated state so future partial saves POST the full state
+        hydrate({
+          budgetData: JSON.stringify(currentBudget),
+          rules: JSON.stringify(currentRules),
+          portfolios: JSON.stringify(stripRuntimeFields(reconciledPortfolios)),
+          expandedPortfolios: JSON.stringify(savedExpanded),
+          sortOptions: JSON.stringify(
+            savedSort ?? { column: "weight", direction: "desc" }
+          ),
+        });
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -636,9 +604,8 @@ export function useBuilder() {
     init();
     return () => {
       cancelled = true;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, []);
+  }, [hydrate]);
 
   return {
     isLoading,

@@ -10,10 +10,16 @@ import {
 import { apiFetch } from "@/lib/api";
 import { toast } from "sonner";
 import {
-  loadPersistedState,
-  savePersistedState,
+  DEFAULT_PERSISTED_STATE,
+  parsePersistedState,
+  serializePersistedState,
 } from "@/lib/simulator-persistence";
+import {
+  applyPositionsToBuilderPortfolios,
+  type AppliedPosition,
+} from "@/lib/apply-to-plan";
 import { useSimulationAutosave } from "@/hooks/use-simulation-autosave";
+import { usePagePersistence } from "@/hooks/use-page-persistence";
 import {
   generateItemId,
   normalizeLabel,
@@ -61,6 +67,7 @@ export function useSimulator() {
   const [currentSimulationName, setCurrentSimulationName] = useState<string | null>(null);
   const [currentSimulationType, setCurrentSimulationType] = useState<"overlay" | "portfolio" | null>(null);
   const [currentClonedFromName, setCurrentClonedFromName] = useState<string | null>(null);
+  const [currentClonedFromPortfolioId, setCurrentClonedFromPortfolioId] = useState<number | null>(null);
 
   // --- Baseline state ---
   const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
@@ -100,30 +107,31 @@ export function useSimulator() {
   // Persist helpers
   // =========================================================================
 
-  const persistLocalStorage = useCallback(
+  // Selection state (mode/scope/simulation ids) lives server-side under
+  // page 'simulator'. persistedRef mirrors the last known server state so
+  // POSTs always carry the full key set (POST /state replaces all keys).
+  const { persistState: persistServerState, hydrate: hydrateServerState } =
+    usePagePersistence<Record<string, string>>("simulator");
+  const persistedRef = useRef<PersistedState>({ ...DEFAULT_PERSISTED_STATE });
+
+  const persistSelection = useCallback(
     (overrides: Partial<PersistedState> = {}) => {
-      const existing = loadPersistedState() || {
-        mode: "overlay" as SimulatorMode,
-        scope: "global" as SimulatorScope,
-        portfolioId: null,
-        overlaySimulationId: null,
-        portfolioSimulationId: null,
-      };
       const modeKey =
         (overrides.mode || mode) === "portfolio"
           ? "portfolioSimulationId"
           : "overlaySimulationId";
       const state: PersistedState = {
-        ...existing,
+        ...persistedRef.current,
         mode: overrides.mode ?? mode,
         scope: overrides.scope ?? scope,
         portfolioId: overrides.portfolioId !== undefined ? overrides.portfolioId : portfolioId,
         [modeKey]: currentSimulationId,
         ...overrides,
       };
-      savePersistedState(state);
+      persistedRef.current = state;
+      persistServerState(serializePersistedState(state));
     },
-    [mode, scope, portfolioId, currentSimulationId]
+    [mode, scope, portfolioId, currentSimulationId, persistServerState]
   );
 
   // =========================================================================
@@ -192,6 +200,7 @@ export function useSimulator() {
       setCurrentSimulationName(simulation.name);
       setCurrentSimulationType(simulation.type);
       setCurrentClonedFromName(simulation.cloned_from_name);
+      setCurrentClonedFromPortfolioId(simulation.cloned_from_portfolio_id ?? null);
       setTotalAmountState(simulation.total_amount || 0);
 
       let loadedItems = simulation.items || [];
@@ -227,6 +236,7 @@ export function useSimulator() {
         setCurrentSimulationName(null);
         setCurrentSimulationType(null);
         setCurrentClonedFromName(null);
+        setCurrentClonedFromPortfolioId(null);
         setItems([]);
         setTotalAmountState(0);
         setAutoSaveStatus("idle");
@@ -234,6 +244,9 @@ export function useSimulator() {
           lumpSum: 0, monthly: 0, months: 1,
           manualMode: false, manualItems: [],
         };
+        persistSelection({
+          [mode === "portfolio" ? "portfolioSimulationId" : "overlaySimulationId"]: null,
+        });
         return;
       }
 
@@ -255,6 +268,10 @@ export function useSimulator() {
           }
 
           populateFromSimulation(sim, silent);
+          persistSelection({
+            mode: targetMode,
+            [sim.type === "portfolio" ? "portfolioSimulationId" : "overlaySimulationId"]: sim.id,
+          });
         } else if (!silent) {
           toast.error("Failed to load simulation");
         }
@@ -262,7 +279,7 @@ export function useSimulator() {
         if (!silent) toast.error("Failed to load simulation");
       }
     },
-    [cancelPendingAutoSave, mode, populateFromSimulation, setAutoSaveStatus]
+    [cancelPendingAutoSave, mode, populateFromSimulation, persistSelection, setAutoSaveStatus]
   );
 
   // =========================================================================
@@ -277,31 +294,28 @@ export function useSimulator() {
       setError(null);
 
       try {
-        const [, simsList] = await Promise.all([
+        const [, simsList, savedRaw] = await Promise.all([
           fetchPortfolios(),
           fetchSimulations(),
+          apiFetch<Record<string, string>>("/state?page=simulator").catch(
+            () => null
+          ),
         ]);
 
         if (cancelled) return;
 
-        const saved = loadPersistedState();
-        let initMode: SimulatorMode = "overlay";
-        let initScope: SimulatorScope = "global";
-        let initPortfolioId: number | null = null;
-        let targetSimId: number | null = null;
+        // Seed the persistence buffer so later partial saves POST all keys.
+        hydrateServerState(serializePersistedState(parsePersistedState(savedRaw)));
+        const saved = parsePersistedState(savedRaw);
+        persistedRef.current = saved;
 
-        if (saved) {
-          if (saved.mode === "overlay" || saved.mode === "portfolio") {
-            initMode = saved.mode;
-          }
-          if (saved.scope) initScope = saved.scope;
-          if (saved.portfolioId) initPortfolioId = saved.portfolioId;
-
-          targetSimId =
-            initMode === "portfolio"
-              ? saved.portfolioSimulationId
-              : saved.overlaySimulationId;
-        }
+        const initMode: SimulatorMode = saved.mode;
+        const initScope: SimulatorScope = saved.scope;
+        const initPortfolioId: number | null = saved.portfolioId;
+        const targetSimId: number | null =
+          initMode === "portfolio"
+            ? saved.portfolioSimulationId
+            : saved.overlaySimulationId;
 
         setModeState(initMode);
         setScopeState(initScope);
@@ -394,35 +408,30 @@ export function useSimulator() {
       }
 
       // Save current mode's simulation ID
-      persistLocalStorage();
+      persistSelection();
 
       // Read target mode's saved simulation ID
-      const saved = loadPersistedState();
+      const saved = persistedRef.current;
       const targetSimId =
         newMode === "portfolio"
-          ? saved?.portfolioSimulationId
-          : saved?.overlaySimulationId;
+          ? saved.portfolioSimulationId
+          : saved.overlaySimulationId;
 
       // Reset state
       setCurrentSimulationId(null);
       setCurrentSimulationName(null);
       setCurrentSimulationType(null);
       setCurrentClonedFromName(null);
+      setCurrentClonedFromPortfolioId(null);
       setTotalAmountState(0);
       setItems([]);
       setAutoSaveStatus("idle");
       setModeState(newMode);
 
-      // Persist new mode
-      const updated = loadPersistedState() || {
-        mode: newMode,
-        scope,
-        portfolioId,
-        overlaySimulationId: null,
-        portfolioSimulationId: null,
-      };
-      updated.mode = newMode;
-      savePersistedState(updated);
+      // Persist new mode (don't touch either mode's saved simulation id)
+      const updated = { ...persistedRef.current, mode: newMode };
+      persistedRef.current = updated;
+      persistServerState(serializePersistedState(updated));
 
       // Restore target mode's simulation
       if (targetSimId && simulations.some((s) => s.id === targetSimId)) {
@@ -431,12 +440,11 @@ export function useSimulator() {
     },
     [
       mode,
-      scope,
-      portfolioId,
       cancelPendingAutoSave,
       currentSimulationId,
       flushAutoSave,
-      persistLocalStorage,
+      persistSelection,
+      persistServerState,
       setAutoSaveStatus,
       simulations,
       loadSimulation,
@@ -451,9 +459,9 @@ export function useSimulator() {
     (newScope: SimulatorScope, newPortfolioId: number | null = null) => {
       setScopeState(newScope);
       setPortfolioIdState(newPortfolioId);
-      persistLocalStorage({ scope: newScope, portfolioId: newPortfolioId });
+      persistSelection({ scope: newScope, portfolioId: newPortfolioId });
     },
-    [persistLocalStorage]
+    [persistSelection]
   );
 
   // =========================================================================
@@ -661,7 +669,7 @@ export function useSimulator() {
           setCurrentSimulationName(sim.name);
           setCurrentSimulationType(sim.type);
           await fetchSimulations();
-          persistLocalStorage();
+          persistSelection();
           toast.success(`Saved "${name}"`);
           return true;
         } else {
@@ -673,7 +681,7 @@ export function useSimulator() {
         return false;
       }
     },
-    [scope, portfolioId, items, mode, totalAmount, fetchSimulations, persistLocalStorage]
+    [scope, portfolioId, items, mode, totalAmount, fetchSimulations, persistSelection]
   );
 
   const renameSimulation = useCallback(
@@ -693,7 +701,7 @@ export function useSimulator() {
         if (res.success) {
           setCurrentSimulationName(name);
           await fetchSimulations();
-          persistLocalStorage();
+          persistSelection();
           toast.success(`Renamed to "${name}"`);
           return true;
         } else {
@@ -705,7 +713,7 @@ export function useSimulator() {
         return false;
       }
     },
-    [currentSimulationId, fetchSimulations, persistLocalStorage]
+    [currentSimulationId, fetchSimulations, persistSelection]
   );
 
   const deleteSimulation = useCallback(async () => {
@@ -723,6 +731,7 @@ export function useSimulator() {
         setCurrentSimulationName(null);
         setCurrentSimulationType(null);
         setCurrentClonedFromName(null);
+        setCurrentClonedFromPortfolioId(null);
         setItems([]);
         setTotalAmountState(0);
         setAutoSaveStatus("idle");
@@ -772,7 +781,7 @@ export function useSimulator() {
           const sim = res.data.simulation;
           populateFromSimulation(sim, true);
           await fetchSimulations();
-          persistLocalStorage();
+          persistSelection();
           const posCount = (sim.items || []).length;
           toast.success(
             `Cloned "${sim.cloned_from_name}" (${posCount} positions)`
@@ -787,7 +796,51 @@ export function useSimulator() {
         return false;
       }
     },
-    [populateFromSimulation, fetchSimulations, persistLocalStorage]
+    [populateFromSimulation, fetchSimulations, persistSelection]
+  );
+
+  // =========================================================================
+  // Apply to Plan (builder state)
+  // =========================================================================
+
+  const applyToPlan = useCallback(
+    async (targetPortfolioId: number, applied: AppliedPosition[]) => {
+      try {
+        // Fresh read — this state is about to be overwritten wholesale.
+        const builderState = await apiFetch<Record<string, string>>(
+          "/state?page=builder",
+          { noStore: true }
+        );
+        const updatedPortfolios = applyPositionsToBuilderPortfolios(
+          builderState?.portfolios,
+          targetPortfolioId,
+          applied
+        );
+        if (!updatedPortfolios) {
+          toast.error(
+            "Target portfolio not found in the Plan — open /plan and add it first"
+          );
+          return false;
+        }
+        // POST /state replaces every key for the page, so send back all
+        // fetched keys verbatim with only 'portfolios' re-serialized.
+        await apiFetch("/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...builderState,
+            page: "builder",
+            portfolios: updatedPortfolios,
+          }),
+        });
+        toast.success("Applied to Plan — open /plan to see the trades");
+        return true;
+      } catch {
+        toast.error("Failed to apply to Plan");
+        return false;
+      }
+    },
+    []
   );
 
   // =========================================================================
@@ -848,6 +901,7 @@ export function useSimulator() {
     currentSimulationName,
     currentSimulationType,
     currentClonedFromName,
+    currentClonedFromPortfolioId,
 
     // Baseline
     portfolioData,
@@ -883,6 +937,7 @@ export function useSimulator() {
     renameSimulation,
     deleteSimulation,
     clonePortfolio,
+    applyToPlan,
   };
 }
 

@@ -7,6 +7,7 @@ import type {
   HeatmapMode,
 } from "@/types/performance";
 import { cashSlice } from "./cash-inclusion";
+import { rankTopItems } from "./aggregation-utils";
 
 /**
  * Build allocation rows from portfolio data for any mode.
@@ -337,16 +338,10 @@ function computeChainLinkedAggregate(
 
 /** Keep top 8 + anything >= 1%, sorted desc, "Unknown" moved to the end. */
 function rankAxis(percentages: Record<string, number>): string[] {
-  const sorted = Object.entries(percentages)
-    .sort((a, b) => b[1] - a[1])
-    .map((e) => e[0]);
-  const kept = sorted.filter((key, idx) => idx < 8 || percentages[key] >= 1.0);
-  const idx = kept.indexOf("Unknown");
-  if (idx !== -1) {
-    kept.splice(idx, 1);
-    kept.push("Unknown");
-  }
-  return kept;
+  const items = Object.entries(percentages)
+    .map(([name, percentage]) => ({ name, value: percentage, percentage }))
+    .sort((a, b) => b.value - a.value);
+  return rankTopItems(items).map((i) => i.name);
 }
 
 /**

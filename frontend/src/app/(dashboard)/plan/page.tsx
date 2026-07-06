@@ -1,18 +1,25 @@
 "use client";
 
+import { Suspense } from "react";
 import { useBuilder } from "@/hooks/use-builder";
 import { BudgetSection } from "./budget-section";
-import { RulesSection } from "./rules-section";
+import { RulesSection } from "@/components/domain/rules-section";
 import { PortfolioList } from "./portfolio-list";
 import { AllocationSummary } from "./allocation-summary";
+import { RebalancePlan } from "./rebalance-plan";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shell/page-header";
 
+// Plan = targets (former Builder) + the trades they imply (former
+// Rebalancer), on one page so edits show their consequences without a
+// page switch. RebalancePlan reads useSearchParams via useRebalancer,
+// which suspends during prerender — hence the Suspense wrapper.
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Builder" showPortfolioPicker={false} />
+      <PageHeader title="Plan" showPortfolioPicker={false} />
       <div className="grid gap-6 lg:grid-cols-2">
         <Skeleton className="h-64" />
         <Skeleton className="h-64" />
@@ -23,7 +30,15 @@ function LoadingSkeleton() {
   );
 }
 
-export default function BuilderPage() {
+export default function PlanPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <PlanPageInner />
+    </Suspense>
+  );
+}
+
+function PlanPageInner() {
   const builder = useBuilder();
 
   if (builder.isLoading) {
@@ -33,7 +48,7 @@ export default function BuilderPage() {
   if (builder.error) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Builder" showPortfolioPicker={false} />
+        <PageHeader title="Plan" showPortfolioPicker={false} />
         <Alert variant="destructive">
           <AlertDescription>{builder.error}</AlertDescription>
         </Alert>
@@ -44,8 +59,8 @@ export default function BuilderPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Builder"
-        showPortfolioPicker={false}
+        title="Plan"
+        showPortfolioPicker
         right={
           builder.isSaving ? (
             <span className="text-xs text-muted-foreground animate-pulse">
@@ -109,6 +124,9 @@ export default function BuilderPage() {
         onExportCSV={builder.exportCSV}
         onExportPDF={builder.exportPDF}
       />
+
+      {/* The trades implied by the targets above */}
+      <RebalancePlan />
     </div>
   );
 }

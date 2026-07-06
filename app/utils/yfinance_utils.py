@@ -610,6 +610,101 @@ def get_historical_prices(identifiers, period='1y', start_date=None):
 # (Add other historical data functions as needed)
 
 
+# --- Bulk price warming ---
+
+def _looks_like_isin(identifier: str) -> bool:
+    """12-char ISIN shape (2-letter country + 10 alphanumerics)."""
+    clean = (identifier or '').strip().upper()
+    return len(clean) == 12 and clean[:2].isalpha() and clean[2:].isalnum()
+
+
+def warm_price_cache_bulk(identifiers) -> Dict[str, Any]:
+    """
+    Fetch current prices for many identifiers in ONE yf.download call and
+    seed the isin_data_ cache, so the per-identifier batch pipeline gets
+    instant cache hits instead of one ticker.info round-trip each.
+
+    Strictly an optimization layer: only identifiers that already have a
+    market_prices row with a currency (i.e. resolved successfully before)
+    and don't look like raw ISINs are attempted; everything else — and
+    anything the download misses — takes the normal per-identifier path.
+    Currency and country are reused from the stored row (yf.download has
+    neither; both change rarely, and .info is only worth its cost for
+    first-time resolution).
+
+    Returns stats for the caller's summary log:
+        {'attempted': [...], 'warmed': [...], 'fallback': [...], 'duration': float}
+    """
+    import time as _time
+    from app.db_manager import query_db
+
+    started = _time.monotonic()
+    identifiers = [i for i in (identifiers or []) if i]
+    stats: Dict[str, Any] = {'attempted': [], 'warmed': [], 'fallback': list(identifiers), 'duration': 0.0}
+    candidates = [i for i in identifiers if not _looks_like_isin(i)]
+    if not candidates:
+        return stats
+
+    placeholders = ','.join('?' * len(candidates))
+    rows = query_db(f'''
+        SELECT identifier, currency, country FROM market_prices
+        WHERE identifier IN ({placeholders})
+          AND currency IS NOT NULL AND currency != ''
+    ''', candidates) or []
+    stored = {r['identifier']: r for r in rows}
+    attempted = [i for i in candidates if i in stored]
+    stats['attempted'] = attempted
+    if not attempted:
+        return stats
+
+    yf = _get_yfinance()
+    data = yf.download(attempted, period='1d', progress=False,
+                       group_by='column', threads=True)
+    close_df = data['Close'] if 'Close' in data else data
+    # Single ticker: yf.download returns a Series-shaped frame
+    if len(attempted) == 1 and hasattr(close_df, 'to_frame') and attempted[0] not in getattr(close_df, 'columns', []):
+        close_df = close_df.to_frame(name=attempted[0])
+
+    warmed = []
+    for ident in attempted:
+        try:
+            if ident not in close_df.columns:
+                continue
+            col = close_df[ident].dropna()
+            if col.empty:
+                continue
+            price = float(col.iloc[-1])
+            if not price > 0:
+                continue
+            currency = stored[ident]['currency']
+            rate = get_exchange_rate(currency, 'EUR')
+            if rate is None:
+                # No EUR conversion possible — let the full path handle it
+                # (it has its own short-TTL semantics for that case).
+                continue
+            result = {
+                'success': True,
+                'data': {
+                    'currentPrice': price,
+                    'priceEUR': price * rate,
+                    'currency': currency,
+                    # Reuse stored country so the DB upsert doesn't clobber it.
+                    'country': stored[ident]['country'],
+                },
+                'modified_identifier': None,
+            }
+            _cache_price_entry(f"isin_data_{ident}", result,
+                               timeout=CACHE_TIMEOUT_STOCK_PRICES)
+            warmed.append(ident)
+        except Exception as e:
+            logger.warning(f"BULK: could not warm {ident}: {e}")
+
+    stats['warmed'] = warmed
+    stats['fallback'] = [i for i in identifiers if i not in warmed]
+    stats['duration'] = _time.monotonic() - started
+    return stats
+
+
 # --- Cache Management Utilities ---
 
 def clear_price_cache(identifier: str = None):

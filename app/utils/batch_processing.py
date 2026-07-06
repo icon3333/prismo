@@ -276,6 +276,22 @@ def _run_batch_job(app, job_id: str, identifiers: List[str]):
     with app.app_context():
         total_items = len(identifiers)
 
+        # Bulk pre-pass: one yf.download seeds the price cache for proven
+        # tickers, so the per-identifier loop below mostly gets cache hits.
+        # Any failure here is non-fatal — everything falls back to the
+        # normal per-identifier fetch.
+        try:
+            from app.utils.yfinance_utils import warm_price_cache_bulk
+            stats = warm_price_cache_bulk(identifiers)
+            if stats['attempted']:
+                logger.info(
+                    f"BULK: warmed {len(stats['warmed'])}/{total_items} identifiers "
+                    f"in {stats['duration']:.1f}s via yf.download; "
+                    f"fallback for {stats['fallback'] or 'none'}")
+        except Exception as e:
+            logger.warning(
+                f"BULK: bulk price warm failed, using per-identifier fetch for all: {e}")
+
         # Decide execution mode based on batch size
         use_async = total_items >= ASYNC_THRESHOLD
 

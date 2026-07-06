@@ -1,0 +1,416 @@
+{
+  "_readme": [
+    "Shared golden fixtures pinning the duplicated allocation/rebalancing math in",
+    "app/services/allocation_service.py (Python) and frontend/src/lib/rebalancer-calc.ts (TypeScript).",
+    "Consumed by tests/test_allocation_parity.py AND frontend/src/lib/__tests__/allocation-parity.test.ts.",
+    "Conventions: the denominator for target calculations is sum(current_value) + investment.",
+    "'portfolio_targets' / 'position_targets' are BACKEND-canonical expected values (for cases with",
+    "'rules' they are the type-CONSTRAINED targets, which the frontend receives as position.targetValue).",
+    "'*_frontend' keys encode known intentional divergences (see 'divergence' on those cases):",
+    "the frontend normalizes weights to sum to 100% and back-fills zero weights; the backend applies",
+    "raw weights. 'expected.frontend' holds frontend-only buy/sell outputs (backend has no equivalent);",
+    "'unconstrained_position_targets'/'capped'/'applicable_rules' are backend-only capping metadata."
+  ],
+  "float_tolerance": 0.01,
+  "cases": [
+    {
+      "name": "simple_two_position_rebalance",
+      "description": "One portfolio, two positions, weights sum to 100, no new money.",
+      "mode": "new-with-sells",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Core",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 60, "current_value": 700, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 40, "current_value": 300, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Core": 1000},
+        "position_targets": {"Core": {"A": 600, "B": 400}},
+        "frontend": {
+          "portfolio_actions": {"Core": 0},
+          "position_actions": {"Core": {"A": -100, "B": 100}},
+          "total_buys": {"Core": 100},
+          "total_sells": {"Core": 100}
+        }
+      }
+    },
+    {
+      "name": "single_position_with_new_money",
+      "description": "Single 100%-weight position absorbing fresh capital.",
+      "mode": "new-with-sells",
+      "investment": 500,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Solo",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 100, "current_value": 500, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Solo": 1000},
+        "position_targets": {"Solo": {"A": 1000}},
+        "frontend": {
+          "portfolio_actions": {"Solo": 500},
+          "position_actions": {"Solo": {"A": 500}},
+          "total_buys": {"Solo": 500},
+          "total_sells": {"Solo": 0}
+        }
+      }
+    },
+    {
+      "name": "zero_value_position",
+      "description": "A position with zero current value still gets its full weight-based target.",
+      "mode": "new-with-sells",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Core",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 50, "current_value": 800, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 50, "current_value": 0, "investment_type": "Stock"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Core": 800},
+        "position_targets": {"Core": {"A": 400, "B": 400}},
+        "frontend": {
+          "portfolio_actions": {"Core": 0},
+          "position_actions": {"Core": {"A": -400, "B": 400}},
+          "total_buys": {"Core": 400},
+          "total_sells": {"Core": 400}
+        }
+      }
+    },
+    {
+      "name": "one_third_weights_rounding",
+      "description": "Three positions at 33.3333% each (sum 99.9999). Backend raw math yields 399.9996; frontend normalization yields exactly 400. Both agree within tolerance.",
+      "mode": "new-with-sells",
+      "investment": 200,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Thirds",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 33.3333, "current_value": 400, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 33.3333, "current_value": 300, "investment_type": "Stock"},
+            {"name": "C", "sector": "Energy", "weight": 33.3333, "current_value": 300, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Thirds": 1200},
+        "position_targets": {"Thirds": {"A": 399.9996, "B": 399.9996, "C": 399.9996}},
+        "frontend": {
+          "portfolio_actions": {"Thirds": 200},
+          "position_actions": {"Thirds": {"A": 0, "B": 100, "C": 100}},
+          "excluded_reasons": {"Thirds": {"A": "at_target"}},
+          "total_buys": {"Thirds": 200},
+          "total_sells": {"Thirds": 0}
+        }
+      }
+    },
+    {
+      "name": "three_portfolios_existing_only",
+      "description": "Portfolio-level rebalance across three portfolios (weights sum to 100) by shifting existing money only.",
+      "mode": "existing-only",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Growth",
+          "allocation": 50,
+          "positions": [
+            {"name": "GA", "sector": "Equities", "weight": 100, "current_value": 400, "investment_type": "ETF"}
+          ]
+        },
+        {
+          "name": "Core",
+          "allocation": 30,
+          "positions": [
+            {"name": "CA", "sector": "Equities", "weight": 100, "current_value": 500, "investment_type": "ETF"}
+          ]
+        },
+        {
+          "name": "Bonds",
+          "allocation": 20,
+          "positions": [
+            {"name": "BA", "sector": "Fixed Income", "weight": 100, "current_value": 100, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Growth": 500, "Core": 300, "Bonds": 200},
+        "position_targets": {"Growth": {"GA": 500}, "Core": {"CA": 300}, "Bonds": {"BA": 200}},
+        "frontend": {
+          "portfolio_actions": {"Growth": 100, "Core": -200, "Bonds": 100}
+        }
+      }
+    },
+    {
+      "name": "position_weights_sum_90_divergence",
+      "description": "Position weights sum to 90, not 100.",
+      "divergence": "Backend applies raw weights (30% each, 10% of the portfolio left unallocated); frontend normalizes position weights to sum to 100% (33.33% each). Backend semantics look correct: an explicit under-allocation should not be silently inflated.",
+      "mode": "new-with-sells",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Ninety",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 30, "current_value": 500, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 30, "current_value": 200, "investment_type": "Stock"},
+            {"name": "C", "sector": "Energy", "weight": 30, "current_value": 300, "investment_type": "Stock"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Ninety": 1000},
+        "position_targets": {"Ninety": {"A": 300, "B": 300, "C": 300}},
+        "position_targets_frontend": {"Ninety": {"A": 333.3333, "B": 333.3333, "C": 333.3333}}
+      }
+    },
+    {
+      "name": "portfolio_weights_sum_80_divergence",
+      "description": "Portfolio allocations sum to 80, not 100.",
+      "divergence": "Backend applies raw portfolio allocations (40% of total each, 20% unallocated); frontend normalizes portfolio weights to 100% (50% each). Backend semantics look correct for the same reason as the position-level case.",
+      "mode": "new-with-sells",
+      "investment": 200,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "P1",
+          "allocation": 40,
+          "positions": [
+            {"name": "A", "sector": "Core", "weight": 100, "current_value": 300, "investment_type": "ETF"}
+          ]
+        },
+        {
+          "name": "P2",
+          "allocation": 40,
+          "positions": [
+            {"name": "B", "sector": "Core", "weight": 100, "current_value": 500, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"P1": 400, "P2": 400},
+        "portfolio_targets_frontend": {"P1": 500, "P2": 500},
+        "position_targets": {"P1": {"A": 400}, "P2": {"B": 400}},
+        "position_targets_frontend": {"P1": {"A": 500}, "P2": {"B": 500}},
+        "frontend": {
+          "portfolio_actions": {"P1": 200, "P2": 0}
+        }
+      }
+    },
+    {
+      "name": "zero_weight_position_divergence",
+      "description": "One position with an explicit 0 weight.",
+      "divergence": "Backend keeps explicit zero-weight positions at target 0; frontend treats 0 as 'unset' and back-fills it from the remaining weight (100-50=50), then normalizes. Backend semantics look correct: weight 0 should mean 'do not allocate'.",
+      "mode": "new-with-sells",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Mixed",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 50, "current_value": 600, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 0, "current_value": 400, "investment_type": "Stock"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Mixed": 1000},
+        "position_targets": {"Mixed": {"A": 500, "B": 0}},
+        "position_targets_frontend": {"Mixed": {"A": 500, "B": 500}},
+        "frontend": {
+          "position_actions": {"Mixed": {"A": -100, "B": 100}}
+        }
+      }
+    },
+    {
+      "name": "type_constraint_cap_and_redistribute",
+      "description": "Stock exceeds maxPerStock (40% > 10%); excess redistributed to the two ETFs proportionally to their unconstrained targets. Frontend receives the constrained values as targetValue and must pass them through.",
+      "mode": "new-with-sells",
+      "investment": 2000,
+      "rules": {"maxPerStock": 10, "maxPerETF": 60, "maxPerCrypto": 5},
+      "portfolios": [
+        {
+          "name": "Managed",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 40, "current_value": 2000, "investment_type": "Stock"},
+            {"name": "B", "sector": "Funds", "weight": 30, "current_value": 3000, "investment_type": "ETF"},
+            {"name": "C", "sector": "Funds", "weight": 30, "current_value": 3000, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Managed": 10000},
+        "position_targets": {"Managed": {"A": 1000, "B": 4500, "C": 4500}},
+        "unconstrained_position_targets": {"Managed": {"A": 4000, "B": 3000, "C": 3000}},
+        "capped": {"Managed": {"A": true, "B": false, "C": false}},
+        "applicable_rules": {"Managed": {"A": "maxPerStock", "B": null, "C": null}},
+        "frontend": {
+          "portfolio_actions": {"Managed": 2000},
+          "position_actions": {"Managed": {"A": -1000, "B": 1500, "C": 1500}},
+          "total_buys": {"Managed": 3000},
+          "total_sells": {"Managed": 1000}
+        }
+      }
+    },
+    {
+      "name": "type_constraint_all_capped_with_crypto",
+      "description": "Stock and Crypto both exceed their caps; everything capped, portfolio deliberately under-allocated.",
+      "mode": "new-with-sells",
+      "investment": 6000,
+      "rules": {"maxPerStock": 5, "maxPerETF": 10, "maxPerCrypto": 3},
+      "portfolios": [
+        {
+          "name": "Risky",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 50, "current_value": 3000, "investment_type": "Stock"},
+            {"name": "B", "sector": "Crypto Assets", "weight": 50, "current_value": 1000, "investment_type": "Crypto"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Risky": 10000},
+        "position_targets": {"Risky": {"A": 500, "B": 300}},
+        "unconstrained_position_targets": {"Risky": {"A": 5000, "B": 5000}},
+        "capped": {"Risky": {"A": true, "B": true}},
+        "applicable_rules": {"Risky": {"A": "maxPerStock", "B": "maxPerCrypto"}},
+        "frontend": {
+          "portfolio_actions": {"Risky": 6000},
+          "position_actions": {"Risky": {"A": -2500, "B": -700}},
+          "total_buys": {"Risky": 0},
+          "total_sells": {"Risky": 3200}
+        }
+      }
+    },
+    {
+      "name": "empty_portfolio_list",
+      "description": "No portfolios at all: both sides return an empty result.",
+      "mode": "new-only",
+      "investment": 100,
+      "rules": null,
+      "portfolios": [],
+      "expected": {
+        "portfolio_targets": {},
+        "position_targets": {}
+      }
+    },
+    {
+      "name": "zero_allocation_portfolio_divergence",
+      "description": "A portfolio with allocation 0.",
+      "divergence": "Backend keeps the portfolio with targetValue 0 (and position targets 0); frontend calculateRebalancing filters zero-weight portfolios out of the result entirely. Representation difference more than a math bug; the numbers agree (nothing is allocated).",
+      "mode": "new-with-sells",
+      "investment": 0,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Idle",
+          "allocation": 0,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 100, "current_value": 400, "investment_type": "Stock"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Idle": 0},
+        "portfolio_targets_frontend": {},
+        "position_targets": {"Idle": {"A": 0}},
+        "position_targets_frontend": {}
+      }
+    },
+    {
+      "name": "new_only_fresh_capital",
+      "description": "new-only mode: overweight position excluded, all fresh capital flows to the underweight one.",
+      "mode": "new-only",
+      "investment": 200,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Core",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 60, "current_value": 700, "investment_type": "Stock"},
+            {"name": "B", "sector": "Health", "weight": 40, "current_value": 100, "investment_type": "ETF"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Core": 1000},
+        "position_targets": {"Core": {"A": 600, "B": 400}},
+        "frontend": {
+          "portfolio_actions": {"Core": 200},
+          "position_actions": {"Core": {"A": 0, "B": 200}},
+          "excluded_reasons": {"Core": {"A": "at_or_above_target"}},
+          "total_buys": {"Core": 200},
+          "total_sells": {"Core": 0}
+        }
+      }
+    },
+    {
+      "name": "ten_position_realistic",
+      "description": "Realistic 10-position portfolio across 4 sectors, weights sum to 100, 2000 fresh capital. Energy sector sits exactly at target, so the frontend sector guard blocks I's buy while J still sells.",
+      "mode": "new-with-sells",
+      "investment": 2000,
+      "rules": null,
+      "portfolios": [
+        {
+          "name": "Main",
+          "allocation": 100,
+          "positions": [
+            {"name": "A", "sector": "Tech", "weight": 15, "current_value": 1200, "investment_type": "Stock"},
+            {"name": "B", "sector": "Tech", "weight": 10, "current_value": 900, "investment_type": "Stock"},
+            {"name": "C", "sector": "Tech", "weight": 10, "current_value": 400, "investment_type": "ETF"},
+            {"name": "D", "sector": "Health", "weight": 10, "current_value": 800, "investment_type": "Stock"},
+            {"name": "E", "sector": "Health", "weight": 10, "current_value": 850, "investment_type": "Stock"},
+            {"name": "F", "sector": "Finance", "weight": 10, "current_value": 700, "investment_type": "Stock"},
+            {"name": "G", "sector": "Finance", "weight": 10, "current_value": 650, "investment_type": "Stock"},
+            {"name": "H", "sector": "Finance", "weight": 5, "current_value": 500, "investment_type": "Stock"},
+            {"name": "I", "sector": "Energy", "weight": 15, "current_value": 1400, "investment_type": "ETF"},
+            {"name": "J", "sector": "Energy", "weight": 5, "current_value": 600, "investment_type": "Crypto"}
+          ]
+        }
+      ],
+      "expected": {
+        "portfolio_targets": {"Main": 10000},
+        "position_targets": {
+          "Main": {
+            "A": 1500, "B": 1000, "C": 1000, "D": 1000, "E": 1000,
+            "F": 1000, "G": 1000, "H": 500, "I": 1500, "J": 500
+          }
+        },
+        "frontend": {
+          "portfolio_actions": {"Main": 2000},
+          "position_actions": {
+            "Main": {
+              "A": 300, "B": 100, "C": 600, "D": 200, "E": 150,
+              "F": 300, "G": 350, "H": 0, "I": 0, "J": -100
+            }
+          },
+          "excluded_reasons": {"Main": {"H": "at_target", "I": "sector_above_target"}},
+          "total_buys": {"Main": 2000},
+          "total_sells": {"Main": 100}
+        }
+      }
+    }
+  ]
+}

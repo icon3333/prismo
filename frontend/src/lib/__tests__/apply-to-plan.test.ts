@@ -45,7 +45,9 @@ describe("computeAppliedPositions", () => {
     expect(skipped).toEqual(["C"]);
     expect(applied).toEqual([
       { companyId: 1, companyName: "A", weight: 33.33 },
-      { companyId: null, companyName: "B", weight: 66.67 },
+      // Not-yet-held items get synthetic unique negative ids so the Plan UI
+      // can address each row individually.
+      { companyId: -2, companyName: "B", weight: 66.67 },
     ]);
   });
 
@@ -56,7 +58,7 @@ describe("computeAppliedPositions", () => {
     ]);
     expect(skipped).toEqual(["B"]);
     expect(applied).toEqual([
-      { companyId: null, companyName: "A", weight: 100 },
+      { companyId: -1, companyName: "A", weight: 100 },
     ]);
   });
 

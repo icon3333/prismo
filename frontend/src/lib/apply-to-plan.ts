@@ -24,7 +24,12 @@ export function resolveTargetPortfolioId(
 }
 
 export interface AppliedPosition {
-  companyId: number | null;
+  /**
+   * Real company id when the item is already held; otherwise a synthetic
+   * unique negative id. The Plan UI keys, edits and removes positions by
+   * companyId, so null would collide across all not-yet-held items.
+   */
+  companyId: number;
   companyName: string;
   weight: number;
 }
@@ -48,8 +53,10 @@ export function computeAppliedPositions(
     .filter((i) => (i.value || 0) <= 0)
     .map((i) => i.name);
   const total = positive.reduce((sum, i) => sum + i.value, 0);
-  const applied = positive.map((i) => ({
-    companyId: i.portfolioData?.id ?? null,
+  const applied = positive.map((i, idx) => ({
+    // Synthetic negative ids keep not-yet-held items individually
+    // addressable in the Plan UI (real DB ids are positive).
+    companyId: i.portfolioData?.id ?? -(idx + 1),
     companyName: i.name,
     weight: total > 0 ? Math.round((i.value / total) * 10000) / 100 : 0,
   }));
@@ -81,10 +88,8 @@ export function applyPositionsToBuilderPortfolios(
   );
   if (idx === -1) return null;
 
-  // companyId may be null for items not yet in the portfolio — the builder
-  // treats those like manually named positions.
   const positions: BuilderRealPosition[] = applied.map((a) => ({
-    companyId: a.companyId as number,
+    companyId: a.companyId,
     companyName: a.companyName,
     weight: a.weight,
     isPlaceholder: false as const,

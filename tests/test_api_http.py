@@ -243,6 +243,10 @@ class TestRebalanceModeParam:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "rebalanced" in data
+        # No builder targets exist in this fixture, so every portfolio comes
+        # back as a zeroTarget entry that still carries a detailed plan.
+        assert data["rebalanced"], "expected zeroTarget entries for untargeted portfolios"
+        assert all(e.get("zeroTarget") for e in data["rebalanced"])
         for entry in data["rebalanced"]:
             assert {"targetValue", "discrepancy", "action", "detailed"} <= set(entry)
             detailed = entry["detailed"]

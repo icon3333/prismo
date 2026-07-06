@@ -273,6 +273,18 @@ def get_simulator_portfolio_data():
             for entry in rebalanced:
                 entry['detailed'] = calculate_detailed_rebalancing(
                     entry, entry.get('action') or 0, mode)
+            # Portfolios without a target allocation still get a (zero-action)
+            # detailed plan so the Detailed tab works before targets are set;
+            # zeroTarget entries are excluded from the plan table client-side.
+            included = {e['name'] for e in rebalanced}
+            for p in result.get('portfolios') or []:
+                if p.get('name') in included:
+                    continue
+                entry = dict(p)
+                entry.update({'targetValue': 0, 'discrepancy': 0,
+                              'action': 0, 'zeroTarget': True})
+                entry['detailed'] = calculate_detailed_rebalancing(entry, 0, mode)
+                rebalanced.append(entry)
             result['rebalanced'] = rebalanced
 
         return jsonify(result)

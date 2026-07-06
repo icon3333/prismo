@@ -75,6 +75,11 @@ export interface RebalancedPortfolio extends Portfolio {
   action: number;
   /** Position-level plan, computed server-side by rebalance_service. */
   detailed?: DetailedRebalancing;
+  /**
+   * True for portfolios without a target allocation — included only so the
+   * Detailed tab has a plan; excluded from the plan table and totals.
+   */
+  zeroTarget?: boolean;
 }
 
 export interface DetailedSector {

@@ -59,7 +59,11 @@ export function RebalancePlan() {
     );
   }
 
-  const totalCurrentValue = rebalanced.reduce(
+  // zeroTarget entries exist only to feed the Detailed tab — the plan table
+  // and totals cover portfolios with a target allocation.
+  const active = rebalanced.filter((p) => !p.zeroTarget);
+
+  const totalCurrentValue = active.reduce(
     (sum, p) => sum + (p.currentValue || 0),
     0
   );
@@ -128,7 +132,7 @@ export function RebalancePlan() {
           </div>
 
           {/* Portfolio Table */}
-          {rebalanced.length === 0 ? (
+          {active.length === 0 ? (
             <Alert>
               <AlertDescription>
                 No portfolios with target allocations found. Set the
@@ -138,12 +142,12 @@ export function RebalancePlan() {
           ) : (
             <>
               <PortfolioTable
-                portfolios={rebalanced}
+                portfolios={active}
                 totalCurrentValue={totalCurrentValue}
                 newTotalValue={newTotalValue}
               />
               <SummaryFooter
-                rebalanced={rebalanced}
+                rebalanced={active}
                 mode={mode}
                 investmentAmount={investmentAmount}
               />

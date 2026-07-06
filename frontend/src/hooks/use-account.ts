@@ -1,36 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { useCallback, useMemo } from "react";
+import { apiFetch } from "@/lib/api";
+import { useApiQuery } from "@/lib/api-cache";
 import type { AccountInfo } from "@/types/account";
 import { toast } from "sonner";
 
 export function useAccount() {
-  const [account, setAccount] = useState<AccountInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shared cached read — revalidated automatically after every successful write.
+  const accountQuery = useApiQuery<AccountInfo & { success: boolean }>("/account");
 
-  const fetchAccount = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await apiFetch<AccountInfo & { success: boolean }>("/account");
-      setAccount({
-        username: data.username,
-        account_id: data.account_id,
-        created_at: data.created_at,
-        last_price_update: data.last_price_update,
-      });
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Failed to load account");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAccount();
-  }, [fetchAccount]);
+  const account = useMemo<AccountInfo | null>(() => {
+    const data = accountQuery.data;
+    if (!data) return null;
+    return {
+      username: data.username,
+      account_id: data.account_id,
+      created_at: data.created_at,
+      last_price_update: data.last_price_update,
+    };
+  }, [accountQuery.data]);
 
   const updateUsername = useCallback(async (username: string) => {
     await apiFetch("/account/username", {
@@ -39,7 +28,6 @@ export function useAccount() {
       body: JSON.stringify({ username }),
     });
     toast.success("Username updated");
-    setAccount((prev) => (prev ? { ...prev, username } : prev));
   }, []);
 
   const resetSettings = useCallback(async () => {
@@ -70,13 +58,12 @@ export function useAccount() {
       body: formData,
     });
     toast.success("Data imported successfully");
-    fetchAccount();
-  }, [fetchAccount]);
+  }, []);
 
   return {
     account,
-    loading,
-    error,
+    loading: accountQuery.isLoading,
+    error: accountQuery.error,
     updateUsername,
     resetSettings,
     deleteStocksCrypto,

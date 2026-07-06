@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 interface PagePersistence<T> {
@@ -6,6 +6,8 @@ interface PagePersistence<T> {
   persistState: (partial: Partial<T>) => void;
   /** Seed the accumulated state from server-loaded values without triggering a POST. */
   hydrate: (initial: Partial<T>) => void;
+  /** True while a debounced POST is in flight. */
+  isSaving: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function usePagePersistence<T extends object>(
 ): PagePersistence<T> {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const stateRef = useRef<Partial<T>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -35,6 +38,7 @@ export function usePagePersistence<T extends object>(
       stateRef.current = { ...stateRef.current, ...partial };
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(async () => {
+        setIsSaving(true);
         try {
           await apiFetch("/state", {
             method: "POST",
@@ -46,6 +50,8 @@ export function usePagePersistence<T extends object>(
           });
         } catch {
           // Silently fail
+        } finally {
+          setIsSaving(false);
         }
       }, 500);
     },
@@ -56,5 +62,5 @@ export function usePagePersistence<T extends object>(
     stateRef.current = { ...stateRef.current, ...initial };
   }, []);
 
-  return { persistState, hydrate };
+  return { persistState, hydrate, isSaving };
 }

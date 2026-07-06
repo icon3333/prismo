@@ -3,10 +3,18 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# Always operate from the repo root, regardless of where the script is invoked
+# from - .env and instance/ live there, the compose file lives in deployment/.
+cd "$(dirname "$0")/.."
+
 # --- Configuration ---
 GIT_BRANCH="main"              # Branch to pull from
-COMPOSE_FILE="docker-compose.yml"  # Compose file
-SERVICE_NAME="portfolio-app"   # Service name in Compose
+COMPOSE_FILE="deployment/docker-compose.yml"  # Compose file
+SERVICE_NAME="prismo"          # Service name in Compose
+
+# BuildKit is required for deployment/Dockerfile.dockerignore to apply
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
 
 # --- Helper Functions ---
 print_message() {

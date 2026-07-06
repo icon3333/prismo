@@ -9,18 +9,31 @@ refreshed every 24 hours. Only the latest rate is kept (no historical tracking).
 """
 
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db_manager import query_db, execute_db, get_db
 import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _utc_now() -> datetime:
+    """
+    Naive UTC timestamp for last_updated.
+
+    Freshness predicates (get_fresh_rate, get_stale_currencies,
+    is_refresh_needed) compare against SQLite's datetime('now'), which is UTC,
+    so stored timestamps must be UTC too — a naive local datetime.now() would
+    skew freshness by the host's UTC offset.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 # Note: this repository used to hold its own in-memory cache (with a thread
 # lock) on top of value_calculator's `_exchange_rates_cache`. Two caches for
 # ~10 rows of data was redundant and the lock cost was paid per call in the
 # value-calc inner loop. value_calculator is now the sole reader-side cache;
-# this repository is a thin DB shim. The HTTP-source cache lives on
-# yfinance_utils.get_exchange_rate (@cache.memoize).
+# this repository is a thin DB shim. yfinance_utils.get_exchange_rate is
+# DB-first: it reads fresh rates from here and only hits the network (and
+# persists back via upsert_rate) when the stored rate is stale or missing.
 
 
 class ExchangeRateRepository:
@@ -39,6 +52,33 @@ class ExchangeRateRepository:
             WHERE from_currency = ? AND to_currency = ?
             ''',
             [from_currency, to_currency],
+            one=True
+        )
+        return result['rate'] if result else None
+
+    @staticmethod
+    def get_fresh_rate(
+        from_currency: str,
+        to_currency: str = 'EUR',
+        max_age_hours: int = 24
+    ) -> Optional[float]:
+        """
+        Get the stored rate only if it was updated within max_age_hours.
+
+        Returns None when the rate is missing or stale, signalling that the
+        caller should refresh from the network (see yfinance_utils.get_exchange_rate).
+        """
+        if from_currency == to_currency:
+            return 1.0
+
+        result = query_db(
+            '''
+            SELECT rate
+            FROM exchange_rates
+            WHERE from_currency = ? AND to_currency = ?
+            AND datetime(last_updated) >= datetime('now', '-' || ? || ' hours')
+            ''',
+            [from_currency, to_currency, max_age_hours],
             one=True
         )
         return result['rate'] if result else None
@@ -73,7 +113,7 @@ class ExchangeRateRepository:
             last_updated: Timestamp (defaults to now)
         """
         if last_updated is None:
-            last_updated = datetime.now()
+            last_updated = _utc_now()
 
         logger.info(f"Upserting exchange rate: {from_currency}->{to_currency} = {rate}")
 
@@ -108,7 +148,7 @@ class ExchangeRateRepository:
         db = get_db()
         cursor = db.cursor()
         count = 0
-        now = datetime.now()
+        now = _utc_now()
 
         try:
             for from_currency, rate in rates.items():

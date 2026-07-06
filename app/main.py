@@ -110,12 +110,14 @@ def create_app(config_name=None):
     from app.db_manager import init_db, migrate_database
     init_db(app)
 
-    # Run database migrations
+    # Run database migrations. A failed migration must abort startup:
+    # serving on a half-migrated schema risks silent data corruption.
     try:
         with app.app_context():
             migrate_database()
     except Exception as e:
-        app.logger.error(f"Database migration failed: {e}")
+        app.logger.critical(f"Database migration failed: {e} - refusing to start on a half-migrated schema")
+        raise
 
     if _show_timing:
         _db_time = time.time() - _db_start
@@ -129,48 +131,16 @@ def create_app(config_name=None):
         (not os.environ.get('WERKZEUG_RUN_MAIN') and not _is_debug)  # Production (no reloader)
     )
 
-    if is_main_process:
+    if os.environ.get('PRISMO_DEFER_STARTUP_TASKS') == '1':
+        # Under gunicorn (deployment/gunicorn.conf.py sets this flag) the app is
+        # created in the master pre-fork; threads started here would run in the
+        # master by accident and be duplicated if preload is ever disabled. The
+        # when_ready hook starts the tasks exactly once instead.
+        app.logger.info("Startup tasks deferred to the WSGI server hook")
+    elif is_main_process:
         app.logger.info("Main process detected - scheduling startup tasks")
-
-        # OPTIMIZATION: Run startup tasks in background thread to avoid blocking startup
-        # This makes the app responsive immediately while background tasks complete
-        def run_startup_tasks():
-            """Run startup tasks in background thread to avoid blocking app startup."""
-            import time
-            time.sleep(0.1)  # Small delay to ensure app is fully initialized
-
-            with app.app_context():
-                # Refresh exchange rates on startup if needed (before price updates)
-                # This ensures consistent currency conversion for all calculations
-                try:
-                    from app.utils.startup_tasks import refresh_exchange_rates_if_needed
-                    refresh_exchange_rates_if_needed()
-                except Exception as e:
-                    app.logger.error(f"Exchange rate refresh failed: {e}")
-
-                # Trigger automatic price update on startup if needed
-                try:
-                    from app.utils.startup_tasks import auto_update_prices_if_needed
-                    result = auto_update_prices_if_needed()
-                    if result and result.get('status') == 'error':
-                        app.logger.error(f"STARTUP: Price update failed: {result.get('error')}")
-                    elif result:
-                        app.logger.info(f"STARTUP: Price update result: {result.get('status')}")
-                except Exception as e:
-                    app.logger.error(f"Automatic price update failed: {e}")
-
-                # Trigger automatic database backup scheduler
-                try:
-                    from app.utils.startup_tasks import schedule_automatic_backups
-                    schedule_automatic_backups()
-                except Exception as e:
-                    app.logger.error(f"Automatic backup setup failed: {e}")
-
-        # Start background thread for startup tasks (daemon=True means it won't prevent app shutdown)
-        import threading
-        startup_thread = threading.Thread(target=run_startup_tasks, daemon=True)
-        startup_thread.start()
-        app.logger.info("Startup tasks scheduled in background thread")
+        from app.utils.startup_tasks import start_background_tasks
+        start_background_tasks(app)
     else:
         app.logger.debug("Reloader parent process - skipping startup tasks")
 

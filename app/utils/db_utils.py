@@ -146,12 +146,20 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
             # Use the modified identifier for all subsequent operations
             identifier = modified_identifier
 
-        # Use INSERT OR REPLACE instead of SELECT + UPDATE/INSERT to reduce lock contention
+        # Single upsert instead of SELECT + UPDATE/INSERT to reduce lock
+        # contention. price_eur=None (EUR conversion unavailable) preserves
+        # the previously stored price_eur instead of clobbering it with NULL.
         logger.debug(f"Upserting price record for {identifier}")
         cursor.execute('''
-            INSERT OR REPLACE INTO market_prices
+            INSERT INTO market_prices
             (identifier, price, currency, price_eur, last_updated, country)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(identifier) DO UPDATE SET
+                price = excluded.price,
+                currency = excluded.currency,
+                price_eur = COALESCE(excluded.price_eur, market_prices.price_eur),
+                last_updated = excluded.last_updated,
+                country = excluded.country
         ''', [identifier, price, currency, price_eur, now, country])
 
         # NOTE: accounts.last_price_update is no longer updated here. The
@@ -242,8 +250,10 @@ def update_price_in_db(identifier: str, price: float, currency: str, price_eur: 
     """
     Update price in database for a single identifier.
 
-    Uses INSERT OR REPLACE for the upsert (one statement instead of SELECT +
-    UPDATE/INSERT, matching the background variant).
+    Uses a single upsert statement (instead of SELECT + UPDATE/INSERT,
+    matching the background variant). When price_eur is None (EUR conversion
+    unavailable, e.g. no FX rate stored and network down), the previously
+    stored price_eur is preserved instead of being clobbered with NULL.
     """
     try:
         if not identifier or price is None:
@@ -265,9 +275,15 @@ def update_price_in_db(identifier: str, price: float, currency: str, price_eur: 
             identifier = modified_identifier
 
         execute_db('''
-            INSERT OR REPLACE INTO market_prices
+            INSERT INTO market_prices
             (identifier, price, currency, price_eur, last_updated, country)
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(identifier) DO UPDATE SET
+                price = excluded.price,
+                currency = excluded.currency,
+                price_eur = COALESCE(excluded.price_eur, market_prices.price_eur),
+                last_updated = excluded.last_updated,
+                country = excluded.country
         ''', [identifier, price, currency, price_eur, now, country])
 
         execute_db('''

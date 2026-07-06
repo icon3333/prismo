@@ -1,6 +1,7 @@
 "use client";
 
 import { useSimulator } from "@/hooks/use-simulator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimulatorHeader } from "./simulator-header";
 import { ItemInputForms } from "./item-input-forms";
@@ -36,9 +37,9 @@ export default function SimulatorPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-title font-bold">Simulator</h1>
-        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red">
-          {sim.error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{sim.error}</AlertDescription>
+        </Alert>
       </div>
     );
   }

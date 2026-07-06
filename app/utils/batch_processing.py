@@ -60,9 +60,16 @@ def _extract_price_data(result: Dict[str, Any]) -> Dict[str, Any]:
     """
     data = result.get('data', {})
 
+    # Nullish (not `or`) for price_eur: None means "EUR conversion unavailable"
+    # and must stay None so the DB upsert preserves the previously stored
+    # price_eur — never substitute the native-currency price as EUR.
+    price_eur = data.get('priceEUR')
+    if price_eur is None:
+        price_eur = result.get('price_eur')
+
     return {
         'price': data.get('currentPrice') or result.get('price'),
-        'price_eur': data.get('priceEUR') or result.get('price_eur'),
+        'price_eur': price_eur,
         'currency': data.get('currency') or result.get('currency', 'USD'),
         'country': data.get('country') or result.get('country'),
         'modified_identifier': result.get('modified_identifier')
@@ -122,7 +129,7 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
             identifier,
             price_data['price'],
             price_data['currency'],
-            price_data['price_eur'] or price_data['price'],
+            price_data['price_eur'],
             country=price_data['country'],
             modified_identifier=price_data['modified_identifier']
         )

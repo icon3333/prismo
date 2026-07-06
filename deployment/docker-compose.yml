@@ -1,15 +1,19 @@
 services:
   prismo:
-    build: .
+    build:
+      # Build from the repo root (this file lives in deployment/) so the app
+      # code, run.py and requirements.txt are inside the build context.
+      context: ..
+      dockerfile: deployment/Dockerfile
     container_name: prismo
     restart: unless-stopped
     ports:
       - "8065:8065"  # Main application port
     volumes:
-      # Mount instance directory for all persistent data
-      - ./instance:/app/instance
+      # Mount instance directory (repo root) for all persistent data
+      - ../instance:/app/instance
       # Mount environment file
-      - ./.env:/app/.env:ro
+      - ../.env:/app/.env:ro
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1

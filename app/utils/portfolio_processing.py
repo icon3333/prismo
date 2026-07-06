@@ -10,7 +10,8 @@ import logging
 import threading
 import time
 
-from app.db_manager import get_db
+from app.db_manager import backup_database, get_db
+from app.exceptions import CSVProcessingError
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +80,6 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
     try:
         logger.info(f"Starting CSV processing for account_id: {account_id}")
 
-        # Note: backup is handled by the 6-hour scheduled job (schedule_automatic_backups).
-        # Per-import shutil.copy was a multi-second blocker on larger DBs.
-
         # Step 1: Detect format and parse CSV file
         logger.info("Step 1: Detecting format and parsing CSV file...")
         if progress_callback:
@@ -96,6 +94,19 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
         else:
             df = parse_csv_file(file_content)
             source = 'parqet'
+
+        # Replace modes delete positions missing from the CSV, so take a
+        # safety snapshot first (after parsing, so invalid files don't
+        # produce backups). No snapshot, no destructive import.
+        if mode != 'add':
+            if progress_callback:
+                progress_callback(5, 100, "Creating pre-import backup...", "processing")
+            backup_file = backup_database(prefix='pre_import')
+            if not backup_file:
+                raise CSVProcessingError(
+                    "Pre-import backup failed - aborting import to protect existing positions"
+                )
+            logger.info(f"Pre-import safety backup created: {backup_file}")
 
         # Step 2: Get database connection
         db = get_db()

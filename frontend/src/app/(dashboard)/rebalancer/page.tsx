@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useRebalancer } from "@/hooks/use-rebalancer";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -50,12 +50,16 @@ function RebalancerPageInner() {
     error,
   } = useRebalancer();
 
+  // The portfolio picker only affects the Detailed tab, so it's hidden while
+  // the Global tab is active.
+  const [activeTab, setActiveTab] = useState("global");
+
   if (isLoading) return <RebalancerSkeleton />;
 
   if (error) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Rebalancer" />
+        <PageHeader title="Rebalancer" showPortfolioPicker={false} />
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -74,9 +78,9 @@ function RebalancerPageInner() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Rebalancer" />
+      <PageHeader title="Rebalancer" showPortfolioPicker={activeTab === "detailed"} />
 
-      <Tabs defaultValue="global">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(String(v))}>
         <TabsList>
           <TabsTrigger value="global">Global Overview</TabsTrigger>
           <TabsTrigger value="detailed">Detailed Overview</TabsTrigger>

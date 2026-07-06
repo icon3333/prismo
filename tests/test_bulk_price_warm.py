@@ -101,6 +101,24 @@ class TestWarmPriceCacheBulk:
         assert cache.get(f'isin_data_{isin}') is None
         assert cache.get('isin_data_NEVERSEEN') is None
 
+    def test_non_canonical_case_identifier_still_warms(self, db, monkeypatch):
+        # yf.download() uppercases tickers internally; a manually-added
+        # position can be stored in whatever case the user typed (e.g.
+        # add_company_manual only strips, never uppercases).
+        seed_price(db, 'aapl', price=100, currency='USD', price_eur=90)
+        seed_rate(db, 'USD', 0.9)
+        db.commit()
+
+        stats, fake = warm(monkeypatch, db, ['aapl'],
+                           make_close_df({'AAPL': 200.0}))
+
+        assert fake.calls == [['aapl']]
+        assert stats['warmed'] == ['aapl']
+        assert stats['fallback'] == []
+        cached = cache.get('isin_data_aapl')
+        assert cached['success'] is True
+        assert cached['data']['currentPrice'] == 200.0
+
     def test_missing_column_and_nan_fall_back(self, db, monkeypatch):
         seed_price(db, 'AAPL', price=100, currency='USD', price_eur=90)
         seed_price(db, 'MSFT', price=100, currency='USD', price_eur=90)

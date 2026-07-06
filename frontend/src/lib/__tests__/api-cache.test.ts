@@ -132,6 +132,58 @@ describe("api-cache", () => {
     expect(getApiQueryState("/portfolio_data").data).toEqual({ value: "post-write" });
   });
 
+  it("discards a stale in-flight result that resolves after invalidation", async () => {
+    const { revalidateApiQuery, invalidateApiCache, subscribeApiQuery, getApiQueryState } =
+      await loadModules();
+
+    // Fetch A hangs; fetch B (triggered by invalidation) resolves immediately.
+    let call = 0;
+    let releaseA: () => void = () => {};
+    mockFetch(async () => {
+      call++;
+      if (call === 1) {
+        await new Promise<void>((resolve) => (releaseA = resolve));
+        return jsonResponse({ value: "stale-A" });
+      }
+      return jsonResponse({ value: "fresh-B" });
+    });
+
+    const first = revalidateApiQuery("/portfolio_data");
+    subscribeApiQuery("/portfolio_data", () => {});
+    const invalidated = invalidateApiCache();
+
+    // Resolve A now — its result is from the pre-invalidation epoch and must
+    // be discarded; the chained refetch B is the only committer.
+    releaseA();
+    await first;
+    await invalidated;
+
+    // A's stale payload must not overwrite B's post-write payload.
+    expect(getApiQueryState("/portfolio_data").data).toEqual({ value: "fresh-B" });
+  });
+
+  it("revalidation bypasses the TTL cache in api.ts (noStore)", async () => {
+    const { apiFetch, revalidateApiQuery, getApiQueryState } = await loadModules();
+
+    let value = "v1";
+    const fetchMock = mockFetch(() => jsonResponse({ value }));
+
+    // Seed the 30s TTL cache via a plain GET.
+    await apiFetch("/portfolio_data");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // SWR revalidation must hit the network even though the TTL entry is warm.
+    value = "v2";
+    await revalidateApiQuery("/portfolio_data");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(getApiQueryState("/portfolio_data").data).toEqual({ value: "v2" });
+
+    // The fresh response still populates the TTL cache for unmigrated callers.
+    const served = await apiFetch<{ value: string }>("/portfolio_data");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(served).toEqual({ value: "v2" });
+  });
+
   it("a successful mutation through apiFetch invalidates subscribed reads", async () => {
     const { apiFetch, revalidateApiQuery, subscribeApiQuery, getApiQueryState } =
       await loadModules();

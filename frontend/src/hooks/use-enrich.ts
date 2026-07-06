@@ -583,14 +583,15 @@ export function useEnrich() {
       Object.entries(params).forEach(([k, v]) => formData.append(k, v));
 
       try {
-        const result = await apiPostForm<{ success: boolean; message?: string }>(
+        const result = await apiPostForm<{ success: boolean; message?: string; error?: string }>(
           "/api/manage_portfolios",
           formData
         );
         if (result.success) {
           toast.success(result.message || "Portfolios updated");
         } else {
-          toast.error(result.message || "Action failed");
+          // Flask auth/typed-exception failures report via `error`, not `message`.
+          toast.error(result.message || result.error || "Action failed");
         }
         return result;
       } catch {

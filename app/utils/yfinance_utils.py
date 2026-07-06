@@ -279,11 +279,15 @@ def get_isin_data(identifier: str) -> Dict[str, Any]:
             'modified_identifier': effective_identifier
         }
 
-        # Only cache successful responses (15 minutes). A result whose EUR
-        # conversion failed is not cached, so the next call converts as soon
-        # as an exchange rate becomes available.
+        # Cache successful responses for 15 minutes. A result whose EUR
+        # conversion failed is cached only under the short failed-lookup TTL:
+        # long enough to prevent a re-fetch storm during an FX outage (bulk
+        # updates would otherwise hit the network on every call), short enough
+        # that conversion is retried soon after a rate becomes available.
         if price is not None and result['data']['priceEUR'] is None:
-            logger.debug(f"Not caching {identifier}: EUR conversion unavailable")
+            cache.set(cache_key, result, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+            logger.debug(
+                f"Cached unconverted result for {identifier} (short TTL): EUR conversion unavailable")
         else:
             cache.set(cache_key, result, timeout=CACHE_TIMEOUT_STOCK_PRICES)
             logger.debug(f"Cached successful result for {identifier}")

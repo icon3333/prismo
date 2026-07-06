@@ -9,11 +9,23 @@ refreshed every 24 hours. Only the latest rate is kept (no historical tracking).
 """
 
 from typing import Optional, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 from app.db_manager import query_db, execute_db, get_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """
+    Naive UTC timestamp for last_updated.
+
+    Freshness predicates (get_fresh_rate, get_stale_currencies,
+    is_refresh_needed) compare against SQLite's datetime('now'), which is UTC,
+    so stored timestamps must be UTC too — a naive local datetime.now() would
+    skew freshness by the host's UTC offset.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Note: this repository used to hold its own in-memory cache (with a thread
 # lock) on top of value_calculator's `_exchange_rates_cache`. Two caches for
@@ -101,7 +113,7 @@ class ExchangeRateRepository:
             last_updated: Timestamp (defaults to now)
         """
         if last_updated is None:
-            last_updated = datetime.now()
+            last_updated = _utc_now()
 
         logger.info(f"Upserting exchange rate: {from_currency}->{to_currency} = {rate}")
 
@@ -136,7 +148,7 @@ class ExchangeRateRepository:
         db = get_db()
         cursor = db.cursor()
         count = 0
-        now = datetime.now()
+        now = _utc_now()
 
         try:
             for from_currency, rate in rates.items():

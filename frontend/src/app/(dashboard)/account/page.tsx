@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useAccount } from "@/hooks/use-account";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,7 @@ export default function AccountPage() {
   const {
     account,
     loading,
+    error,
     updateUsername,
     resetSettings,
     deleteStocksCrypto,
@@ -103,6 +105,17 @@ export default function AccountPage() {
           <Skeleton className="h-48" />
           <Skeleton className="h-64" />
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-title font-bold">Account</h1>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       </div>
     );
   }

@@ -5,6 +5,7 @@ import { BudgetSection } from "./budget-section";
 import { RulesSection } from "./rules-section";
 import { PortfolioList } from "./portfolio-list";
 import { AllocationSummary } from "./allocation-summary";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/shell/page-header";
 
@@ -33,9 +34,9 @@ export default function BuilderPage() {
     return (
       <div className="space-y-4">
         <PageHeader title="Builder" showPortfolioPicker={false} />
-        <div className="border border-red-400/30 bg-red-400/10 p-4 text-sm text-red">
-          {builder.error}
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{builder.error}</AlertDescription>
+        </Alert>
       </div>
     );
   }

@@ -27,8 +27,9 @@ export function ItemsTable({ sim }: Props) {
   const showPortfolioCol =
     !isPortfolioMode && sim.scope === "portfolio" && sim.portfolios.length > 0;
 
+  // Horizontal scroll comes from the Table's own overflow-x-auto container.
   return (
-    <div className="border border-border/50 bg-card/50 overflow-x-auto">
+    <div className="border border-border/50 bg-card/50 overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>

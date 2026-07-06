@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { notFound } from "next/navigation";
 import {
   AlertCircle,
 
@@ -93,6 +94,9 @@ function Section({
 }
 
 export default function ThemePage() {
+  // Dev-only component gallery — 404s in production builds.
+  if (process.env.NODE_ENV === "production") notFound();
+
   const [sliderValue, setSliderValue] = useState(5000);
 
   return (

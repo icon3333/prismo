@@ -76,8 +76,9 @@ export function EnrichTable({
   onToggleSelect,
   ...saveProps
 }: EnrichTableProps) {
+  // Horizontal scroll comes from the Table's own overflow-x-auto container.
   return (
-    <div className="border border-border overflow-auto">
+    <div className="border border-border overflow-hidden">
       <Table className="[&_input]:[font-size:inherit] [&_[data-slot=select-trigger]]:[font-size:inherit]">
         <TableHeader>
           <ShadTableRow className="bg-muted hover:bg-muted">

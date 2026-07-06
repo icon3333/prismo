@@ -1,0 +1,77 @@
+# BuildKit per-Dockerfile ignore file for deployment/Dockerfile.
+# The build context is the repo root (see docker-compose.yml), so keep the
+# frontend, tests, secrets and local data out of the backend image.
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Frontend (served separately; backend image is the Flask API only)
+frontend/
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment, secrets and backup files
+.env
+.env.backup.*
+.env.local
+.env.development
+.env.test
+
+# Database and instance directories (mounted as a volume at runtime;
+# never bake the live SQLite DB into image layers)
+instance/
+*.db
+
+# Python cache and virtual environments
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox/
+.cache/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

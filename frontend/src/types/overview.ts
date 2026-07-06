@@ -41,6 +41,7 @@ export interface PortfolioDataItem {
   is_custom_value?: boolean;
   custom_total_value?: number;
   current_value?: number;
+  value_source?: "custom" | "market" | "none";
 }
 
 export interface RebalancerPosition {

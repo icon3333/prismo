@@ -7,7 +7,7 @@ import type {
   MissingPortfolio,
   RebalancerData,
 } from "@/types/overview";
-import { calculatePositionValue } from "@/lib/position-value";
+import { calculatePositionValue, getPositionValueSource } from "@/lib/position-value";
 import { groupAndAggregate } from "@/lib/aggregation-utils";
 
 function calculateItemValue(item: PortfolioDataItem): number {
@@ -17,11 +17,10 @@ function calculateItemValue(item: PortfolioDataItem): number {
 export function computeMetricsFromItems(items: PortfolioDataItem[]): PortfolioMetrics {
   const total_items = items.length;
   const total_value = items.reduce((s, i) => s + calculateItemValue(i), 0);
+  // Mirrors the backend's has_price_or_custom_value(): an item is "missing"
+  // exactly when the server reports no valuation source for it.
   const missing_prices = items.filter(
-    (item) =>
-      !item.current_value &&
-      !(item.is_custom_value && item.custom_total_value != null) &&
-      (!item.price_eur || item.price_eur === 0)
+    (item) => getPositionValueSource(item) === "none"
   ).length;
   const health =
     total_items > 0

@@ -2,6 +2,7 @@ from flask import request, jsonify, g
 from app.db_manager import query_db, get_db
 from app.utils.portfolio_utils import get_stock_info
 from app.utils.db_utils import update_price_in_db
+from app.utils.value_calculator import calculate_item_value, VALUE_INPUT_COLUMNS_SQL
 from app.utils.batch_processing import start_batch_process, get_job_status, get_latest_job_progress
 from app.decorators import require_auth
 from app.utils.response_helpers import success_response, error_response, not_found_response, service_unavailable_response
@@ -41,7 +42,10 @@ def update_price_api(company_id: int):
 
         logger.info(f"Forcing price update for company {company_id} with identifier '{identifier}' (bypassing 24h rule)")
 
-        # backup_database()  # Consider if this is needed for single updates
+        # A forced update must hit the network — drop this identifier's 15-min
+        # cache entries first, or get_stock_info would return the cached price.
+        from app.utils.yfinance_utils import clear_price_cache
+        clear_price_cache(identifier)
 
         result = get_stock_info(identifier)
         if not result.get('success'):
@@ -367,11 +371,10 @@ def get_portfolio_companies(portfolio_id):
         account_id = g.account_id
         if not portfolio_id:
             return error_response('No portfolio ID provided', 400)
-        companies = query_db('''
+        companies = query_db(f'''
             SELECT c.id, c.name, c.identifier, c.sector,
                    cs.shares, cs.override_share,
-                   COALESCE(cs.override_share, cs.shares, 0) as effective_shares,
-                   mp.price_eur
+                   {VALUE_INPUT_COLUMNS_SQL}
             FROM companies c
             LEFT JOIN company_shares cs ON c.id = cs.company_id
             LEFT JOIN market_prices mp ON c.identifier = mp.identifier
@@ -390,7 +393,7 @@ def get_portfolio_companies(portfolio_id):
                     'override_share': company['override_share'],
                     'effective_shares': company['effective_shares'],
                     'price_eur': company['price_eur'],
-                    'value_eur': company['price_eur'] * company['effective_shares'] if company['price_eur'] and company['effective_shares'] else 0
+                    'value_eur': calculate_item_value(company)
                 })
         return jsonify(result)
     except (DataIntegrityError, ValidationError) as e:

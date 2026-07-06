@@ -15,6 +15,25 @@ from app.cache import cache
 _price_cache_keys: set = set()
 _price_cache_keys_lock = threading.Lock()
 
+# Per-currency-pair locks serializing the fetch-then-upsert sequence in
+# get_exchange_rate(). Without this, concurrent async-pool workers resolving
+# different identifiers that share a not-yet-fresh currency (e.g. right
+# after the first holding in a new currency is added) can each miss the
+# same fail-cache/fresh-rate check and independently hit the network —
+# harmless (upsert is idempotent) but wasteful and, on a single-user
+# homeserver whose network identity is one shared quota, worth avoiding.
+_fx_fetch_locks: Dict[str, threading.Lock] = {}
+_fx_fetch_locks_meta_lock = threading.Lock()
+
+
+def _get_fx_fetch_lock(from_currency: str, to_currency: str) -> threading.Lock:
+    key = f"{from_currency}_{to_currency}"
+    lock = _fx_fetch_locks.get(key)
+    if lock is None:
+        with _fx_fetch_locks_meta_lock:
+            lock = _fx_fetch_locks.setdefault(key, threading.Lock())
+    return lock
+
 
 def _cache_price_entry(key: str, value: Any, timeout: int) -> None:
     """cache.set for price data, recording the key for selective clearing.
@@ -134,14 +153,25 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[
 
     fail_key = f"fx_fail_{from_currency}_{to_currency}"
     if not cache.get(fail_key):
-        fetched = fetch_exchange_rate_from_network(from_currency, to_currency)
-        if fetched is not None:
-            ExchangeRateRepository.upsert_rate(from_currency, fetched, to_currency)
-            # value_calculator caches DB rates module-wide; force a re-read
-            from app.utils.value_calculator import clear_exchange_rate_cache
-            clear_exchange_rate_cache()
-            return fetched * base_rate
-        _cache_price_entry(fail_key, True, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
+        # Serialize the fetch+upsert per currency pair: concurrent async-pool
+        # workers resolving different identifiers in the same not-yet-fresh
+        # currency would otherwise all pass the checks above together and
+        # each hit the network. Re-check inside the lock — the winner's
+        # upsert makes the rate fresh for everyone waiting behind it.
+        with _get_fx_fetch_lock(from_currency, to_currency):
+            rate = ExchangeRateRepository.get_fresh_rate(
+                from_currency, to_currency, max_age_hours=FRESH_RATE_MAX_AGE_HOURS)
+            if rate is not None:
+                return rate * base_rate
+            if not cache.get(fail_key):
+                fetched = fetch_exchange_rate_from_network(from_currency, to_currency)
+                if fetched is not None:
+                    ExchangeRateRepository.upsert_rate(from_currency, fetched, to_currency)
+                    # value_calculator caches DB rates module-wide; force a re-read
+                    from app.utils.value_calculator import clear_exchange_rate_cache
+                    clear_exchange_rate_cache()
+                    return fetched * base_rate
+                _cache_price_entry(fail_key, True, timeout=CACHE_TIMEOUT_FAILED_LOOKUP)
 
     stale_rate = ExchangeRateRepository.get_rate(from_currency, to_currency)
     if stale_rate is not None:
@@ -665,12 +695,19 @@ def warm_price_cache_bulk(identifiers) -> Dict[str, Any]:
     if len(attempted) == 1 and hasattr(close_df, 'to_frame') and attempted[0] not in getattr(close_df, 'columns', []):
         close_df = close_df.to_frame(name=attempted[0])
 
+    # yf.download() uppercases tickers internally, so a stored identifier
+    # that isn't already canonical-case (e.g. a manually-added 'aapl') won't
+    # exact-match a column name — match case-insensitively instead, or the
+    # optimization silently and permanently no-ops for that identifier.
+    columns_by_upper = {str(c).upper(): c for c in getattr(close_df, 'columns', [])}
+
     warmed = []
     for ident in attempted:
         try:
-            if ident not in close_df.columns:
+            col_name = columns_by_upper.get(ident.upper())
+            if col_name is None:
                 continue
-            col = close_df[ident].dropna()
+            col = close_df[col_name].dropna()
             if col.empty:
                 continue
             price = float(col.iloc[-1])

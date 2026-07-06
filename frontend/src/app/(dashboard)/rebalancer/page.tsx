@@ -165,7 +165,6 @@ function RebalancerPageInner() {
             portfolioData={portfolioData}
             rebalanced={rebalanced}
             selectedPortfolio={selectedPortfolio}
-            mode={mode}
           />
         </TabsContent>
       </Tabs>

@@ -2,7 +2,7 @@
 
 import { useBuilder } from "@/hooks/use-builder";
 import { BudgetSection } from "./budget-section";
-import { RulesSection } from "./rules-section";
+import { RulesSection } from "@/components/domain/rules-section";
 import { PortfolioList } from "./portfolio-list";
 import { AllocationSummary } from "./allocation-summary";
 import { Alert, AlertDescription } from "@/components/ui/alert";

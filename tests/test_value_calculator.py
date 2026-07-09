@@ -87,15 +87,36 @@ class TestCalculateItemValue:
         item = {"price": 100.0, "currency": "USD", "shares": None}
         assert vc.calculate_item_value(item) == 0.0
 
+    def test_unknown_currency_falls_back_to_price_eur(self, rates):
+        # No rate for KRW: must not value 1 KRW = 1 EUR; use stored price_eur.
+        item = {"price": 50000.0, "currency": "KRW", "price_eur": 32.0, "shares": 2}
+        assert vc.calculate_item_value(item) == pytest.approx(64.0)
+
+    def test_unknown_currency_without_price_eur_is_zero(self, rates):
+        item = {"price": 50000.0, "currency": "KRW", "shares": 2}
+        assert vc.calculate_item_value(item) == 0.0
+
+
+class TestValueSourceUnknownCurrency:
+    def test_unknown_currency_without_price_eur_is_none_source(self, rates):
+        item = {"price": 50000.0, "currency": "KRW", "shares": 2}
+        assert vc.get_value_source(item) == "none"
+
+    def test_unknown_currency_with_price_eur_is_market(self, rates):
+        item = {"price": 50000.0, "currency": "KRW", "price_eur": 32.0, "shares": 2}
+        assert vc.get_value_source(item) == "market"
+
 
 class TestExchangeRateLookup:
     def test_fallback_rate_used_when_currency_missing_from_db(self, monkeypatch):
         monkeypatch.setattr(vc, "_exchange_rates_cache", {"EUR": 1.0})
         assert vc._get_exchange_rate("USD") == vc._FALLBACK_RATES["USD"]
 
-    def test_unknown_currency_defaults_to_1(self, monkeypatch):
+    def test_unknown_currency_returns_none(self, monkeypatch):
+        # Valuing an unknown currency at 1:1 EUR silently misprices positions
+        # (e.g. KRW would be inflated ~1400x). Unknown must mean "no rate".
         monkeypatch.setattr(vc, "_exchange_rates_cache", {"EUR": 1.0})
-        assert vc._get_exchange_rate("XYZ") == 1.0
+        assert vc._get_exchange_rate("XYZ") is None
 
     def test_empty_currency_is_1(self):
         assert vc._get_exchange_rate("") == 1.0

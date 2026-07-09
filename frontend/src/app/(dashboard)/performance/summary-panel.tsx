@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import { date, eur, signedEur, signedPct } from "@/lib/format";
+import { parseServerTimestampMs } from "@/lib/enrich-calc";
 import type { PerformancePortfolioData } from "@/types/performance";
 
 interface SummaryPanelProps {
@@ -53,9 +54,8 @@ export function SummaryPanel({
       )
     : null;
 
-  const lastUpdated = portfolioData?.last_updated
-    ? date(portfolioData.last_updated)
-    : "Never";
+  const lastUpdatedMs = parseServerTimestampMs(portfolioData?.last_updated ?? null);
+  const lastUpdated = lastUpdatedMs != null ? date(lastUpdatedMs) : "Never";
 
   return (
     <div className="border border-border bg-card p-4 space-y-4">

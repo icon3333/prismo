@@ -80,8 +80,8 @@ export function sortItems(items: EnrichItem[], sort: SortState): EnrichItem[] {
     }
 
     if (col === "last_updated") {
-      const aDate = a.last_updated ? new Date(a.last_updated).getTime() : 0;
-      const bDate = b.last_updated ? new Date(b.last_updated).getTime() : 0;
+      const aDate = parseServerTimestampMs(a.last_updated) ?? 0;
+      const bDate = parseServerTimestampMs(b.last_updated) ?? 0;
       return dir * (aDate - bDate);
     }
 
@@ -119,9 +119,23 @@ export function filterItems(items: EnrichItem[], portfolio: string | null, searc
 
 // --- Formatting ---
 
+// Server timestamps are UTC. Current backend rows carry an explicit +00:00
+// offset, but legacy rows are timezone-less ("2026-07-03T11:30:00" or
+// "2026-07-03 11:30:00") — new Date() would parse those as browser-local,
+// shifting ages by the UTC offset. Treat missing offsets as UTC.
+export function parseServerTimestampMs(value: string | null): number | null {
+  if (!value) return null;
+  let iso = value.replace(" ", "T");
+  if (!/(Z|[+-]\d{2}:?\d{2})$/.test(iso)) iso += "Z";
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 export function formatDateAgo(value: string | null): string {
   if (!value) return "Never";
-  const d = new Date(value);
+  const ms = parseServerTimestampMs(value);
+  if (ms == null) return "Never";
+  const d = new Date(ms);
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;

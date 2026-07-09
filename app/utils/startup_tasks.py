@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 from flask import current_app
 from app.db_manager import query_db, backup_database
@@ -18,11 +18,18 @@ _background_tasks_started = False
 _background_tasks_lock = threading.Lock()
 
 
-def run_startup_tasks(app):
+# How often the refresh loop re-checks staleness. The refreshers themselves
+# gate on their own intervals (24h FX, PRICE_UPDATE_INTERVAL), so a fine-
+# grained check is cheap: two SELECTs per hour when everything is fresh.
+REFRESH_CHECK_INTERVAL_SECONDS = 60 * 60
+
+
+def run_refresh_cycle(app):
     """
-    Run one-time startup tasks: exchange-rate refresh, price auto-update,
-    and the periodic backup scheduler. Each task is isolated so one failure
-    doesn't block the others.
+    Run one staleness check + refresh pass for exchange rates and prices.
+    Each task is isolated so one failure doesn't block the other. Called at
+    startup and then periodically — without the loop, a long-running server
+    (Docker restart: unless-stopped) would keep boot-time prices forever.
     """
     with app.app_context():
         try:
@@ -33,16 +40,30 @@ def run_startup_tasks(app):
         try:
             result = auto_update_prices_if_needed()
             if result and result.get('status') == 'error':
-                logger.error(f"STARTUP: Price update failed: {result.get('error')}")
+                logger.error(f"Price update failed: {result.get('error')}")
             elif result:
-                logger.info(f"STARTUP: Price update result: {result.get('status')}")
+                logger.info(f"Price update result: {result.get('status')}")
         except Exception as e:
             logger.error(f"Automatic price update failed: {e}")
 
+
+def run_startup_tasks(app):
+    """
+    Run the first refresh cycle, start the backup scheduler, then keep
+    re-checking price/FX staleness periodically for the process lifetime.
+    """
+    run_refresh_cycle(app)
+
+    with app.app_context():
         try:
             schedule_automatic_backups()
         except Exception as e:
             logger.error(f"Automatic backup setup failed: {e}")
+
+    # Periodic re-check (runs in the same daemon thread that called us).
+    while True:
+        time.sleep(REFRESH_CHECK_INTERVAL_SECONDS)
+        run_refresh_cycle(app)
 
 
 def start_background_tasks(app):
@@ -180,6 +201,34 @@ def _fetch_exchange_rates(currencies: List[str]) -> Dict[str, float]:
     return rates
 
 
+def _needs_price_update(last_str, update_interval: timedelta) -> bool:
+    """
+    Decide whether prices are stale given the stored accounts.last_price_update.
+
+    Handles both the current format (timezone-aware UTC ISO) and legacy rows
+    (naive local isoformat or 'YYYY-MM-DD HH:MM:SS'). Naive timestamps are
+    compared against naive local now. Unparseable values count as stale.
+    """
+    if not last_str:
+        return True
+
+    try:
+        last_dt = datetime.fromisoformat(last_str)
+    except ValueError:
+        try:
+            last_dt = datetime.strptime(last_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            logger.warning(f"Unparseable last_price_update {last_str!r} - treating as stale")
+            return True
+
+    if last_dt.tzinfo is not None:
+        now = datetime.now(timezone.utc)
+    else:
+        now = datetime.now()
+
+    return (now - last_dt) >= update_interval
+
+
 def auto_update_prices_if_needed():
     """
     Trigger bulk price update if last update is older than configured interval.
@@ -200,22 +249,8 @@ def auto_update_prices_if_needed():
         last_str = row['last'] if row else None
         logger.info(f"STARTUP: Last price update from database: {last_str}")
 
-        needs_update = True
-        if last_str:
-            try:
-                last_dt = datetime.fromisoformat(last_str)
-            except ValueError:
-                last_dt = datetime.strptime(last_str, "%Y-%m-%d %H:%M:%S")
-
-            time_since_update = datetime.now() - last_dt
-            update_interval = current_app.config.get('PRICE_UPDATE_INTERVAL', timedelta(hours=24))
-            logger.info(f"STARTUP: Time since last update: {time_since_update}")
-            logger.info(f"STARTUP: Required update interval: {update_interval}")
-
-            if time_since_update < update_interval:
-                needs_update = False
-
-        if not needs_update:
+        update_interval = current_app.config.get('PRICE_UPDATE_INTERVAL', timedelta(hours=24))
+        if not _needs_price_update(last_str, update_interval):
             logger.info("STARTUP: Prices are fresh - no update needed")
             logger.info("=" * 50)
             return {'status': 'skipped', 'reason': 'prices_fresh'}

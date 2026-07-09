@@ -124,7 +124,10 @@ class PriceRepository:
             last_updated: Timestamp (defaults to now)
         """
         if last_updated is None:
-            last_updated = datetime.now()
+            # Aware UTC ISO — the frontend parses this field; tz-less strings
+            # would be read as browser-local time (see db_utils.utc_now_iso).
+            from app.utils.db_utils import utc_now_iso
+            last_updated = utc_now_iso()
 
         logger.debug(f"Updating price for {identifier}: {price_eur} {currency}")
 

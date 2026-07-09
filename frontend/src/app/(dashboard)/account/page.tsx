@@ -19,6 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { dateTime } from "@/lib/format";
+import { parseServerTimestampMs } from "@/lib/enrich-calc";
 import { toast } from "sonner";
 
 export default function AccountPage() {
@@ -121,12 +122,8 @@ export default function AccountPage() {
   }
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "Never";
-    try {
-      return dateTime(dateStr + "Z");
-    } catch {
-      return dateStr;
-    }
+    const ms = parseServerTimestampMs(dateStr);
+    return ms == null ? "Never" : dateTime(ms);
   };
 
   return (

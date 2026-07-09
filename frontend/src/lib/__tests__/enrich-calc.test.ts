@@ -184,4 +184,29 @@ describe("formatDateAgo", () => {
     expect(formatDateAgo("2026-07-03T02:00:00Z")).toBe("10h ago");
     expect(formatDateAgo("2026-07-01T12:00:00Z")).toBe("2d ago");
   });
+
+  it("treats timezone-less server timestamps as UTC", () => {
+    // Legacy backend rows carry naive UTC ISO strings (no Z / offset).
+    // new Date() would parse them as browser-local, misreporting age.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-03T12:00:00Z"));
+    expect(formatDateAgo("2026-07-03T11:30:00")).toBe("30m ago");
+  });
+});
+
+describe("parseServerTimestampMs", () => {
+  it("parses tz-less strings as UTC, keeps explicit offsets, handles null", async () => {
+    const { parseServerTimestampMs } = await import("@/lib/enrich-calc");
+    expect(parseServerTimestampMs("2026-07-03T11:30:00")).toBe(
+      Date.parse("2026-07-03T11:30:00Z"),
+    );
+    expect(parseServerTimestampMs("2026-07-03T11:30:00+00:00")).toBe(
+      Date.parse("2026-07-03T11:30:00Z"),
+    );
+    expect(parseServerTimestampMs("2026-07-03 11:30:00")).toBe(
+      Date.parse("2026-07-03T11:30:00Z"),
+    );
+    expect(parseServerTimestampMs(null)).toBeNull();
+    expect(parseServerTimestampMs("garbage")).toBeNull();
+  });
 });

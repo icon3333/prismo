@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import g, jsonify, request, session
 
 from app.db_manager import backup_database, execute_db, get_db, query_db
+from app.utils.db_utils import utc_now_iso
 from app.decorators import require_auth
 from app.utils.response_helpers import (
     error_response,
@@ -512,7 +513,7 @@ def api_import_account_data():
 
             db.execute(
                 'UPDATE accounts SET last_price_update = ? WHERE id = ?',
-                [datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), account_id]
+                [utc_now_iso(), account_id]
             )
 
         return jsonify({'success': True})

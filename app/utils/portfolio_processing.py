@@ -269,10 +269,11 @@ def _seed_ibkr_prices(company_positions, cursor):
         if cursor.fetchone():
             continue
 
+        from app.utils.db_utils import utc_now_iso
         cursor.execute(
             '''INSERT OR IGNORE INTO market_prices (identifier, price, currency, last_updated)
-               VALUES (?, ?, ?, datetime('now'))''',
-            [identifier, price, currency]
+               VALUES (?, ?, ?, ?)''',
+            [identifier, price, currency, utc_now_iso()]
         )
         seeded += 1
 

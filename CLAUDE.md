@@ -32,7 +32,7 @@ cd frontend && npm run lint                    # ESLint for Next.js
 cd deployment && docker-compose up -d          # Manual Docker
 ```
 
-`dev.sh` auto-prefers Homebrew's `node@22` because Next 16 / Turbopack panics on Node 25. If you see Turbopack crashes, install `node@22` or point `NODE_BIN` in `dev.sh`.
+`dev.sh` is a thin wrapper that execs `start.py` (the real dev launcher: bootstraps venv + deps, then runs Flask + Next.js). `start.py` auto-prefers Homebrew's `node@22` because Next 16 / Turbopack panics on Node 25. If you see Turbopack crashes, install `node@22` or point `NODE_BIN` in `start.py`.
 
 ## Architecture
 
@@ -69,7 +69,7 @@ The old Jinja `templates/` and `static/` directories were deleted in commit `488
 - `app/utils/value_calculator.py`: Central value calculation — priority: custom value → native currency × exchange rate → legacy price_eur
 - `app/utils/yfinance_utils.py`: Market data with 15-min cache
 - `app/utils/batch_processing.py`: Sync (<5 items) / async (≥5 items) execution via a persistent thread pool
-- `app/utils/startup_tasks.py`: Refreshes exchange rates, auto-updates prices, schedules backups — runs in a background thread started once per process: in dev via `create_app`, in production via the gunicorn `when_ready` hook (master process; `PRISMO_DEFER_STARTUP_TASKS=1` keeps workers from double-starting them)
+- `app/utils/startup_tasks.py`: Refreshes exchange rates + auto-updates prices (at boot, then re-checked hourly via `run_refresh_cycle` — the refreshers gate on their own 24h intervals), schedules backups — runs in a background thread started once per process: in dev via `create_app`, in production via the gunicorn `when_ready` hook (master process; `PRISMO_DEFER_STARTUP_TASKS=1` keeps workers from double-starting them)
 
 ## Routes
 

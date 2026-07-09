@@ -54,7 +54,7 @@ _FALLBACK_RATES: Dict[str, float] = {
 }
 
 
-def _get_exchange_rate(currency: str) -> float:
+def _get_exchange_rate(currency: str) -> Optional[float]:
     """
     Get exchange rate for a currency to EUR.
 
@@ -65,7 +65,10 @@ def _get_exchange_rate(currency: str) -> float:
         currency: Currency code (e.g., 'USD', 'GBP')
 
     Returns:
-        Exchange rate to EUR, or fallback rate if not found
+        Exchange rate to EUR, fallback rate if not in DB, or None when the
+        currency is unknown — valuing an unknown currency 1:1 with EUR would
+        silently misprice the position (KRW would be ~1400x too high), so
+        callers must fall back to price_eur or treat the value as missing.
     """
     global _exchange_rates_cache, _exchange_rates_loaded_at
 
@@ -94,9 +97,9 @@ def _get_exchange_rate(currency: str) -> float:
             logger.warning(f"No exchange rate found for {currency} in DB, using fallback rate {fallback_rate}")
             return fallback_rate
         else:
-            # Unknown currency - log error as this could cause significant valuation errors
-            logger.error(f"No exchange rate found for unknown currency {currency}, using 1.0 (WILL CAUSE INCORRECT VALUATION)")
-            return 1.0
+            logger.error(f"No exchange rate available for currency {currency}; "
+                         "position will fall back to stored price_eur or be valued as missing")
+            return None
 
     return rate
 
@@ -139,11 +142,14 @@ def calculate_item_value(item: Dict[str, Any]) -> float:
         shares_value = item.get('shares')
     shares = float(shares_value or 0)
 
-    # Priority 2: native currency conversion
+    # Priority 2: native currency conversion (skipped when no rate is known —
+    # the legacy price_eur below is then the best available value)
     native_price = item.get('price')
     currency = item.get('currency')
     if native_price is not None and native_price > 0 and currency:
-        return float(native_price) * float(_get_exchange_rate(currency)) * shares
+        rate = _get_exchange_rate(currency)
+        if rate is not None:
+            return float(native_price) * float(rate) * shares
 
     # Priority 3: legacy price_eur
     return float(item.get('price_eur') or 0) * shares
@@ -192,7 +198,9 @@ def get_value_source(item: Dict[str, Any]) -> str:
     """
     if item.get('is_custom_value') and item.get('custom_total_value') is not None:
         return 'custom'
-    elif item.get('price') is not None and item.get('price') > 0 and item.get('currency'):
+    elif (item.get('price') is not None and item.get('price') > 0
+          and item.get('currency')
+          and _get_exchange_rate(item.get('currency')) is not None):
         return 'market'
     elif item.get('price_eur') is not None and item.get('price_eur') > 0:
         return 'market'

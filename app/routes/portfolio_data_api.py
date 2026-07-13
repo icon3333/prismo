@@ -571,7 +571,12 @@ def get_single_portfolio_data_api(portfolio_id):
 
         # Handle "all portfolios" aggregation
         if portfolio_id == 'all':
-            fields = request.args.get('fields')
+            # Normalize to the only two variants _get_all_portfolios_data
+            # distinguishes (companies_only = fields == 'companies'). This keeps
+            # the memoize key space to exactly {None, 'companies'} so the two
+            # scoped clears in invalidate_portfolio_cache cover every request —
+            # a stray ?fields=<anything-else> can't leave an uninvalidated entry.
+            fields = 'companies' if request.args.get('fields') == 'companies' else None
             response_data = _get_all_portfolios_data(account_id, fields=fields)
             return jsonify(response_data)
 

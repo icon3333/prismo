@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1205 symbols, 3389 relationships, 93 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **prismo** (1696 symbols, 4838 relationships, 133 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -17,7 +17,7 @@ This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1205 sym
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/portfolio_rebalancing_flask/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/prismo/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -56,10 +56,10 @@ This project is indexed by GitNexus as **portfolio_rebalancing_flask** (1205 sym
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/portfolio_rebalancing_flask/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/portfolio_rebalancing_flask/clusters` | All functional areas |
-| `gitnexus://repo/portfolio_rebalancing_flask/processes` | All execution flows |
-| `gitnexus://repo/portfolio_rebalancing_flask/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/prismo/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/prismo/clusters` | All functional areas |
+| `gitnexus://repo/prismo/processes` | All execution flows |
+| `gitnexus://repo/prismo/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 

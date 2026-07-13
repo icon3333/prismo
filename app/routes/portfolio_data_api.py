@@ -101,7 +101,12 @@ def invalidate_portfolio_cache(account_id: int) -> None:
     """
     try:
         cache.delete_memoized(_get_simulator_portfolio_data_internal, account_id)
-        cache.delete_memoized(_get_all_portfolios_data)
+        # Scoped to this account; clear both fields variants the endpoint serves
+        # (default read = fields=None, concentrations = fields='companies'). A
+        # bare delete_memoized(fn) would wipe every account's cache, and passing
+        # only account_id would miss the 'companies' variant entirely.
+        cache.delete_memoized(_get_all_portfolios_data, account_id, fields=None)
+        cache.delete_memoized(_get_all_portfolios_data, account_id, fields='companies')
         cache.delete_memoized(PortfolioRepository.get_portfolio_data_with_enrichment, account_id)
         logger.debug(f"Cache invalidated for account_id: {account_id}")
     except Exception as e:

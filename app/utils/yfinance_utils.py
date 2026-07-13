@@ -116,6 +116,26 @@ def fetch_exchange_rate_from_network(from_currency: str, to_currency: str = "EUR
         return None
 
 
+def _yf_download_close_columns(tickers):
+    """Download 1-day closes for ``tickers``; return ``(close_df, columns_by_upper)``.
+
+    ``columns_by_upper`` maps each UPPERCASED ticker to its actual column name:
+    yf.download() uppercases tickers internally, so an identifier that isn't
+    already canonical-case (e.g. a manually-added 'aapl') would never exact-match
+    a column and the lookup would silently, permanently no-op without this.
+    """
+    yf = _get_yfinance()
+    data = yf.download(tickers, period='1d', progress=False,
+                       group_by='column', threads=True)
+    close_df = data['Close'] if 'Close' in data else data
+    # Single ticker: yf.download returns a Series-shaped frame
+    if len(tickers) == 1 and hasattr(close_df, 'to_frame') and \
+            tickers[0] not in getattr(close_df, 'columns', []):
+        close_df = close_df.to_frame(name=tickers[0])
+    columns_by_upper = {str(c).upper(): c for c in getattr(close_df, 'columns', [])}
+    return close_df, columns_by_upper
+
+
 def fetch_exchange_rates_from_network_bulk(
         currencies, to_currency: str = "EUR") -> Dict[str, float]:
     """
@@ -154,17 +174,7 @@ def fetch_exchange_rates_from_network_bulk(
     if not tickers:
         return rates
 
-    yf = _get_yfinance()
-    data = yf.download(tickers, period='1d', progress=False,
-                       group_by='column', threads=True)
-    close_df = data['Close'] if 'Close' in data else data
-    # Single ticker: yf.download returns a Series-shaped frame
-    if len(tickers) == 1 and hasattr(close_df, 'to_frame') and \
-            tickers[0] not in getattr(close_df, 'columns', []):
-        close_df = close_df.to_frame(name=tickers[0])
-
-    # yf.download() uppercases tickers internally; match case-insensitively.
-    columns_by_upper = {str(c).upper(): c for c in getattr(close_df, 'columns', [])}
+    close_df, columns_by_upper = _yf_download_close_columns(tickers)
 
     for currency, (ticker, base_rate) in specs.items():
         col_name = columns_by_upper.get(ticker.upper())
@@ -755,19 +765,7 @@ def warm_price_cache_bulk(identifiers) -> Dict[str, Any]:
     if not attempted:
         return stats
 
-    yf = _get_yfinance()
-    data = yf.download(attempted, period='1d', progress=False,
-                       group_by='column', threads=True)
-    close_df = data['Close'] if 'Close' in data else data
-    # Single ticker: yf.download returns a Series-shaped frame
-    if len(attempted) == 1 and hasattr(close_df, 'to_frame') and attempted[0] not in getattr(close_df, 'columns', []):
-        close_df = close_df.to_frame(name=attempted[0])
-
-    # yf.download() uppercases tickers internally, so a stored identifier
-    # that isn't already canonical-case (e.g. a manually-added 'aapl') won't
-    # exact-match a column name — match case-insensitively instead, or the
-    # optimization silently and permanently no-ops for that identifier.
-    columns_by_upper = {str(c).upper(): c for c in getattr(close_df, 'columns', [])}
+    close_df, columns_by_upper = _yf_download_close_columns(attempted)
 
     warmed = []
     for ident in attempted:

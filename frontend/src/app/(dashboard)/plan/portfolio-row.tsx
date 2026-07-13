@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,7 +47,7 @@ interface PortfolioRowProps {
   onSetSelectedPosition: (value: string) => void;
 }
 
-export function PortfolioRow({
+export const PortfolioRow = React.memo(function PortfolioRow({
   portfolio,
   expanded,
   onToggleExpanded,
@@ -217,4 +217,4 @@ export function PortfolioRow({
       )}
     </div>
   );
-}
+});

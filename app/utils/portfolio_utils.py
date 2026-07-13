@@ -1,5 +1,4 @@
 from app.db_manager import query_db
-from app.utils.db_utils import load_portfolio_data
 from app.utils.yfinance_utils import get_isin_data
 from app.repositories.portfolio_repository import PortfolioRepository
 import logging

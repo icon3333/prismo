@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -19,16 +19,33 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatSimValue, parseSimValue } from "@/lib/simulator-calc";
-import type { SimulatorItem } from "@/types/simulator";
-import type { UseSimulatorReturn } from "@/hooks/use-simulator";
+import type { SimulatorItem, PortfolioOption } from "@/types/simulator";
 
 interface Props {
   item: SimulatorItem;
-  sim: UseSimulatorReturn;
   showPortfolioCol: boolean;
+  /** Stable reference from the hook — only changes when portfolios refetch. */
+  portfolios: PortfolioOption[];
+  updateItem: (id: string, updates: Partial<SimulatorItem>) => void;
+  updateItemValue: (
+    id: string,
+    field: "value" | "targetPercent",
+    rawValue: number
+  ) => void;
+  deleteItem: (id: string) => void;
 }
 
-export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
+// Memoized: a row only re-renders when its OWN `item` (or the shared
+// primitives/stable callbacks) changes — editing one row no longer re-renders
+// every other row's heavy Select/Input/Tooltip subtree.
+export const ItemsTableRow = React.memo(function ItemsTableRow({
+  item,
+  showPortfolioCol,
+  portfolios,
+  updateItem,
+  updateItemValue,
+  deleteItem,
+}: Props) {
   return (
     <TableRow className="group">
       {/* Ticker */}
@@ -57,7 +74,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
         <InlineTextInput
           value={item.name}
           placeholder="Name"
-          onCommit={(v) => sim.updateItem(item.id, { name: v })}
+          onCommit={(v) => updateItem(item.id, { name: v })}
         />
       </TableCell>
 
@@ -68,7 +85,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
             value={item.portfolio_id ? String(item.portfolio_id) : "none"}
             onValueChange={(v) => {
               if (!v) return;
-              sim.updateItem(item.id, {
+              updateItem(item.id, {
                 portfolio_id: v === "none" ? null : parseInt(v),
               });
             }}
@@ -78,7 +95,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">—</SelectItem>
-              {sim.portfolios.map((p) => (
+              {portfolios.map((p) => (
                 <SelectItem key={p.id} value={String(p.id)}>
                   {p.name}
                 </SelectItem>
@@ -93,7 +110,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
         <InlineTextInput
           value={item.sector === "—" ? "" : item.sector}
           placeholder="—"
-          onCommit={(v) => sim.updateItem(item.id, { sector: v || "—" })}
+          onCommit={(v) => updateItem(item.id, { sector: v || "—" })}
         />
       </TableCell>
 
@@ -102,7 +119,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
         <InlineTextInput
           value={item.thesis === "—" ? "" : item.thesis}
           placeholder="—"
-          onCommit={(v) => sim.updateItem(item.id, { thesis: v || "—" })}
+          onCommit={(v) => updateItem(item.id, { thesis: v || "—" })}
         />
       </TableCell>
 
@@ -111,7 +128,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
         <InlineTextInput
           value={item.country === "—" ? "" : item.country}
           placeholder="—"
-          onCommit={(v) => sim.updateItem(item.id, { country: v || "—" })}
+          onCommit={(v) => updateItem(item.id, { country: v || "—" })}
         />
       </TableCell>
 
@@ -120,7 +137,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
         <InlineNumberInput
           value={item.value}
           prefix="€"
-          onCommit={(v) => sim.updateItemValue(item.id, "value", v)}
+          onCommit={(v) => updateItemValue(item.id, "value", v)}
         />
       </TableCell>
 
@@ -142,7 +159,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
           <InlineNumberInput
             value={item.targetPercent}
             suffix="%"
-            onCommit={(v) => sim.updateItemValue(item.id, "targetPercent", v)}
+            onCommit={(v) => updateItemValue(item.id, "targetPercent", v)}
           />
         </div>
       </TableCell>
@@ -150,7 +167,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
       {/* Delete */}
       <TableCell>
         <button
-          onClick={() => sim.deleteItem(item.id)}
+          onClick={() => deleteItem(item.id)}
           aria-label="Remove"
           className="opacity-0 group-hover:opacity-100 transition-opacity text-ink-2 hover:text-ink leading-none text-[14px]"
         >
@@ -159,7 +176,7 @@ export function ItemsTableRow({ item, sim, showPortfolioCol }: Props) {
       </TableCell>
     </TableRow>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Inline text input

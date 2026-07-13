@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -43,16 +43,22 @@ export function SimulatorHeader({ sim }: Props) {
 
   // Apply to Plan is only possible when the sandbox resolves to a single
   // target portfolio (cloned-from wins, else a common portfolio_id).
-  const applyTargetId = resolveTargetPortfolioId(
-    sim.currentClonedFromPortfolioId,
-    sim.items
+  const applyTargetId = useMemo(
+    () => resolveTargetPortfolioId(sim.currentClonedFromPortfolioId, sim.items),
+    [sim.currentClonedFromPortfolioId, sim.items]
   );
-  const applyTargetName =
-    applyTargetId != null
-      ? (sim.portfolios.find((p) => String(p.id) === String(applyTargetId))
-          ?.name ?? sim.currentClonedFromName ?? `Portfolio ${applyTargetId}`)
-      : "";
-  const applyMapping = computeAppliedPositions(sim.items);
+  const applyTargetName = useMemo(
+    () =>
+      applyTargetId != null
+        ? (sim.portfolios.find((p) => String(p.id) === String(applyTargetId))
+            ?.name ?? sim.currentClonedFromName ?? `Portfolio ${applyTargetId}`)
+        : "",
+    [applyTargetId, sim.portfolios, sim.currentClonedFromName]
+  );
+  const applyMapping = useMemo(
+    () => computeAppliedPositions(sim.items),
+    [sim.items]
+  );
 
   return (
     <div className="space-y-3">

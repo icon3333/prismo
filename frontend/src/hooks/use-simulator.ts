@@ -79,6 +79,16 @@ export function useSimulator() {
   const [expandedCountryBar, setExpandedCountryBar] = useState<string | null>(null);
   const [expandedSectorBar, setExpandedSectorBar] = useState<string | null>(null);
 
+  // Refs mirror the latest committed state so row-facing callbacks can keep
+  // empty/narrow deps (stable references for React.memo'd rows) without ever
+  // reading a stale value — the ref is reassigned on every render below.
+  const modeRef = useRef(mode);
+  const totalAmountRef = useRef(totalAmount);
+  const portfolioDataRef = useRef(portfolioData);
+  modeRef.current = mode;
+  totalAmountRef.current = totalAmount;
+  portfolioDataRef.current = portfolioData;
+
   // --- Deploy state (stored, not rendered in Phase 1) ---
   const deployRef = useRef({
     lumpSum: 0,
@@ -588,6 +598,11 @@ export function useSimulator() {
 
   const updateItemValue = useCallback(
     (id: string, field: "value" | "targetPercent", rawValue: number) => {
+      // Read current mode/total/baseline from refs so this callback stays a
+      // stable reference across item edits (keeps React.memo'd rows quiet).
+      const mode = modeRef.current;
+      const totalAmount = totalAmountRef.current;
+      const portfolioData = portfolioDataRef.current;
       setItems((prev) =>
         prev.map((item) => {
           if (item.id !== id) return item;
@@ -614,7 +629,7 @@ export function useSimulator() {
       );
       triggerAutoSave();
     },
-    [mode, totalAmount, portfolioData, triggerAutoSave]
+    [triggerAutoSave]
   );
 
   // =========================================================================

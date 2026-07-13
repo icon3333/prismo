@@ -2,6 +2,7 @@ import { AnonymousModeProvider } from "@/components/domain/anonymous-mode";
 import { Masthead } from "@/components/ptsim";
 import { AccountPicker } from "@/components/shell/account-picker";
 import { ErrorBoundary } from "@/components/shell/error-boundary";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
   children,
@@ -17,6 +18,7 @@ export default function DashboardLayout({
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
+      <Toaster />
     </AnonymousModeProvider>
   );
 }

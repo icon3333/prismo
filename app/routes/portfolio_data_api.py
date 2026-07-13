@@ -101,7 +101,7 @@ def invalidate_portfolio_cache(account_id: int) -> None:
     """
     try:
         cache.delete_memoized(_get_simulator_portfolio_data_internal, account_id)
-        cache.delete_memoized(_get_all_portfolios_data, account_id)
+        cache.delete_memoized(_get_all_portfolios_data)
         cache.delete_memoized(PortfolioRepository.get_portfolio_data_with_enrichment, account_id)
         logger.debug(f"Cache invalidated for account_id: {account_id}")
     except Exception as e:
@@ -266,8 +266,13 @@ def get_simulator_portfolio_data():
             if mode not in VALID_MODES:
                 raise ValidationError(f'Invalid mode: {mode}')
             amount = request.args.get('amount', 0, type=float) or 0
-            # The memoized base tree must not be mutated.
-            result = copy.deepcopy(result)
+            # The memoized base tree must not be mutated. We only add a
+            # top-level 'rebalanced' key and rebalance_service only reads
+            # (never mutates) the 'portfolios' entries, so a shallow top-level
+            # copy plus a deep copy of just 'portfolios' is sufficient — no need
+            # to deep-copy the large aliased 'companies'/'sectors'/'theses'.
+            result = dict(result)
+            result['portfolios'] = copy.deepcopy(result.get('portfolios') or [])
             rebalanced = calculate_rebalancing(
                 result.get('portfolios') or [], mode, amount)
             for entry in rebalanced:
@@ -388,13 +393,22 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
 
     companies_only = fields == 'companies'
 
+    # Value each raw row exactly once; both loops below reuse these numbers
+    # instead of re-calling calculate_item_value()/total_invested per row.
+    valued_rows = [
+        (
+            company,
+            float(calculate_item_value(company)),
+            float(company.get('total_invested', 0) or 0),
+        )
+        for company in companies_raw
+    ]
+
     # Group by portfolio BEFORE deduplication (for Portfolios tab)
     portfolios_raw = {}
     if not companies_only:
-        for company in companies_raw:
+        for company, current_value, total_invested in valued_rows:
             portfolio_name = company.get('portfolio_name') or 'Unknown'
-            current_value = float(calculate_item_value(company))
-            total_invested = float(company.get('total_invested', 0) or 0)
 
             if portfolio_name not in portfolios_raw:
                 portfolios_raw[portfolio_name] = {
@@ -419,10 +433,8 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
 
     # Deduplicate by identifier - group by identifier and aggregate
     deduped = {}
-    for company in companies_raw:
+    for company, current_value, total_invested in valued_rows:
         identifier = company['identifier']
-        current_value = float(calculate_item_value(company))
-        total_invested = float(company.get('total_invested', 0) or 0)
         effective_shares = float(company.get('effective_shares', 0) or 0)
 
         if identifier in deduped:

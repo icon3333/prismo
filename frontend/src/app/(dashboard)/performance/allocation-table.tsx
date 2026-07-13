@@ -157,6 +157,30 @@ export function AllocationTable({
     return sorted;
   }, [rows, sortField, sortDir]);
 
+  // Precompute the parent-row ChartSelection payloads (filter + maps over
+  // children) once per `rows` change instead of on every click. Keyed by row
+  // reference — sortedRows preserves the same objects, so the rows handed to
+  // handleRowClick match these keys. Output is identical to computing inline.
+  const parentSelections = useMemo(() => {
+    const map = new Map<AllocationRow, ChartSelection | null>();
+    for (const row of rows) {
+      if (!row.children) continue;
+      const withIds = row.children.filter((c) => c.identifier);
+      map.set(
+        row,
+        withIds.length > 0
+          ? {
+              identifiers: withIds.map((c) => c.identifier!),
+              names: withIds.map((c) => c.name),
+              groupName: row.name,
+              values: withIds.map((c) => c.value),
+            }
+          : null
+      );
+    }
+    return map;
+  }, [rows]);
+
   const handleRowClick = (row: AllocationRow, isParent: boolean) => {
     if (row.isCash) return;
 
@@ -167,17 +191,7 @@ export function AllocationTable({
     }
 
     if (isParent && row.children) {
-      const withIds = row.children.filter((c) => c.identifier);
-      if (withIds.length > 0) {
-        onRowClick({
-          identifiers: withIds.map((c) => c.identifier!),
-          names: withIds.map((c) => c.name),
-          groupName: row.name,
-          values: withIds.map((c) => c.value),
-        });
-      } else {
-        onRowClick(null);
-      }
+      onRowClick(parentSelections.get(row) ?? null);
     } else if (row.identifier) {
       onRowClick({
         identifiers: [row.identifier],

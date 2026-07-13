@@ -116,6 +116,74 @@ def fetch_exchange_rate_from_network(from_currency: str, to_currency: str = "EUR
         return None
 
 
+def fetch_exchange_rates_from_network_bulk(
+        currencies, to_currency: str = "EUR") -> Dict[str, float]:
+    """
+    Fetch many currency→EUR rates in ONE yf.download call.
+
+    Reproduces the exact rate math of fetch_exchange_rate_from_network for each
+    currency: ticker is f"{FROM}{to_currency}=X" (with 'GBp' mapped to the 'GBP'
+    ticker and a 0.01 base_rate), and the returned value is
+    float(close) * base_rate for a close that is present and > 0.
+
+    Network-only: no stale/DB fallback. Currencies whose ticker column is
+    missing, all-NaN, or non-positive are omitted from the result (mirroring the
+    serial version treating those as failures). Returns {currency: rate}.
+    """
+    currencies = [c for c in (currencies or []) if c]
+    rates: Dict[str, float] = {}
+    if not currencies:
+        return rates
+
+    # Map each requested currency to its (ticker, base_rate). Same-currency
+    # short-circuits to 1.0 without a network column (matches the serial fn).
+    specs = {}  # currency -> (ticker, base_rate)
+    for currency in currencies:
+        if currency == to_currency:
+            rates[currency] = 1.0
+            continue
+        if currency == 'GBp':
+            from_ccy = 'GBP'
+            base_rate = 0.01
+        else:
+            from_ccy = currency
+            base_rate = 1.0
+        specs[currency] = (f"{from_ccy}{to_currency}=X", base_rate)
+
+    tickers = list({t for t, _ in specs.values()})
+    if not tickers:
+        return rates
+
+    yf = _get_yfinance()
+    data = yf.download(tickers, period='1d', progress=False,
+                       group_by='column', threads=True)
+    close_df = data['Close'] if 'Close' in data else data
+    # Single ticker: yf.download returns a Series-shaped frame
+    if len(tickers) == 1 and hasattr(close_df, 'to_frame') and \
+            tickers[0] not in getattr(close_df, 'columns', []):
+        close_df = close_df.to_frame(name=tickers[0])
+
+    # yf.download() uppercases tickers internally; match case-insensitively.
+    columns_by_upper = {str(c).upper(): c for c in getattr(close_df, 'columns', [])}
+
+    for currency, (ticker, base_rate) in specs.items():
+        col_name = columns_by_upper.get(ticker.upper())
+        if col_name is None:
+            logger.warning(f"  {currency}/{to_currency}: no data column for {ticker}")
+            continue
+        col = close_df[col_name].dropna()
+        if col.empty:
+            logger.warning(f"  {currency}/{to_currency}: empty series for {ticker}")
+            continue
+        rate = float(col.iloc[-1])
+        if not rate > 0:
+            logger.warning(f"  {currency}/{to_currency}: invalid rate {rate}")
+            continue
+        rates[currency] = rate * base_rate
+
+    return rates
+
+
 def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[float]:
     """
     Get the exchange rate between two currencies, DB-first.

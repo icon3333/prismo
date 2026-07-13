@@ -184,10 +184,34 @@ def _fetch_exchange_rates(currencies: List[str]) -> Dict[str, float]:
     # Network-only fetch: get_exchange_rate() falls back to stale stored
     # rates, which this refresh would re-upsert with a fresh timestamp and
     # mask real staleness.
-    from app.utils.yfinance_utils import fetch_exchange_rate_from_network
+    from app.utils.yfinance_utils import (
+        fetch_exchange_rate_from_network,
+        fetch_exchange_rates_from_network_bulk,
+    )
 
-    rates = {}
-    for currency in currencies:
+    # Fast path: fetch every currency→EUR rate in ONE yf.download call instead
+    # of one blocking round-trip per currency. Same rate math, same network-only
+    # semantics. On error, treat as zero bulk results.
+    try:
+        rates = dict(fetch_exchange_rates_from_network_bulk(currencies, 'EUR'))
+    except Exception as e:
+        logger.warning(f"Bulk exchange rate fetch failed, falling back to serial: {e}")
+        rates = {}
+
+    for currency, rate in rates.items():
+        logger.info(f"  {currency}/EUR: {rate:.6f}")
+
+    # Serial fallback for ONLY the currencies the bulk call did not resolve.
+    # fetch_exchange_rate_from_network() uses yf.Ticker().history(), a different
+    # code path that can succeed when yf.download() soft-fails (returns NaN) for
+    # an individual ticker. When bulk covers everything (the common case) this
+    # loop makes zero network calls, preserving the full speedup; a total bulk
+    # failure degrades to the original per-currency behavior.
+    missing = [c for c in currencies if c not in rates]
+    if missing:
+        logger.info(
+            f"Bulk fetch missed {len(missing)} currencies - serial fallback: {missing}")
+    for currency in missing:
         try:
             rate = fetch_exchange_rate_from_network(currency, 'EUR')
             if rate and rate > 0:

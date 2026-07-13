@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { TableCell, TableRow as ShadTableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -129,8 +129,24 @@ export const TableRow = React.memo(function TableRow({
     [item.id, index, onToggleSelect]
   );
 
-  const valueSrc = getValueSource(item);
-  const computedValue = calculateItemValue(item);
+  const { valueSrc, computedValue } = useMemo(
+    () => ({
+      valueSrc: getValueSource(item),
+      computedValue: calculateItemValue(item),
+    }),
+    // Minimal fields read by getValueSource/calculateItemValue via
+    // getPositionValueSource + calculatePositionValue (position-value.ts).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      item.current_value,
+      item.value_source,
+      item.is_custom_value,
+      item.custom_total_value,
+      item.price_eur,
+      item.effective_shares,
+      item.shares,
+    ]
+  );
 
   return (
     <ShadTableRow className={isSelected ? "bg-muted/40" : undefined}>

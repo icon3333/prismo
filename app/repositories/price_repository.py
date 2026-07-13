@@ -38,8 +38,6 @@ class PriceRepository:
                 last_updated
             FROM market_prices
             WHERE identifier = ?
-            ORDER BY last_updated DESC
-            LIMIT 1
             ''',
             [identifier],
             one=True
@@ -83,18 +81,12 @@ class PriceRepository:
 
         query = f'''
             SELECT
-                mp.identifier,
-                mp.price_eur,
-                mp.currency,
-                mp.last_updated
-            FROM market_prices mp
-            INNER JOIN (
-                SELECT identifier, MAX(last_updated) as max_updated
-                FROM market_prices
-                WHERE identifier IN ({placeholders})
-                GROUP BY identifier
-            ) latest ON mp.identifier = latest.identifier
-                     AND mp.last_updated = latest.max_updated
+                identifier,
+                price_eur,
+                currency,
+                last_updated
+            FROM market_prices
+            WHERE identifier IN ({placeholders})
         '''
 
         results = query_db(query, identifiers)
@@ -212,17 +204,11 @@ class PriceRepository:
 
         return query_db(
             '''
-            SELECT DISTINCT
-                mp.identifier,
-                mp.last_updated
-            FROM market_prices mp
-            INNER JOIN (
-                SELECT identifier, MAX(last_updated) as max_updated
-                FROM market_prices
-                GROUP BY identifier
-            ) latest ON mp.identifier = latest.identifier
-                     AND mp.last_updated = latest.max_updated
-            WHERE datetime(mp.last_updated) < datetime('now', '-' || ? || ' hours')
+            SELECT
+                identifier,
+                last_updated
+            FROM market_prices
+            WHERE datetime(last_updated) < datetime('now', '-' || ? || ' hours')
             ''',
             [hours]
         ) or []

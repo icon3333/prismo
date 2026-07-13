@@ -11,6 +11,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { getHealthColorClass } from "@/lib/enrich-calc";
 import type { EnrichItem, SortState, SortColumn, ColumnHealth } from "@/types/enrich";
 import { TableRow } from "./table-row";
+import { useVirtualRows } from "@/hooks/use-virtual-rows";
+
+// Fixed column widths (px) used only when virtualization engages, so windowed
+// rows keep stable columns. Order: checkbox + COLUMNS.
+const COL_WIDTHS = [40, 130, 200, 90, 150, 130, 150, 90, 110, 100, 120, 110];
 
 interface EnrichTableProps {
   items: EnrichItem[];
@@ -76,10 +81,37 @@ export function EnrichTable({
   onToggleSelect,
   ...saveProps
 }: EnrichTableProps) {
+  const { containerRef, enabled, items: vRows, paddingTop, paddingBottom } =
+    useVirtualRows(items.length);
+
+  const renderRow = (item: EnrichItem, index: number) => (
+    <TableRow
+      key={item.id}
+      item={item}
+      index={index}
+      isSelected={selectedIds.has(item.id)}
+      portfolioOptions={portfolioOptions}
+      countryOptions={countryOptions}
+      onToggleSelect={onToggleSelect}
+      {...saveProps}
+    />
+  );
+
   // Horizontal scroll comes from the Table's own overflow-x-auto container.
   return (
-    <div className="border border-border overflow-hidden">
-      <Table className="[&_input]:[font-size:inherit] [&_[data-slot=select-trigger]]:[font-size:inherit]">
+    <div ref={containerRef} className="border border-border overflow-hidden">
+      <Table
+        className={`[&_input]:[font-size:inherit] [&_[data-slot=select-trigger]]:[font-size:inherit] ${
+          enabled ? "[table-layout:fixed]" : ""
+        }`}
+      >
+        {enabled && (
+          <colgroup>
+            {COL_WIDTHS.map((w, i) => (
+              <col key={i} style={{ width: w }} />
+            ))}
+          </colgroup>
+        )}
         <TableHeader>
           <ShadTableRow className="bg-muted hover:bg-muted">
             <TableHead className="w-10">
@@ -113,18 +145,19 @@ export function EnrichTable({
           </ShadTableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item, index) => (
-            <TableRow
-              key={item.id}
-              item={item}
-              index={index}
-              isSelected={selectedIds.has(item.id)}
-              portfolioOptions={portfolioOptions}
-              countryOptions={countryOptions}
-              onToggleSelect={onToggleSelect}
-              {...saveProps}
-            />
-          ))}
+          {enabled ? (
+            <>
+              {paddingTop > 0 && (
+                <tr data-spacer aria-hidden style={{ height: paddingTop }} />
+              )}
+              {vRows.map((vi) => renderRow(items[vi.index], vi.index))}
+              {paddingBottom > 0 && (
+                <tr data-spacer aria-hidden style={{ height: paddingBottom }} />
+              )}
+            </>
+          ) : (
+            items.map((item, index) => renderRow(item, index))
+          )}
         </TableBody>
       </Table>
     </div>

@@ -9,6 +9,7 @@ import type {
 } from "@/types/overview";
 import { calculatePositionValue, getPositionValueSource } from "@/lib/position-value";
 import { groupAndAggregate } from "@/lib/aggregation-utils";
+import { computePositionDeviation } from "@/lib/builder-calc";
 
 function calculateItemValue(item: PortfolioDataItem): number {
   return calculatePositionValue(item);
@@ -101,33 +102,53 @@ export function getHealthStatus(
   };
 }
 
-export function extractMissingPositions(data: RebalancerData | null): MissingPortfolio[] {
+export function extractPositionDeviations(
+  data: RebalancerData | null
+): MissingPortfolio[] {
   if (!data?.portfolios) return [];
 
   const result: MissingPortfolio[] = [];
 
   for (const portfolio of data.portfolios) {
     const sectors = portfolio.sectors || [];
+    const currentPositions = sectors.reduce(
+      (sum, s) =>
+        s.name === "Missing Positions" ? sum : sum + (s.positions || []).length,
+      0
+    );
+
+    // Under target: preserve the server-driven "Missing Positions" detection,
+    // so deficit behavior is unchanged.
     const missingSector = sectors.find((s) => s.name === "Missing Positions");
-    if (!missingSector) continue;
-
-    const missingPositions = missingSector.positions || [];
+    const missingPositions = missingSector?.positions ?? [];
     const hasMissing = missingPositions.some((p) => p.targetAllocation > 0);
-    if (missingPositions.length === 0 || !hasMissing) continue;
-
-    let currentPositions = 0;
-    for (const sector of sectors) {
-      if (sector.name !== "Missing Positions") {
-        currentPositions += (sector.positions || []).length;
-      }
+    if (missingSector && missingPositions.length > 0 && hasMissing) {
+      result.push({
+        name: portfolio.name,
+        missing_count: missingPositions.length,
+        surplus_count: 0,
+        current_positions: currentPositions,
+        effective_positions: currentPositions + missingPositions.length,
+      });
+      continue; // a portfolio is under OR over target, never both
     }
 
-    result.push({
-      name: portfolio.name,
-      missing_count: missingPositions.length,
-      current_positions: currentPositions,
-      effective_positions: currentPositions + missingPositions.length,
-    });
+    // Over target: flag when current exceeds the server-provided effective
+    // target. `effectivePositions` is absent when the portfolio has no plan
+    // target, in which case the shared helper reports no deviation.
+    const { surplus } = computePositionDeviation(
+      portfolio.effectivePositions,
+      currentPositions
+    );
+    if (surplus > 0) {
+      result.push({
+        name: portfolio.name,
+        missing_count: 0,
+        surplus_count: surplus,
+        current_positions: currentPositions,
+        effective_positions: portfolio.effectivePositions ?? currentPositions,
+      });
+    }
   }
 
   return result;

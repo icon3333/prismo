@@ -6,7 +6,7 @@ import {
   computeMetricsFromItems,
   calculateViolations,
   getHealthStatus,
-  extractMissingPositions,
+  extractPositionDeviations,
 } from "@/lib/overview-calc";
 import type {
   PortfolioMetrics,
@@ -67,8 +67,8 @@ export function useOverview() {
     [violations, rules]
   );
 
-  const missingPositions = useMemo(
-    () => extractMissingPositions(rebalancerData),
+  const offTargetPortfolios = useMemo(
+    () => extractPositionDeviations(rebalancerData),
     [rebalancerData]
   );
 
@@ -93,7 +93,7 @@ export function useOverview() {
     error,
     violations,
     healthStatus,
-    missingPositions,
+    offTargetPortfolios,
     stockViolations,
     sectorViolations,
     countryViolations,

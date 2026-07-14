@@ -125,7 +125,7 @@ export default function OverviewPage() {
     isLoading,
     error,
     healthStatus,
-    missingPositions,
+    offTargetPortfolios,
     stockViolations,
     sectorViolations,
     countryViolations,
@@ -207,17 +207,17 @@ export default function OverviewPage() {
         </div>
       </header>
 
-      {missingPositions.length > 0 && (
+      {offTargetPortfolios.length > 0 && (
         <section className="border border-red bg-red/10">
           <div className="flex items-center justify-between gap-4 border-b border-red/40 px-5 py-4">
             <div>
               <h2 className="font-mono text-sm font-semibold uppercase text-red">
-                BUILDER POSITIONS REQUIRED
+                OFF-TARGET PORTFOLIOS
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {int(missingPositions.length)} portfolio allocation plan
-                {missingPositions.length === 1 ? " needs" : "s need"} more
-                positions.
+                {int(offTargetPortfolios.length)} portfolio allocation plan
+                {offTargetPortfolios.length === 1 ? " is" : "s are"} off their
+                position target.
               </p>
             </div>
             <Link
@@ -228,7 +228,7 @@ export default function OverviewPage() {
             </Link>
           </div>
           <div className="divide-y divide-red/30">
-            {missingPositions.map((portfolio) => (
+            {offTargetPortfolios.map((portfolio) => (
               <div
                 key={portfolio.name}
                 className="grid gap-2 px-5 py-3 text-sm md:grid-cols-[1fr_auto]"
@@ -237,9 +237,19 @@ export default function OverviewPage() {
                   {portfolio.name}
                 </span>
                 <span className="font-mono text-red">
-                  {int(portfolio.missing_count)} missing |{" "}
-                  {int(portfolio.current_positions)}/
-                  {int(portfolio.effective_positions)} filled
+                  {portfolio.surplus_count > 0 ? (
+                    <>
+                      {int(portfolio.surplus_count)} over target |{" "}
+                      {int(portfolio.current_positions)}/
+                      {int(portfolio.effective_positions)}
+                    </>
+                  ) : (
+                    <>
+                      {int(portfolio.missing_count)} missing |{" "}
+                      {int(portfolio.current_positions)}/
+                      {int(portfolio.effective_positions)} filled
+                    </>
+                  )}
                 </span>
               </div>
             ))}

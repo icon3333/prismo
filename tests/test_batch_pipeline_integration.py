@@ -85,6 +85,16 @@ def _mock_robust_fetch(monkeypatch, price, currency, country):
         yfinance_utils, "_fetch_yfinance_data_robust",
         lambda identifier: {"price": price, "currency": currency, "country": country},
     )
+    # get_isin_data also auto-categorizes each identifier, which calls
+    # get_yfinance_info() -> yf.Ticker(...).info — a SECOND real network round
+    # trip the price stub above does not cover. For synthetic tickers it 404s
+    # per identifier and can push the async job past this test's 5s deadline
+    # (the source of its intermittent failures). Stub it to a no-category result
+    # so the pipeline stays fully offline; investment_type is not asserted here.
+    monkeypatch.setattr(
+        yfinance_utils, "get_yfinance_info",
+        lambda identifier: {},
+    )
 
 
 class TestRealAsyncPipelineWiring:

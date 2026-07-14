@@ -8,7 +8,6 @@ import { ChartWrapper } from "@/components/domain/chart-wrapper";
 import { ConcentrationHeatmap } from "@/components/domain/concentration-heatmap";
 import { PageHeader } from "@/components/shell/page-header";
 import { PortfolioFilter } from "./portfolio-filter";
-import { LimitsPanel } from "./limits-panel";
 import { DistributionBar } from "./distribution-bar";
 import { DonutChart } from "./donut-chart";
 
@@ -125,10 +124,6 @@ function ConcentrationsPageInner() {
         includeCash={includeCash}
         cashBalance={cashBalance}
       />
-
-      {/* The limits monitored above are edited here too — same rules the
-          Builder and the Overview violation panels use. */}
-      <LimitsPanel />
     </div>
   );
 }

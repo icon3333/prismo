@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback } from "react";
 
+import { useFlushOnUnmount } from "./use-flush-on-unmount";
+
 interface UseInlineEditOptions {
   onCommit: (value: string) => Promise<void>;
 }
@@ -42,6 +44,10 @@ export function useInlineEdit(initialValue: string, { onCommit }: UseInlineEditO
   const handleBlur = useCallback(() => {
     commit();
   }, [commit]);
+
+  // A virtualized row can unmount before blur fires; commit() self-guards on a
+  // clean draft, so flushing on unmount only persists a genuinely pending edit.
+  useFlushOnUnmount(commit);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback } from "react";
+import { useFlushOnUnmount } from "@/hooks/use-flush-on-unmount";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -200,6 +201,11 @@ function InlineTextInput({
     if (draft !== value) onCommit(draft);
   }, [draft, value, onCommit]);
 
+  // Flush a pending edit if a virtualized row unmounts before onBlur fires.
+  useFlushOnUnmount(() => {
+    if (editing && draft !== value) onCommit(draft);
+  });
+
   if (!editing) {
     return (
       <span
@@ -265,6 +271,13 @@ function InlineNumberInput({
     const parsed = parseSimValue(draft);
     if (parsed !== value) onCommit(parsed);
   }, [draft, value, onCommit]);
+
+  // Flush a pending edit if a virtualized row unmounts before onBlur fires.
+  useFlushOnUnmount(() => {
+    if (!editing) return;
+    const parsed = parseSimValue(draft);
+    if (parsed !== value) onCommit(parsed);
+  });
 
   if (!editing) {
     return (

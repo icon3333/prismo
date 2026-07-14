@@ -29,6 +29,19 @@ def create_app(config_name=None):
     # Load the appropriate configuration
     app.config.from_object(config.get(config_name, config['development']))
 
+    # config.py computes SQLALCHEMY_DATABASE_URI once, at first import, and
+    # freezes it on the config class. Re-resolve it from the current
+    # environment so every create_app() call honors the live env instead of
+    # whatever was frozen on first import. In production the env is stable
+    # (DATABASE_URL comes from .env, loaded when config.py imported), so this
+    # is a no-op; it only matters for tests that point successive apps at
+    # different throwaway DBs. Precedence mirrors config.py: DATABASE_URL wins,
+    # else the APP_DATA_DIR-derived path.
+    if not app.config.get('TESTING'):
+        app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or (
+            f"sqlite:///{os.environ.get('APP_DATA_DIR', 'instance')}/portfolio.db"
+        )
+
     # Configure caching (SimpleCache for single-user homeserver)
     # Note: CACHE_DEFAULT_TIMEOUT comes from config.py (env var controllable)
     app.config.update(

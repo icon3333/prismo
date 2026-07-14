@@ -18,14 +18,30 @@ import pytest
 @pytest.fixture(scope="module")
 def http_app(tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("prismo-http")
+    db_path = data_dir / "portfolio.db"
     os.environ.setdefault("SECRET_KEY", "test-secret-key")
     os.environ["APP_DATA_DIR"] = str(data_dir)
     os.environ["FLASK_ENV"] = "development"  # skips startup background tasks
-    os.environ.pop("DATABASE_URL", None)
+    # Pin the DB to a throwaway file. Popping DATABASE_URL is NOT enough:
+    # config.py calls load_dotenv() at import, which re-adds the real
+    # DATABASE_URL from .env, and .env's DATABASE_URL takes precedence over
+    # APP_DATA_DIR (config.py) — so the app would otherwise open the real
+    # instance DB and pollute it. Setting it here wins because load_dotenv()
+    # never overrides an env var that is already present.
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from app.main import create_app
 
-    return create_app("development")
+    app = create_app("development")
+
+    # Fail loudly rather than silently corrupting the real database if the
+    # isolation above ever regresses.
+    resolved = app.config["SQLALCHEMY_DATABASE_URI"]
+    assert str(db_path) in resolved, (
+        f"HTTP test app must use the throwaway DB, got {resolved!r}"
+    )
+
+    return app
 
 
 @pytest.fixture(scope="module")

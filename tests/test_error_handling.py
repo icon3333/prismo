@@ -14,14 +14,25 @@ import pytest
 @pytest.fixture(scope="module")
 def app(tmp_path_factory):
     data_dir = tmp_path_factory.mktemp("prismo-errors")
+    db_path = data_dir / "portfolio.db"
     os.environ.setdefault("SECRET_KEY", "test-secret-key")
     os.environ["APP_DATA_DIR"] = str(data_dir)
     os.environ["FLASK_ENV"] = "development"  # skips startup background tasks
-    os.environ.pop("DATABASE_URL", None)
+    # Pin the DB to a throwaway file. Popping DATABASE_URL is NOT enough:
+    # config.py's load_dotenv() re-adds the real DATABASE_URL from .env, which
+    # takes precedence over APP_DATA_DIR — so create_app() would otherwise run
+    # init_db/migrate against the real instance DB. Setting it wins because
+    # load_dotenv() never overrides an env var that is already present.
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
 
     from app.main import create_app
 
     flask_app = create_app("development")
+
+    resolved = flask_app.config["SQLALCHEMY_DATABASE_URI"]
+    assert str(db_path) in resolved, (
+        f"error-handling test app must use the throwaway DB, got {resolved!r}"
+    )
 
     from app.exceptions import (
         ValidationError,

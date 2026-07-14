@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import type { AllocationRules } from "@/types/builder";
 
 interface RulesSectionProps {
@@ -32,18 +32,20 @@ export function RulesSection({ rules, setRule }: RulesSectionProps) {
               <div className="text-xs text-muted-foreground">{field.subtitle}</div>
             </div>
             <div className="relative w-24">
-              <Input
-                type="number"
+              <NumberInput
+                decimal
                 min={0}
                 max={100}
+                inputMode="decimal"
+                aria-label={field.label}
                 className="text-right pr-6"
                 value={rules[field.key]}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v)) setRule(field.key, v);
-                }}
+                onCommit={(v) => setRule(field.key, v)}
               />
-              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+              >
                 %
               </span>
             </div>

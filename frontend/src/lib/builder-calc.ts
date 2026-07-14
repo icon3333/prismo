@@ -41,6 +41,32 @@ export function computeMinPositions(
   return Math.max(1, Math.ceil(allocationPct / maxPerStock));
 }
 
+export interface PositionDeviation {
+  deficit: number;
+  surplus: number;
+  offTarget: boolean;
+}
+
+/**
+ * Symmetric target-vs-current position-count comparison shared by every
+ * "off target" indicator (Plan target rows, rebalance hint, dashboard callout).
+ * A null/undefined or non-positive target means "no target set" — nothing is
+ * flagged, preserving each call site's existing guard.
+ */
+export function computePositionDeviation(
+  target: number | null | undefined,
+  current: number
+): PositionDeviation {
+  if (target == null || target <= 0) {
+    return { deficit: 0, surplus: 0, offTarget: false };
+  }
+  return {
+    deficit: Math.max(0, target - current),
+    surplus: Math.max(0, current - target),
+    offTarget: target !== current,
+  };
+}
+
 export function computeEvenSplitWeight(effectivePositions: number): number {
   return parseFloat((100 / Math.max(1, effectivePositions)).toFixed(2));
 }

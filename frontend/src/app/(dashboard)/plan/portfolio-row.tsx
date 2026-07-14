@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/ui/number-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -103,16 +103,16 @@ export const PortfolioRow = React.memo(function PortfolioRow({
             className="flex items-center gap-1"
             onClick={(e) => e.stopPropagation()}
           >
-            <Input
-              type="number"
+            <NumberInput
+              decimal
               min={0}
               max={100}
+              zeroAsEmpty
+              inputMode="decimal"
+              aria-label={`Allocation percent for ${portfolio.name}`}
               className="w-16 text-right text-sm"
-              value={portfolio.allocation || ""}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (!isNaN(v)) onSetAllocation(v);
-              }}
+              value={portfolio.allocation}
+              onCommit={onSetAllocation}
             />
             <span className="text-muted-foreground">%</span>
           </div>
@@ -128,15 +128,14 @@ export const PortfolioRow = React.memo(function PortfolioRow({
             onClick={(e) => e.stopPropagation()}
           >
             <span className="text-xs text-muted-foreground">Target:</span>
-            <Input
-              type="number"
+            <NumberInput
+              integer
               min={1}
+              inputMode="numeric"
+              aria-label={`Target positions for ${portfolio.name}`}
               className={`w-14 text-right text-sm ${desiredBelow ? "border-amber-400/50 text-amber-400" : ""}`}
               value={portfolio.desiredPositions ?? minPositions}
-              onChange={(e) => {
-                const v = parseInt(e.target.value, 10);
-                if (!isNaN(v) && v > 0) onSetDesiredPositions(v);
-              }}
+              onCommit={onSetDesiredPositions}
             />
             <span className="text-muted-foreground">#</span>
           </div>

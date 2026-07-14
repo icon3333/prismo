@@ -15,6 +15,7 @@ import { SensitiveValue } from "@/components/domain/anonymous-mode";
 import {
   computePortfolioAmount,
   computeEvenSplitWeight,
+  computePositionDeviation,
   formatCurrencyRaw,
 } from "@/lib/builder-calc";
 import { PositionTable } from "./position-table";
@@ -74,7 +75,10 @@ export const PortfolioRow = React.memo(function PortfolioRow({
   );
 
   const desiredBelow = (portfolio.desiredPositions ?? minPositions) < minPositions;
-  const currentBelow = currentPositions < effectivePositions;
+  const currentOffTarget = computePositionDeviation(
+    effectivePositions,
+    currentPositions
+  ).offTarget;
 
   const realPositions = useMemo(
     () =>
@@ -142,7 +146,7 @@ export const PortfolioRow = React.memo(function PortfolioRow({
 
           {/* Current Positions */}
           <span
-            className={`w-20 text-right text-xs ${currentBelow ? "text-red" : "text-muted-foreground"}`}
+            className={`w-20 text-right text-xs ${currentOffTarget ? "text-red" : "text-muted-foreground"}`}
           >
             {currentPositions} current
           </span>

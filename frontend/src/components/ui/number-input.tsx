@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Input } from "@/components/ui/input";
-import { resolveNumberCommit } from "@/lib/number-input-calc";
+import { resolveNumberCommit, formatNumberDisplay } from "@/lib/number-input-calc";
 
 interface NumberInputProps {
   value: number;
@@ -50,7 +50,7 @@ export function NumberInput({
   // committing (the draft state update wouldn't be visible to that blur yet).
   const revertRef = React.useRef(false);
 
-  const shown = value === 0 && zeroAsEmpty ? "" : String(value);
+  const shown = formatNumberDisplay(value, zeroAsEmpty);
   const display = draft !== null ? draft : shown;
 
   const commit = () => {

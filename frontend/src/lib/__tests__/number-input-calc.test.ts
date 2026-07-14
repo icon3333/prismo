@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveNumberCommit } from "../number-input-calc";
+import { resolveNumberCommit, formatNumberDisplay } from "../number-input-calc";
 
 describe("resolveNumberCommit", () => {
   // Happy path
@@ -88,5 +88,44 @@ describe("resolveNumberCommit", () => {
   it("never returns NaN for garbage decimal input", () => {
     const out = resolveNumberCommit("..", { decimal: true, min: 0, max: 100, lastValue: 4 });
     expect(Number.isNaN(out)).toBe(false);
+  });
+
+  // Non-finite input (parseFloat("Infinity")/"1e400") must not leak through a
+  // field that has no max (e.g. Target) — treat as garbage -> 0 -> clamp.
+  it("coerces Infinity to a finite clamped value on a min-only field", () => {
+    expect(resolveNumberCommit("Infinity", { integer: true, min: 1, lastValue: 5 })).toBe(1);
+  });
+
+  it("coerces scientific-overflow (1e400 -> Infinity) to finite", () => {
+    const out = resolveNumberCommit("1e400", { integer: true, min: 1, lastValue: 5 });
+    expect(Number.isFinite(out)).toBe(true);
+    expect(out).toBe(1);
+  });
+
+  it("coerces -Infinity to a finite clamped value", () => {
+    const out = resolveNumberCommit("-Infinity", { decimal: true, min: 0, max: 100, lastValue: 4 });
+    expect(Number.isFinite(out)).toBe(true);
+    expect(out).toBe(0);
+  });
+
+  // Round and clamp combined in one call (round first, then floor to min)
+  it("rounds then clamps (0.4 integer min 1 -> 0 -> 1)", () => {
+    expect(resolveNumberCommit("0.4", { integer: true, min: 1, lastValue: 5 })).toBe(1);
+  });
+});
+
+describe("formatNumberDisplay", () => {
+  it("renders a committed 0 as blank when zeroAsEmpty", () => {
+    expect(formatNumberDisplay(0, true)).toBe("");
+  });
+
+  it("renders 0 literally when not zeroAsEmpty", () => {
+    expect(formatNumberDisplay(0, false)).toBe("0");
+    expect(formatNumberDisplay(0)).toBe("0");
+  });
+
+  it("renders a non-zero value as its string regardless of zeroAsEmpty", () => {
+    expect(formatNumberDisplay(25, true)).toBe("25");
+    expect(formatNumberDisplay(5)).toBe("5");
   });
 });

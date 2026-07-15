@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 # Common currencies to fetch exchange rates for
 COMMON_CURRENCIES = ['USD', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD', 'SEK', 'NOK', 'DKK', 'HKD', 'SGD', 'NZD']
 
-# start_background_tasks must be exactly-once per process: dev reloader,
-# repeated create_app calls, and the gunicorn hook all funnel through here.
+# start_background_tasks must be exactly-once per process: the dev reloader
+# and any repeated create_app calls all funnel through here.
 _background_tasks_started = False
 _background_tasks_lock = threading.Lock()
 
@@ -29,7 +29,7 @@ def run_refresh_cycle(app):
     Run one staleness check + refresh pass for exchange rates and prices.
     Each task is isolated so one failure doesn't block the other. Called at
     startup and then periodically — without the loop, a long-running server
-    (Docker restart: unless-stopped) would keep boot-time prices forever.
+    process would keep boot-time prices forever.
     """
     with app.app_context():
         try:
@@ -70,11 +70,8 @@ def start_background_tasks(app):
     """
     Start the startup tasks in a daemon thread, exactly once per process.
 
-    Callers:
-    - dev (python3 run.py): create_app in the reloader child process
-    - production (gunicorn): the when_ready hook in deployment/gunicorn.conf.py,
-      which runs in the master so the scheduler survives worker restarts;
-      PRISMO_DEFER_STARTUP_TASKS=1 keeps create_app from also starting them.
+    Called from create_app (app/main.py) once the main process is identified
+    (the dev reloader child, or a non-reloader run of run.py).
     """
     global _background_tasks_started
     with _background_tasks_lock:
@@ -84,8 +81,8 @@ def start_background_tasks(app):
         _background_tasks_started = True
 
     def _worker():
-        # Small delay so the server finishes initializing (and, under gunicorn,
-        # forking workers) before this thread starts doing DB/network work.
+        # Small delay so the server finishes initializing before this thread
+        # starts doing DB/network work.
         time.sleep(1)
         run_startup_tasks(app)
 

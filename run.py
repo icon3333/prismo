@@ -188,13 +188,9 @@ def create_application():
     return flask_app
 
 
-# Gunicorn imports `app` from this module. CLI execution creates it after
-# argument handling so setup-only commands do not need Flask or SECRET_KEY.
-if __name__ == '__main__':
-    app = None
-else:
-    check_and_setup_environment()
-    app = create_application()
+# The app is created inside the __main__ block below, after argument handling,
+# so setup-only commands (e.g. --setup-env) don't need Flask or a SECRET_KEY.
+app = None
 
 if __name__ == '__main__':
     # Parse command line arguments first to check for skip flag

@@ -144,13 +144,7 @@ def create_app(config_name=None):
         (not os.environ.get('WERKZEUG_RUN_MAIN') and not _is_debug)  # Production (no reloader)
     )
 
-    if os.environ.get('PRISMO_DEFER_STARTUP_TASKS') == '1':
-        # Under gunicorn (deployment/gunicorn.conf.py sets this flag) the app is
-        # created in the master pre-fork; threads started here would run in the
-        # master by accident and be duplicated if preload is ever disabled. The
-        # when_ready hook starts the tasks exactly once instead.
-        app.logger.info("Startup tasks deferred to the WSGI server hook")
-    elif is_main_process:
+    if is_main_process:
         app.logger.info("Main process detected - scheduling startup tasks")
         from app.utils.startup_tasks import start_background_tasks
         start_background_tasks(app)

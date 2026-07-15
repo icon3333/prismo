@@ -14,7 +14,7 @@ def utc_now_iso() -> str:
     Timestamps the frontend parses (market_prices.last_updated,
     accounts.last_price_update) MUST carry an explicit offset: a tz-less ISO
     string is parsed by JS `new Date()` as browser-local time, so a fresh
-    price written as naive UTC in Docker shows as 1-2h old in a CET browser.
+    price written as naive UTC would show as 1-2h old in a CET browser.
     """
     return datetime.now(timezone.utc).isoformat()
 

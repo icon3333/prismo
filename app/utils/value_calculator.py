@@ -24,12 +24,10 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache for exchange rates with a TTL. Rates change at most once
-# a day, but long-lived gunicorn workers (max_requests=0) would otherwise keep
-# first-request rates forever: the master process refreshes the DB, and the
-# worker's module-level cache is never invalidated cross-process. The TTL
-# bounds staleness to a few minutes; clear_exchange_rate_cache() still forces
-# an immediate in-process reload.
+# Module-level cache for exchange rates with a TTL. Rates change at most once a
+# day; the TTL bounds staleness to a few minutes so an out-of-band DB refresh is
+# picked up without holding first-request rates forever, and
+# clear_exchange_rate_cache() still forces an immediate in-process reload.
 _exchange_rates_cache: Optional[Dict[str, float]] = None
 _exchange_rates_loaded_at: float = 0.0
 _EXCHANGE_RATES_TTL_SECONDS = 300

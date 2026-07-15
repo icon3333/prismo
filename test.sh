@@ -7,7 +7,11 @@ cd "$(dirname "$0")"
 
 run_backend() {
     echo "── Backend tests (pytest) ──────────────────────────────"
-    python3 -m pytest tests/ -q
+    # Prefer the project venv (created by ./dev.sh); fall back to system python3.
+    PY="./venv/bin/python"; [ -x "$PY" ] || PY="python3"
+    # Self-heal: install test deps if pytest is missing (fresh venv / clone).
+    "$PY" -m pytest --version >/dev/null 2>&1 || "$PY" -m pip install -q -r requirements-dev.txt
+    "$PY" -m pytest tests/ -q
 }
 
 run_frontend() {

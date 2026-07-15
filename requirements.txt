@@ -15,8 +15,5 @@ numpy~=2.4.6
 yfinance~=1.5.1
 requests~=2.33.1
 
-# Production server
-gunicorn~=26.0.0
-
 # Utilities
 python-dotenv~=1.2.2

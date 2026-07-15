@@ -25,6 +25,7 @@ import type {
   PortfolioPosition,
 } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
+import { computePositionDeviation } from "@/lib/builder-calc";
 
 interface DetailedOverviewProps {
   portfolioData: PortfolioData | null;
@@ -51,6 +52,19 @@ export function DetailedOverview({
   const detailed = rebalancedPortfolio?.detailed ?? null;
 
   const sectors = detailed?.sectors ?? [];
+
+  // Over-target cue: mirror the rebalance table's surplus dot, computed from the
+  // same `rebalanced[]` entry so the two always agree by construction (plan U1).
+  const desired =
+    rebalancedPortfolio?.desiredPositions ??
+    rebalancedPortfolio?.minPositions ??
+    0;
+  const currentRealPositions = (rebalancedPortfolio?.sectors ?? [])
+    .filter((s) => s.name !== "Missing Positions")
+    .reduce((sum, s) => sum + (s.positions?.length ?? s.positionCount ?? 0), 0);
+  const { surplus } = computePositionDeviation(desired, currentRealPositions);
+  const showSurplus =
+    surplus > 0 && (rebalancedPortfolio?.currentValue ?? 0) > 0;
 
   const toggleSector = (name: string) =>
     setExpanded((prev) => ({ ...prev, [name]: !(prev[name] ?? true) }));
@@ -83,7 +97,14 @@ export function DetailedOverview({
         )}
 
         {selected && sectors.length > 0 && detailed ? (
-          <div className="border border-border overflow-x-auto">
+          <>
+            {showSurplus && (
+              <p className="text-sm text-amber">
+                <span aria-hidden>⚠</span> {surplus} position
+                {surplus > 1 ? "s" : ""} over target
+              </p>
+            )}
+            <div className="border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">
@@ -180,7 +201,8 @@ export function DetailedOverview({
                 </TableRow>
               </TableBody>
             </Table>
-          </div>
+            </div>
+          </>
         ) : selected ? (
           <p className="text-sm text-muted-foreground">
             No positions in this portfolio.

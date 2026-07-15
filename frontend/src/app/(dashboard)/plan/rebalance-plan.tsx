@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { RebalanceMode, RebalancedPortfolio } from "@/types/portfolio";
 import { rebalancerFmt as fmt, formatAction } from "@/lib/format";
+import { computePositionDeviation } from "@/lib/builder-calc";
 import { DetailedOverview } from "./detailed-overview";
 import { SummaryFooter } from "./summary-footer";
 
@@ -230,12 +231,17 @@ function PortfolioTable({
             const currentPositions = p.sectors
               ?.filter((s) => s.name !== "Missing Positions")
               .reduce((sum, s) => sum + (s.positions?.length ?? s.positionCount ?? 0), 0) ?? 0;
-            const deficit = desired > 0 ? desired - currentPositions : 0;
+            const { deficit, surplus } = computePositionDeviation(
+              desired,
+              currentPositions
+            );
 
             return (
               <TableRow
                 key={p.name}
-                className={cn(deficit > 0 && "border-l-2 border-l-amber-500")}
+                className={cn(
+                  (deficit > 0 || surplus > 0) && "border-l-2 border-l-amber-500"
+                )}
               >
                 <TableCell className="font-medium">
                   <span className="flex items-center gap-1.5">
@@ -252,6 +258,16 @@ function PortfolioTable({
                         </TooltipTrigger>
                         <TooltipContent>
                           Needs {deficit} more position{deficit > 1 ? "s" : ""}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {surplus > 0 && (p.currentValue || 0) > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber align-middle shrink-0" aria-hidden />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {surplus} over target
                         </TooltipContent>
                       </Tooltip>
                     )}

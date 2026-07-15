@@ -21,6 +21,7 @@ export interface Violation {
 export interface MissingPortfolio {
   name: string;
   missing_count: number;
+  surplus_count: number;
   current_positions: number;
   effective_positions: number;
 }
@@ -57,6 +58,14 @@ export interface RebalancerSector {
 export interface RebalancerPortfolio {
   name: string;
   sectors: RebalancerSector[];
+  /**
+   * Per-portfolio target position counts. Present in the raw
+   * `/simulator/portfolio-data` payload (built server-side in
+   * allocation_service); consumed here to detect over-target portfolios.
+   */
+  effectivePositions?: number;
+  desiredPositions?: number;
+  minPositions?: number;
 }
 
 export interface RebalancerData {

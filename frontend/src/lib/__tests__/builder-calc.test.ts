@@ -3,6 +3,7 @@ import {
   computeBudgetDerived,
   parseNumericInput,
   computeMinPositions,
+  computePositionDeviation,
   computeEvenSplitWeight,
   computePlaceholder,
   computePortfolioAmount,
@@ -66,6 +67,47 @@ describe("computeMinPositions", () => {
 
   it("guards against zero max", () => {
     expect(computeMinPositions(10, 0)).toBe(1);
+  });
+});
+
+describe("computePositionDeviation", () => {
+  it("flags a deficit when current is under target", () => {
+    expect(computePositionDeviation(15, 7)).toEqual({
+      deficit: 8,
+      surplus: 0,
+      offTarget: true,
+    });
+  });
+
+  it("flags a surplus when current is over target", () => {
+    expect(computePositionDeviation(1, 6)).toEqual({
+      deficit: 0,
+      surplus: 5,
+      offTarget: true,
+    });
+  });
+
+  it("is calm on an exact match", () => {
+    expect(computePositionDeviation(10, 10)).toEqual({
+      deficit: 0,
+      surplus: 0,
+      offTarget: false,
+    });
+  });
+
+  it("treats a zero, null, or undefined target as no target set", () => {
+    const none = { deficit: 0, surplus: 0, offTarget: false };
+    expect(computePositionDeviation(0, 6)).toEqual(none);
+    expect(computePositionDeviation(null, 6)).toEqual(none);
+    expect(computePositionDeviation(undefined, 3)).toEqual(none);
+  });
+
+  it("flags a full deficit when current is zero", () => {
+    expect(computePositionDeviation(5, 0)).toEqual({
+      deficit: 5,
+      surplus: 0,
+      offTarget: true,
+    });
   });
 });
 

@@ -26,10 +26,6 @@ cd frontend && npm run dev                     # Next.js on :3000, proxies /api 
 python3 -m pytest tests/ -q                    # Backend only — value calc, allocation, CSV import (in-memory SQLite, no network)
 cd frontend && npm test                        # Frontend only — vitest on src/lib/*-calc pure modules
 cd frontend && npm run lint                    # ESLint for Next.js
-
-# Production
-./deployment/deploy.sh                         # Git pull + Docker rebuild + restart
-cd deployment && docker-compose up -d          # Manual Docker
 ```
 
 `dev.sh` is a thin wrapper that execs `start.py` (the real dev launcher: bootstraps venv + deps, then runs Flask + Next.js). `start.py` auto-prefers Homebrew's `node@22` because Next 16 / Turbopack panics on Node 25. If you see Turbopack crashes, install `node@22` or point `NODE_BIN` in `start.py`.
@@ -83,7 +79,7 @@ Portfolio API implementations are split by domain and wired centrally in `portfo
 
 ## Frontend → Backend
 
-Next.js dev server on `:3000` proxies API calls to Flask on `:8065` (see `frontend/next.config.ts`). In production, both are behind the Docker setup in `deployment/`. Client code calls into `frontend/src/lib/api.ts`; pure calc logic stays in `frontend/src/lib/*-calc.ts` so it's unit-testable without the network.
+Next.js dev server on `:3000` proxies API calls to Flask on `:8065` (see `frontend/next.config.ts`). Client code calls into `frontend/src/lib/api.ts`; pure calc logic stays in `frontend/src/lib/*-calc.ts` so it's unit-testable without the network.
 
 Design tokens and components live in `frontend/src/components/ui/` (shadcn) and `frontend/src/app/theme/`. No CSS variables in the Flask side anymore — the Next.js app uses Tailwind classes and shadcn defaults.
 

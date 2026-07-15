@@ -74,13 +74,7 @@ Everything has sensible defaults — just run `python3 run.py` and it generates 
 | `BACKUP_INTERVAL_HOURS` | `6` | Auto-backup cadence |
 | `MAX_BACKUP_FILES` | `10` | Backup retention |
 
-### Deployment
-
-```bash
-cd deployment
-docker-compose up -d
-# or: ./deployment/deploy.sh   (git pull + rebuild + restart)
-```
+### Data & access
 
 Data persists in `./instance`. Session-based auth, no passwords — this assumes a homeserver, not the open internet. Review before exposing publicly.
 

@@ -23,7 +23,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 VENV = ROOT / "venv"
 VENV_PY = VENV / "bin" / "python3"
-VENV_PIP = VENV / "bin" / "pip"
 REQ = ROOT / "requirements.txt"
 FRONTEND = ROOT / "frontend"
 NODE22_BIN = Path("/opt/homebrew/opt/node@22/bin")
@@ -67,8 +66,12 @@ def pip_install(force: bool) -> None:
     if not needs_install:
         return
     log("installing Python dependencies", CYAN)
-    subprocess.check_call([str(VENV_PIP), "install", "--upgrade", "pip", "--quiet"])
-    subprocess.check_call([str(VENV_PIP), "install", "-r", str(REQ), "--quiet"])
+    subprocess.check_call(
+        [str(VENV_PY), "-m", "pip", "install", "--upgrade", "pip>=26.1.2", "--quiet"]
+    )
+    subprocess.check_call(
+        [str(VENV_PY), "-m", "pip", "install", "-r", str(REQ), "--quiet"]
+    )
     marker.touch()
 
 

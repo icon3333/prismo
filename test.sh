@@ -10,7 +10,10 @@ run_backend() {
     # Prefer the project venv (created by ./dev.sh); fall back to system python3.
     PY="./venv/bin/python"; [ -x "$PY" ] || PY="python3"
     # Self-heal: install test deps if pytest is missing (fresh venv / clone).
-    "$PY" -m pytest --version >/dev/null 2>&1 || "$PY" -m pip install -q -r requirements-dev.txt
+    if ! "$PY" -m pytest --version >/dev/null 2>&1; then
+        "$PY" -m pip install -q --upgrade "pip>=26.1.2"
+        "$PY" -m pip install -q -r requirements-dev.txt
+    fi
     "$PY" -m pytest tests/ -q
 }
 

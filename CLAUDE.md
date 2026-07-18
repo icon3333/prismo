@@ -23,7 +23,9 @@ cd frontend && npm run dev                     # Next.js on :3000, proxies /api 
 
 # Testing
 ./test.sh                                      # Full suite: backend pytest + frontend vitest
-venv/bin/python -m pytest tests/ -q            # Backend only (in-memory SQLite; test deps: pip install -r requirements-dev.txt)
+venv/bin/python -m pip install --upgrade "pip>=26.1.2"
+venv/bin/python -m pip install -r requirements-dev.txt
+venv/bin/python -m pytest tests/ -q            # Backend only (in-memory SQLite)
 cd frontend && npm test                        # Frontend only — vitest on src/lib/*-calc pure modules
 cd frontend && npm run lint                    # ESLint for Next.js
 ```

@@ -27,6 +27,7 @@ const ROW2_GROUPS = [
   ],
   [
     { href: "/plan", label: "Plan" },
+    { href: "/review", label: "Review" },
     { href: "/simulator", label: "Simulator" },
   ],
 ];

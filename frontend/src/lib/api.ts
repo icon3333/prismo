@@ -15,10 +15,10 @@ const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
 const CACHE_TTL = 30_000;
 
-// Writes that only persist UI state (sort order, expanded rows, …) don't
-// change portfolio data — exempt them from mutation notification so every
-// debounced toggle doesn't refetch all subscribed reads.
-const UI_STATE_WRITE_PATHS = ["/state"];
+// Writes that only persist UI/review state don't change live portfolio data.
+// Exempt them from broad mutation notification; their owning hooks explicitly
+// refresh their narrower query families after a successful write.
+const UI_STATE_WRITE_PATHS = ["/state", "/monthly-reviews"];
 
 type MutationListener = () => void;
 const mutationListeners = new Set<MutationListener>();

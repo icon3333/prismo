@@ -272,3 +272,63 @@ class TestRebalanceModeParam:
     def test_invalid_mode_rejected(self, client, account):
         resp = client.get("/portfolio/api/simulator/portfolio-data?mode=bogus")
         assert resp.status_code == 400
+
+
+class TestMonthlyReviewApi:
+    def test_account_scoped_versioned_review_lifecycle(self, client, account):
+        created_response = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        )
+        assert created_response.status_code == 201, created_response.get_json()
+        review = created_response.get_json()["data"]["review"]
+        assert review["account_id"] == account["id"]
+        assert review["status"] == "draft"
+        assert review["payload"]["comparison"]["baseline"] is True
+
+        listing = client.get("/portfolio/api/monthly-reviews")
+        assert listing.status_code == 200
+        assert any(
+            item["id"] == review["id"]
+            for item in listing.get_json()["data"]["reviews"]
+        )
+
+        stale = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": review["version"] + 1, "readiness_override": True},
+        )
+        assert stale.status_code == 409
+        assert stale.get_json()["error_code"] == "review_conflict"
+
+        updated_response = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": review["version"], "readiness_override": True},
+        )
+        assert updated_response.status_code == 200, updated_response.get_json()
+        updated = updated_response.get_json()["data"]["review"]
+
+        completed_response = client.post(
+            f"/portfolio/api/monthly-reviews/{review['id']}/complete",
+            json={"version": updated["version"]},
+        )
+        assert completed_response.status_code == 200, completed_response.get_json()
+        completed = completed_response.get_json()["data"]["review"]
+        assert completed["status"] == "completed"
+
+        immutable = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": completed["version"], "contribution": 1},
+        )
+        assert immutable.status_code == 409
+
+    def test_review_id_is_not_readable_by_another_account(self, client, account):
+        client.post(f"/api/select_account/{account['id']}")
+        created = client.post("/portfolio/api/monthly-reviews", json={}).get_json()
+        review_id = created["data"]["review"]["id"]
+
+        other = client.post("/account/create", json={"username": "review-other"})
+        assert other.status_code == 200
+        assert client.get(
+            f"/portfolio/api/monthly-reviews/{review_id}"
+        ).status_code == 404
+
+        client.post(f"/api/select_account/{account['id']}")

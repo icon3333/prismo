@@ -31,7 +31,12 @@ def invalidate_cache_after_write(response):
     batch price updates) invalidate on completion since they outlive the
     request.
     """
-    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and response.status_code < 400:
+    review_only_write = request.path.startswith('/portfolio/api/monthly-reviews')
+    if (
+        request.method in ('POST', 'PUT', 'PATCH', 'DELETE')
+        and response.status_code < 400
+        and not review_only_write
+    ):
         account_id = getattr(g, 'account_id', None)
         if account_id:
             from app.routes.portfolio_data_api import invalidate_portfolio_cache

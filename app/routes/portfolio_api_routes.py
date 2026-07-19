@@ -47,6 +47,13 @@ from app.routes.portfolio_updates import (
     update_single_portfolio_api,
 )
 from app.routes.simple_upload import upload_csv_simple, get_simple_upload_progress
+from app.routes.monthly_review_api import (
+    complete_monthly_review,
+    create_monthly_review,
+    get_monthly_review,
+    list_monthly_reviews,
+    patch_monthly_review,
+)
 
 
 def register_portfolio_api_routes(portfolio_bp):
@@ -57,6 +64,40 @@ def register_portfolio_api_routes(portfolio_bp):
     register_builder_routes(portfolio_bp)
     register_manual_position_routes(portfolio_bp)
     register_account_routes(portfolio_bp)
+    register_monthly_review_routes(portfolio_bp)
+
+
+def register_monthly_review_routes(portfolio_bp):
+    portfolio_bp.add_url_rule(
+        "/api/monthly-reviews",
+        endpoint="monthly_reviews_list",
+        view_func=list_monthly_reviews,
+        methods=["GET"],
+    )
+    portfolio_bp.add_url_rule(
+        "/api/monthly-reviews",
+        endpoint="monthly_reviews_create",
+        view_func=create_monthly_review,
+        methods=["POST"],
+    )
+    portfolio_bp.add_url_rule(
+        "/api/monthly-reviews/<int:review_id>",
+        endpoint="monthly_reviews_get",
+        view_func=get_monthly_review,
+        methods=["GET"],
+    )
+    portfolio_bp.add_url_rule(
+        "/api/monthly-reviews/<int:review_id>",
+        endpoint="monthly_reviews_patch",
+        view_func=patch_monthly_review,
+        methods=["PATCH"],
+    )
+    portfolio_bp.add_url_rule(
+        "/api/monthly-reviews/<int:review_id>/complete",
+        endpoint="monthly_reviews_complete",
+        view_func=complete_monthly_review,
+        methods=["POST"],
+    )
 
 
 def register_core_routes(portfolio_bp):

@@ -6,6 +6,7 @@ import {
   computeMetricsFromItems,
   calculateViolations,
   getHealthStatus,
+  hydrateAllocationRules,
   extractPositionDeviations,
 } from "@/lib/overview-calc";
 import type {
@@ -51,7 +52,7 @@ export function useOverview() {
   const rules = useMemo<AllocationRules | null>(() => {
     if (!stateQuery.data?.rules) return null;
     try {
-      return JSON.parse(stateQuery.data.rules);
+      return hydrateAllocationRules(JSON.parse(stateQuery.data.rules));
     } catch {
       return null; // Invalid JSON
     }
@@ -72,8 +73,8 @@ export function useOverview() {
     [rebalancerData]
   );
 
-  const stockViolations = useMemo(
-    () => violations.filter((v) => v.type === "stock"),
+  const positionViolations = useMemo(
+    () => violations.filter((v) => v.type === "position"),
     [violations]
   );
   const sectorViolations = useMemo(
@@ -94,7 +95,7 @@ export function useOverview() {
     violations,
     healthStatus,
     offTargetPortfolios,
-    stockViolations,
+    positionViolations,
     sectorViolations,
     countryViolations,
     rules,

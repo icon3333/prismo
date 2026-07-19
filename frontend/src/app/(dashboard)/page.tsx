@@ -126,7 +126,7 @@ export default function OverviewPage() {
     error,
     healthStatus,
     offTargetPortfolios,
-    stockViolations,
+    positionViolations,
     sectorViolations,
     countryViolations,
     rules,
@@ -160,7 +160,7 @@ export default function OverviewPage() {
   const holdingsValue = metrics?.total_value ?? 0;
   const totalExposure = holdingsValue + cashBalance;
   const totalViolations =
-    stockViolations.length + sectorViolations.length + countryViolations.length;
+    positionViolations.length + sectorViolations.length + countryViolations.length;
 
   return (
     <div className="space-y-6">
@@ -277,17 +277,21 @@ export default function OverviewPage() {
         </div>
         <div className="grid gap-px bg-border md:grid-cols-3">
           <ViolationPanel
-            title="Stock Limits"
-            violations={stockViolations}
-            hasRule={!!rules?.maxPerStock && rules.maxPerStock > 0}
+            title="Position"
+            violations={positionViolations}
+            hasRule={!![
+              rules?.maxPerStock,
+              rules?.maxPerETF,
+              rules?.maxPerCrypto,
+            ].some((limit) => limit != null && limit > 0)}
           />
           <ViolationPanel
-            title="Sector Limits"
+            title="Sector"
             violations={sectorViolations}
-            hasRule={!!rules?.maxPerSector && rules.maxPerSector > 0}
+            hasRule={!!rules?.maxPerCategory && rules.maxPerCategory > 0}
           />
           <ViolationPanel
-            title="Country Limits"
+            title="Country"
             violations={countryViolations}
             hasRule={!!rules?.maxPerCountry && rules.maxPerCountry > 0}
           />

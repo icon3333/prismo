@@ -3,16 +3,19 @@ export interface PortfolioMetrics {
   total_items: number;
   health: number;
   missing_prices: number;
+  last_update?: string | null;
 }
 
 export interface AllocationRules {
   maxPerStock: number | null;
-  maxPerSector: number | null;
+  maxPerETF: number | null;
+  maxPerCrypto: number | null;
+  maxPerCategory: number | null;
   maxPerCountry: number | null;
 }
 
 export interface Violation {
-  type: "stock" | "sector" | "country";
+  type: "position" | "sector" | "country";
   name: string;
   currentPercentage: number;
   maxPercentage: number;
@@ -37,6 +40,8 @@ export interface PortfolioDataItem {
   name?: string;
   sector?: string;
   country?: string;
+  effective_country?: string;
+  investment_type?: string;
   price_eur?: number;
   effective_shares?: number;
   is_custom_value?: boolean;

@@ -189,7 +189,8 @@ def apply_share_changes(
         'updated': positions_updated,
         'removed': positions_removed,
         'protected_identifiers_count': protected_identifiers_count,
-        'manual_protected_count': manual_protected_count
+        'manual_protected_count': manual_protected_count,
+        'source_protected_count': source_protected_count,
     }
 
 

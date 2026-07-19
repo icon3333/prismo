@@ -59,9 +59,7 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
         Tuple[bool, str, dict]: (success, message, details)
     """
     from app.utils.csv_processing import (
-        parse_csv_file,
-        detect_csv_format,
-        parse_ibkr_csv,
+        parse_csv_with_summary,
         process_companies,
         process_companies_snapshot,
         assign_portfolios,
@@ -85,15 +83,13 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
         if progress_callback:
             progress_callback(0, 100, "Detecting CSV format...", "processing")
 
-        csv_format = detect_csv_format(file_content)
+        parsed = parse_csv_with_summary(
+            file_content, strict_rows=(mode != 'add')
+        )
+        csv_format = parsed.source_format
         logger.info(f"Detected CSV format: {csv_format}")
-
-        if csv_format == 'ibkr':
-            df = parse_ibkr_csv(file_content)
-            source = 'ibkr'
-        else:
-            df = parse_csv_file(file_content)
-            source = 'parqet'
+        df = parsed.dataframe
+        source = csv_format
 
         # Replace modes delete positions missing from the CSV, so take a
         # safety snapshot first (after parsing, so invalid files don't
@@ -218,12 +214,43 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
                 f"that had zero shares or were not in the CSV: {removed_details}"
             )
 
+        counts = {
+            'added': len(results['added']),
+            'updated': len(results['updated']),
+            'removed': len(results['removed']),
+            'skipped': parsed.skipped_count,
+            'manual_protected': results.get('manual_protected_count', 0),
+            'source_protected': results.get('source_protected_count', 0),
+            'identifier_protected': results.get('protected_identifiers_count', 0),
+            'share_movement_advisories': sum(
+                1 for calculation in share_calculations.values()
+                if calculation.get('has_manual_edit')
+                and calculation.get('csv_modified_after_edit')
+            ),
+        }
+        warnings = list(parsed.warnings)
+        if results.get('manual_protected_count'):
+            warnings.append(
+                f"Protected {results['manual_protected_count']} manually managed holding(s)"
+            )
+        if results.get('source_protected_count'):
+            warnings.append(
+                f"Protected {results['source_protected_count']} holding(s) owned by another source"
+            )
+        if counts['share_movement_advisories']:
+            warnings.append(
+                f"Review {counts['share_movement_advisories']} holding(s) where imported "
+                "share movement intersects a manual override"
+            )
+
         return True, message, {
             'added': results['added'],
             'updated': results['updated'],
             'removed': results['removed'],
             'failed_prices': failed_prices,
             'format': csv_format,
+            'counts': counts,
+            'warnings': warnings,
         }
 
     except ValueError as e:

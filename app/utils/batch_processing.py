@@ -3,6 +3,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import json
+import sqlite3
 from datetime import datetime
 from typing import Dict, Any, List
 import time
@@ -161,7 +162,10 @@ def _process_single_identifier(identifier: str) -> Dict[str, Any]:
         }
 
 
-def _run_csv_job(app, account_id: int, file_content: str, job_id: str, mode: str = 'replace'):
+def _run_csv_job(
+    app, account_id: int, file_content: str, job_id: str,
+    mode: str = 'replace', filename: str = 'upload.csv'
+):
     """
     Background job to process a CSV file.
     This runs in a separate thread with Flask application context.
@@ -181,8 +185,22 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str, mode: str
             
             if success:
                 logger.info(f"Background CSV processing completed successfully for account_id: {account_id}")
-                # Mark job as completed in database
-                _update_csv_job_final(job_id, 100, "CSV processing completed successfully")
+                receipt = {
+                    'receipt_version': 1,
+                    'source_format': result.get('format'),
+                    'mode': mode,
+                    'filename': filename,
+                    'holdings': {
+                        'added': result.get('added', []),
+                        'updated': result.get('updated', []),
+                        'removed': result.get('removed', []),
+                    },
+                    'counts': result.get('counts', {}),
+                    'price_failures': result.get('failed_prices', []),
+                    'warnings': result.get('warnings', []),
+                    'completed_at': datetime.now().astimezone().isoformat(),
+                }
+                _update_csv_job_final(job_id, 100, receipt)
                 # Invalidate portfolio cache after successful CSV import
                 try:
                     from app.routes.portfolio_data_api import invalidate_portfolio_cache
@@ -193,7 +211,12 @@ def _run_csv_job(app, account_id: int, file_content: str, job_id: str, mode: str
             else:
                 logger.error(f"Background CSV processing failed for account_id: {account_id}: {message}")
                 # Mark job as failed in database
-                _update_csv_job_final(job_id, 0, f"Processing failed: {message}", "failed")
+                _update_csv_job_final(
+                    job_id, 0,
+                    {'receipt_version': 1, 'filename': filename, 'mode': mode,
+                     'message': f"Processing failed: {message}"},
+                    "failed"
+                )
                 
         except Exception as e:
             logger.error(f"Error in background CSV processing for account {account_id}: {e}", exc_info=True)
@@ -215,18 +238,23 @@ def _update_csv_job_progress(job_id: str, progress: int, message: str = "Process
         logger.error(f"Failed to update CSV job progress for {job_id}: {e}")
 
 
-def _update_csv_job_final(job_id: str, progress: int, message: str, status: str = "completed"):
+def _update_csv_job_final(job_id: str, progress: int, result, status: str = "completed"):
     """Mark CSV job as completed or failed in the database."""
     try:
         execute_background_db(
             "UPDATE background_jobs SET status = ?, progress = ?, result = ?, updated_at = ? WHERE id = ?",
-            (status, progress, message, datetime.now(), job_id)
+            (status, progress,
+             json.dumps(result) if isinstance(result, dict) else result,
+             datetime.now(), job_id)
         )
     except Exception as e:
         logger.error(f"Failed to finalize CSV job {job_id}: {e}")
 
 
-def start_csv_processing_job(account_id: int, file_content: str, mode: str = 'replace') -> str:
+def start_csv_processing_job(
+    account_id: int, file_content: str, mode: str = 'replace',
+    filename: str = 'upload.csv'
+) -> str:
     """
     Starts a background thread to process the uploaded CSV file.
     Returns job_id for tracking progress.
@@ -241,8 +269,11 @@ def start_csv_processing_job(account_id: int, file_content: str, mode: str = 're
         logger.debug(f" Creating job record in database for job_id: {job_id}")
         db = get_db()
         db.execute(
-            "INSERT INTO background_jobs (id, name, status, progress, total) VALUES (?, ?, ?, ?, ?)",
-            (job_id, 'csv_upload', 'processing', 0, 100)
+            """INSERT INTO background_jobs
+               (id, name, account_id, status, progress, total, result)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (job_id, 'csv_upload', account_id, 'processing', 0, 100,
+             json.dumps({'receipt_version': 1, 'filename': filename, 'mode': mode}))
         )
         db.commit()
         logger.debug(f" Job record created successfully in database for job_id: {job_id}")
@@ -251,7 +282,7 @@ def start_csv_processing_job(account_id: int, file_content: str, mode: str = 're
         logger.debug(f" Creating background thread for job_id: {job_id}")
         thread = threading.Thread(
             target=_run_csv_job,
-            args=(app, account_id, file_content, job_id, mode),
+            args=(app, account_id, file_content, job_id, mode, filename),
             name=f"csv-processing-{account_id}-{job_id[:8]}"
         )
         thread.daemon = True
@@ -260,6 +291,11 @@ def start_csv_processing_job(account_id: int, file_content: str, mode: str = 're
         logger.info(f"CSV processing thread started successfully for account {account_id}, job_id: {job_id}")
         return job_id
         
+    except sqlite3.IntegrityError as e:
+        db.rollback()
+        if 'background_jobs.account_id' in str(e) or 'UNIQUE constraint failed' in str(e):
+            raise ValueError("A CSV import is already active for this account") from e
+        raise
     except Exception as e:
         logger.error(f"Failed to start CSV processing job: {e}")
         raise
@@ -601,12 +637,20 @@ def start_batch_process(identifiers: List[str]) -> str:
         raise
 
 
-def get_job_status(job_id: str) -> Dict[str, Any]:
+def get_job_status(job_id: str, account_id: int | None = None) -> Dict[str, Any]:
     """
     Get the status and results of a batch processing job from the main database.
     """
     try:
-        row = get_db().execute("SELECT * FROM background_jobs WHERE id = ?", (job_id,)).fetchone()
+        if account_id is None:
+            row = get_db().execute(
+                "SELECT * FROM background_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        else:
+            row = get_db().execute(
+                "SELECT * FROM background_jobs WHERE id = ? AND account_id = ?",
+                (job_id, account_id),
+            ).fetchone()
         if row is None:
             return {'status': 'not_found'}
 
@@ -626,13 +670,34 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
             'progress': row['progress'],
             'total': row['total'],
             'results': result_data,
-            'message': str(row['result']) if row['result'] else 'Processing...',
+            'message': (
+                result_data.get('message')
+                if isinstance(result_data, dict) and result_data.get('message')
+                else ('CSV import completed' if row['status'] == 'completed' else 'Processing...')
+            ),
             'created_at': row['created_at'].isoformat() if row['created_at'] else None,
             'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
         }
     except Exception as e:
         logger.error(f"Failed to get job status for {job_id}: {e}")
         return {'status': 'db_error', 'error': str(e)}
+
+
+def interrupt_stale_csv_jobs() -> int:
+    """Mark CSV work inherited after a process restart as truthfully failed."""
+    result = json.dumps({
+        'receipt_version': 1,
+        'message': 'CSV import interrupted by server restart; please retry.',
+        'retryable': True,
+    })
+    cursor = get_db().execute(
+        """UPDATE background_jobs
+           SET status = 'failed', result = ?, updated_at = ?
+           WHERE name = 'csv_upload' AND status IN ('pending', 'processing')""",
+        (result, datetime.now()),
+    )
+    get_db().commit()
+    return cursor.rowcount
 
 
 def cancel_background_job(job_id: str) -> bool:

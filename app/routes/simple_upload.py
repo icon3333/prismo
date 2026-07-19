@@ -19,13 +19,14 @@ def get_simple_upload_progress():
     """
     try:
         if request.method == 'GET':
-            # Check for job_id in session
-            job_id = session.get('csv_upload_job_id')
+            # Poll the explicit job returned by upload; the session fallback
+            # remains for older clients only.
+            job_id = request.args.get('job_id') or session.get('csv_upload_job_id')
 
             if job_id:
                 # Get progress from database using existing function
                 from app.utils.batch_processing import get_job_status
-                job_status = get_job_status(job_id)
+                job_status = get_job_status(job_id, account_id=g.account_id)
 
                 logger.debug(f"Session has job_id={job_id}, job_status={job_status.get('status')}")
 
@@ -53,7 +54,8 @@ def get_simple_upload_progress():
                         'percentage': 100,
                         'message': job_status.get('message', 'Upload completed successfully!'),
                         'status': 'completed',
-                        'job_id': job_id
+                        'job_id': job_id,
+                        'receipt': job_status.get('results'),
                     })
                 elif job_status.get('status') == 'failed':
                     return jsonify({
@@ -131,7 +133,9 @@ def upload_csv_simple():
 
         try:
             # Start background job and get job_id
-            job_id = start_csv_processing_job(account_id, file_content, mode=mode)
+            job_id = start_csv_processing_job(
+                account_id, file_content, mode=mode, filename=file.filename
+            )
 
             # Store job_id in session for progress tracking
             session['csv_upload_job_id'] = job_id
@@ -144,6 +148,9 @@ def upload_csv_simple():
                 message='Upload started successfully'
             )
 
+        except ValueError as e:
+            logger.warning(f"CSV upload rejected: {e}")
+            return error_response(str(e), 409)
         except Exception as e:
             error_msg = f"Failed to start CSV processing: {str(e)}"
             logger.error(error_msg, exc_info=True)

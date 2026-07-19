@@ -109,7 +109,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
   }
 
   const epochAtStart = cacheEpoch;
-  const promise = doFetch<T>(url, init);
+  const promise = doFetch<T>(url, noStore ? { ...init, cache: "no-store" } : init);
   inflight.set(url, promise);
 
   try {

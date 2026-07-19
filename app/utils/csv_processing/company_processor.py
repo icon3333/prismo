@@ -11,6 +11,60 @@ from app.db_manager import query_db
 logger = logging.getLogger(__name__)
 
 
+def _match_existing_companies(
+    company_positions: Dict[str, Dict], existing_companies, cursor
+) -> Dict[str, Dict]:
+    """Match by identifier first and reject identity collisions before writes."""
+    by_identifier = {}
+    by_name = {}
+    for company in existing_companies:
+        identifier = str(company.get('identifier') or '').strip().upper()
+        if identifier:
+            by_identifier.setdefault(identifier, []).append(company)
+        by_name.setdefault(company['name'].casefold(), []).append(company)
+
+    incoming_names = {}
+    incoming_identifiers = {}
+    for name, position in company_positions.items():
+        identifier = str(position.get('identifier') or '').strip().upper()
+        folded_name = name.casefold()
+        if folded_name in incoming_names and incoming_names[folded_name] != identifier:
+            raise ValueError(f"Holding identity collision for name '{name}'")
+        if identifier in incoming_identifiers and incoming_identifiers[identifier] != folded_name:
+            raise ValueError(f"Holding identity collision for identifier '{identifier}'")
+        incoming_names[folded_name] = identifier
+        incoming_identifiers[identifier] = folded_name
+
+    matched = {}
+    used_ids = set()
+    for name, position in company_positions.items():
+        identifier = str(position.get('identifier') or '').strip().upper()
+        id_matches = by_identifier.get(identifier, [])
+        name_matches = by_name.get(name.casefold(), [])
+        if len(id_matches) > 1 or len(name_matches) > 1:
+            raise ValueError(f"Holding identity collision for '{name}'")
+
+        existing = id_matches[0] if id_matches else None
+        if name_matches and (not existing or name_matches[0]['id'] != existing['id']):
+            raise ValueError(
+                f"Holding identity collision: '{name}' has a different identifier"
+            )
+
+        if existing:
+            if existing['id'] in used_ids:
+                raise ValueError(f"Holding identity collision for '{name}'")
+            used_ids.add(existing['id'])
+            if existing['name'] != name:
+                cursor.execute(
+                    "UPDATE companies SET name = ? WHERE id = ?", (name, existing['id'])
+                )
+                existing = dict(existing)
+                existing['name'] = name
+            matched[name] = existing
+
+    return matched
+
+
 def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, int], Dict[str, Dict]]:
     """
     Process company records from CSV and create identifier mappings.
@@ -69,6 +123,14 @@ def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[s
             identifier = normalize_identifier(raw_identifier)
             if raw_identifier != identifier:
                 logger.info(f"Normalized identifier for {company_name}: '{raw_identifier}' -> '{identifier}'")
+
+        if (
+            company_name in company_positions
+            and company_positions[company_name]['identifier'] != identifier
+        ):
+            raise ValueError(
+                f"Holding identity collision: '{company_name}' has multiple identifiers"
+            )
 
         fee = float(row['fee']) if 'fee' in row else 0
         tax = float(row['tax']) if 'tax' in row else 0
@@ -163,10 +225,16 @@ def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[s
 
     # Get existing companies for mapping
     existing_companies = query_db(
-        'SELECT id, name, identifier, total_invested, portfolio_id FROM companies WHERE account_id = ?',
+        'SELECT id, name, identifier, total_invested, portfolio_id, source FROM companies WHERE account_id = ?',
         [account_id]
     )
-    existing_company_map = {c['name']: c for c in existing_companies}
+    existing_company_map = _match_existing_companies(
+        company_positions, existing_companies, cursor
+    )
+    existing_company_map.update({
+        c['name']: c for c in existing_companies
+        if c['id'] not in {matched['id'] for matched in existing_company_map.values()}
+    })
 
     return existing_company_map, company_positions
 
@@ -217,6 +285,14 @@ def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tup
         else:
             identifier = normalize_identifier(raw_identifier)
 
+        if (
+            company_name in company_positions
+            and company_positions[company_name]['identifier'] != identifier
+        ):
+            raise ValueError(
+                f"Holding identity collision: '{company_name}' has multiple identifiers"
+            )
+
         total_invested = float(row['total_invested']) if 'total_invested' in row and pd.notna(row['total_invested']) else 0.0
         first_bought = row.get('first_bought_date') if 'first_bought_date' in row else None
         investment_type = row.get('investment_type') if 'investment_type' in row else None
@@ -247,9 +323,15 @@ def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tup
 
     # Get existing companies for mapping
     existing_companies = query_db(
-        'SELECT id, name, identifier, total_invested, portfolio_id FROM companies WHERE account_id = ?',
+        'SELECT id, name, identifier, total_invested, portfolio_id, source FROM companies WHERE account_id = ?',
         [account_id]
     )
-    existing_company_map = {c['name']: c for c in existing_companies}
+    existing_company_map = _match_existing_companies(
+        company_positions, existing_companies, cursor
+    )
+    existing_company_map.update({
+        c['name']: c for c in existing_companies
+        if c['id'] not in {matched['id'] for matched in existing_company_map.values()}
+    })
 
     return existing_company_map, company_positions

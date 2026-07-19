@@ -88,13 +88,33 @@ CREATE TABLE IF NOT EXISTS identifier_mappings (
 -- Create background_jobs table
 CREATE TABLE IF NOT EXISTS background_jobs (
  id TEXT PRIMARY KEY,
+ account_id INTEGER,
  name TEXT NOT NULL,
  status TEXT NOT NULL DEFAULT 'pending',
  progress INTEGER DEFAULT 0,
  total INTEGER DEFAULT 0,
  result TEXT,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+-- One versioned aggregate per monthly decision review.
+CREATE TABLE IF NOT EXISTS monthly_reviews (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ account_id INTEGER NOT NULL,
+ source_job_id TEXT,
+ period TEXT NOT NULL,
+ previous_review_id INTEGER,
+ status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'completed')),
+ version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+ payload TEXT NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ completed_at TIMESTAMP,
+ FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+ FOREIGN KEY (source_job_id) REFERENCES background_jobs(id) ON DELETE SET NULL,
+ FOREIGN KEY (previous_review_id) REFERENCES monthly_reviews(id) ON DELETE SET NULL
 );
 
 -- Create exchange_rates table for consistent currency conversion
@@ -157,6 +177,22 @@ CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio
 -- Create indexes for background_jobs
 CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_background_jobs_created_at ON background_jobs(created_at);
+CREATE INDEX IF NOT EXISTS idx_background_jobs_account_status ON background_jobs(account_id, status);
+-- Account-owned jobs are CSV imports. Enforce one active import atomically;
+-- global price jobs keep account_id NULL and are unaffected.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_background_jobs_active_account
+ON background_jobs(account_id)
+WHERE account_id IS NOT NULL AND status IN ('pending', 'processing');
+-- Monthly review indexes support history, draft resume, completed comparison,
+-- and idempotent creation from a terminal CSV job.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_monthly_reviews_account_source_job
+ON monthly_reviews(account_id, source_job_id)
+WHERE source_job_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_monthly_reviews_account_status_created
+ON monthly_reviews(account_id, status, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_monthly_reviews_account_completed
+ON monthly_reviews(account_id, completed_at DESC, id DESC)
+WHERE status = 'completed';
 -- Create index for exchange_rates
 CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency ON exchange_rates(from_currency, to_currency);
 
@@ -188,5 +224,3 @@ END;
 --  UPDATE background_jobs SET updated_at = CURRENT_TIMESTAMP
 --  WHERE id = NEW.id;
 -- END;
-
- 

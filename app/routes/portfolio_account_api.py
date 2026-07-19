@@ -256,6 +256,8 @@ def api_delete_account():
             db.execute('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
             db.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
             db.execute('DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM monthly_reviews WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM background_jobs WHERE account_id = ?', [account_id])
 
             identifiers = query_db('''
                 SELECT DISTINCT identifier
@@ -381,6 +383,8 @@ def api_import_account_data():
 
             db.execute('DELETE FROM expanded_state WHERE account_id = ?', [account_id])
             db.execute('DELETE FROM identifier_mappings WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM monthly_reviews WHERE account_id = ?', [account_id])
+            db.execute('DELETE FROM background_jobs WHERE account_id = ?', [account_id])
             db.execute('''
                 DELETE FROM company_shares
                 WHERE company_id IN (SELECT id FROM companies WHERE account_id = ?)

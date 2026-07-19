@@ -225,10 +225,6 @@ class AccountRepository:
             # Delete simulations
             cursor.execute('DELETE FROM simulations WHERE account_id = ?', [account_id])
 
-            # Reviews and their account-scoped CSV receipts cannot outlive the account.
-            cursor.execute('DELETE FROM monthly_reviews WHERE account_id = ?', [account_id])
-            cursor.execute('DELETE FROM background_jobs WHERE account_id = ?', [account_id])
-
             # Delete the account itself
             cursor.execute('DELETE FROM accounts WHERE id = ?', [account_id])
 

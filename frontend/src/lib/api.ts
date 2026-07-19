@@ -20,6 +20,10 @@ const CACHE_TTL = 30_000;
 // refresh their narrower query families after a successful write.
 const UI_STATE_WRITE_PATHS = ["/state", "/monthly-reviews"];
 
+function uiStateWritePrefix(path: string): string | undefined {
+  return UI_STATE_WRITE_PATHS.find((prefix) => path.startsWith(prefix));
+}
+
 type MutationListener = () => void;
 const mutationListeners = new Set<MutationListener>();
 
@@ -36,7 +40,7 @@ export function onApiMutation(listener: MutationListener): () => void {
 }
 
 function notifyMutation(path: string) {
-  if (UI_STATE_WRITE_PATHS.some((p) => path.startsWith(p))) return;
+  if (uiStateWritePrefix(path)) return;
   for (const listener of mutationListeners) listener();
 }
 
@@ -90,7 +94,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
   const url = `${API_BASE}${path}`;
 
   if (method !== "GET") {
-    clearApiCache();
+    clearApiCache(uiStateWritePrefix(path));
     const data = await doFetch<T>(url, init);
     notifyMutation(path);
     return data;

@@ -18,6 +18,7 @@ from app.services.rebalance_service import (
     calculate_detailed_rebalancing,
     calculate_rebalancing,
 )
+from app.utils.db_utils import utc_now_iso
 
 
 class ReviewValidationError(ValueError):
@@ -730,7 +731,7 @@ def capture_snapshot(account_id: int, receipt: Optional[Dict[str, Any]] = None) 
                 }
             )
     snapshot = {
-        "captured_at": datetime.now(timezone.utc).isoformat(),
+        "captured_at": utc_now_iso(),
         "receipt": copy.deepcopy(receipt) if receipt else None,
         "holdings": holdings,
         "targets": targets,
@@ -936,7 +937,7 @@ def complete_review(
         live_fingerprint = mutable_input_fingerprint(holdings, targets, rules, live_cash)
         if live_fingerprint != payload["snapshot"].get("mutable_fingerprint"):
             raise ReviewConflictError("Portfolio inputs changed; start a fresh review draft")
-        payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+        payload["completed_at"] = utc_now_iso()
         completed = MonthlyReviewRepository.complete(
             review_id, account_id, expected_version, payload
         )

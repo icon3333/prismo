@@ -231,9 +231,10 @@ def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[s
     existing_company_map = _match_existing_companies(
         company_positions, existing_companies, cursor
     )
+    matched_ids = {matched['id'] for matched in existing_company_map.values()}
     existing_company_map.update({
         c['name']: c for c in existing_companies
-        if c['id'] not in {matched['id'] for matched in existing_company_map.values()}
+        if c['id'] not in matched_ids
     })
 
     return existing_company_map, company_positions
@@ -329,9 +330,10 @@ def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tup
     existing_company_map = _match_existing_companies(
         company_positions, existing_companies, cursor
     )
+    matched_ids = {matched['id'] for matched in existing_company_map.values()}
     existing_company_map.update({
         c['name']: c for c in existing_companies
-        if c['id'] not in {matched['id'] for matched in existing_company_map.values()}
+        if c['id'] not in matched_ids
     })
 
     return existing_company_map, company_positions

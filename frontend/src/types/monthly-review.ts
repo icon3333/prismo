@@ -5,6 +5,7 @@ export type ReviewDecision =
   | "adjusted"
   | "deferred"
   | "dismissed";
+export type ReviewCapitalMode = "existing-only" | "new-only" | "new-with-sells";
 
 export interface MonthlyReviewSummary {
   id: number;
@@ -108,13 +109,13 @@ export interface MonthlyReviewPayload {
     disclaimer: string;
   };
   inputs: {
-    mode: string;
+    mode: ReviewCapitalMode;
     contribution: number;
     contribution_label: string;
     readiness_override: boolean;
   };
   recommendations: {
-    mode: string;
+    mode: ReviewCapitalMode;
     actions: ReviewAction[];
     unresolved_gaps: ReviewGap[];
   };
@@ -137,7 +138,7 @@ export interface ReviewResponse {
 }
 
 export type ReviewChange =
-  | { mode: string }
+  | { mode: ReviewCapitalMode }
   | { contribution: number }
   | { readiness_override: boolean }
   | {

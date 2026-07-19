@@ -225,6 +225,21 @@ describe("api-cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("review writes preserve unrelated TTL entries", async () => {
+    const { apiFetch } = await loadModules();
+    const fetchMock = mockFetch((url, init) =>
+      (init?.method ?? "GET") !== "GET"
+        ? jsonResponse({ success: true })
+        : jsonResponse({ url })
+    );
+
+    await apiFetch("/portfolio_data");
+    await apiFetch("/monthly-reviews/1", { method: "PATCH", body: "{}" });
+    await apiFetch("/portfolio_data");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("surfaces the error when the initial fetch fails", async () => {
     const { revalidateApiQuery, getApiQueryState } = await loadModules();
     mockFetch(() => jsonResponse({ error: "boom" }, 500));

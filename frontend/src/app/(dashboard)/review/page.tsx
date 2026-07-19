@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,12 @@ import { PageHeader } from "@/components/shell/page-header";
 import { useMonthlyReview } from "@/hooks/use-monthly-review";
 import { firstUndecidedActionKey, groupReviewPresentation } from "@/lib/monthly-review-calc";
 import { serializeReviewCsv } from "@/lib/monthly-review-export";
-import type { MonthlyReview, ReviewAction, ReviewDecision } from "@/types/monthly-review";
+import type {
+  MonthlyReview,
+  ReviewAction,
+  ReviewCapitalMode,
+  ReviewDecision,
+} from "@/types/monthly-review";
 
 const EUR = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
 const NUMBER = new Intl.NumberFormat("en-IE", { maximumFractionDigits: 4 });
@@ -277,7 +282,9 @@ function ReviewWorkspace({
               className="mt-1 h-[30px] w-full border border-rule-2 bg-bg-2 px-3 text-ink"
               value={payload.inputs.mode}
               disabled={readOnly || isSaving}
-              onChange={(event) => void onSave({ mode: event.target.value }).catch(() => undefined)}
+              onChange={(event) =>
+                void onSave({ mode: event.target.value as ReviewCapitalMode }).catch(() => undefined)
+              }
             >
               <option value="existing-only">Rebalance existing holdings</option>
               <option value="new-only">Deploy cash without sells</option>
@@ -351,8 +358,6 @@ function ReviewPageInner() {
   const requestedId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
   const recoveryJob = params.get("job");
   const reviewState = useMonthlyReview(requestedId);
-  const historyRef = useRef<HTMLSelectElement>(null);
-
   if (reviewState.isLoading) {
     return <div className="space-y-5"><PageHeader title="Monthly review" showPortfolioPicker={false} /><Skeleton className="h-20" /><Skeleton className="h-56" /><Skeleton className="h-72" /></div>;
   }
@@ -381,7 +386,6 @@ function ReviewPageInner() {
         <label className="min-w-[260px] font-mono text-micro uppercase text-ink-2">
           Review history
           <select
-            ref={historyRef}
             className="mt-1 h-[30px] w-full border border-rule-2 bg-bg-2 px-3 text-ink"
             value={review.id}
             disabled={reviewState.isSaving}

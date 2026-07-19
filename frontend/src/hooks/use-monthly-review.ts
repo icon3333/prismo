@@ -18,14 +18,11 @@ function newestDraftOrFirst(reviews: MonthlyReviewSummary[]): number | null {
 export function useMonthlyReview(requestedReviewId: number | null) {
   const listQuery = useApiQuery<ReviewListResponse>("/monthly-reviews");
   const reviews = useMemo(() => listQuery.data?.data.reviews ?? [], [listQuery.data]);
-  const requestedExists = requestedReviewId !== null && reviews.some((item) => item.id === requestedReviewId);
   const [chosenId, setChosenId] = useState<number | null>(requestedReviewId);
   const activeId =
     chosenId !== null && reviews.some((item) => item.id === chosenId)
       ? chosenId
-      : requestedExists
-        ? requestedReviewId
-        : newestDraftOrFirst(reviews);
+      : newestDraftOrFirst(reviews);
   const detailQuery = useApiQuery<ReviewResponse>(
     activeId === null ? null : `/monthly-reviews/${activeId}`,
   );
@@ -44,9 +41,7 @@ export function useMonthlyReview(requestedReviewId: number | null) {
 
   const refreshReviewData = useCallback(async () => {
     await invalidateApiCache("/monthly-reviews");
-    await listQuery.refetch();
-    await detailQuery.refetch();
-  }, [detailQuery, listQuery]);
+  }, []);
 
   const runSerialized = useCallback(
     <T,>(operation: () => Promise<T>): Promise<T> => {
@@ -75,7 +70,6 @@ export function useMonthlyReview(requestedReviewId: number | null) {
           setCanonicalReview(saved);
           setSaveMessage(`Saved version ${saved.version}`);
           await invalidateApiCache("/monthly-reviews");
-          await listQuery.refetch();
           return saved;
         } catch (caught) {
           if (caught instanceof ApiError && caught.status === 409) {
@@ -90,7 +84,7 @@ export function useMonthlyReview(requestedReviewId: number | null) {
           throw caught;
         }
       }),
-    [detailQuery, listQuery, runSerialized],
+    [detailQuery, runSerialized],
   );
 
   const complete = useCallback(
@@ -140,10 +134,9 @@ export function useMonthlyReview(requestedReviewId: number | null) {
         setChosenId(created.id);
         setSaveMessage(sourceJobId ? "Import review recovered" : "Review draft created");
         await invalidateApiCache("/monthly-reviews");
-        await listQuery.refetch();
         return created;
       }),
-    [listQuery, runSerialized],
+    [runSerialized],
   );
 
   const chooseReview = useCallback((id: number) => {

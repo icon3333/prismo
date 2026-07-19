@@ -97,6 +97,28 @@ describe("calculateViolations", () => {
       expect.objectContaining({ name: "A", currentPercentage: 60 }),
     );
   });
+
+  it.each([
+    ["missing", undefined],
+    ["blank", "   "],
+  ])("treats %s investment types as Stock for position caps", (_label, investmentType) => {
+    const violations = calculateViolations(
+      [
+        holding("Unclassified", 60, { investment_type: investmentType }),
+        holding("Explicit ETF", 40, { investment_type: "ETF" }),
+      ],
+      rules({ maxPerStock: 50, maxPerETF: 50 }),
+    );
+
+    expect(violations).toEqual([
+      expect.objectContaining({
+        type: "position",
+        name: "Unclassified",
+        currentPercentage: 60,
+        maxPercentage: 50,
+      }),
+    ]);
+  });
 });
 
 describe("getHealthStatus", () => {

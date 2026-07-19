@@ -75,7 +75,8 @@ export function calculateViolations(
   for (const [investmentType, limit] of positionRules) {
     if (!limit || limit <= 0) continue;
     const matchingItems = allocationItems.filter(
-      (item) => item.investment_type?.trim().toLowerCase() === investmentType,
+      (item) =>
+        (item.investment_type?.trim().toLowerCase() || "stock") === investmentType,
     );
     const aggregated = groupAndAggregate(
       matchingItems,

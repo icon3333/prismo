@@ -810,6 +810,12 @@ def create_draft(
                 stored_result = None
             if isinstance(stored_result, dict):
                 receipt = stored_result
+    recovering_completed_job = bool(
+        source_job_id and source_job and source_job["status"] == "completed"
+    )
+    if recovering_completed_job:
+        receipt = copy.deepcopy(receipt) if isinstance(receipt, dict) else {}
+        receipt["review_creation"] = {"status": "recovered"}
     previous = MonthlyReviewRepository.get_latest_completed(account_id)
     snapshot = capture_snapshot(account_id, receipt)
     previous_snapshot = (previous or {}).get("payload", {}).get("snapshot")
@@ -838,11 +844,9 @@ def create_draft(
     )
     # Recovery POSTs use the same account/job uniqueness key. Reflect a
     # successful retry in the durable receipt without changing import status.
-    if source_job_id and source_job and source_job["status"] == "completed":
-        stored_receipt = receipt if isinstance(receipt, dict) else {}
-        stored_receipt = copy.deepcopy(stored_receipt)
+    if recovering_completed_job:
+        stored_receipt = copy.deepcopy(receipt)
         stored_receipt["review_id"] = review["id"]
-        stored_receipt["review_creation"] = {"status": "recovered"}
         db = get_db()
         db.execute(
             "UPDATE background_jobs SET result = ?, updated_at = ? WHERE id = ? AND account_id = ?",

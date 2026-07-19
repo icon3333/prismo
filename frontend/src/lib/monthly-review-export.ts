@@ -37,9 +37,15 @@ export function serializeReviewCsv(actions: ReviewAction[]): string {
           ? finite(action.adjusted_amount, "Adjusted amount")
           : finite(action.amount_eur, "Amount");
       const units =
-        action.estimated_units == null
-          ? ""
-          : finite(action.estimated_units, "Estimated units").toString();
+        action.decision === "adjusted"
+          ? typeof action.snapshot_price_eur === "number" &&
+            Number.isFinite(action.snapshot_price_eur) &&
+            action.snapshot_price_eur > 0
+            ? finite(amount / action.snapshot_price_eur, "Estimated units").toString()
+            : ""
+          : action.estimated_units == null
+            ? ""
+            : finite(action.estimated_units, "Estimated units").toString();
       return [
         safeText(action.portfolio),
         safeText(action.security),

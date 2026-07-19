@@ -8,6 +8,7 @@ from app.db_manager import backup_database, execute_db, get_db, query_db
 from app.utils.db_utils import utc_now_iso
 from app.decorators import require_auth
 from app.utils.response_helpers import (
+    conflict_response,
     error_response,
     not_found_response,
     validation_error_response,
@@ -367,6 +368,22 @@ def api_import_account_data():
 
         if 'export_version' not in import_payload or 'data' not in import_payload:
             return validation_error_response('file', 'Invalid export file format')
+
+        active_csv_job = query_db(
+            """SELECT id
+               FROM background_jobs
+               WHERE account_id = ?
+                 AND name = 'csv_upload'
+                 AND status IN ('pending', 'processing')
+               LIMIT 1""",
+            [account_id],
+            one=True,
+        )
+        if active_csv_job:
+            return conflict_response(
+                'Account data cannot be replaced while a CSV import is active',
+                details={'job_id': active_csv_job['id']},
+            )
 
         backup_database()
 

@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 
@@ -440,6 +441,55 @@ def test_processing_import_can_capture_exact_receipt_idempotently(db, monkeypatc
 
     assert first["id"] == second["id"]
     assert first["payload"]["snapshot"]["receipt"] == receipt
+
+
+def test_recovered_import_freezes_recovered_provenance_before_adding_review_id(
+    db, monkeypatch
+):
+    from app.services import monthly_review_service as service
+
+    account_id = seed_account(db, "recovered-review")
+    failed_receipt = {
+        "receipt_version": 1,
+        "filename": "recover.csv",
+        "review_creation": {
+            "status": "failed",
+            "retryable": True,
+            "retry_token": "recovered-review-job",
+        },
+    }
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, account_id, status, progress, total, result)
+           VALUES ('recovered-review-job', 'csv_upload', ?, 'completed', 100, 100, ?)""",
+        [account_id, json.dumps(failed_receipt)],
+    )
+    db.commit()
+    snapshot = _captured_snapshot()
+    monkeypatch.setattr(
+        service,
+        "capture_snapshot",
+        lambda _account_id, captured_receipt=None: {
+            **deepcopy(snapshot),
+            "receipt": deepcopy(captured_receipt),
+        },
+    )
+
+    review = service.create_draft(
+        account_id, source_job_id="recovered-review-job"
+    )
+
+    frozen_receipt = review["payload"]["snapshot"]["receipt"]
+    assert frozen_receipt["review_creation"] == {"status": "recovered"}
+    assert "review_id" not in frozen_receipt
+    stored_receipt = json.loads(
+        db.execute(
+            "SELECT result FROM background_jobs WHERE id = 'recovered-review-job'"
+        ).fetchone()[0]
+    )
+    assert stored_receipt["review_creation"] == {"status": "recovered"}
+    assert stored_receipt["review_id"] == review["id"]
+    assert failed_receipt["review_creation"]["status"] == "failed"
 
 
 def test_completion_blocks_stale_inputs_and_undecided_actions(db, monkeypatch):

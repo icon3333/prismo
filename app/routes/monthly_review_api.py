@@ -25,15 +25,11 @@ def _json_body():
 
 def _version(body):
     value = body.get("version")
-    if isinstance(value, bool):
-        raise ReviewValidationError("version must be an integer")
-    try:
-        result = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ReviewValidationError("version is required and must be an integer") from exc
-    if result < 1:
+    if type(value) is not int:
+        raise ReviewValidationError("version is required and must be an integer")
+    if value < 1:
         raise ReviewValidationError("version must be positive")
-    return result
+    return value
 
 
 def _review_error(exc):

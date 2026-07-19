@@ -305,7 +305,31 @@ def start_csv_processing_job(
             name=f"csv-processing-{account_id}-{job_id[:8]}"
         )
         thread.daemon = True
-        thread.start()
+        try:
+            thread.start()
+        except Exception as start_error:
+            failure_receipt = {
+                'receipt_version': 1,
+                'filename': filename,
+                'mode': mode,
+                'message': f"CSV import could not start: {start_error}",
+                'retryable': True,
+            }
+            try:
+                db.execute(
+                    """UPDATE background_jobs
+                       SET status = 'failed', progress = 0, result = ?, updated_at = ?
+                       WHERE id = ?""",
+                    (json.dumps(failure_receipt), datetime.now(), job_id),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Failed to terminalize CSV job %s after thread start failure",
+                    job_id,
+                )
+            raise
         
         logger.info(f"CSV processing thread started successfully for account {account_id}, job_id: {job_id}")
         return job_id

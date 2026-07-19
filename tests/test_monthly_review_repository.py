@@ -210,3 +210,42 @@ def test_full_account_data_replacement_clears_reviews_and_owned_jobs(
     assert db.execute(
         "SELECT COUNT(*) FROM background_jobs WHERE account_id = ?", [account_id]
     ).fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("job_status", ["pending", "processing"])
+def test_full_account_data_replacement_rejects_active_csv_job(
+    app, db, monkeypatch, job_status
+):
+    from app.routes import portfolio_account_api
+
+    app.secret_key = "test-secret"
+    account_id = seed_account(db)
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, status, account_id, progress, total, result)
+           VALUES ('active-import', 'csv_upload', ?, ?, 1, 100, '{}')""",
+        [job_status, account_id],
+    )
+    backup_calls = []
+    monkeypatch.setattr(
+        portfolio_account_api, "backup_database", lambda: backup_calls.append(True)
+    )
+    export = {"export_version": 1, "data": {}}
+
+    with app.test_request_context(
+        data={"file": (io.BytesIO(json.dumps(export).encode()), "account.json")},
+        content_type="multipart/form-data",
+    ):
+        from flask import session
+
+        session["account_id"] = account_id
+        response, status = portfolio_account_api.api_import_account_data()
+
+    assert status == 409
+    assert response.get_json()["error_code"] == "CONFLICT"
+    assert response.get_json()["details"]["job_id"] == "active-import"
+    assert backup_calls == []
+    active_job = db.execute(
+        "SELECT status FROM background_jobs WHERE id = 'active-import'"
+    ).fetchone()
+    assert active_job["status"] == job_status

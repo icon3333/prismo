@@ -128,6 +128,9 @@ def parse_csv_file(file_content: str, *, strict_rows: bool = False) -> pd.DataFr
 def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> pd.DataFrame:
     """Clean and validate DataFrame data."""
 
+    warnings = []
+    skipped_count = 0
+
     # Clean string fields
     df['identifier'] = df['identifier'].apply(
         lambda x: str(x).strip() if pd.notna(x) else ''
@@ -141,11 +144,17 @@ def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> 
 
     # Destructive replacement must never silently turn a malformed row into a
     # deletion of the corresponding holding.
-    if strict_rows and (df['identifier'].str.len() == 0).any():
+    empty_identifier_count = int((df['identifier'].str.len() == 0).sum())
+    if strict_rows and empty_identifier_count:
         raise ValueError("Invalid holding row: identifier is required")
 
     # Filter out empty identifiers for non-destructive add imports.
     df = df[df['identifier'].str.len() > 0].copy()
+    if empty_identifier_count:
+        skipped_count += empty_identifier_count
+        warnings.append(
+            f"Filtered {empty_identifier_count} row(s) with empty identifiers"
+        )
     if len(df) == 0:
         raise ValueError("No valid entries found in CSV file")
 
@@ -165,16 +174,26 @@ def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> 
             f"These rows will be skipped."
         )
 
-    if strict_rows and (shares_null > 0 or price_null > 0):
+    invalid_numeric_count = int((df['shares'].isna() | df['price'].isna()).sum())
+    if strict_rows and invalid_numeric_count:
         raise ValueError("Invalid holding row: shares and price must be numeric")
 
     # Drop rows with invalid numeric data in non-destructive add imports.
     df = df.dropna(subset=['shares', 'price'])
+    if invalid_numeric_count:
+        skipped_count += invalid_numeric_count
+        warnings.append(
+            f"Filtered {invalid_numeric_count} row(s) with invalid shares or prices"
+        )
     if df.empty:
         raise ValueError("No valid entries found after converting numeric values")
 
     # Parse and sort by date
     df = _parse_dates(df)
+    df.attrs['parse_summary'] = {
+        'skipped_count': skipped_count,
+        'warnings': warnings,
+    }
 
     return df
 

@@ -11,6 +11,7 @@ rates / price updates), so no network is touched.
 """
 
 import os
+import json
 
 import pytest
 
@@ -332,3 +333,46 @@ class TestMonthlyReviewApi:
         ).status_code == 404
 
         client.post(f"/api/select_account/{account['id']}")
+
+    def test_failed_review_capture_recovers_idempotently_from_import_job(
+        self, http_app, client, account
+    ):
+        from app.db_manager import get_db
+
+        receipt = {
+            "receipt_version": 1,
+            "filename": "recover.csv",
+            "review_creation": {
+                "status": "failed",
+                "retryable": True,
+                "retry_token": "http-review-recovery",
+            },
+        }
+        with http_app.app_context():
+            db = get_db()
+            db.execute(
+                """INSERT INTO background_jobs
+                   (id, name, account_id, status, progress, total, result)
+                   VALUES (?, 'csv_upload', ?, 'completed', 100, 100, ?)""",
+                ["http-review-recovery", account["id"], json.dumps(receipt)],
+            )
+            db.commit()
+
+        first = client.post(
+            "/portfolio/api/monthly-reviews",
+            json={"source_job_id": "http-review-recovery"},
+        )
+        second = client.post(
+            "/portfolio/api/monthly-reviews",
+            json={"source_job_id": "http-review-recovery"},
+        )
+        assert first.status_code == 201, first.get_json()
+        assert second.status_code == 201, second.get_json()
+        first_review = first.get_json()["data"]["review"]
+        assert second.get_json()["data"]["review"]["id"] == first_review["id"]
+
+        progress = client.get(
+            "/portfolio/api/simple_upload_progress?job_id=http-review-recovery"
+        ).get_json()
+        assert progress["receipt"]["review_id"] == first_review["id"]
+        assert progress["receipt"]["review_creation"]["status"] == "recovered"

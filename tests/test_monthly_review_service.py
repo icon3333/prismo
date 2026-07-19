@@ -91,6 +91,77 @@ def test_fingerprint_covers_mutable_inputs_but_not_frozen_prices():
     ) != base
 
 
+def test_reconcile_previous_actions_observes_partial_pending_and_deferred():
+    from app.services.monthly_review_service import reconcile_previous_actions
+
+    previous_snapshot = {
+        "holdings": [
+            _holding(identifier="BUY", effective_shares=10),
+            _holding(identifier="SELL", company="Sell", effective_shares=10),
+            _holding(identifier="WAIT", company="Wait", effective_shares=10),
+            _holding(identifier="DEFER", company="Deferred", effective_shares=10),
+        ]
+    }
+    previous = {
+        "payload": {
+            "snapshot": previous_snapshot,
+            "recommendations": {
+                "actions": [
+                    {"key": "buy", "identifier": "BUY", "portfolio": "Core", "side": "buy", "decision": "accepted", "estimated_units": 2},
+                    {"key": "sell", "identifier": "SELL", "portfolio": "Core", "side": "sell", "decision": "adjusted", "adjusted_amount": 50, "snapshot_price_eur": 50, "estimated_units": 2},
+                    {"key": "wait", "identifier": "WAIT", "portfolio": "Core", "side": "buy", "decision": "accepted", "estimated_units": 2},
+                    {"key": "defer", "identifier": "DEFER", "portfolio": "Core", "side": "buy", "decision": "deferred", "estimated_units": 2},
+                ]
+            },
+        }
+    }
+    current = {
+        "holdings": [
+            _holding(identifier="BUY", effective_shares=12),
+            _holding(identifier="SELL", company="Sell", effective_shares=9.5),
+            _holding(identifier="WAIT", company="Wait", effective_shares=10),
+            _holding(identifier="DEFER", company="Deferred", effective_shares=99),
+        ]
+    }
+
+    items = {item["action_key"]: item for item in reconcile_previous_actions(previous, current)}
+
+    assert items["buy"]["status"] == "observed"
+    assert items["sell"]["status"] == "partial"
+    assert items["wait"]["status"] == "pending"
+    assert items["defer"]["status"] == "deferred"
+    assert all(item["advisory"] is True for item in items.values())
+
+
+def test_reconcile_previous_actions_marks_ambiguous_identity_and_units():
+    from app.services.monthly_review_service import reconcile_previous_actions
+
+    previous = {
+        "payload": {
+            "snapshot": {"holdings": [_holding()]},
+            "recommendations": {
+                "actions": [
+                    {"key": "duplicate", "identifier": "AAA", "portfolio": "Core", "side": "buy", "decision": "accepted", "estimated_units": 1},
+                    {"key": "units", "identifier": "MISSING", "portfolio": "Core", "side": "buy", "decision": "accepted", "estimated_units": None},
+                ]
+            },
+        }
+    }
+    current = {
+        "holdings": [
+            _holding(portfolio="Core"),
+            _holding(portfolio="Satellite"),
+        ]
+    }
+
+    items = {item["action_key"]: item for item in reconcile_previous_actions(previous, current)}
+
+    assert items["duplicate"]["status"] == "ambiguous"
+    assert items["duplicate"]["reason"] == "duplicate_identity"
+    assert items["units"]["status"] == "ambiguous"
+    assert items["units"]["reason"] == "missing_estimated_units"
+
+
 def test_readiness_age_and_approximate_fx_rules():
     from app.services.monthly_review_service import evaluate_readiness
 
@@ -336,6 +407,39 @@ def test_create_update_complete_round_trip_is_versioned_and_immutable(db, monkey
         service.update_draft(
             review["id"], account_id, completed["version"], {"contribution": 1}
         )
+
+
+def test_processing_import_can_capture_exact_receipt_idempotently(db, monkeypatch):
+    from app.services import monthly_review_service as service
+
+    account_id = seed_account(db, "processing-review")
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, account_id, status, progress, total, result)
+           VALUES ('processing-review-job', 'csv_upload', ?, 'processing', 90, 100, '{}')""",
+        [account_id],
+    )
+    db.commit()
+    receipt = {"receipt_version": 1, "filename": "july.csv"}
+    snapshot = _captured_snapshot()
+    monkeypatch.setattr(
+        service,
+        "capture_snapshot",
+        lambda _account_id, captured_receipt=None: {
+            **deepcopy(snapshot),
+            "receipt": deepcopy(captured_receipt),
+        },
+    )
+
+    first = service.create_draft(
+        account_id, source_job_id="processing-review-job", receipt=receipt
+    )
+    second = service.create_draft(
+        account_id, source_job_id="processing-review-job", receipt=receipt
+    )
+
+    assert first["id"] == second["id"]
+    assert first["payload"]["snapshot"]["receipt"] == receipt
 
 
 def test_completion_blocks_stale_inputs_and_undecided_actions(db, monkeypatch):

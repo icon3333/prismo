@@ -200,7 +200,6 @@ def _run_csv_job(
                     'warnings': result.get('warnings', []),
                     'completed_at': datetime.now().astimezone().isoformat(),
                 }
-                _update_csv_job_final(job_id, 100, receipt)
                 # Invalidate portfolio cache after successful CSV import
                 try:
                     from app.routes.portfolio_data_api import invalidate_portfolio_cache
@@ -208,6 +207,26 @@ def _run_csv_job(
                     logger.debug(f"Cache invalidated after CSV processing for account_id: {account_id}")
                 except Exception as cache_error:
                     logger.warning(f"Failed to invalidate cache after CSV processing: {cache_error}")
+                # Review capture is secondary: holdings remain imported even if
+                # the frozen review snapshot cannot be created immediately.
+                try:
+                    from app.services.monthly_review_service import create_draft
+                    review = create_draft(
+                        account_id, source_job_id=job_id, receipt=receipt
+                    )
+                    receipt["review_id"] = review["id"]
+                    receipt["review_creation"] = {"status": "created"}
+                except Exception:
+                    logger.exception(
+                        "CSV import succeeded but monthly review capture failed for job %s",
+                        job_id,
+                    )
+                    receipt["review_creation"] = {
+                        "status": "failed",
+                        "retryable": True,
+                        "retry_token": job_id,
+                    }
+                _update_csv_job_final(job_id, 100, receipt)
             else:
                 logger.error(f"Background CSV processing failed for account_id: {account_id}: {message}")
                 # Mark job as failed in database

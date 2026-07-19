@@ -551,6 +551,109 @@ def compare_snapshots(
     }
 
 
+def reconcile_previous_actions(
+    previous: Optional[Dict[str, Any]], current_snapshot: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Advisory-only observation of prior decisions from effective-share movement."""
+    if not previous:
+        return []
+
+    previous_payload = previous.get("payload") or {}
+    previous_holdings = (previous_payload.get("snapshot") or {}).get("holdings") or []
+    current_holdings = current_snapshot.get("holdings") or []
+
+    def grouped(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        result: Dict[str, List[Dict[str, Any]]] = {}
+        for item in items:
+            result.setdefault(stable_identity(item, include_portfolio=False), []).append(item)
+        return result
+
+    before_groups = grouped(previous_holdings)
+    after_groups = grouped(current_holdings)
+    reconciled: List[Dict[str, Any]] = []
+    actions = (previous_payload.get("recommendations") or {}).get("actions") or []
+    for action in actions:
+        decision = action.get("decision")
+        if decision not in {"accepted", "adjusted", "deferred"}:
+            continue
+        item = {
+            "action_key": action.get("key"),
+            "security": action.get("security"),
+            "identifier": action.get("identifier"),
+            "portfolio": action.get("portfolio"),
+            "side": action.get("side"),
+            "decision": decision,
+            "advisory": True,
+        }
+        if decision == "deferred":
+            item["status"] = "deferred"
+            reconciled.append(item)
+            continue
+
+        expected_units = action.get("estimated_units")
+        if decision == "adjusted":
+            price = float(action.get("snapshot_price_eur") or 0)
+            amount = float(action.get("adjusted_amount") or 0)
+            expected_units = amount / price if price > 0 else None
+        try:
+            expected = float(expected_units)
+        except (TypeError, ValueError):
+            expected = 0
+        if not math.isfinite(expected) or expected <= 0:
+            item.update(status="ambiguous", reason="missing_estimated_units")
+            reconciled.append(item)
+            continue
+
+        identity = stable_identity(
+            {
+                "identifier": action.get("identifier"),
+                "company": action.get("security"),
+                "source": "unknown",
+            },
+            include_portfolio=False,
+        )
+        before_matches = before_groups.get(identity) or []
+        after_matches = after_groups.get(identity) or []
+        if len(before_matches) > 1 or len(after_matches) > 1:
+            item.update(status="ambiguous", reason="duplicate_identity")
+            reconciled.append(item)
+            continue
+        if len(before_matches) != 1:
+            item.update(status="ambiguous", reason="missing_baseline")
+            reconciled.append(item)
+            continue
+
+        before = before_matches[0]
+        after = after_matches[0] if after_matches else None
+        if after is not None:
+            before_portfolio = str(before.get("portfolio") or before.get("portfolio_name") or "")
+            after_portfolio = str(after.get("portfolio") or after.get("portfolio_name") or "")
+            action_portfolio = str(action.get("portfolio") or "")
+            if before_portfolio != action_portfolio or after_portfolio != action_portfolio:
+                item.update(status="ambiguous", reason="portfolio_moved")
+                reconciled.append(item)
+                continue
+
+        before_shares = float(before.get("effective_shares") or 0)
+        after_shares = float(after.get("effective_shares") or 0) if after else 0.0
+        observed = after_shares - before_shares
+        directional = observed if action.get("side") == "buy" else -observed
+        tolerance = max(1e-6, expected * 0.05)
+        if directional <= tolerance:
+            status = "pending"
+        elif directional + tolerance < expected:
+            status = "partial"
+        else:
+            status = "observed"
+        item.update(
+            status=status,
+            expected_units=expected,
+            observed_units=max(0.0, directional),
+        )
+        reconciled.append(item)
+    return reconciled
+
+
 def _load_builder_inputs(account_id: int) -> Tuple[Any, Dict[str, Any]]:
     rows = query_db(
         """SELECT variable_name, variable_value FROM expanded_state
@@ -677,6 +780,8 @@ def create_draft(
         datetime.strptime(selected_period, "%Y-%m")
     except (TypeError, ValueError) as exc:
         raise ReviewValidationError("period must use YYYY-MM format") from exc
+    source_job = None
+    supplied_receipt = receipt is not None
     if source_job_id:
         existing = query_db(
             "SELECT id FROM monthly_reviews WHERE account_id = ? AND source_job_id = ?",
@@ -693,7 +798,9 @@ def create_draft(
         )
         if source_job is None:
             raise ReviewValidationError("Import job was not found for this account")
-        if source_job["status"] != "completed":
+        if source_job["status"] != "completed" and not (
+            source_job["status"] == "processing" and supplied_receipt
+        ):
             raise ReviewValidationError("Only a completed import can create a review")
         if receipt is None and source_job.get("result"):
             try:
@@ -710,7 +817,7 @@ def create_draft(
         "snapshot": snapshot,
         "comparison": compare_snapshots(snapshot, previous_snapshot),
         "reconciliation": {
-            "items": [],
+            "items": reconcile_previous_actions(previous, snapshot),
             "disclaimer": "Best-effort snapshot analysis, not transaction or tax accounting.",
         },
         "inputs": {
@@ -721,13 +828,27 @@ def create_draft(
         },
     }
     payload = _recompute_payload(payload)
-    return MonthlyReviewRepository.create(
+    review = MonthlyReviewRepository.create(
         account_id=account_id,
         source_job_id=source_job_id,
         period=selected_period,
         previous_review_id=previous["id"] if previous else None,
         payload=payload,
     )
+    # Recovery POSTs use the same account/job uniqueness key. Reflect a
+    # successful retry in the durable receipt without changing import status.
+    if source_job_id and source_job and source_job["status"] == "completed":
+        stored_receipt = receipt if isinstance(receipt, dict) else {}
+        stored_receipt = copy.deepcopy(stored_receipt)
+        stored_receipt["review_id"] = review["id"]
+        stored_receipt["review_creation"] = {"status": "recovered"}
+        db = get_db()
+        db.execute(
+            "UPDATE background_jobs SET result = ?, updated_at = ? WHERE id = ? AND account_id = ?",
+            [json.dumps(stored_receipt), datetime.now(timezone.utc), source_job_id, account_id],
+        )
+        db.commit()
+    return review
 
 
 def update_draft(

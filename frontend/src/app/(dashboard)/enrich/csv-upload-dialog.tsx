@@ -19,14 +19,14 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { apiFetch } from "@/lib/api";
-import { classifyUploadPollStatus } from "@/lib/csv-upload-state";
+import { classifyUploadPollStatus, reviewHandoffUrl } from "@/lib/csv-upload-state";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "completed" | "failed";
 
 interface CsvUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onComplete: () => void;
+  onComplete: (handoffUrl: string) => void | Promise<void>;
 }
 
 export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDialogProps) {
@@ -67,6 +67,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
           status: string;
           percentage?: number;
           message?: string;
+          receipt?: { review_id?: number; review_creation?: { status?: string } };
         }>(`/simple_upload_progress?job_id=${encodeURIComponent(activeJobId)}`, {
           noStore: true,
         });
@@ -83,7 +84,7 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
           setStatus("completed");
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
-          onComplete();
+          await onComplete(reviewHandoffUrl(data.receipt, activeJobId));
         } else if (data.status === "failed") {
           setError(data.message || "Upload failed");
           setStatus("failed");

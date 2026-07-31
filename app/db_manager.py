@@ -233,7 +233,8 @@ def verify_schema(db):
     """
     required_tables = [
         'accounts', 'portfolios', 'companies', 'company_shares',
-        'market_prices', 'expanded_state', 'identifier_mappings', 'exchange_rates'
+        'market_prices', 'expanded_state', 'identifier_mappings', 'exchange_rates',
+        'background_jobs', 'monthly_reviews'
     ]
     cursor = db.cursor()
     for table in required_tables:
@@ -265,6 +266,23 @@ def verify_schema(db):
     missing_columns = [col for col in required_columns if col not in col_names]
     if missing_columns:
         logger.warning(f"Missing columns in 'identifier_mappings' table: {missing_columns}")
+
+    background_jobs_check = cursor.execute("PRAGMA table_info(background_jobs)").fetchall()
+    background_job_columns = [col[1] for col in background_jobs_check]
+    if 'account_id' not in background_job_columns:
+        logger.warning("Missing column in 'background_jobs': account_id")
+
+    monthly_reviews_check = cursor.execute("PRAGMA table_info(monthly_reviews)").fetchall()
+    monthly_review_columns = [col[1] for col in monthly_reviews_check]
+    required_review_columns = [
+        'id', 'account_id', 'source_job_id', 'period', 'previous_review_id',
+        'status', 'version', 'payload', 'created_at', 'updated_at', 'completed_at'
+    ]
+    missing_review_columns = [
+        col for col in required_review_columns if col not in monthly_review_columns
+    ]
+    if missing_review_columns:
+        logger.warning(f"Missing columns in 'monthly_reviews': {missing_review_columns}")
 
 def is_database_empty(db):
     """
@@ -465,7 +483,7 @@ def migrate_database():
     cursor = db.cursor()
 
     # Latest migration version
-    LATEST_VERSION = 23
+    LATEST_VERSION = 24
 
     try:
         # Get current schema version
@@ -975,6 +993,56 @@ def migrate_database():
             db.commit()
             logger.info("Migration 23 completed: added 'Crypto' to investment_type CHECK constraint")
 
+        # Migration 24: Account-owned CSV jobs and monthly decision reviews
+        if current_version < 24:
+            logger.info("Applying migration 24: Adding account-owned jobs and monthly reviews")
+            _safe_add_column(cursor, "background_jobs", "account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE")
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS monthly_reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    source_job_id TEXT,
+                    period TEXT NOT NULL,
+                    previous_review_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'draft'
+                        CHECK(status IN ('draft', 'completed')),
+                    version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (source_job_id) REFERENCES background_jobs(id) ON DELETE SET NULL,
+                    FOREIGN KEY (previous_review_id) REFERENCES monthly_reviews(id) ON DELETE SET NULL
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_background_jobs_account_status
+                ON background_jobs(account_id, status)
+            ''')
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_background_jobs_active_account
+                ON background_jobs(account_id)
+                WHERE account_id IS NOT NULL AND status IN ('pending', 'processing')
+            ''')
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_monthly_reviews_account_source_job
+                ON monthly_reviews(account_id, source_job_id)
+                WHERE source_job_id IS NOT NULL
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_monthly_reviews_account_status_created
+                ON monthly_reviews(account_id, status, created_at DESC, id DESC)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_monthly_reviews_account_completed
+                ON monthly_reviews(account_id, completed_at DESC, id DESC)
+                WHERE status = 'completed'
+            ''')
+            cursor.execute("UPDATE schema_version SET version = 24, applied_at = CURRENT_TIMESTAMP")
+            db.commit()
+            logger.info("Migration 24 completed: account-owned jobs and monthly reviews added")
+
         logger.info(f"Database migrations completed successfully (version {LATEST_VERSION})")
 
     except sqlite3.Error as e:
@@ -992,4 +1060,3 @@ def init_db_command():
     """Clear the existing data and create new tables."""
     init_db(current_app)
     logger.info('Initialized the database.')
-

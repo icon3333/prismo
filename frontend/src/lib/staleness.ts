@@ -34,39 +34,28 @@ function formatAge(ageMs: number): string {
 
 export function classifyStaleness(
   lastUpdateMs: number | null | undefined,
+  nowMs: number = Date.now(),
 ): StalenessResult {
   if (lastUpdateMs == null || !Number.isFinite(lastUpdateMs)) {
-    return { level: "disconnected", label: "DISCONNECTED", ageMs: Infinity };
+    return {
+      level: "disconnected",
+      label: "NO VALUATION DATA",
+      ageMs: Infinity,
+    };
   }
 
-  const now = Date.now();
-  const ageMs = Math.max(0, now - lastUpdateMs);
+  const ageMs = Math.max(0, nowMs - lastUpdateMs);
 
-  // Thresholds per spec §12.1
-  if (ageMs <= 30 * SECOND) {
+  if (ageMs <= DAY) {
     return {
       level: "live",
-      label: `LIVE · EUR · ${formatCetTime(lastUpdateMs)}`,
-      ageMs,
-    };
-  }
-  if (ageMs <= 5 * MINUTE) {
-    return {
-      level: "recent",
-      label: `UPDATED ${formatAge(ageMs)}`,
-      ageMs,
-    };
-  }
-  if (ageMs <= HOUR) {
-    return {
-      level: "stale",
-      label: `STALE · ${formatAge(ageMs)}`,
+      label: `CURRENT · EUR · ${formatCetTime(lastUpdateMs)}`,
       ageMs,
     };
   }
   return {
-    level: "disconnected",
-    label: `DISCONNECTED · ${formatAge(ageMs)}`,
+    level: "stale",
+    label: `STALE · ${formatAge(ageMs)}`,
     ageMs,
   };
 }

@@ -332,4 +332,3 @@ class AccountRepository:
             logger.warning(f"Failed to update cash balance for account {account_id}")
 
         return success
-

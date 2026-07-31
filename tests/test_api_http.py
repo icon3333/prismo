@@ -11,6 +11,8 @@ rates / price updates), so no network is touched.
 """
 
 import os
+import json
+import io
 
 import pytest
 
@@ -107,6 +109,52 @@ class TestAccountFlow:
     def test_select_unknown_account_404s(self, client):
         resp = client.post("/api/select_account/99999")
         assert resp.status_code == 404
+
+    def test_account_replacement_conflicts_with_active_csv_import(
+        self, http_app, client, account
+    ):
+        from app.db_manager import get_db
+
+        client.post(f"/api/select_account/{account['id']}")
+        with http_app.app_context():
+            db = get_db()
+            db.execute(
+                """INSERT INTO background_jobs
+                   (id, name, account_id, status, progress, total, result)
+                   VALUES ('http-active-import', 'csv_upload', ?,
+                           'processing', 1, 100, '{}')""",
+                [account["id"]],
+            )
+            db.commit()
+
+        try:
+            response = client.post(
+                "/portfolio/api/account/import",
+                data={
+                    "file": (
+                        io.BytesIO(b'{"export_version": 1, "data": {}}'),
+                        "account.json",
+                    )
+                },
+                content_type="multipart/form-data",
+            )
+
+            assert response.status_code == 409
+            assert response.get_json()["error_code"] == "CONFLICT"
+            assert response.get_json()["details"]["job_id"] == "http-active-import"
+
+            with http_app.app_context():
+                status = get_db().execute(
+                    "SELECT status FROM background_jobs WHERE id = 'http-active-import'"
+                ).fetchone()["status"]
+            assert status == "processing"
+        finally:
+            with http_app.app_context():
+                db = get_db()
+                db.execute(
+                    "DELETE FROM background_jobs WHERE id = 'http-active-import'"
+                )
+                db.commit()
 
 
 class TestPortfolioApi:
@@ -272,3 +320,149 @@ class TestRebalanceModeParam:
     def test_invalid_mode_rejected(self, client, account):
         resp = client.get("/portfolio/api/simulator/portfolio-data?mode=bogus")
         assert resp.status_code == 400
+
+
+class TestMonthlyReviewApi:
+    @pytest.mark.parametrize("invalid_version", [1.5, True])
+    def test_patch_rejects_non_integer_versions_without_mutation(
+        self, client, account, invalid_version
+    ):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+
+        response = client.patch(
+            f"/portfolio/api/monthly-reviews/{created['id']}",
+            json={"version": invalid_version, "readiness_override": True},
+        )
+
+        assert response.status_code == 422
+        assert response.get_json()["error_code"] == "review_validation"
+        unchanged = client.get(
+            f"/portfolio/api/monthly-reviews/{created['id']}"
+        ).get_json()["data"]["review"]
+        assert unchanged["version"] == created["version"]
+        assert unchanged["payload"] == created["payload"]
+
+    @pytest.mark.parametrize("invalid_version", [1.5, True])
+    def test_complete_rejects_non_integer_versions_without_mutation(
+        self, client, account, invalid_version
+    ):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+
+        response = client.post(
+            f"/portfolio/api/monthly-reviews/{created['id']}/complete",
+            json={"version": invalid_version},
+        )
+
+        assert response.status_code == 422
+        assert response.get_json()["error_code"] == "review_validation"
+        unchanged = client.get(
+            f"/portfolio/api/monthly-reviews/{created['id']}"
+        ).get_json()["data"]["review"]
+        assert unchanged["status"] == "draft"
+        assert unchanged["version"] == created["version"]
+        assert unchanged["payload"] == created["payload"]
+
+    def test_account_scoped_versioned_review_lifecycle(self, client, account):
+        created_response = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        )
+        assert created_response.status_code == 201, created_response.get_json()
+        review = created_response.get_json()["data"]["review"]
+        assert review["account_id"] == account["id"]
+        assert review["status"] == "draft"
+        assert review["payload"]["comparison"]["baseline"] is True
+
+        listing = client.get("/portfolio/api/monthly-reviews")
+        assert listing.status_code == 200
+        assert any(
+            item["id"] == review["id"]
+            for item in listing.get_json()["data"]["reviews"]
+        )
+
+        stale = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": review["version"] + 1, "readiness_override": True},
+        )
+        assert stale.status_code == 409
+        assert stale.get_json()["error_code"] == "review_conflict"
+
+        updated_response = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": review["version"], "readiness_override": True},
+        )
+        assert updated_response.status_code == 200, updated_response.get_json()
+        updated = updated_response.get_json()["data"]["review"]
+
+        completed_response = client.post(
+            f"/portfolio/api/monthly-reviews/{review['id']}/complete",
+            json={"version": updated["version"]},
+        )
+        assert completed_response.status_code == 200, completed_response.get_json()
+        completed = completed_response.get_json()["data"]["review"]
+        assert completed["status"] == "completed"
+
+        immutable = client.patch(
+            f"/portfolio/api/monthly-reviews/{review['id']}",
+            json={"version": completed["version"], "contribution": 1},
+        )
+        assert immutable.status_code == 409
+
+    def test_review_id_is_not_readable_by_another_account(self, client, account):
+        client.post(f"/api/select_account/{account['id']}")
+        created = client.post("/portfolio/api/monthly-reviews", json={}).get_json()
+        review_id = created["data"]["review"]["id"]
+
+        other = client.post("/account/create", json={"username": "review-other"})
+        assert other.status_code == 200
+        assert client.get(
+            f"/portfolio/api/monthly-reviews/{review_id}"
+        ).status_code == 404
+
+        client.post(f"/api/select_account/{account['id']}")
+
+    def test_failed_review_capture_recovers_idempotently_from_import_job(
+        self, http_app, client, account
+    ):
+        from app.db_manager import get_db
+
+        receipt = {
+            "receipt_version": 1,
+            "filename": "recover.csv",
+            "review_creation": {
+                "status": "failed",
+                "retryable": True,
+                "retry_token": "http-review-recovery",
+            },
+        }
+        with http_app.app_context():
+            db = get_db()
+            db.execute(
+                """INSERT INTO background_jobs
+                   (id, name, account_id, status, progress, total, result)
+                   VALUES (?, 'csv_upload', ?, 'completed', 100, 100, ?)""",
+                ["http-review-recovery", account["id"], json.dumps(receipt)],
+            )
+            db.commit()
+
+        first = client.post(
+            "/portfolio/api/monthly-reviews",
+            json={"source_job_id": "http-review-recovery"},
+        )
+        second = client.post(
+            "/portfolio/api/monthly-reviews",
+            json={"source_job_id": "http-review-recovery"},
+        )
+        assert first.status_code == 201, first.get_json()
+        assert second.status_code == 201, second.get_json()
+        first_review = first.get_json()["data"]["review"]
+        assert second.get_json()["data"]["review"]["id"] == first_review["id"]
+
+        progress = client.get(
+            "/portfolio/api/simple_upload_progress?job_id=http-review-recovery"
+        ).get_json()
+        assert progress["receipt"]["review_id"] == first_review["id"]
+        assert progress["receipt"]["review_creation"]["status"] == "recovered"

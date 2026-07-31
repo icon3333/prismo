@@ -52,6 +52,17 @@ def run_startup_tasks(app):
     Run the first refresh cycle, start the backup scheduler, then keep
     re-checking price/FX staleness periodically for the process lifetime.
     """
+    with app.app_context():
+        try:
+            from app.utils.batch_processing import interrupt_stale_csv_jobs
+            interrupted = interrupt_stale_csv_jobs()
+            if interrupted:
+                logger.warning(
+                    f"Marked {interrupted} interrupted CSV import(s) as failed"
+                )
+        except Exception as e:
+            logger.error(f"Interrupted CSV job cleanup failed: {e}")
+
     run_refresh_cycle(app)
 
     with app.app_context():

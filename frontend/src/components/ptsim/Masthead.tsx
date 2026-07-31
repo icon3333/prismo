@@ -6,7 +6,10 @@ import { Suspense, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAnonymousMode } from "@/components/domain/anonymous-mode";
-import { cetTime } from "@/lib/format";
+import { useApiQuery } from "@/lib/api-cache";
+import { parseServerTimestampMs } from "@/lib/enrich-calc";
+import { classifyStaleness } from "@/lib/staleness";
+import type { PortfolioMetrics } from "@/types/overview";
 import { LiveDot } from "./LiveDot";
 import {
   DropdownMenu,
@@ -24,6 +27,7 @@ const ROW2_GROUPS = [
   ],
   [
     { href: "/plan", label: "Plan" },
+    { href: "/review", label: "Review" },
     { href: "/simulator", label: "Simulator" },
   ],
 ];
@@ -105,14 +109,17 @@ export function Masthead() {
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
   const now = useNowEvery30s();
+  const metricsQuery = useApiQuery<PortfolioMetrics>("/portfolio_metrics");
 
   // Render-time-stable timestamp for SSR/hydration: only render the time on
   // the client to avoid mismatches.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const liveLabel = mounted
-    ? `LIVE · EUR · ${cetTime(now)}`
-    : "LIVE · EUR";
+  const valuation = classifyStaleness(
+    parseServerTimestampMs(metricsQuery.data?.last_update ?? null),
+    now,
+  );
+  const valuationLabel = mounted ? valuation.label : "VALUATION · EUR";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-rule bg-bg">
@@ -134,9 +141,9 @@ export function Masthead() {
 
         {/* Live */}
         <div className="flex items-center gap-2 px-3 border-l border-rule">
-          <LiveDot level="live" />
+          <LiveDot level={mounted ? valuation.level : "disconnected"} />
           <span className="font-mono uppercase text-chrome tracking-[0.06em] text-ink-2">
-            {liveLabel}
+            {valuationLabel}
           </span>
         </div>
 

@@ -19,13 +19,14 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { apiFetch } from "@/lib/api";
+import { classifyUploadPollStatus, reviewHandoffUrl } from "@/lib/csv-upload-state";
 
 type UploadStatus = "idle" | "uploading" | "processing" | "completed" | "failed";
 
 interface CsvUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onComplete: () => void;
+  onComplete: (handoffUrl: string) => void | Promise<void>;
 }
 
 export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDialogProps) {
@@ -59,41 +60,47 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
     [onOpenChange, resetState]
   );
 
-  const pollProgress = useCallback(() => {
+  const pollProgress = useCallback((activeJobId: string) => {
     pollingRef.current = setInterval(async () => {
       try {
-        const data = await apiFetch<{ status: string; percentage?: number; message?: string }>("/simple_upload_progress");
+        const data = await apiFetch<{
+          status: string;
+          percentage?: number;
+          message?: string;
+          receipt?: { review_id?: number; review_creation?: { status?: string } };
+        }>(`/simple_upload_progress?job_id=${encodeURIComponent(activeJobId)}`, {
+          noStore: true,
+        });
+        setError(null);
 
-        if (data.status === "processing") {
+        const polledStatus = classifyUploadPollStatus(data.status);
+        if (polledStatus === "processing") {
           setProgress(data.percentage || 0);
           setMessage(data.message || "Processing...");
           setStatus("processing");
-        } else if (data.status === "completed") {
+        } else if (polledStatus === "completed") {
           setProgress(100);
           setMessage(data.message || "Upload completed!");
           setStatus("completed");
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
-          onComplete();
+          await onComplete(reviewHandoffUrl(data.receipt, activeJobId));
         } else if (data.status === "failed") {
           setError(data.message || "Upload failed");
           setStatus("failed");
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
-        } else if (data.status === "idle" && status === "processing") {
-          // Job finished between polls
-          setProgress(100);
-          setMessage("Upload completed!");
-          setStatus("completed");
+        } else {
+          setError("This import job is no longer available. Please retry the upload.");
+          setStatus("failed");
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
-          onComplete();
         }
       } catch {
-        // Ignore polling errors, will retry
+        setError("Could not refresh import progress. Retrying…");
       }
     }, 1000);
-  }, [onComplete, status]);
+  }, [onComplete]);
 
   const handleUpload = useCallback(async () => {
     if (!file) return;
@@ -121,10 +128,17 @@ export function CsvUploadDialog({ open, onOpenChange, onComplete }: CsvUploadDia
         return;
       }
 
-      // Upload started, begin polling for progress
+      const startedJobId = data.data?.job_id ?? data.job_id;
+      if (!startedJobId) {
+        setError("Upload started without a tracking ID. Please retry.");
+        setStatus("failed");
+        return;
+      }
+
+      // Upload started, begin polling for its explicit account-owned job.
       setStatus("processing");
       setMessage("Processing CSV...");
-      pollProgress();
+      pollProgress(startedJobId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
       setStatus("failed");

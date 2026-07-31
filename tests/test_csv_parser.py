@@ -40,8 +40,9 @@ class TestFormatDetection:
     def test_ibkr_detected_by_columns(self):
         assert detect_csv_format(IBKR_CSV) == "ibkr"
 
-    def test_ambiguous_defaults_to_parqet(self):
-        assert detect_csv_format("foo,bar\n1,2\n") == "parqet"
+    def test_ambiguous_format_is_rejected(self):
+        with pytest.raises(ValueError, match="Unable to determine CSV format"):
+            detect_csv_format("foo,bar\n1,2\n")
 
 
 class TestParqetParsing:
@@ -121,14 +122,19 @@ class TestTransactionTypeNormalization:
             ("transfer out", "transferout"),
             ("dividend", "dividend"),
             ("interest", "dividend"),
-            ("mystery-type", "buy"),  # unknown defaults to buy
-            (None, "buy"),
         ],
     )
     def test_normalization(self, raw, expected):
         if raw is None:
             raw = float("nan")
         assert _normalize_transaction_type(raw) == expected
+
+    @pytest.mark.parametrize("raw", ["mystery-type", None])
+    def test_unknown_or_missing_type_is_rejected(self, raw):
+        if raw is None:
+            raw = float("nan")
+        with pytest.raises(ValueError, match="Unknown transaction type"):
+            _normalize_transaction_type(raw)
 
     def test_deposit_is_buy_not_transferin(self):
         # 'deposit' appears in both _BUY_TYPES and _TRANSFERIN_TYPES;

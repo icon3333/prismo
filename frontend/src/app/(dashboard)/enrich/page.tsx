@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useState, useMemo } from "react";
+import { Suspense, useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useEnrich } from "@/hooks/use-enrich";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,8 +33,15 @@ function EnrichSkeleton() {
 
 function EnrichPageInner() {
   const enrich = useEnrich();
+  const { refreshData } = enrich;
+  const router = useRouter();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showCsvDialog, setShowCsvDialog] = useState(false);
+  const handleCsvComplete = useCallback(async (handoffUrl: string) => {
+    await refreshData();
+    setShowCsvDialog(false);
+    router.push(handoffUrl);
+  }, [refreshData, router]);
 
   // Extract unique country options from data
   const countryOptions = useMemo(() => {
@@ -166,7 +174,7 @@ function EnrichPageInner() {
       <CsvUploadDialog
         open={showCsvDialog}
         onOpenChange={setShowCsvDialog}
-        onComplete={enrich.refreshData}
+        onComplete={handleCsvComplete}
       />
     </div>
   );

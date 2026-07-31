@@ -7,6 +7,7 @@ Supports both Parqet and IBKR Flex Query CSV formats with auto-detection.
 import pandas as pd
 import io
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,15 @@ _TRANSFEROUT_TYPES = frozenset(['transferout', 'transfer out', 'transfer-out', '
 _DIVIDEND_TYPES = frozenset(['dividend', 'div', 'dividends', 'income', 'interest'])
 
 
-def parse_csv_file(file_content: str) -> pd.DataFrame:
+@dataclass(frozen=True)
+class ParsedCsv:
+    dataframe: pd.DataFrame
+    source_format: str
+    skipped_count: int
+    warnings: tuple[str, ...]
+
+
+def parse_csv_file(file_content: str, *, strict_rows: bool = False) -> pd.DataFrame:
     """
     Parse CSV file with validation, delimiter detection, and column mapping.
 
@@ -110,14 +119,17 @@ def parse_csv_file(file_content: str) -> pd.DataFrame:
         df['date'] = pd.Timestamp.now()
 
     # Clean and validate data
-    df = _clean_and_validate_data(df)
+    df = _clean_and_validate_data(df, strict_rows=strict_rows)
 
     logger.info(f"CSV parsing completed: {len(df)} valid rows")
     return df
 
 
-def _clean_and_validate_data(df: pd.DataFrame) -> pd.DataFrame:
+def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> pd.DataFrame:
     """Clean and validate DataFrame data."""
+
+    warnings = []
+    skipped_count = 0
 
     # Clean string fields
     df['identifier'] = df['identifier'].apply(
@@ -130,8 +142,19 @@ def _clean_and_validate_data(df: pd.DataFrame) -> pd.DataFrame:
     # Normalize transaction types
     df['type'] = df['type'].apply(_normalize_transaction_type)
 
-    # Filter out empty identifiers
+    # Destructive replacement must never silently turn a malformed row into a
+    # deletion of the corresponding holding.
+    empty_identifier_count = int((df['identifier'].str.len() == 0).sum())
+    if strict_rows and empty_identifier_count:
+        raise ValueError("Invalid holding row: identifier is required")
+
+    # Filter out empty identifiers for non-destructive add imports.
     df = df[df['identifier'].str.len() > 0].copy()
+    if empty_identifier_count:
+        skipped_count += empty_identifier_count
+        warnings.append(
+            f"Filtered {empty_identifier_count} row(s) with empty identifiers"
+        )
     if len(df) == 0:
         raise ValueError("No valid entries found in CSV file")
 
@@ -151,21 +174,34 @@ def _clean_and_validate_data(df: pd.DataFrame) -> pd.DataFrame:
             f"These rows will be skipped."
         )
 
-    # Drop rows with invalid numeric data
+    invalid_numeric_count = int((df['shares'].isna() | df['price'].isna()).sum())
+    if strict_rows and invalid_numeric_count:
+        raise ValueError("Invalid holding row: shares and price must be numeric")
+
+    # Drop rows with invalid numeric data in non-destructive add imports.
     df = df.dropna(subset=['shares', 'price'])
+    if invalid_numeric_count:
+        skipped_count += invalid_numeric_count
+        warnings.append(
+            f"Filtered {invalid_numeric_count} row(s) with invalid shares or prices"
+        )
     if df.empty:
         raise ValueError("No valid entries found after converting numeric values")
 
     # Parse and sort by date
     df = _parse_dates(df)
+    df.attrs['parse_summary'] = {
+        'skipped_count': skipped_count,
+        'warnings': warnings,
+    }
 
     return df
 
 
 def _normalize_transaction_type(t):
     """Normalize transaction type to standard format using O(1) frozenset lookups."""
-    if pd.isna(t):
-        return 'buy'
+    if pd.isna(t) or not str(t).strip():
+        raise ValueError("Unknown transaction type: value is required")
     t = str(t).strip().lower()
     if t in _BUY_TYPES:
         return 'buy'
@@ -178,8 +214,7 @@ def _normalize_transaction_type(t):
     elif t in _DIVIDEND_TYPES:
         return 'dividend'
     else:
-        logger.warning(f"Unknown transaction type '{t}', defaulting to 'buy'")
-        return 'buy'
+        raise ValueError(f"Unknown transaction type: {t}")
 
 
 def _convert_numeric(val, field_name: str = None):
@@ -329,11 +364,10 @@ def detect_csv_format(file_content: str) -> str:
         logger.info(f"Detected Parqet CSV format (matched {parqet_matches} Parqet columns, semicolon={is_semicolon})")
         return 'parqet'
     else:
-        logger.warning("Could not determine CSV format, defaulting to Parqet")
-        return 'parqet'
+        raise ValueError("Unable to determine CSV format")
 
 
-def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
+def parse_ibkr_csv(file_content: str, *, strict_rows: bool = False) -> pd.DataFrame:
     """
     Parse IBKR Flex Query Open Positions CSV.
 
@@ -425,6 +459,9 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
         logger.info(f"Renaming IBKR columns: {reverse_mapping}")
     df = df.rename(columns=reverse_mapping)
 
+    warnings = []
+    skipped_count = 0
+
     # Filter out non-equity types
     if 'assetcategory' in df.columns:
         original_count = len(df)
@@ -435,6 +472,8 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
         filtered = original_count - len(df)
         if filtered > 0:
             logger.info(f"Filtered out {filtered} non-equity rows (options, futures, cash, etc.)")
+            skipped_count += filtered
+            warnings.append(f"Filtered {filtered} non-equity or cash row(s)")
 
     # Filter out SHORT positions
     if 'side' in df.columns:
@@ -443,13 +482,24 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
         filtered = original_count - len(df)
         if filtered > 0:
             logger.info(f"Filtered out {filtered} SHORT positions")
+            skipped_count += filtered
+            warnings.append(f"Filtered {filtered} short position row(s)")
 
-    # Filter out summary/total rows
+    # Filter out summary/total rows and retain the fact in the receipt.
+    original_count = len(df)
     df = df[df['identifier'].apply(lambda x: pd.notna(x) and str(x).strip() != '' and str(x).strip().lower() != 'total')].copy()
+    filtered = original_count - len(df)
+    if filtered:
+        if strict_rows:
+            raise ValueError("Invalid holding row: identifier is required")
+        skipped_count += filtered
+        warnings.append(f"Filtered {filtered} summary or unidentified row(s)")
 
     # Clean string fields
     df['identifier'] = df['identifier'].apply(lambda x: str(x).strip() if pd.notna(x) else '')
     df['holdingname'] = df['holdingname'].apply(lambda x: str(x).strip() if pd.notna(x) else '')
+    if strict_rows and (df['holdingname'].str.len() == 0).any():
+        raise ValueError("Invalid holding row: holding name is required")
 
     # Filter out empty identifiers
     df = df[df['identifier'].str.len() > 0].copy()
@@ -458,10 +508,20 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
 
     # Convert numeric columns
     df['shares'] = df['shares'].apply(lambda x: _convert_numeric(x, 'shares'))
+    invalid_shares = int(df['shares'].isna().sum())
+    if strict_rows and invalid_shares:
+        raise ValueError("Invalid holding row: shares must be numeric")
     df = df.dropna(subset=['shares'])
+    if invalid_shares:
+        skipped_count += invalid_shares
+        warnings.append(f"Filtered {invalid_shares} row(s) with invalid shares")
 
     # Filter out zero/negative positions
+    nonpositive = int((df['shares'] <= 0).sum())
     df = df[df['shares'] > 0].copy()
+    if nonpositive:
+        skipped_count += nonpositive
+        warnings.append(f"Filtered {nonpositive} zero or negative position row(s)")
     if len(df) == 0:
         raise ValueError("No positions with positive shares found in IBKR CSV")
 
@@ -508,7 +568,29 @@ def parse_ibkr_csv(file_content: str) -> pd.DataFrame:
         df['investment_type'] = None
 
     logger.info(f"IBKR CSV parsing completed: {len(df)} valid positions")
+    df.attrs['parse_summary'] = {
+        'skipped_count': skipped_count,
+        'warnings': warnings,
+    }
     return df
+
+
+def parse_csv_with_summary(
+    file_content: str, *, strict_rows: bool = False
+) -> ParsedCsv:
+    """Parse a supported CSV while retaining intentional filtering facts."""
+    source_format = detect_csv_format(file_content)
+    if source_format == 'ibkr':
+        dataframe = parse_ibkr_csv(file_content, strict_rows=strict_rows)
+    else:
+        dataframe = parse_csv_file(file_content, strict_rows=strict_rows)
+    summary = dataframe.attrs.get('parse_summary', {})
+    return ParsedCsv(
+        dataframe=dataframe,
+        source_format=source_format,
+        skipped_count=int(summary.get('skipped_count', 0)),
+        warnings=tuple(summary.get('warnings', [])),
+    )
 
 
 def _parse_ibkr_datetime(val) -> object:

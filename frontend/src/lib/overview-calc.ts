@@ -36,7 +36,10 @@ export function calculateViolations(
 ): Violation[] {
   if (!rules || !items.length) return [];
 
-  const totalValue = items.reduce((s, i) => s + calculateItemValue(i), 0);
+  const allocationItems = items.filter(
+    (item) => item.investment_type?.trim().toLowerCase() !== "cash",
+  );
+  const totalValue = allocationItems.reduce((s, i) => s + calculateItemValue(i), 0);
   if (totalValue === 0) return [];
 
   const violations: Violation[] = [];
@@ -46,7 +49,12 @@ export function calculateViolations(
     limit: number,
     keyFn: (item: PortfolioDataItem) => string,
   ) => {
-    const aggregated = groupAndAggregate(items, keyFn, calculateItemValue, totalValue);
+    const aggregated = groupAndAggregate(
+      allocationItems,
+      keyFn,
+      calculateItemValue,
+      totalValue,
+    );
     for (const { name, percentage } of aggregated) {
       if (percentage > limit) {
         violations.push({
@@ -59,16 +67,45 @@ export function calculateViolations(
     }
   };
 
-  if (rules.maxPerStock && rules.maxPerStock > 0) {
-    collect("stock", rules.maxPerStock, (item) => item.company || item.name || "Unknown");
+  const positionRules: Array<[string, number | null]> = [
+    ["stock", rules.maxPerStock],
+    ["etf", rules.maxPerETF],
+    ["crypto", rules.maxPerCrypto],
+  ];
+  for (const [investmentType, limit] of positionRules) {
+    if (!limit || limit <= 0) continue;
+    const matchingItems = allocationItems.filter(
+      (item) =>
+        (item.investment_type?.trim().toLowerCase() || "stock") === investmentType,
+    );
+    const aggregated = groupAndAggregate(
+      matchingItems,
+      (item) => item.company || item.name || "Unknown",
+      calculateItemValue,
+      totalValue,
+    );
+    for (const { name, percentage } of aggregated) {
+      if (percentage > limit) {
+        violations.push({
+          type: "position",
+          name,
+          currentPercentage: percentage,
+          maxPercentage: limit,
+        });
+      }
+    }
   }
 
-  if (rules.maxPerSector && rules.maxPerSector > 0) {
-    collect("sector", rules.maxPerSector, (item) => item.sector || "Unknown");
+  if (rules.maxPerCategory && rules.maxPerCategory > 0) {
+    collect("sector", rules.maxPerCategory, (item) => item.sector || "Unknown");
   }
 
   if (rules.maxPerCountry && rules.maxPerCountry > 0) {
-    collect("country", rules.maxPerCountry, (item) => item.country || "Unknown");
+    collect(
+      "country",
+      rules.maxPerCountry,
+      (item) => item.effective_country?.trim() || item.country?.trim() || "Unknown",
+    );
   }
 
   violations.sort(
@@ -82,7 +119,16 @@ export function getHealthStatus(
   violations: Violation[],
   rules: AllocationRules | null
 ): HealthStatus {
-  if (!rules || (!rules.maxPerStock && !rules.maxPerSector && !rules.maxPerCountry)) {
+  if (
+    !rules ||
+    ![
+      rules.maxPerStock,
+      rules.maxPerETF,
+      rules.maxPerCrypto,
+      rules.maxPerCategory,
+      rules.maxPerCountry,
+    ].some((limit) => limit != null && limit > 0)
+  ) {
     return { icon: "wrench", title: "No Rules Configured", subtitle: "Set allocation rules to monitor portfolio risk" };
   }
   if (violations.length === 0) {
@@ -99,6 +145,24 @@ export function getHealthStatus(
     icon: "alert",
     title: "High Risk",
     subtitle: `${violations.length} rules violated`,
+  };
+}
+
+export function hydrateAllocationRules(value: unknown): AllocationRules | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const readRule = (key: string): number | null => {
+    const rule = record[key];
+    return typeof rule === "number" && Number.isFinite(rule) ? rule : null;
+  };
+
+  return {
+    maxPerStock: readRule("maxPerStock"),
+    maxPerETF: readRule("maxPerETF"),
+    maxPerCrypto: readRule("maxPerCrypto"),
+    maxPerCategory: readRule("maxPerCategory") ?? readRule("maxPerSector"),
+    maxPerCountry: readRule("maxPerCountry"),
   };
 }
 

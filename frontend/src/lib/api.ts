@@ -15,10 +15,14 @@ const cache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<unknown>>();
 const CACHE_TTL = 30_000;
 
-// Writes that only persist UI state (sort order, expanded rows, …) don't
-// change portfolio data — exempt them from mutation notification so every
-// debounced toggle doesn't refetch all subscribed reads.
-const UI_STATE_WRITE_PATHS = ["/state"];
+// Writes that only persist UI/review state don't change live portfolio data.
+// Exempt them from broad mutation notification; their owning hooks explicitly
+// refresh their narrower query families after a successful write.
+const UI_STATE_WRITE_PATHS = ["/state", "/monthly-reviews"];
+
+function uiStateWritePrefix(path: string): string | undefined {
+  return UI_STATE_WRITE_PATHS.find((prefix) => path.startsWith(prefix));
+}
 
 type MutationListener = () => void;
 const mutationListeners = new Set<MutationListener>();
@@ -36,7 +40,7 @@ export function onApiMutation(listener: MutationListener): () => void {
 }
 
 function notifyMutation(path: string) {
-  if (UI_STATE_WRITE_PATHS.some((p) => path.startsWith(p))) return;
+  if (uiStateWritePrefix(path)) return;
   for (const listener of mutationListeners) listener();
 }
 
@@ -90,7 +94,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
   const url = `${API_BASE}${path}`;
 
   if (method !== "GET") {
-    clearApiCache();
+    clearApiCache(uiStateWritePrefix(path));
     const data = await doFetch<T>(url, init);
     notifyMutation(path);
     return data;
@@ -109,7 +113,7 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
   }
 
   const epochAtStart = cacheEpoch;
-  const promise = doFetch<T>(url, init);
+  const promise = doFetch<T>(url, noStore ? { ...init, cache: "no-store" } : init);
   inflight.set(url, promise);
 
   try {

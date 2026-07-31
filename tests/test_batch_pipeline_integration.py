@@ -20,6 +20,7 @@ DB-touching FX-conversion path, the pool wiring, and the write path are all
 real, so this doubles as regression coverage for that whole chain.
 """
 import time
+import json
 
 import pytest
 
@@ -30,7 +31,7 @@ from app.utils.batch_processing import (
     get_job_status,
     start_batch_process,
 )
-from tests.conftest import seed_rate
+from tests.conftest import seed_account, seed_rate
 
 
 @pytest.fixture(autouse=True)
@@ -43,9 +44,13 @@ def _isolate_background_db_path(app):
     afterward so it can't leak into a later test in the same process.
     """
     original = db_manager._db_path
+    from app.utils.db_utils import close_thread_conn
+
+    close_thread_conn()
     db_manager.set_db_path(
         app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', ''))
     yield
+    close_thread_conn()
     db_manager._db_path = original
 
 
@@ -95,6 +100,134 @@ def _mock_robust_fetch(monkeypatch, price, currency, country):
         yfinance_utils, "get_yfinance_info",
         lambda identifier: {},
     )
+
+
+def test_successful_csv_job_invalidates_before_review_and_returns_review_id(
+    app, db, monkeypatch
+):
+    import app.utils.batch_processing as batch_processing
+    import app.utils.portfolio_processing as portfolio_processing
+    import app.services.monthly_review_service as monthly_review_service
+
+    account_id = seed_account(db, "csv-review-owner")
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, account_id, status, progress, total, result)
+           VALUES ('csv-review-job', 'csv_upload', ?, 'processing', 0, 100, '{}')""",
+        [account_id],
+    )
+    db.commit()
+    calls = []
+    monkeypatch.setattr(
+        portfolio_processing,
+        "process_csv_data_background",
+        lambda *args, **kwargs: (True, "ok", {"format": "parqet"}),
+    )
+    monkeypatch.setattr(
+        "app.routes.portfolio_data_api.invalidate_portfolio_cache",
+        lambda owned_account_id: calls.append(("invalidate", owned_account_id)),
+    )
+    monkeypatch.setattr(
+        monthly_review_service,
+        "create_draft",
+        lambda owned_account_id, source_job_id=None, receipt=None: (
+            calls.append(("review", owned_account_id, source_job_id, receipt)),
+            {"id": 42},
+        )[1],
+    )
+
+    batch_processing._run_csv_job(
+        app, account_id, "csv", "csv-review-job", filename="july.csv"
+    )
+
+    row = db.execute(
+        "SELECT status, result FROM background_jobs WHERE id = 'csv-review-job'"
+    ).fetchone()
+    receipt = json.loads(row["result"])
+    assert [call[0] for call in calls] == ["invalidate", "review"]
+    assert row["status"] == "completed"
+    assert receipt["review_id"] == 42
+    assert receipt["review_creation"]["status"] == "created"
+
+
+def test_csv_review_failure_keeps_import_completed_and_reports_retry_token(
+    app, db, monkeypatch
+):
+    import app.utils.batch_processing as batch_processing
+    import app.utils.portfolio_processing as portfolio_processing
+    import app.services.monthly_review_service as monthly_review_service
+
+    account_id = seed_account(db, "csv-review-retry")
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, account_id, status, progress, total, result)
+           VALUES ('csv-review-fail', 'csv_upload', ?, 'processing', 0, 100, '{}')""",
+        [account_id],
+    )
+    db.commit()
+    monkeypatch.setattr(
+        portfolio_processing,
+        "process_csv_data_background",
+        lambda *args, **kwargs: (True, "ok", {"format": "ibkr"}),
+    )
+    monkeypatch.setattr(
+        "app.routes.portfolio_data_api.invalidate_portfolio_cache", lambda account_id: None
+    )
+    monkeypatch.setattr(
+        monthly_review_service, "create_draft", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("capture failed"))
+    )
+
+    batch_processing._run_csv_job(
+        app, account_id, "csv", "csv-review-fail", filename="july.csv"
+    )
+
+    row = db.execute(
+        "SELECT status, result FROM background_jobs WHERE id = 'csv-review-fail'"
+    ).fetchone()
+    receipt = json.loads(row["result"])
+    assert row["status"] == "completed"
+    assert receipt.get("review_id") is None
+    assert receipt["review_creation"] == {
+        "status": "failed",
+        "retryable": True,
+        "retry_token": "csv-review-fail",
+    }
+
+
+def test_failed_csv_import_does_not_create_review(app, db, monkeypatch):
+    import app.utils.batch_processing as batch_processing
+    import app.utils.portfolio_processing as portfolio_processing
+    import app.services.monthly_review_service as monthly_review_service
+
+    account_id = seed_account(db, "csv-import-failure")
+    db.execute(
+        """INSERT INTO background_jobs
+           (id, name, account_id, status, progress, total, result)
+           VALUES ('csv-import-failure', 'csv_upload', ?, 'processing', 0, 100, '{}')""",
+        [account_id],
+    )
+    db.commit()
+    created = []
+    monkeypatch.setattr(
+        portfolio_processing,
+        "process_csv_data_background",
+        lambda *args, **kwargs: (False, "invalid holdings", {}),
+    )
+    monkeypatch.setattr(
+        monthly_review_service,
+        "create_draft",
+        lambda *args, **kwargs: created.append((args, kwargs)),
+    )
+
+    batch_processing._run_csv_job(
+        app, account_id, "csv", "csv-import-failure", filename="broken.csv"
+    )
+
+    row = db.execute(
+        "SELECT status, result FROM background_jobs WHERE id = 'csv-import-failure'"
+    ).fetchone()
+    assert row["status"] == "failed"
+    assert created == []
 
 
 class TestRealAsyncPipelineWiring:

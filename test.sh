@@ -18,6 +18,11 @@ run_backend() {
 }
 
 run_frontend() {
+    # Typecheck first: vitest transpiles without checking types, so a rename or
+    # a changed interface can break the build while every test still passes.
+    # tsc reads the whole graph and is the closest thing to a safe-rename check.
+    echo "── Frontend typecheck (tsc) ────────────────────────────"
+    (cd frontend && npm run --silent typecheck)
     echo "── Frontend tests (vitest) ─────────────────────────────"
     (cd frontend && npm test)
 }

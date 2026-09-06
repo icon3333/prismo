@@ -107,12 +107,12 @@ Design tokens and components live in `frontend/src/components/ui/` (shadcn) and 
 **SQLite**. `init_db()` in `app/db_manager.py` runs three steps at every boot, **in this order**:
 
 1. Bootstrap `schema_version`. A brand-new file is stamped straight at `LATEST_SCHEMA_VERSION` — it is built from the current `app/schema.sql` and needs no migration replay. An existing pre-versioning database starts at 0.
-2. `migrate_database()` — the numbered migration chain. Only ever runs for a database that predates the current schema; a fresh one skips it entirely.
+2. `migrate_database()` — the numbered migration chain. Only ever runs for a database that predates the current schema; a fresh one skips it entirely. It starts at migration 24: 1–23 were deleted as unreachable (this is a single-user app, and the live database and every backup were already at 23). A database below `MIN_MIGRATABLE_VERSION` is refused with a message naming commit `4226f05`, which still carries the full chain — boot once against that commit to upgrade, then come back.
 3. `app/schema.sql` — every statement is `CREATE ... IF NOT EXISTS`, so this creates whatever is still missing and is a no-op once current.
 
 **Migrations must run before `schema.sql`.** `schema.sql` can only CREATE, never add a column to an existing table, so applying it first makes a new index reference a column an older database does not have yet — which is exactly how migration 24's `background_jobs.account_id` index broke startup on a v23 database. `tests/test_db_migrations.py` boots `init_db()` on a synthetic v23 database to pin this.
 
-When adding a migration: add it to `migrate_database()`, mirror the end state in `schema.sql`, and bump `LATEST_SCHEMA_VERSION`.
+When adding a migration: add it to `migrate_database()`, mirror the end state in `schema.sql`, and bump `LATEST_SCHEMA_VERSION`. Then run `python3 scripts/smoke.py` — the unit tests only prove the fresh path.
 
 Key tables and notable columns:
 - `companies`: Holdings with `investment_type` (Stock/ETF/Crypto), `source` (parqet/ibkr/manual), `thesis`, `sector`, nullable `identifier` and `portfolio_id`, custom value support, identifier protection columns, `first_bought_date`

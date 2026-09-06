@@ -40,9 +40,7 @@ from app.routes.portfolio_updates import (
     bulk_update,
     get_portfolio_companies,
     price_fetch_progress,
-    price_update_status,
     update_all_prices,
-    update_price_api,
     update_selected_prices,
     update_single_portfolio_api,
 )
@@ -150,11 +148,6 @@ def register_upload_routes(portfolio_bp):
 
 def register_price_update_routes(portfolio_bp):
     portfolio_bp.add_url_rule(
-        "/api/update_price/<int:company_id>",
-        view_func=update_price_api,
-        methods=["POST"],
-    )
-    portfolio_bp.add_url_rule(
         "/api/update_portfolio/<int:company_id>",
         view_func=update_single_portfolio_api,
         methods=["POST"],
@@ -172,11 +165,6 @@ def register_price_update_routes(portfolio_bp):
     )
     portfolio_bp.add_url_rule(
         "/api/price_fetch_progress", view_func=price_fetch_progress, methods=["GET"]
-    )
-    portfolio_bp.add_url_rule(
-        "/api/price_update_status/<string:job_id>",
-        view_func=price_update_status,
-        methods=["GET"],
     )
     portfolio_bp.add_url_rule(
         "/api/historical_prices",

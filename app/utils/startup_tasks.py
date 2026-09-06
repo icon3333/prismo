@@ -18,10 +18,10 @@ _background_tasks_started = False
 _background_tasks_lock = threading.Lock()
 
 
-# How often the refresh loop re-checks staleness. The refreshers themselves
-# gate on their own intervals (24h FX, PRICE_UPDATE_INTERVAL), so a fine-
-# grained check is cheap: two SELECTs per hour when everything is fresh.
-REFRESH_CHECK_INTERVAL_SECONDS = 60 * 60
+# How often the maintenance loop wakes up. The refreshers gate on their own
+# intervals (24h FX, PRICE_UPDATE_INTERVAL), so a fine-grained tick is cheap:
+# two SELECTs per hour when everything is fresh.
+MAINTENANCE_TICK_SECONDS = 60 * 60
 
 
 def run_refresh_cycle(app):
@@ -47,10 +47,29 @@ def run_refresh_cycle(app):
             logger.error(f"Automatic price update failed: {e}")
 
 
+def run_backup(app):
+    """Take one scheduled database backup. Never raises."""
+    try:
+        with app.app_context():
+            backup_file = backup_database()
+        if backup_file:
+            logger.info(f"Automatic database backup completed: {backup_file}")
+        else:
+            logger.error("Automatic database backup failed")
+    except Exception as e:
+        logger.error(f"Automatic database backup failed: {e}")
+
+
 def run_startup_tasks(app):
     """
-    Run the first refresh cycle, start the backup scheduler, then keep
-    re-checking price/FX staleness periodically for the process lifetime.
+    Boot-time pass, then one maintenance loop for the process lifetime.
+
+    Staleness refresh and database backup share a single thread. Both are
+    periodic and neither is time-critical to the minute, so a second thread
+    bought nothing but a second thing to reason about.
+
+    Elapsed time is measured with the monotonic clock, not the wall clock, so
+    a DST shift or an NTP correction can't skip or double-fire a backup.
     """
     with app.app_context():
         try:
@@ -63,18 +82,31 @@ def run_startup_tasks(app):
         except Exception as e:
             logger.error(f"Interrupted CSV job cleanup failed: {e}")
 
+        backup_interval = current_app.config.get('BACKUP_INTERVAL_HOURS', 6) * 3600
+
     run_refresh_cycle(app)
 
-    with app.app_context():
-        try:
-            schedule_automatic_backups()
-        except Exception as e:
-            logger.error(f"Automatic backup setup failed: {e}")
+    # No boot-time backup — it costs 1-3s of startup for a snapshot that is
+    # near-identical to the one the previous run already took. The first
+    # backup lands one interval in.
+    tick = min(MAINTENANCE_TICK_SECONDS, backup_interval)
+    last_backup = time.monotonic()
+    logger.info(
+        f"Maintenance loop started: tick {tick / 60:g}min, "
+        f"backup every {backup_interval / 3600:g}h"
+    )
 
-    # Periodic re-check (runs in the same daemon thread that called us).
     while True:
-        time.sleep(REFRESH_CHECK_INTERVAL_SECONDS)
-        run_refresh_cycle(app)
+        time.sleep(tick)
+        try:
+            run_refresh_cycle(app)
+
+            if time.monotonic() - last_backup >= backup_interval:
+                last_backup = time.monotonic()
+                run_backup(app)
+        except Exception as e:
+            # The loop outlives any single failed cycle.
+            logger.error(f"Maintenance cycle failed: {e}", exc_info=True)
 
 
 def start_background_tasks(app):
@@ -329,41 +361,3 @@ def auto_update_prices_if_needed():
         logger.error("=" * 50, exc_info=True)
         # Return error status instead of silent failure
         return {'status': 'error', 'error': str(exc)}
-
-
-def schedule_automatic_backups():
-    """Schedule automatic database backups based on configuration interval."""
-    # Capture app reference while context is active (for use in background thread)
-    app = current_app._get_current_object()
-    backup_interval_hours = current_app.config.get('BACKUP_INTERVAL_HOURS', 6)
-    backup_interval_seconds = backup_interval_hours * 60 * 60
-
-    def backup_worker():
-        """Background worker for automatic database backups."""
-        while True:
-            try:
-                # Wait for configured interval between backups
-                time.sleep(backup_interval_seconds)
-
-                # Perform backup (with app context for database access)
-                with app.app_context():
-                    backup_file = backup_database()
-                    if backup_file:
-                        logger.info(f"Automatic database backup completed: {backup_file}")
-                    else:
-                        logger.error("Automatic database backup failed")
-
-            except Exception as e:
-                logger.error(f"Error in automatic backup worker: {e}")
-                # Continue running despite errors
-                time.sleep(60)  # Wait 1 minute before retrying
-
-    # OPTIMIZATION: Skip initial backup on startup to speed up application start
-    # The backup thread will create the first backup after the configured interval
-    # This saves 1-3 seconds on startup depending on database size
-    logger.info(f"Automatic database backup scheduler started (every {backup_interval_hours} hours)")
-    logger.info(f"First backup will be created in {backup_interval_hours} hours")
-
-    # Start background backup thread
-    backup_thread = threading.Thread(target=backup_worker, daemon=True)
-    backup_thread.start()

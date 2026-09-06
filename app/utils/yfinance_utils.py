@@ -295,37 +295,6 @@ def _is_valid_isin_format(identifier: str) -> bool:
     return True
 
 
-def _is_likely_crypto(identifier: str) -> bool:
-    """
-    Determine if an identifier is likely a cryptocurrency.
-    
-    Since all traditional stocks will be ISINs (12 characters), 
-    any short identifier (≤4 characters) that's alphabetic is likely crypto.
-    This greatly simplifies the detection logic.
-    """
-    if not identifier:
-        return False
-    
-    # Clean identifier
-    clean_id = identifier.upper().strip()
-    
-    # ISINs are 12 characters - exclude them
-    if len(clean_id) == 12 and clean_id[:2].isalpha() and clean_id[2:].isalnum():
-        return False
-    
-    # Skip if it contains exchange suffixes (e.g., ".PA", ".L")
-    if '.' in clean_id:
-        return False
-    
-    # Short identifiers (≤4 chars) that are alphabetic are crypto
-    # since all traditional stocks will be ISINs
-    if len(clean_id) <= 4 and clean_id.isalpha():
-        return True
-    
-    return False
-
-
-# --- Main Data Fetching Function ---
 
 
 def get_isin_data(identifier: str) -> Dict[str, Any]:

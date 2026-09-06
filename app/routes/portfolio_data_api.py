@@ -230,13 +230,8 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
             rules=rules
         )
 
-        # Step 3: Generate rebalancing plan
-        result = allocation_service.generate_rebalancing_plan(
-            portfolios_with_targets=portfolios_with_targets
-        )
-
-        logger.info(f"Returning {len(result['portfolios'])} portfolios")
-        return result
+        logger.info(f"Returning {len(portfolios_with_targets)} portfolios")
+        return {'portfolios': portfolios_with_targets}
 
     except ImportError as e:
         logger.error(f"Failed to import allocation service: {e}")

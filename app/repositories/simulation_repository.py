@@ -80,11 +80,6 @@ class SimulationRepository:
                 s.cloned_from_name,
                 s.global_value_mode,
                 s.total_amount,
-                s.deploy_lump_sum,
-                s.deploy_monthly,
-                s.deploy_months,
-                s.deploy_manual_mode,
-                s.deploy_manual_items,
                 p.name as portfolio_name,
                 s.items,
                 s.created_at,
@@ -108,11 +103,6 @@ class SimulationRepository:
                 result['items'] = []
                 result['_items_corrupted'] = True
 
-            # Parse deploy_manual_items JSON
-            try:
-                result['deploy_manual_items'] = json.loads(result['deploy_manual_items']) if result.get('deploy_manual_items') else []
-            except (json.JSONDecodeError, TypeError):
-                result['deploy_manual_items'] = []
 
         return result
 
@@ -127,12 +117,7 @@ class SimulationRepository:
         cloned_from_portfolio_id: Optional[int] = None,
         cloned_from_name: Optional[str] = None,
         global_value_mode: str = 'euro',
-        total_amount: float = 0,
-        deploy_lump_sum: float = 0,
-        deploy_monthly: float = 0,
-        deploy_months: int = 1,
-        deploy_manual_mode: int = 0,
-        deploy_manual_items: Optional[List[Dict]] = None
+        total_amount: float = 0
     ) -> int:
         """
         Create a new simulation.
@@ -148,32 +133,22 @@ class SimulationRepository:
             cloned_from_name: Source portfolio name (if cloned)
             global_value_mode: 'euro' or 'percent' (sandbox mode only)
             total_amount: Total portfolio amount for percent mode
-            deploy_lump_sum: Lump sum to deploy via DCA
-            deploy_monthly: Monthly savings amount
-            deploy_months: Number of months for DCA deployment
-            deploy_manual_mode: 0=auto (from sandbox items), 1=manual
-            deploy_manual_items: Manual deploy positions (when manual mode)
 
         Returns:
             New simulation ID
         """
         items_json = json.dumps(items)
-        deploy_manual_items_json = json.dumps(deploy_manual_items) if deploy_manual_items else None
 
         db = get_db()
         cursor = db.execute(
             '''INSERT INTO simulations
                (account_id, name, scope, portfolio_id, items, type,
                 cloned_from_portfolio_id, cloned_from_name,
-                global_value_mode, total_amount,
-                deploy_lump_sum, deploy_monthly, deploy_months,
-                deploy_manual_mode, deploy_manual_items)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                global_value_mode, total_amount)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             [account_id, name, scope, portfolio_id, items_json, sim_type,
              cloned_from_portfolio_id, cloned_from_name,
-             global_value_mode, total_amount,
-             deploy_lump_sum, deploy_monthly, deploy_months,
-             deploy_manual_mode, deploy_manual_items_json]
+             global_value_mode, total_amount]
         )
         simulation_id = cursor.lastrowid
         db.commit()
@@ -190,12 +165,7 @@ class SimulationRepository:
         items: Optional[List[Dict]] = None,
         portfolio_id: Optional[int] = None,
         global_value_mode: Optional[str] = None,
-        total_amount: Optional[float] = None,
-        deploy_lump_sum: Optional[float] = None,
-        deploy_monthly: Optional[float] = None,
-        deploy_months: Optional[int] = None,
-        deploy_manual_mode: Optional[int] = None,
-        deploy_manual_items: Optional[List[Dict]] = None
+        total_amount: Optional[float] = None
     ) -> bool:
         """
         Update an existing simulation.
@@ -221,8 +191,6 @@ class SimulationRepository:
         field_map = {
             'name': name, 'scope': scope, 'portfolio_id': portfolio_id,
             'global_value_mode': global_value_mode, 'total_amount': total_amount,
-            'deploy_lump_sum': deploy_lump_sum, 'deploy_monthly': deploy_monthly,
-            'deploy_months': deploy_months, 'deploy_manual_mode': deploy_manual_mode,
         }
         for col, val in field_map.items():
             if val is not None:
@@ -233,9 +201,6 @@ class SimulationRepository:
         if items is not None:
             updates.append('items = ?')
             params.append(json.dumps(items))
-        if deploy_manual_items is not None:
-            updates.append('deploy_manual_items = ?')
-            params.append(json.dumps(deploy_manual_items))
 
         if not updates:
             return False

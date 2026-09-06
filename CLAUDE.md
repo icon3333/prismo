@@ -22,13 +22,24 @@ FLASK_ENV=development python3 run.py --port 8065
 cd frontend && npm run dev                     # Next.js on :3000, proxies /api → :8065
 
 # Testing
-./test.sh                                      # Full suite: backend pytest + frontend vitest
+./test.sh                                      # Full suite: pytest + tsc + vitest
 venv/bin/python -m pip install --upgrade "pip>=26.1.2"
 venv/bin/python -m pip install -r requirements-dev.txt
 venv/bin/python -m pytest tests/ -q            # Backend only (in-memory SQLite)
+cd frontend && npm run typecheck               # tsc --noEmit — catches renames vitest can't
 cd frontend && npm test                        # Frontend only — vitest on src/lib/*-calc pure modules
 cd frontend && npm run lint                    # ESLint for Next.js
+
+# Scripts (see AGENTS.md)
+python3 scripts/smoke.py                       # boot against a COPY of the real DB, and a fresh one
+python3 scripts/deadcode.py                    # unused symbols/files/deps + routes the frontend never calls
 ```
+
+Run `scripts/smoke.py` after touching `db_manager.py`, `main.py`, or `schema.sql`. The unit tests only ever build a database from `schema.sql`, so they exercise the fresh-install path alone — `smoke.py` is what proves the app still starts on an *existing* database.
+
+**`instance/portfolio.db` is live financial data and is gitignored.** Never point migrations or experiments at it; copy it to a temp dir first, as `smoke.py` does.
+
+**Renaming or removing a symbol**: `rg` for call sites, then `./test.sh`. `tsc --noEmit` reads the whole type graph, so it catches frontend breakage vitest misses — vitest transpiles without type-checking, so a changed interface passes every test and fails the build. On the Python side, imports are often function-local (`from app.utils.batch_processing import …` inside a function body), so grep for the bare symbol name, not just the import line — and note that patching such a symbol on the *importing* module in a test is a silent no-op.
 
 `dev.sh` is a thin wrapper that execs `start.py` (the real dev launcher: bootstraps venv + deps, then runs Flask + Next.js). `start.py` auto-prefers Homebrew's `node@22` because Next 16 / Turbopack panics on Node 25. If you see Turbopack crashes, install `node@22` or point `NODE_BIN` in `start.py`.
 
@@ -51,9 +62,13 @@ SQLite (app/schema.sql + migrations in app/db_manager.py)
 The old Jinja `templates/` and `static/` directories were deleted in commit `4889844`. Don't look for them.
 
 ### Services
-- `AllocationService`: Portfolio allocation calculations, rebalancing logic, type constraints (Stock/ETF/Crypto)
-- `BuilderService`: Investment targets, budget planning, progress tracking
-- `CompanyService`: Manual stock addition, identifier validation (yfinance), deletion
+Modules of plain functions, not classes. Import the module (`from app.services import allocation_service`) — the package `__init__` re-exports nothing.
+
+- `allocation_service`: allocation targets, Stock/ETF/Crypto type constraints, recursive cap redistribution. Golden-fixture regression suite in `tests/test_allocation_parity.py`.
+- `rebalance_service`: the three capital modes (existing-only, new-only, new-with-sells)
+- `builder_service`: investment targets, budget planning, progress tracking
+- `company_service`: manual stock addition, identifier validation (yfinance), deletion
+- `monthly_review_service`: monthly decision review engine
 
 ### Repositories
 - `PortfolioRepository`: Portfolio and company data queries
@@ -61,21 +76,23 @@ The old Jinja `templates/` and `static/` directories were deleted in commit `488
 - `AccountRepository`: Account management, cash balance tracking
 - `SimulationRepository`: Allocation simulator CRUD with name uniqueness
 - `ExchangeRateRepository`: Daily exchange rates for currency conversion
+- `MonthlyReviewRepository`: Monthly review persistence (draft → completed, versioned)
 
 ### Key Utils
 - `app/utils/csv_processing/`: Modular CSV import (parser → company_processor → share_calculator → portfolio_handler)
 - `app/utils/value_calculator.py`: Central value calculation — priority: custom value → native currency × exchange rate → legacy price_eur
 - `app/utils/yfinance_utils.py`: Market data with 15-min cache
 - `app/utils/batch_processing.py`: Sync (<5 items) / async (≥5 items) execution via a persistent thread pool
-- `app/utils/startup_tasks.py`: Refreshes exchange rates + auto-updates prices (at boot, then re-checked hourly via `run_refresh_cycle` — the refreshers gate on their own 24h intervals), schedules backups — runs in a background thread started once per process (via `create_app` once the main process is identified)
+- `app/utils/startup_tasks.py`: **one** daemon thread per process (started from `create_app` once the main process is identified). Boot pass — clear interrupted CSV jobs, then `run_refresh_cycle` — followed by a single maintenance loop that ticks hourly and, on each tick, runs `run_refresh_cycle` (the FX/price refreshers gate on their own 24h intervals) and `run_backup` when `BACKUP_INTERVAL_HOURS` has elapsed. The tick shrinks to match a sub-hourly backup interval; elapsed time uses `time.monotonic()` so DST/NTP shifts can't skip or double-fire a backup. No backup at boot. Cadence pinned by `TestMaintenanceLoop` in `tests/test_freshness.py`.
 
 ## Routes
 
 All routes live under blueprints registered in `app/main.py`:
 - `main_bp` (`/`): account selection/switching API (`/api/accounts`, `/api/select_account/<id>`)
 - `account_bp` (`/account`): account management
-- `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich API under `/portfolio/api/*`, plus 301 redirects for old URLs (`/analyse` → `/performance`, `/allocate` → `/plan`, `/build` → `/plan`, `/risk_overview` → `/concentrations`)
-- `admin_bp`: admin endpoints
+- `portfolio_bp` (`/portfolio`): portfolio + simulator + builder + enrich + monthly-review API under `/portfolio/api/*`
+
+Flask serves JSON only. Page URLs belong to Next.js — old-URL redirects live in `frontend/next.config.ts` (`/builder`, `/rebalancer` → `/plan`), not in Flask, which never sees a page request.
 
 Portfolio API implementations are split by domain and wired centrally in `portfolio_api_routes.py` (plain view functions + `add_url_rule`): `portfolio_data_api.py` (cached reads + `invalidate_portfolio_cache`), `portfolio_company_api.py` (company/portfolio writes), `portfolio_state_api.py` (UI state), plus `portfolio_account_api.py`, `portfolio_simulator_api.py`, `portfolio_builder_api.py`, `portfolio_manual_api.py`, `simple_upload.py` (CSV import), and `portfolio_updates.py` (price fetches). Most expensive reads are wrapped in `@cache.memoize(timeout=…)`; a `portfolio_bp.after_request` hook invalidates the account's memoized reads on every successful write, so write endpoints don't call `invalidate_portfolio_cache()` themselves — except mid-request before re-reading, and in background jobs that outlive the request.
 
@@ -87,14 +104,23 @@ Design tokens and components live in `frontend/src/components/ui/` (shadcn) and 
 
 ## Database
 
-**SQLite** with schema in `app/schema.sql` (auto-applied on startup). Migrations in `app/db_manager.py` (currently 23 migrations, runs on every boot).
+**SQLite**. `init_db()` in `app/db_manager.py` runs three steps at every boot, **in this order**:
+
+1. Bootstrap `schema_version`. A brand-new file is stamped straight at `LATEST_SCHEMA_VERSION` — it is built from the current `app/schema.sql` and needs no migration replay. An existing pre-versioning database starts at 0.
+2. `migrate_database()` — the numbered migration chain. Only ever runs for a database that predates the current schema; a fresh one skips it entirely.
+3. `app/schema.sql` — every statement is `CREATE ... IF NOT EXISTS`, so this creates whatever is still missing and is a no-op once current.
+
+**Migrations must run before `schema.sql`.** `schema.sql` can only CREATE, never add a column to an existing table, so applying it first makes a new index reference a column an older database does not have yet — which is exactly how migration 24's `background_jobs.account_id` index broke startup on a v23 database. `tests/test_db_migrations.py` boots `init_db()` on a synthetic v23 database to pin this.
+
+When adding a migration: add it to `migrate_database()`, mirror the end state in `schema.sql`, and bump `LATEST_SCHEMA_VERSION`.
 
 Key tables and notable columns:
 - `companies`: Holdings with `investment_type` (Stock/ETF/Crypto), `source` (parqet/ibkr/manual), `thesis`, `sector`, nullable `identifier` and `portfolio_id`, custom value support, identifier protection columns, `first_bought_date`
 - `company_shares`: Share quantities with manual override and edit tracking
 - `market_prices`: Native currency `price` + `price_eur` (legacy)
 - `exchange_rates`: Daily rates, refreshed on startup if >24h old
-- `simulations`: Allocation scenarios with `type` (overlay/portfolio), `scope` (global/portfolio), JSON `items`
+- `simulations`: Allocation scenarios with `type` (overlay/portfolio), `scope` (global/portfolio), JSON `items`. The live DB still carries five `deploy_*` columns from a DCA feature that was never built; nothing reads or writes them any more.
+- `monthly_reviews`: One versioned JSON `payload` per review, `draft` → `completed`, chained via `previous_review_id`
 - `expanded_state`: UI state persistence (page_name values: `performance`, `builder` (Plan targets), `plan` (capital mode/amount), `enrich`, `risk_overview`, `simulator`)
 - `accounts`: Has `cash` column for cash balance tracking
 
@@ -116,9 +142,9 @@ All routes use `@require_auth` decorator (`app/decorators/auth.py`):
 
 ## Error Handling
 
-Structured exceptions in `app/exceptions.py`: `ValidationError`, `NotFoundError`, `DatabaseError`, `CSVProcessingError`, `PriceFetchError`, `AuthenticationError`.
+Structured exceptions in `app/exceptions.py`: `ValidationError`, `NotFoundError`, `DatabaseError`, `DataIntegrityError`, `CSVProcessingError`, `PriceFetchError`, `ExternalAPIError`, `AuthenticationError`. Only classes something actually raises live there — don't add speculative ones.
 
-Global JSON error handlers in `app/errors.py` (registered in `create_app`) map typed exceptions to status codes (400/401/403/404/409/502) and return JSON for everything, including 404/405 and unexpected 500s. Routes should raise typed exceptions and let them propagate instead of wrapping handlers in try/except boilerplate.
+Global JSON error handlers in `app/errors.py` (registered in `create_app`) map typed exceptions to status codes (400/401/404/409/502) and return JSON for everything, including 404/405 and unexpected 500s. Routes should raise typed exceptions and let them propagate instead of wrapping handlers in try/except boilerplate.
 
 ## Position Valuation
 

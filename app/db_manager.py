@@ -5,11 +5,14 @@ from pathlib import Path
 import logging
 import threading
 from flask import g, current_app
-import click
-from flask.cli import with_appcontext
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Schema version that app/schema.sql produces. Bump it together with every new
+# migration in migrate_database(); a database built fresh from schema.sql is
+# stamped straight at this version rather than replaying the migration chain.
+LATEST_SCHEMA_VERSION = 24
 
 # Store the database path when the app initializes
 _db_path = None
@@ -156,133 +159,80 @@ def close_db(e=None):
 
 def init_db(app):
     """
-    Initialize the database and create tables if they don't exist.
-    Then verify schema, run migrations, and optionally insert sample data if empty.
+    Bring the database up to date, then seed it if it is empty.
+
+    Order matters. schema.sql only ever CREATEs — it cannot add a column to a
+    table that already exists — so an older database has to be migrated FIRST,
+    otherwise schema.sql's newer indexes reference columns that are not there
+    yet (that is exactly how migration 24's `background_jobs.account_id` index
+    broke startup on a v23 database).
+
+      1. bootstrap schema_version
+      2. migrate_database()  — brings an existing database's columns forward
+      3. schema.sql          — creates anything still missing (idempotent)
     """
     with app.app_context():
         # Store the database path for background operations
         db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
         set_db_path(db_path)
         logger.info(f"Database path configured: {db_path}")
-        logger.info(f"Database directory: {os.path.dirname(db_path)}")
         logger.info(f"Database file exists: {os.path.exists(db_path)}")
-        
+
         db = get_db()
 
-        # Perform all initialization in a single transaction for atomicity.
-        # schema.sql is the single source of truth for tables/indexes/triggers;
-        # the only extra step here is the schema_version bootstrap.
-        with db:
-            try:
+        try:
+            with db:
+                # Is this an empty file, or an existing Prismo database?
+                # Must be decided before schema.sql creates anything.
+                is_new_database = db.execute(
+                    "SELECT COUNT(*) FROM sqlite_master "
+                    "WHERE type='table' AND name='accounts'"
+                ).fetchone()[0] == 0
+
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                if not db.execute('SELECT version FROM schema_version LIMIT 1').fetchone():
+                    # A new database gets built from the CURRENT schema.sql, so
+                    # it is already at the latest version — stamp it there
+                    # instead of replaying the whole chain over a schema that is
+                    # correct by construction. That replay is why every
+                    # migration also had to be a no-op on a fresh schema (see
+                    # migration 9's `category` guard). A pre-schema_version
+                    # database starts at 0 and migrates normally.
+                    start_version = LATEST_SCHEMA_VERSION if is_new_database else 0
+                    db.execute(
+                        'INSERT INTO schema_version (version) VALUES (?)',
+                        [start_version],
+                    )
+                    logger.info(
+                        f"Stamped {'new' if is_new_database else 'existing'} "
+                        f"database at schema version {start_version}"
+                    )
+
+            # 2. Migrate an existing database's columns forward.
+            migrate_database()
+
+            # 3. Create whatever is still missing. All statements are
+            #    CREATE ... IF NOT EXISTS, so this is a no-op once current.
+            with db:
                 with app.open_resource('schema.sql', mode='r') as f:
                     db.cursor().executescript(f.read())
-                logger.debug("Schema loaded from app/schema.sql")
-            except FileNotFoundError:
-                logger.warning("app/schema.sql not found - will use fallback table creation")
+            logger.debug("Schema applied from app/schema.sql")
 
-            db.execute('''
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            cursor = db.cursor()
-            cursor.execute('SELECT version FROM schema_version LIMIT 1')
-            if not cursor.fetchone():
-                db.execute('INSERT INTO schema_version (version) VALUES (0)')
-
-        logger.info("Database tables initialized successfully")
-
-        try:
-            # Create tables if not present
-            cursor = db.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [row[0] for row in cursor.fetchall()]
-
-            if not tables or 'accounts' not in tables:
-                logger.info("Fallback: Initializing database schema from app/schema.sql ...")
-                try:
-                    with app.open_resource('schema.sql', mode='r') as f:
-                        db.executescript(f.read())
-                    db.commit()
-                    logger.info("Database schema initialized from app/schema.sql")
-                except FileNotFoundError:
-                    logger.error("CRITICAL: No schema file found. Database cannot be initialized.")
-                    raise
-
-            # Verify that required columns exist, etc.
-            verify_schema(db)
-
-            # Check if database is empty and insert sample data if you want
             if is_database_empty(db):
-                logger.info("Database appears empty. Optionally adding sample data.")
+                logger.info("Database is empty - creating default account.")
                 create_default_data(db)
 
-            # Assign teardown
             app.teardown_appcontext(close_db)
 
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             raise
-
-def verify_schema(db):
-    """
-    Verify that all required tables/columns are present.
-    If something is missing, you can recreate or raise an error.
-    """
-    required_tables = [
-        'accounts', 'portfolios', 'companies', 'company_shares',
-        'market_prices', 'expanded_state', 'identifier_mappings', 'exchange_rates',
-        'background_jobs', 'monthly_reviews'
-    ]
-    cursor = db.cursor()
-    for table in required_tables:
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table])
-        result = cursor.fetchone()
-        if not result:
-            logger.warning(f"Missing table: {table}. You might need to re-run schema.sql.")
-
-    # Check companies table structure
-    columns_check = cursor.execute("PRAGMA table_info(companies)").fetchall()
-    col_names = [col[1] for col in columns_check]
-    required_columns = ['id', 'name', 'identifier', 'sector', 'portfolio_id', 'account_id', 'total_invested', 'override_country', 'country_manually_edited', 'country_manual_edit_date']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'companies' table: {missing_columns}")
-
-    # Check market_prices table structure and add missing columns if necessary
-    market_prices_check = cursor.execute("PRAGMA table_info(market_prices)").fetchall()
-    col_names = [col[1] for col in market_prices_check]
-    required_columns = ['identifier', 'price', 'currency', 'price_eur', 'last_updated', 'country']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'market_prices' table: {missing_columns}")
-
-    # Check identifier_mappings table structure
-    identifier_mappings_check = cursor.execute("PRAGMA table_info(identifier_mappings)").fetchall()
-    col_names = [col[1] for col in identifier_mappings_check]
-    required_columns = ['id', 'account_id', 'csv_identifier', 'preferred_identifier', 'company_name', 'created_at', 'updated_at']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'identifier_mappings' table: {missing_columns}")
-
-    background_jobs_check = cursor.execute("PRAGMA table_info(background_jobs)").fetchall()
-    background_job_columns = [col[1] for col in background_jobs_check]
-    if 'account_id' not in background_job_columns:
-        logger.warning("Missing column in 'background_jobs': account_id")
-
-    monthly_reviews_check = cursor.execute("PRAGMA table_info(monthly_reviews)").fetchall()
-    monthly_review_columns = [col[1] for col in monthly_reviews_check]
-    required_review_columns = [
-        'id', 'account_id', 'source_job_id', 'period', 'previous_review_id',
-        'status', 'version', 'payload', 'created_at', 'updated_at', 'completed_at'
-    ]
-    missing_review_columns = [
-        col for col in required_review_columns if col not in monthly_review_columns
-    ]
-    if missing_review_columns:
-        logger.warning(f"Missing columns in 'monthly_reviews': {missing_review_columns}")
 
 def is_database_empty(db):
     """
@@ -482,8 +432,7 @@ def migrate_database():
     db = get_db()
     cursor = db.cursor()
 
-    # Latest migration version
-    LATEST_VERSION = 24
+    LATEST_VERSION = LATEST_SCHEMA_VERSION
 
     try:
         # Get current schema version
@@ -914,18 +863,6 @@ def migrate_database():
             db.commit()
             logger.info("Migration 21 completed: lowercased all portfolio names")
 
-        # Migration 22: Add deploy columns to simulations table
-        if current_version < 22:
-            logger.info("Applying migration 22: Adding deploy columns to simulations table")
-            _safe_add_column(cursor, "simulations", "deploy_lump_sum REAL DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_monthly REAL DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_months INTEGER DEFAULT 1")
-            _safe_add_column(cursor, "simulations", "deploy_manual_mode INTEGER DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_manual_items TEXT")
-            cursor.execute("UPDATE schema_version SET version = 22, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 22 completed: added deploy columns to simulations")
-
         # Migration 23: Add 'Crypto' to investment_type CHECK constraint
         if current_version < 23:
             logger.info("Applying migration 23: Adding 'Crypto' to investment_type CHECK constraint")
@@ -1053,10 +990,3 @@ def migrate_database():
         logger.error(f"Unexpected error during database migration: {e}")
         db.rollback()
         raise
-
-@click.command('init-db')
-@with_appcontext
-def init_db_command():
-    """Clear the existing data and create new tables."""
-    init_db(current_app)
-    logger.info('Initialized the database.')

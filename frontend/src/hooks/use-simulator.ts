@@ -45,7 +45,6 @@ import type {
   PortfolioOption,
   PersistedState,
   TickerLookupResult,
-  DeployManualItem,
 } from "@/types/simulator";
 
 // ---------------------------------------------------------------------------
@@ -89,15 +88,6 @@ export function useSimulator() {
   totalAmountRef.current = totalAmount;
   portfolioDataRef.current = portfolioData;
 
-  // --- Deploy state (stored, not rendered in Phase 1) ---
-  const deployRef = useRef({
-    lumpSum: 0,
-    monthly: 0,
-    months: 1,
-    manualMode: false,
-    manualItems: [] as DeployManualItem[],
-  });
-
   const {
     autoSaveStatus,
     setAutoSaveStatus,
@@ -109,7 +99,6 @@ export function useSimulator() {
     payload: {
       items,
       totalAmount,
-      deploy: deployRef.current,
     },
   });
 
@@ -222,15 +211,6 @@ export function useSimulator() {
       }
       setItems(loadedItems);
 
-      // Restore deploy data
-      deployRef.current = {
-        lumpSum: simulation.deploy_lump_sum || 0,
-        monthly: simulation.deploy_monthly || 0,
-        months: simulation.deploy_months || 1,
-        manualMode: simulation.deploy_manual_mode || false,
-        manualItems: simulation.deploy_manual_items || [],
-      };
-
       if (!silent) {
         toast.success(`Loaded "${simulation.name}"`);
       }
@@ -250,10 +230,6 @@ export function useSimulator() {
         setItems([]);
         setTotalAmountState(0);
         setAutoSaveStatus("idle");
-        deployRef.current = {
-          lumpSum: 0, monthly: 0, months: 1,
-          manualMode: false, manualItems: [],
-        };
         persistSelection({
           [mode === "portfolio" ? "portfolioSimulationId" : "overlaySimulationId"]: null,
         });
@@ -660,11 +636,6 @@ export function useSimulator() {
         type: mode === "portfolio" ? "portfolio" : "overlay",
         global_value_mode: "euro",
         total_amount: totalAmount,
-        deploy_lump_sum: deployRef.current.lumpSum,
-        deploy_monthly: deployRef.current.monthly,
-        deploy_months: deployRef.current.months,
-        deploy_manual_mode: deployRef.current.manualMode,
-        deploy_manual_items: deployRef.current.manualItems,
       };
 
       try {

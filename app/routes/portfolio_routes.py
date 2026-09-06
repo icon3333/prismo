@@ -1,8 +1,5 @@
-from flask import (
-    Blueprint, g, redirect, request,
-    session
-)
-from app.decorators import require_auth
+from flask import Blueprint, g, request, session
+
 from app.routes.portfolio_api_routes import register_portfolio_api_routes
 
 portfolio_bp = Blueprint('portfolio', __name__,
@@ -42,33 +39,6 @@ def invalidate_cache_after_write(response):
             from app.routes.portfolio_data_api import invalidate_portfolio_cache
             invalidate_portfolio_cache(account_id)
     return response
-
-
-# Backward-compatibility redirects for old URLs
-@portfolio_bp.route('/analyse')
-@require_auth
-def analyse_redirect():
-    return redirect('/portfolio/performance', code=301)
-
-@portfolio_bp.route('/build')
-@require_auth
-def build_redirect():
-    return redirect('/portfolio/plan', code=301)
-
-@portfolio_bp.route('/allocate')
-@require_auth
-def allocate_redirect():
-    return redirect('/portfolio/plan', code=301)
-
-@portfolio_bp.route('/risk_overview')
-@require_auth
-def risk_overview_redirect():
-    return redirect('/portfolio/concentrations', code=301)
-
-@portfolio_bp.route('/api/allocate/<path:subpath>')
-@require_auth
-def allocate_api_redirect(subpath):
-    return redirect(f'/portfolio/api/simulator/{subpath}', code=301)
 
 
 register_portfolio_api_routes(portfolio_bp)

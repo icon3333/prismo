@@ -183,3 +183,41 @@ def test_init_db_stamps_a_new_database_at_the_latest_version(app, tmp_path):
         assert "monthly_reviews" in {
             r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
+
+
+def test_pre_v23_database_is_refused_not_half_migrated(app, tmp_path):
+    """Migrations 1-23 were removed as unreachable (see migrate_database).
+
+    A database below MIN_MIGRATABLE_VERSION must fail loudly and name the commit
+    that still has the chain — never boot on a schema this build cannot complete.
+    """
+    from app import db_manager
+
+    db_path = tmp_path / "ancient.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE accounts (id INTEGER PRIMARY KEY, username TEXT, created_at TEXT);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP);
+        INSERT INTO schema_version (version) VALUES (22);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    app.root_path = str(REPO_ROOT / "app")
+
+    with pytest.raises(Exception) as excinfo:
+        db_manager.init_db(app)
+
+    message = str(excinfo.value)
+    assert "22" in message
+    assert str(db_manager.MIN_MIGRATABLE_VERSION) in message
+    assert "4226f05" in message, "the guard must name the commit holding the old chain"
+
+
+def test_min_migratable_is_not_above_latest(app):
+    from app import db_manager
+
+    assert db_manager.MIN_MIGRATABLE_VERSION <= db_manager.LATEST_SCHEMA_VERSION

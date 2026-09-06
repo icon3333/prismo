@@ -5,22 +5,15 @@ from datetime import datetime
 from app.cache import cache
 
 def create_app(config_name=None):
-    import time
-    _create_app_start = time.time()
-
     app = Flask(__name__)
 
     # Load configuration from config.py
     from config import config
 
-    # Only show timing in debug mode AND in the main process (not reloader parent)
+    # The dev reloader runs create_app twice; the parent process only watches
+    # files, so it must not log startup or run background tasks.
     _is_debug = os.environ.get('FLASK_ENV') == 'development'
-    _is_reloader_parent = not os.environ.get('WERKZEUG_RUN_MAIN') and _is_debug
-    _show_timing = _is_debug and not _is_reloader_parent
-
-    if _show_timing:
-        _config_load_time = time.time() - _create_app_start
-        print(f"  ⏱️  Config loaded: {_config_load_time:.3f}s")
+    _is_reloader_parent = _is_debug and not os.environ.get('WERKZEUG_RUN_MAIN')
 
     # Determine config name from environment or parameter
     if config_name is None:
@@ -91,12 +84,7 @@ def create_app(config_name=None):
         app.logger.info(f"Session cookie secure: {app.config.get('SESSION_COOKIE_SECURE')}")
         app.logger.info(f"Session permanent lifetime: {app.config.get('PERMANENT_SESSION_LIFETIME')}")
     
-    # Security headers disabled for demo
-    
     # Register blueprints
-    if _show_timing:
-        _blueprint_start = time.time()
-
     from app.routes.main_routes import main_bp
     app.register_blueprint(main_bp)
 
@@ -106,35 +94,21 @@ def create_app(config_name=None):
     from app.routes.portfolio_routes import portfolio_bp
     app.register_blueprint(portfolio_bp)
 
-    from app.routes.admin_routes import admin_bp
-    app.register_blueprint(admin_bp)
-
     from app.errors import register_error_handlers
     register_error_handlers(app)
 
-    if _show_timing:
-        _blueprint_time = time.time() - _blueprint_start
-        print(f"  ⏱️  Blueprints registered: {_blueprint_time:.3f}s")
-
-    # Initialize the database
-    if _show_timing:
-        _db_start = time.time()
-
-    from app.db_manager import init_db, migrate_database
-    init_db(app)
-
-    # Run database migrations. A failed migration must abort startup:
+    # init_db bootstraps the version table, migrates, then applies schema.sql
+    # (in that order — see its docstring). A failure must abort startup:
     # serving on a half-migrated schema risks silent data corruption.
+    from app.db_manager import init_db
     try:
-        with app.app_context():
-            migrate_database()
+        init_db(app)
     except Exception as e:
-        app.logger.critical(f"Database migration failed: {e} - refusing to start on a half-migrated schema")
+        app.logger.critical(
+            f"Database initialization failed: {e} - "
+            "refusing to start on a half-migrated schema"
+        )
         raise
-
-    if _show_timing:
-        _db_time = time.time() - _db_start
-        print(f"  ⏱️  Database init + migrations: {_db_time:.3f}s")
 
     # Determine if we're in the main process that should run startup tasks
     # - In development with reloader: WERKZEUG_RUN_MAIN is set in the child process
@@ -150,10 +124,6 @@ def create_app(config_name=None):
         start_background_tasks(app)
     else:
         app.logger.debug("Reloader parent process - skipping startup tasks")
-
-    if _show_timing:
-        _total_time = time.time() - _create_app_start
-        print(f"  ⏱️  TOTAL create_app() time: {_total_time:.3f}s\n")
 
     @app.after_request
     def _add_etag_and_cache_control(response):

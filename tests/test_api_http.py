@@ -158,6 +158,26 @@ class TestAccountFlow:
 
 
 class TestPortfolioApi:
+    def test_companies_only_keeps_lean_response_and_skips_grouping(
+        self, client, account, monkeypatch
+    ):
+        import app.routes.portfolio_data_api as portfolio_data
+
+        def no_grouping(*args, **kwargs):
+            raise AssertionError('companies-only must skip grouping')
+
+        monkeypatch.setattr(portfolio_data, '_group_and_summarize', no_grouping)
+        response = client.get('/portfolio/api/portfolio_data/all?fields=companies')
+        assert response.status_code == 200, response.get_json()
+        data = response.get_json()
+        assert set(data) == {
+            'portfolio_id', 'portfolio_name', 'total_value', 'cash',
+            'portfolio_total', 'total_invested', 'num_holdings',
+            'last_updated', 'companies', 'sectors', 'theses', 'portfolios',
+        }
+        assert data['sectors'] == data['theses'] == data['portfolios'] == []
+        assert any(c['name'] == 'HttpCo' for c in data['companies'])
+
     def test_portfolio_data_returns_seeded_company(self, client, account):
         resp = client.get("/portfolio/api/portfolio_data")
         assert resp.status_code == 200

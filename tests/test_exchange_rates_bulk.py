@@ -58,6 +58,15 @@ def test_bulk_empty_and_falsy_input_returns_empty():
     # Only the base currency -> short-circuits without any network column.
     assert yfu.fetch_exchange_rates_from_network_bulk(["EUR"], "EUR") == {"EUR": 1.0}
 
+def test_bulk_pence_to_pounds_does_not_request_an_invalid_gbpgbp_pair(monkeypatch):
+    monkeypatch.setattr(
+        yfu, "_yf_download_close_columns",
+        lambda tickers: (_ for _ in ()).throw(AssertionError("no network required")),
+    )
+    assert yfu.fetch_exchange_rates_from_network_bulk(["GBp", "GBP"], "GBP") == {
+        "GBp": 0.01, "GBP": 1.0,
+    }
+
 
 def test_serial_fallback_runs_only_for_currencies_bulk_missed(monkeypatch):
     from app.utils import startup_tasks

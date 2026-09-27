@@ -74,6 +74,11 @@ CACHE_TIMEOUT_FAILED_LOOKUP = 300     # 5 minutes - prevent retry storms for inv
 FRESH_RATE_MAX_AGE_HOURS = 24
 
 
+def _rate_source(currency: str):
+    """Yahoo quotes pence through the GBP pair; scale the resulting rate."""
+    return ('GBP', 0.01) if currency == 'GBp' else (currency, 1.0)
+
+
 def fetch_exchange_rate_from_network(from_currency: str, to_currency: str = "EUR") -> Optional[float]:
     """
     Fetch an exchange rate from yfinance. Returns None on any failure —
@@ -83,14 +88,9 @@ def fetch_exchange_rate_from_network(from_currency: str, to_currency: str = "EUR
     if from_currency == to_currency:
         return 1.0
 
-    # yfinance uses 'GBp' for pence, which needs to be converted to 'GBP'
-    if from_currency == 'GBp':
-        from_currency = 'GBP'
-        base_rate = 0.01
-        if from_currency == to_currency:
-            return base_rate
-    else:
-        base_rate = 1.0
+    from_currency, base_rate = _rate_source(from_currency)
+    if from_currency == to_currency:
+        return base_rate
 
     logger.info(f"Fetching exchange rate from network: {from_currency} → {to_currency}")
     try:
@@ -162,12 +162,10 @@ def fetch_exchange_rates_from_network_bulk(
         if currency == to_currency:
             rates[currency] = 1.0
             continue
-        if currency == 'GBp':
-            from_ccy = 'GBP'
-            base_rate = 0.01
-        else:
-            from_ccy = currency
-            base_rate = 1.0
+        from_ccy, base_rate = _rate_source(currency)
+        if from_ccy == to_currency:
+            rates[currency] = base_rate
+            continue
         specs[currency] = (f"{from_ccy}{to_currency}=X", base_rate)
 
     tickers = list({t for t, _ in specs.values()})
@@ -213,14 +211,10 @@ def get_exchange_rate(from_currency: str, to_currency: str = "EUR") -> Optional[
     if from_currency == to_currency:
         return 1.0
 
-    # yfinance uses 'GBp' for pence; rates are stored per whole-GBP pair
-    if from_currency == 'GBp':
-        from_currency = 'GBP'
-        base_rate = 0.01
-        if from_currency == to_currency:
-            return base_rate
-    else:
-        base_rate = 1.0
+    # Rates are stored per whole-GBP pair, even when the quote is in pence.
+    from_currency, base_rate = _rate_source(from_currency)
+    if from_currency == to_currency:
+        return base_rate
 
     from app.repositories.exchange_rate_repository import ExchangeRateRepository
 
@@ -691,8 +685,7 @@ def get_historical_prices(identifiers, period='1y', start_date=None):
 
 def _looks_like_isin(identifier: str) -> bool:
     """12-char ISIN shape (2-letter country + 10 alphanumerics)."""
-    clean = (identifier or '').strip().upper()
-    return len(clean) == 12 and clean[:2].isalpha() and clean[2:].isalnum()
+    return _is_valid_isin_format((identifier or '').strip().upper())
 
 
 def warm_price_cache_bulk(identifiers) -> Dict[str, Any]:

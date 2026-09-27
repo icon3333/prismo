@@ -1,34 +1,58 @@
 from app.routes.portfolio_account_api import (
-    api_delete_account, api_delete_stocks_crypto, api_import_account_data,
-    api_reset_account_settings, get_account_cash, get_account_info,
-    set_account_cash, update_account_username,
+    api_delete_account,
+    api_delete_stocks_crypto,
+    api_import_account_data,
+    api_reset_account_settings,
+    get_account_cash,
+    get_account_info,
+    set_account_cash,
+    update_account_username,
 )
 from app.routes.portfolio_company_api import manage_portfolios, update_portfolio_api
 from app.routes.portfolio_data_api import (
-    get_portfolio_data_api, get_portfolio_metrics, get_portfolios_api,
-    get_simulator_portfolio_data, get_single_portfolio_data_api,
+    get_portfolio_data_api,
+    get_portfolio_metrics,
+    get_portfolios_api,
+    get_simulator_portfolio_data,
+    get_single_portfolio_data_api,
 )
 from app.routes.portfolio_state_api import manage_state
 from app.routes.portfolio_builder_api import builder_investment_targets
 from app.routes.portfolio_manual_api import (
-    add_company, delete_manual_companies, get_historical_prices_api,
-    get_portfolios_for_dropdown, validate_identifier,
+    add_company,
+    delete_manual_companies,
+    get_historical_prices_api,
+    get_portfolios_for_dropdown,
+    validate_identifier,
 )
 from app.routes.portfolio_simulator_api import (
-    simulator_clone_portfolio, simulator_portfolio_allocations,
-    simulator_search_investments, simulator_simulation_create,
-    simulator_simulation_delete, simulator_simulation_get,
-    simulator_simulation_update, simulator_simulations_list,
+    simulator_portfolio_allocations,
+    simulator_search_investments,
     simulator_ticker_lookup,
 )
-from app.routes.portfolio_updates import (
-    bulk_update, get_portfolio_companies, price_fetch_progress,
-    update_all_prices, update_selected_prices, update_single_portfolio_api,
+from app.routes.simulator_crud import (
+    simulator_clone_portfolio,
+    simulator_simulation_create,
+    simulator_simulation_delete,
+    simulator_simulation_get,
+    simulator_simulation_update,
+    simulator_simulations_list,
 )
-from app.routes.simple_upload import get_simple_upload_progress, upload_csv_simple
+from app.routes.portfolio_updates import (
+    bulk_update,
+    get_portfolio_companies,
+    price_fetch_progress,
+    update_all_prices,
+    update_selected_prices,
+    update_single_portfolio_api,
+)
+from app.routes.simple_upload import upload_csv_simple, get_simple_upload_progress
 from app.routes.monthly_review_api import (
-    complete_monthly_review, create_monthly_review, get_monthly_review,
-    list_monthly_reviews, patch_monthly_review,
+    complete_monthly_review,
+    create_monthly_review,
+    get_monthly_review,
+    list_monthly_reviews,
+    patch_monthly_review,
 )
 
 

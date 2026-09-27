@@ -295,6 +295,56 @@ class TestCanonicalValuation:
         assert item["effective_shares"] == 4
 
 
+class TestSimulatorCrudApi:
+    def test_simulation_crud_lifecycle(self, client, account):
+        base = "/portfolio/api/simulator/simulations"
+        created = client.post(base, json={"name": "HTTP lifecycle", "items": []})
+        assert created.status_code == 201, created.get_json()
+        simulation = created.get_json()["data"]["simulation"]
+        simulation_id = simulation["id"]
+
+        listed = client.get(base)
+        assert listed.status_code == 200
+        assert any(item["id"] == simulation_id for item in listed.get_json()["data"]["simulations"])
+
+        fetched = client.get(f"{base}/{simulation_id}")
+        assert fetched.status_code == 200
+        assert fetched.get_json()["data"]["simulation"]["name"] == "HTTP lifecycle"
+
+        updated = client.put(
+            f"{base}/{simulation_id}",
+            json={"name": "HTTP lifecycle updated", "items": [{"ticker": "HTTP"}]},
+        )
+        assert updated.status_code == 200
+        assert updated.get_json()["data"]["simulation"]["name"] == "HTTP lifecycle updated"
+
+        deleted = client.delete(f"{base}/{simulation_id}")
+        assert deleted.status_code == 200
+        assert client.get(f"{base}/{simulation_id}").status_code == 404
+
+    def test_simulation_crud_does_not_cross_account_ownership(self, client, account, http_app):
+        base = "/portfolio/api/simulator/simulations"
+        created = client.post(base, json={"name": "Owned simulation"})
+        assert created.status_code == 201
+        simulation_id = created.get_json()["data"]["simulation"]["id"]
+
+        from app.db_manager import get_db
+        with http_app.app_context():
+            db = get_db()
+            other = db.execute(
+                "INSERT INTO accounts (username, created_at) VALUES ('other-http-user', datetime('now'))"
+            ).lastrowid
+            db.commit()
+
+        client.post(f"/api/select_account/{other}")
+        assert client.get(f"{base}/{simulation_id}").status_code == 404
+        assert client.put(f"{base}/{simulation_id}", json={"name": "hijacked"}).status_code == 404
+        assert client.delete(f"{base}/{simulation_id}").status_code == 404
+
+        client.post(f"/api/select_account/{account['id']}")
+        assert client.get(f"{base}/{simulation_id}").status_code == 200
+
+
 class TestRebalanceModeParam:
     def test_portfolio_data_without_mode_has_no_rebalanced(self, client, account):
         resp = client.get("/portfolio/api/simulator/portfolio-data")

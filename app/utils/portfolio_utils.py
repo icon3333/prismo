@@ -1,5 +1,4 @@
 from app.db_manager import query_db
-from app.utils.yfinance_utils import get_isin_data
 from app.repositories.portfolio_repository import PortfolioRepository
 import logging
 
@@ -58,34 +57,3 @@ def has_companies_in_default(account_id):
         return companies_count and companies_count['count'] > 0
 
     return False
-
-
-def get_stock_info(identifier):
-    """Wrapper for get_isin_data to keep consistent interface"""
-    try:
-        result = get_isin_data(identifier)
-
-        if result.get('success'):
-            # The data from get_isin_data is nested under the 'data' key
-            stock_data = result.get('data', {})
-            return {
-                'success': True,
-                'data': {
-                    'currentPrice': stock_data.get('currentPrice'),
-                    'currency': stock_data.get('currency', 'USD'),
-                    'priceEUR': stock_data.get('priceEUR'),
-                    'country': stock_data.get('country')
-                },
-                'modified_identifier': result.get('modified_identifier')
-            }
-        else:
-            return {
-                'success': False,
-                'error': result.get('error', 'Unknown error')
-            }
-    except Exception as e:
-        logger.error(f"Error in get_stock_info: {str(e)}")
-        return {
-            'success': False,
-            'error': str(e)
-        }

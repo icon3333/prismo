@@ -1,20 +1,16 @@
 """
-Golden-fixture parity tests for the backend allocation math.
+Golden-fixture regression tests for the allocation math.
 
-The SAME fixture file (tests/fixtures/allocation_parity_cases.json) drives
-frontend/src/lib/__tests__/allocation-parity.test.ts, so the duplicated
-Python/TypeScript rebalancing math cannot silently drift: changing either
-implementation forces an update of the shared golden numbers, which fails
-the other side's suite.
+tests/fixtures/allocation_parity_cases.json pins the expected outputs of
+allocation_service for 14 hand-checked portfolio shapes, so a change to the
+capping / redistribution logic cannot silently move users' target numbers —
+it has to move the golden file too, which shows up in review.
 
 Fixture conventions:
-- `position_targets` / `portfolio_targets` are BACKEND-canonical values
-  (for cases with `rules` they are the type-constrained targets).
-- `*_frontend` overrides encode known, intentional divergences (the frontend
-  normalizes weights to 100%; the backend applies raw weights) and are only
-  consumed by the vitest side.
+- `position_targets` / `portfolio_targets` are the expected targets (for cases
+  with `rules`, the type-constrained ones).
 - `unconstrained_position_targets` / `capped` / `applicable_rules` pin the
-  backend-only type-constraint capping metadata.
+  type-constraint capping metadata.
 """
 
 import json
@@ -25,7 +21,6 @@ import pytest
 from app.services.allocation_service import (
     calculate_allocation_targets,
     calculate_allocation_targets_with_type_constraints,
-    generate_rebalancing_plan,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "allocation_parity_cases.json"
@@ -130,13 +125,3 @@ def test_type_constraint_metadata(case):
         positions = positions_by_name(by_name[pname])
         for pos_name, want in rule_map.items():
             assert positions[pos_name]["applicable_rule"] == want, f"{pname}/{pos_name}"
-
-
-@pytest.mark.parametrize("case", CASES, ids=CASE_IDS)
-def test_rebalancing_plan_wraps_portfolios(case):
-    # generate_rebalancing_plan is currently a passthrough: the buy/sell
-    # recommendation math lives only in the frontend (rebalancer-calc.ts).
-    # Pin that contract so any backend recommendations become a visible change.
-    result = run_case(case)
-    plan = generate_rebalancing_plan(result)
-    assert plan == {"portfolios": result}

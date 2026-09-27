@@ -48,38 +48,30 @@ class MonthlyReviewRepository:
         return [dict(row) for row in rows]
 
     @classmethod
-    def get_by_id(cls, review_id: int, account_id: int) -> Optional[Dict[str, Any]]:
+    def _fetch_one(cls, where: str, params: List[Any], order: str = "") -> Optional[Dict[str, Any]]:
         row = get_db().execute(
-            f"""SELECT {cls._FULL_COLUMNS}
-                FROM monthly_reviews
-                WHERE id = ? AND account_id = ?""",
-            [review_id, account_id],
+            f"SELECT {cls._FULL_COLUMNS} FROM monthly_reviews WHERE {where} {order}",
+            params,
         ).fetchone()
         return cls._row_to_review(row)
+
+    @classmethod
+    def get_by_id(cls, review_id: int, account_id: int) -> Optional[Dict[str, Any]]:
+        return cls._fetch_one("id = ? AND account_id = ?", [review_id, account_id])
 
     @classmethod
     def get_newest_draft(cls, account_id: int) -> Optional[Dict[str, Any]]:
-        row = get_db().execute(
-            f"""SELECT {cls._FULL_COLUMNS}
-                FROM monthly_reviews
-                WHERE account_id = ? AND status = 'draft'
-                ORDER BY created_at DESC, id DESC
-                LIMIT 1""",
-            [account_id],
-        ).fetchone()
-        return cls._row_to_review(row)
+        return cls._fetch_one(
+            "account_id = ? AND status = 'draft'", [account_id],
+            "ORDER BY created_at DESC, id DESC LIMIT 1",
+        )
 
     @classmethod
     def get_latest_completed(cls, account_id: int) -> Optional[Dict[str, Any]]:
-        row = get_db().execute(
-            f"""SELECT {cls._FULL_COLUMNS}
-                FROM monthly_reviews
-                WHERE account_id = ? AND status = 'completed'
-                ORDER BY completed_at DESC, id DESC
-                LIMIT 1""",
-            [account_id],
-        ).fetchone()
-        return cls._row_to_review(row)
+        return cls._fetch_one(
+            "account_id = ? AND status = 'completed'", [account_id],
+            "ORDER BY completed_at DESC, id DESC LIMIT 1",
+        )
 
     @classmethod
     def create(
@@ -147,57 +139,38 @@ class MonthlyReviewRepository:
         return review
 
     @classmethod
-    def update_draft(
+    def _transition_draft(
         cls,
         review_id: int,
         account_id: int,
         expected_version: int,
         payload: Dict[str, Any],
+        completion: bool = False,
     ) -> Optional[Dict[str, Any]]:
+        """Optimistically update a draft, optionally freezing its lifecycle."""
+        state = (
+            ", status = 'completed', completed_at = CURRENT_TIMESTAMP"
+            if completion else ""
+        )
         db = get_db()
         with db:
             cursor = db.execute(
-                """UPDATE monthly_reviews
+                f"""UPDATE monthly_reviews
                    SET payload = ?, version = version + 1,
-                       updated_at = CURRENT_TIMESTAMP
+                       updated_at = CURRENT_TIMESTAMP{state}
                    WHERE id = ? AND account_id = ?
                      AND status = 'draft' AND version = ?""",
-                [
-                    cls._serialize_payload(payload),
-                    review_id,
-                    account_id,
-                    expected_version,
-                ],
+                [cls._serialize_payload(payload), review_id, account_id, expected_version],
             )
-        if cursor.rowcount != 1:
-            return None
-        return cls.get_by_id(review_id, account_id)
+        return cls.get_by_id(review_id, account_id) if cursor.rowcount == 1 else None
 
     @classmethod
-    def complete(
-        cls,
-        review_id: int,
-        account_id: int,
-        expected_version: int,
-        payload: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+    def update_draft(cls, review_id: int, account_id: int, expected_version: int,
+                     payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return cls._transition_draft(review_id, account_id, expected_version, payload)
+
+    @classmethod
+    def complete(cls, review_id: int, account_id: int, expected_version: int,
+                 payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Atomically freeze a draft payload and transition it to completed."""
-        db = get_db()
-        with db:
-            cursor = db.execute(
-                """UPDATE monthly_reviews
-                   SET payload = ?, status = 'completed', version = version + 1,
-                       updated_at = CURRENT_TIMESTAMP,
-                       completed_at = CURRENT_TIMESTAMP
-                   WHERE id = ? AND account_id = ?
-                     AND status = 'draft' AND version = ?""",
-                [
-                    cls._serialize_payload(payload),
-                    review_id,
-                    account_id,
-                    expected_version,
-                ],
-            )
-        if cursor.rowcount != 1:
-            return None
-        return cls.get_by_id(review_id, account_id)
+        return cls._transition_draft(review_id, account_id, expected_version, payload, True)

@@ -30,11 +30,6 @@ class ValidationError(PortfolioError):
     pass
 
 
-class IdentifierError(PortfolioError):
-    """Identifier normalization or mapping failed."""
-    pass
-
-
 class DataIntegrityError(PortfolioError):
     """
     Database constraint violation or data integrity issue.
@@ -73,17 +68,6 @@ class AuthenticationError(PortfolioError):
     pass
 
 
-class AuthorizationError(PortfolioError):
-    """
-    User is authenticated but not authorized for this action.
-
-    Examples:
-    - Accessing another user's data (not applicable in single-user, but future-proof)
-    - Missing permissions
-    """
-    pass
-
-
 class NotFoundError(PortfolioError):
     """
     Requested resource not found.
@@ -101,27 +85,3 @@ class NotFoundError(PortfolioError):
         else:
             message = f"{resource} not found"
         super().__init__(message)
-
-
-class ConfigurationError(PortfolioError):
-    """
-    Application configuration error.
-
-    Examples:
-    - Missing environment variables
-    - Invalid configuration values
-    - Database connection setup errors
-    """
-    pass
-
-
-class BusinessRuleError(PortfolioError):
-    """
-    Business rule validation failed.
-
-    Examples:
-    - Cannot delete portfolio with active holdings
-    - Cannot set negative shares
-    - Invalid allocation percentages
-    """
-    pass

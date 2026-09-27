@@ -68,7 +68,7 @@ Modules of plain functions, not classes. Import the module (`from app.services i
 - `rebalance_service`: the three capital modes (existing-only, new-only, new-with-sells)
 - `builder_service`: investment targets, budget planning, progress tracking
 - `company_service`: manual stock addition, identifier validation (yfinance), deletion
-- `monthly_review_service`: monthly decision review engine
+- `monthly_review_service`: monthly review persistence and workflow; `monthly_review_snapshot`: pure snapshot identity, comparison, reconciliation, and recommendations (selected functions re-exported from the service for existing callers)
 
 ### Repositories
 - `PortfolioRepository`: Portfolio and company data queries

@@ -79,7 +79,7 @@ def _group_and_summarize(companies, key_fn, portfolio_total: float):
 
 
 def _serialize_holdings(companies, account_id, portfolio_id, portfolio_name,
-                         extra_groups=None):
+                         extra_groups=None, companies_only=False):
     """Build the common holdings response for one portfolio or an aggregate."""
     companies.sort(key=lambda c: c['current_value'], reverse=True)
     holdings_value = sum(c['current_value'] for c in companies)
@@ -87,20 +87,26 @@ def _serialize_holdings(companies, account_id, portfolio_id, portfolio_name,
     total_invested = sum(float(c.get('total_invested', 0) or 0) for c in companies)
     portfolio_total = totals['total']
     _apply_company_percentages(companies, portfolio_total)
-    overall = {'total_invested': total_invested, 'total_value': holdings_value}
-    _apply_pnl(overall)
     response = {
         'portfolio_id': portfolio_id, 'portfolio_name': portfolio_name,
         'total_value': holdings_value, 'cash': totals['cash'],
         'portfolio_total': portfolio_total, 'total_invested': total_invested,
-        'portfolio_pnl_absolute': overall['pnl_absolute'],
-        'portfolio_pnl_percentage': overall['pnl_percentage'],
         'num_holdings': len(companies),
         'last_updated': max((c['last_updated'] for c in companies if c.get('last_updated')), default=None),
         'companies': companies,
-        'sectors': _group_and_summarize(companies, _sector_key, portfolio_total),
-        'theses': _group_and_summarize(companies, _thesis_key, portfolio_total),
     }
+    if companies_only:
+        response.update(sectors=[], theses=[], portfolios=[])
+        return response
+
+    overall = {'total_invested': total_invested, 'total_value': holdings_value}
+    _apply_pnl(overall)
+    response.update(
+        portfolio_pnl_absolute=overall['pnl_absolute'],
+        portfolio_pnl_percentage=overall['pnl_percentage'],
+        sectors=_group_and_summarize(companies, _sector_key, portfolio_total),
+        theses=_group_and_summarize(companies, _thesis_key, portfolio_total),
+    )
     if extra_groups is not None:
         response['portfolios'] = _finalize_groups(extra_groups, portfolio_total, True)
     return response
@@ -502,8 +508,7 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
 
     if companies_only:
         response = _serialize_holdings(
-            companies, account_id, 'all', 'All Portfolios')
-        response['sectors'] = response['theses'] = response['portfolios'] = []
+            companies, account_id, 'all', 'All Portfolios', companies_only=True)
         logger.info(f"Returning {len(companies)} unique companies (companies-only mode)")
         return response
 

@@ -12,6 +12,13 @@ from app.utils.response_helpers import error_response, not_found_response, succe
 logger = logging.getLogger(__name__)
 
 
+def _owns_portfolio(portfolio_id, account_id):
+    return bool(query_db(
+        'SELECT 1 FROM portfolios WHERE id = ? AND account_id = ?',
+        [portfolio_id, account_id], one=True,
+    ))
+
+
 @require_auth
 def simulator_simulations_list():
     """
@@ -27,7 +34,10 @@ def simulator_simulations_list():
     try:
         account_id = g.account_id
 
-        simulations = SimulationRepository.get_all(account_id)
+        sim_type = request.args.get('type')
+        if sim_type is not None and sim_type not in ('overlay', 'portfolio'):
+            return error_response("Type must be 'overlay' or 'portfolio'", 400)
+        simulations = SimulationRepository.get_all(account_id, sim_type=sim_type)
 
         logger.info(f"Returning {len(simulations)} simulations for account {account_id}")
         return success_response({'simulations': simulations})
@@ -68,12 +78,16 @@ def simulator_simulation_create():
             return error_response('Simulation name too long (max 100 characters)', 400)
 
         scope = data.get('scope', 'global')
+        if SimulationRepository.exists(name, account_id):
+            return error_response(f'A simulation named "{name}" already exists', 409)
         if scope not in ('global', 'portfolio'):
             return error_response("Scope must be 'global' or 'portfolio'", 400)
 
         portfolio_id = data.get('portfolio_id')
         if scope == 'portfolio' and not portfolio_id:
             return error_response('portfolio_id is required when scope is "portfolio"', 400)
+        if scope == 'portfolio' and not _owns_portfolio(portfolio_id, account_id):
+            return not_found_response('Portfolio', portfolio_id)
 
         items = data.get('items', [])
         if not isinstance(items, list):
@@ -186,6 +200,13 @@ def simulator_simulation_update(simulation_id: int):
         scope = data.get('scope')
         if scope is not None and scope not in ('global', 'portfolio'):
             return error_response("Scope must be 'global' or 'portfolio'", 400)
+        effective_scope = scope or existing['scope']
+        portfolio_id = data.get('portfolio_id', existing['portfolio_id'])
+        if effective_scope == 'portfolio':
+            if not portfolio_id:
+                return error_response('portfolio_id is required when scope is "portfolio"', 400)
+            if not _owns_portfolio(portfolio_id, account_id):
+                return not_found_response('Portfolio', portfolio_id)
 
         # Validate items if provided
         items = data.get('items')
@@ -208,7 +229,7 @@ def simulator_simulation_update(simulation_id: int):
             name=name,
             scope=scope,
             items=items,
-            portfolio_id=data.get('portfolio_id'),
+            portfolio_id=portfolio_id if effective_scope == 'portfolio' else None,
             global_value_mode=global_value_mode,
             total_amount=total_amount
         )

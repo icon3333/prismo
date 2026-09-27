@@ -43,7 +43,7 @@ class SimulationRepository:
                 s.created_at,
                 s.updated_at
             FROM simulations s
-            LEFT JOIN portfolios p ON s.portfolio_id = p.id
+            LEFT JOIN portfolios p ON s.portfolio_id = p.id AND p.account_id = s.account_id
             WHERE s.account_id = ?
         '''
         params = [account_id]
@@ -85,7 +85,7 @@ class SimulationRepository:
                 s.created_at,
                 s.updated_at
             FROM simulations s
-            LEFT JOIN portfolios p ON s.portfolio_id = p.id
+            LEFT JOIN portfolios p ON s.portfolio_id = p.id AND p.account_id = s.account_id
             WHERE s.id = ? AND s.account_id = ?
         '''
 
@@ -196,6 +196,8 @@ class SimulationRepository:
             if val is not None:
                 updates.append(f'{col} = ?')
                 params.append(val)
+        if scope == 'global':
+            updates.append('portfolio_id = NULL')
 
         # JSON fields: need serialization
         if items is not None:

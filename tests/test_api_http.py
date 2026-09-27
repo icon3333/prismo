@@ -316,6 +316,61 @@ class TestCanonicalValuation:
 
 
 class TestSimulatorCrudApi:
+    def test_names_and_type_filter(self, client, account):
+        base = "/portfolio/api/simulator/simulations"
+        assert client.post(base, json={"name": "Unique", "type": "overlay"}).status_code == 201
+        assert client.post(base, json={"name": "Unique"}).status_code == 409
+        assert client.post(base, json={"name": "Portfolio simulation", "type": "portfolio"}).status_code == 201
+        listed = client.get(f"{base}?type=portfolio")
+        assert listed.status_code == 200
+        assert [s['name'] for s in listed.get_json()['data']['simulations']] == ["Portfolio simulation"]
+        assert client.get(f"{base}?type=invalid").status_code == 400
+
+    def test_portfolio_scope_requires_own_portfolio(self, client, account, http_app):
+        from app.db_manager import get_db
+
+        base = "/portfolio/api/simulator/simulations"
+        with http_app.app_context():
+            db = get_db()
+            other = db.execute(
+                "INSERT INTO accounts (username, created_at) VALUES ('other-portfolio-owner', datetime('now'))"
+            ).lastrowid
+            foreign_id = db.execute(
+                "INSERT INTO portfolios (name, account_id) VALUES ('Private portfolio', ?)", (other,)
+            ).lastrowid
+            own_id = db.execute(
+                "INSERT INTO portfolios (name, account_id) VALUES ('Own portfolio', ?)",
+                (account['id'],),
+            ).lastrowid
+            db.commit()
+
+        assert client.post(base, json={
+            'name': 'Foreign', 'scope': 'portfolio', 'portfolio_id': foreign_id,
+        }).status_code == 404
+        created = client.post(base, json={
+            'name': 'Owned', 'scope': 'portfolio', 'portfolio_id': own_id,
+        })
+        assert created.status_code == 201, created.get_json()
+        simulation_id = created.get_json()['data']['simulation']['id']
+        assert client.put(f"{base}/{simulation_id}", json={
+            'scope': 'portfolio', 'portfolio_id': foreign_id,
+        }).status_code == 404
+        assert client.get(f"{base}/{simulation_id}").get_json()['data']['simulation']['portfolio_id'] == own_id
+
+        switched = client.put(f"{base}/{simulation_id}", json={'scope': 'global'})
+        assert switched.status_code == 200
+        assert switched.get_json()['data']['simulation']['portfolio_id'] is None
+        assert switched.get_json()['data']['simulation']['portfolio_name'] is None
+
+        # Even legacy malformed records cannot expose another account's name.
+        with http_app.app_context():
+            db = get_db()
+            db.execute('UPDATE simulations SET portfolio_id = ? WHERE id = ?',
+                       (foreign_id, simulation_id))
+            db.commit()
+        listed = client.get(base).get_json()['data']['simulations']
+        assert next(s for s in listed if s['id'] == simulation_id)['portfolio_name'] is None
+
     def test_simulation_crud_lifecycle(self, client, account):
         base = "/portfolio/api/simulator/simulations"
         created = client.post(base, json={"name": "HTTP lifecycle", "items": []})

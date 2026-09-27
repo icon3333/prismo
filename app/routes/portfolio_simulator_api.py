@@ -18,6 +18,38 @@ from app.utils.yfinance_utils import get_yfinance_info
 logger = logging.getLogger(__name__)
 
 
+def _allocation_breakdown(positions, field, denominator):
+    """Group position values for the three simulator allocation dimensions."""
+    totals = {}
+    for position in positions:
+        name = position[field]
+        if field == 'thesis':
+            name = (name or '').strip() or 'Unassigned'
+        else:
+            name = name or 'Unknown'
+        totals[name] = totals.get(name, 0) + float(position['value'] or 0)
+
+    return [
+        {
+            'name': name,
+            'value': round(value, 2),
+            'percentage': round(value / denominator * 100, 2) if denominator > 0 else 0,
+        }
+        for name, value in sorted(totals.items(), key=lambda item: -item[1])
+    ]
+
+
+def _investment_progress(target_amount, current_value):
+    return {
+        'targetAmount': round(target_amount, 2),
+        'remainingToInvest': round(max(0, target_amount - current_value), 2),
+        'percentComplete': round(
+            current_value / target_amount * 100 if target_amount > 0 else 0, 1
+        ),
+        'isOverTarget': current_value > target_amount,
+    }
+
+
 @require_auth
 def simulator_ticker_lookup():
     """
@@ -216,50 +248,9 @@ def simulator_portfolio_allocations():
         total_value = holdings_value  # Keep for backwards compatibility
         portfolio_total = totals['total']  # Use this for percentages (includes cash)
 
-        # Aggregate by country
-        country_totals = {}
-        for p in positions:
-            country = p['country'] or 'Unknown'
-            country_totals[country] = country_totals.get(country, 0) + float(p['value'] or 0)
-
-        countries = []
-        for country, value in sorted(country_totals.items(), key=lambda x: -x[1]):
-            percentage = (value / portfolio_total * 100) if portfolio_total > 0 else 0
-            countries.append({
-                'name': country,
-                'value': round(value, 2),
-                'percentage': round(percentage, 2)
-            })
-
-        # Aggregate by sector
-        sector_totals = {}
-        for p in positions:
-            sector = p['sector'] or 'Unknown'
-            sector_totals[sector] = sector_totals.get(sector, 0) + float(p['value'] or 0)
-
-        sectors = []
-        for sector, value in sorted(sector_totals.items(), key=lambda x: -x[1]):
-            percentage = (value / portfolio_total * 100) if portfolio_total > 0 else 0
-            sectors.append({
-                'name': sector,
-                'value': round(value, 2),
-                'percentage': round(percentage, 2)
-            })
-
-        # Aggregate by thesis
-        thesis_totals = {}
-        for p in positions:
-            thesis = (p['thesis'] or '').strip() or 'Unassigned'
-            thesis_totals[thesis] = thesis_totals.get(thesis, 0) + float(p['value'] or 0)
-
-        theses = []
-        for thesis, value in sorted(thesis_totals.items(), key=lambda x: -x[1]):
-            percentage = (value / portfolio_total * 100) if portfolio_total > 0 else 0
-            theses.append({
-                'name': thesis,
-                'value': round(value, 2),
-                'percentage': round(percentage, 2)
-            })
+        countries = _allocation_breakdown(positions, 'country', portfolio_total)
+        sectors = _allocation_breakdown(positions, 'sector', portfolio_total)
+        theses = _allocation_breakdown(positions, 'thesis', portfolio_total)
 
         # Format positions for response
         positions_list = []
@@ -286,33 +277,21 @@ def simulator_portfolio_allocations():
             if targets:
                 if scope == 'global':
                     target_amount = targets['totals']['totalTargetAmount']
-                    remaining = max(0, target_amount - total_value)
-                    percent_complete = (total_value / target_amount * 100) if target_amount > 0 else 0
-
                     investment_targets = {
                         'hasBuilderConfig': True,
-                        'targetAmount': round(target_amount, 2),
-                        'remainingToInvest': round(remaining, 2),
-                        'percentComplete': round(percent_complete, 1),
+                        **_investment_progress(target_amount, total_value),
                         'availableToInvest': round(targets['budget']['availableToInvest'], 2),
-                        'isOverTarget': total_value > target_amount
                     }
                 else:
                     # Portfolio-specific targets
                     portfolio_target = builder_service.get_portfolio_target(account_id, portfolio_id)
                     if portfolio_target:
                         target_amount = portfolio_target['targetAmount']
-                        remaining = max(0, target_amount - total_value)
-                        percent_complete = (total_value / target_amount * 100) if target_amount > 0 else 0
-
                         investment_targets = {
                             'hasBuilderConfig': True,
                             'portfolioName': portfolio_target['portfolioName'],
                             'allocationPercent': portfolio_target['allocationPercent'],
-                            'targetAmount': round(target_amount, 2),
-                            'remainingToInvest': round(remaining, 2),
-                            'percentComplete': round(percent_complete, 1),
-                            'isOverTarget': total_value > target_amount
+                            **_investment_progress(target_amount, total_value),
                         }
         except Exception as e:
             logger.warning(f"Could not load investment targets: {e}")

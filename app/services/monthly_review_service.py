@@ -463,11 +463,15 @@ def reconcile_cash(
     }
 
 
-def _unique_identifier_map(items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _group_by_identity(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     groups: Dict[str, List[Dict[str, Any]]] = {}
     for item in items:
         groups.setdefault(stable_identity(item, include_portfolio=False), []).append(item)
-    return {key: group[0] for key, group in groups.items() if len(group) == 1}
+    return groups
+
+
+def _unique_identifier_map(items: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    return {key: group[0] for key, group in _group_by_identity(items).items() if len(group) == 1}
 
 
 def compare_snapshots(
@@ -563,14 +567,8 @@ def reconcile_previous_actions(
     previous_holdings = (previous_payload.get("snapshot") or {}).get("holdings") or []
     current_holdings = current_snapshot.get("holdings") or []
 
-    def grouped(items: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-        result: Dict[str, List[Dict[str, Any]]] = {}
-        for item in items:
-            result.setdefault(stable_identity(item, include_portfolio=False), []).append(item)
-        return result
-
-    before_groups = grouped(previous_holdings)
-    after_groups = grouped(current_holdings)
+    before_groups = _group_by_identity(previous_holdings)
+    after_groups = _group_by_identity(current_holdings)
     reconciled: List[Dict[str, Any]] = []
     actions = (previous_payload.get("recommendations") or {}).get("actions") or []
     for action in actions:

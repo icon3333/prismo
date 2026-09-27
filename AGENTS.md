@@ -26,7 +26,7 @@
 
 Requires **Python 3.11+** (pandas 3.0 won't install below it) and **Node 22** (Next 16 / Turbopack panics on 25). `start.py` bootstraps the venv and prefers Homebrew's `node@22`. A `venv/` built on a different OS will fail with a missing interpreter — delete it and re-run rather than debugging it.
 
-There is no CI. Nothing is finished until `./test.sh` is green locally.
+GitHub Actions (`.github/workflows/test.yml`) runs pytest, frontend typecheck, and vitest on pushes and PRs. `./test.sh` must also pass locally; CI does not run the production build or existing-database smoke.
 
 ## Scripts
 

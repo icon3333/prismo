@@ -481,8 +481,3 @@ export function getGlobalTotal(
   );
   return portfolioSum + simulatedSum;
 }
-
-// ---------------------------------------------------------------------------
-// DCA calculation (stored for Phase 2 UI, logic included)
-// ---------------------------------------------------------------------------
-

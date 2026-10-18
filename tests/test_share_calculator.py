@@ -65,6 +65,23 @@ class TestManualEditProtection:
         assert result["Apple"]["has_manual_edit"] is True
         assert result["Apple"]["csv_modified_after_edit"] is True
 
+    def test_first_reconciliation_ignores_newly_supplied_pre_edit_trades(self):
+        df = make_df([
+            ("Apple", "buy", 10, "2026-01-01"),
+            ("Apple", "buy", 2, "2026-03-01"),
+            ("Apple", "buy", 2, "2026-05-01"),
+        ])
+        user_edits = {"Apple": {
+            "manual_edit_date": "2026-04-01 00:00:00",
+            "manual_shares": 20.0,
+            "original_shares": 10.0,
+            "csv_modified_after_edit": False,
+        }}
+        result = calculate_share_changes(df, {"Apple": position(14)}, user_edits)
+        assert result["Apple"]["csv_shares"] == 14
+        assert result["Apple"]["override_shares"] == 22.0
+        assert result["Apple"]["csv_modified_after_edit"] is True
+
     def test_newer_sells_reduce_override(self):
         df = make_df([("Apple", "sell", 3, "2023-07-01")])
         user_edits = {

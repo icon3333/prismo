@@ -97,8 +97,10 @@ def simulator_simulation_create():
         if sim_type not in ('overlay', 'portfolio'):
             return error_response("Type must be 'overlay' or 'portfolio'", 400)
 
-        cloned_from_portfolio_id = data.get('cloned_from_portfolio_id')
-        cloned_from_name = data.get('cloned_from_name')
+        # Provenance belongs to the dedicated clone endpoint, which checks the
+        # source portfolio's ownership and derives its name server-side.
+        if 'cloned_from_portfolio_id' in data or 'cloned_from_name' in data:
+            return error_response('Use the clone endpoint to set portfolio provenance', 400)
 
         global_value_mode = data.get('global_value_mode', 'euro')
         if global_value_mode not in ('euro', 'percent'):
@@ -115,8 +117,6 @@ def simulator_simulation_create():
             items=items,
             portfolio_id=portfolio_id if scope == 'portfolio' else None,
             sim_type=sim_type,
-            cloned_from_portfolio_id=cloned_from_portfolio_id,
-            cloned_from_name=cloned_from_name,
             global_value_mode=global_value_mode,
             total_amount=total_amount
         )

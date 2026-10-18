@@ -347,6 +347,12 @@ class TestSimulatorCrudApi:
         assert client.post(base, json={
             'name': 'Foreign', 'scope': 'portfolio', 'portfolio_id': foreign_id,
         }).status_code == 404
+        for provenance in (
+            {'cloned_from_portfolio_id': foreign_id},
+            {'cloned_from_name': 'Fabricated source'},
+        ):
+            response = client.post(base, json={'name': 'Forged clone', **provenance})
+            assert response.status_code == 400, response.get_json()
         created = client.post(base, json={
             'name': 'Owned', 'scope': 'portfolio', 'portfolio_id': own_id,
         })

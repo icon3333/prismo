@@ -114,17 +114,18 @@ def test_identical_history_reimport_preserves_manual_shares(db, monkeypatch, imp
     portfolio = seed_portfolio(db, account, "Assigned")
     company = seed_company(db, account, portfolio, "Example", "EXAMPLE")
     seed_shares(db, company, 10, override_share=20, is_manually_edited=1,
-                manual_edit_date="2026-02-01 00:00:00")
+                manual_edit_date="2026-04-01 00:00:00")
     db.commit()
     csv = HEADER + (
         "2026-01-01;10;10;0;0;buy;Example;EXAMPLE\n"
-        f"2026-03-01;20;2;0;0;buy;{imported_name};EXAMPLE\n"
+        "2026-03-01;20;2;0;0;buy;Example;EXAMPLE\n"
+        f"2026-05-01;20;2;0;0;buy;{imported_name};EXAMPLE\n"
     )
     for _ in range(2):
         success, message, _ = process_csv_data(account, csv, mode="add")
         assert success, message
         row = db.execute("SELECT shares,override_share FROM company_shares WHERE company_id=?", [company]).fetchone()
-        assert row["shares"] == 12
+        assert row["shares"] == 14
         assert row["override_share"] == 22
         assert db.execute("SELECT portfolio_id FROM companies WHERE id=?", [company]).fetchone()["portfolio_id"] == portfolio
         assert db.execute("SELECT name FROM companies WHERE id=?", [company]).fetchone()["name"] == imported_name

@@ -266,6 +266,44 @@ describe("api-cache", () => {
     const state = getApiQueryState("/portfolio_data");
     expect(state.data).toEqual(["good"]);
     expect(state.error).toBeNull();
+    expect(state.refreshError).toBe("boom");
+
+    // Keep the failure visible while retrying; clear it only on success.
+    fail = false;
+    await revalidateApiQuery("/portfolio_data");
+    expect(getApiQueryState("/portfolio_data").refreshError).toBeNull();
+  });
+
+  it("exposes target-only failures and marks retained targets stale until recovery", async () => {
+    const { revalidateApiQuery, getApiQueryState } = await loadModules();
+    const path = "/state?page=builder";
+    let fail = true;
+    let release: () => void = () => {};
+    let slow = false;
+    mockFetch(async () => {
+      if (slow) await new Promise<void>((resolve) => (release = resolve));
+      return fail ? jsonResponse({ error: "Targets unavailable" }, 500)
+        : jsonResponse({ portfolios: '[{"name":"Core","allocation":0}]' });
+    });
+    await revalidateApiQuery(path);
+    expect(getApiQueryState(path).error).toBe("Targets unavailable");
+    expect(getApiQueryState(path).data).toBeUndefined();
+    fail = false;
+    await revalidateApiQuery(path);
+    const saved = getApiQueryState(path).data;
+    fail = true;
+    await revalidateApiQuery(path);
+    expect(getApiQueryState(path).data).toEqual(saved);
+    expect(getApiQueryState(path).error).toBeNull();
+    expect(getApiQueryState(path).refreshError).toBe("Targets unavailable");
+    fail = false;
+    slow = true;
+    const retry = revalidateApiQuery(path);
+    expect(getApiQueryState(path).refreshError).toBe("Targets unavailable");
+    expect(getApiQueryState(path).isValidating).toBe(true);
+    release();
+    await retry;
+    expect(getApiQueryState(path).refreshError).toBeNull();
   });
 
   it("apiPostForm parses non-2xx JSON bodies and only notifies on success", async () => {

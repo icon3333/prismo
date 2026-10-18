@@ -80,16 +80,16 @@ class TestProcessCompanies:
                 ("Apple", "AAPL", "sell", 50, 10.0, "2023-02-01"),
             ]
         )
-        _, positions = process_companies(df, account["id"], db.cursor())
-        assert positions["Apple"]["total_shares"] == 0
-        assert positions["Apple"]["total_invested"] == pytest.approx(0.0)
+        # A full-history import must not silently cap an impossible sale.
+        with pytest.raises(ValueError, match="Incomplete transaction history"):
+            process_companies(df, account["id"], db.cursor())
 
     def test_sell_without_position_is_skipped(self, db, account):
         from app.utils.csv_processing.company_processor import process_companies
 
         df = make_txn_df([("Ghost", "GHST", "sell", 5, 10.0, "2023-01-01")])
-        _, positions = process_companies(df, account["id"], db.cursor())
-        assert "Ghost" not in positions
+        with pytest.raises(ValueError, match="Incomplete transaction history"):
+            process_companies(df, account["id"], db.cursor())
 
     def test_dividends_do_not_affect_position(self, db, account):
         from app.utils.csv_processing.company_processor import process_companies

@@ -36,7 +36,7 @@ def get_portfolio_data(account_id):
 
     except Exception as e:
         logger.error(f"Error getting portfolio data: {str(e)}", exc_info=True)
-        return []
+        raise
 
 
 def has_companies_in_default(account_id):

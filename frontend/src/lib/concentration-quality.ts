@@ -45,7 +45,7 @@ export function concentrationCompanies(rows: ConcentrationRow[]): ConcentrationC
 
 export function concentrationQuality(companies: ConcentrationCompany[], now = Date.now()) {
   const valuedCompanies = companies.filter(
-    (company) => company.value_source !== "none" && Number.isFinite(company.current_value) && company.current_value > 0,
+    (company) => company.value_source !== "none" && Number.isFinite(company.current_value) && company.current_value >= 0,
   );
   const unknown = (value: string | null) => !value?.trim() || value.trim().toLowerCase() === "unknown";
   let staleValuations = 0;

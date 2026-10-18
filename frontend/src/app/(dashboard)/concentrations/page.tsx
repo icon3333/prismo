@@ -124,7 +124,7 @@ function ConcentrationsPageInner() {
             Saved portfolio targets — {targetsLoading ? "loading" : targetsError ? "unavailable" : `${targets.missing} selected portfolios without a target`} (raw, not normalized)
           </summary>
           {targetsLoading ? <p>Loading target coverage…</p> : targetsError ? (
-            <p>Target coverage unavailable. Saved targets could not be loaded.</p>
+            <p>Target coverage unavailable. Saved targets could not be loaded or refreshed; comparisons are unavailable.</p>
           ) : (
             <div className="mt-2 space-y-1">
               <p>Known saved account targets total: {targets.rawTotal === null ? "unavailable" : fmt.pct(targets.rawTotal)}.
@@ -139,8 +139,8 @@ function ConcentrationsPageInner() {
                 ))}
               </ul>
               <p>Explicit 0% is a saved zero target. Missing targets are not inferred; filtered targets are not rescaled.</p>
-              <p>Actual target comparison uses the whole account{includeCash ? " including cash" : " excluding cash"}, not the filtered chart denominator.
-                {" "}Deviations are unavailable when account valuations are incomplete.</p>
+              <p>Actual target comparison uses the whole account excluding cash, not the filtered chart denominator.
+                {" "}Deviations are unavailable when account valuations are incomplete or known holdings total zero.</p>
             </div>
           )}
         </details>
@@ -149,14 +149,18 @@ function ConcentrationsPageInner() {
       {quality.knownValue > 0 || (includeCash && cashBalance > 0) ? <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartWrapper title="Portfolio Distribution">
-          <DonutChart
-            labels={portfolioDistData.map((d) => d.name)}
-            values={portfolioDistData.map((d) => d.value)}
-          />
+          <div role="img" aria-label="Portfolio distribution chart">
+            <DonutChart
+              labels={portfolioDistData.map((d) => d.name)}
+              values={portfolioDistData.map((d) => d.value)}
+            />
+          </div>
         </ChartWrapper>
 
         <ChartWrapper title="Top 15 Holdings">
-          <DistributionBar data={holdingsData} height={380} />
+          <div role="img" aria-label="Top holdings chart">
+            <DistributionBar data={holdingsData} height={380} />
+          </div>
         </ChartWrapper>
 
         <ChartWrapper title="Sector Distribution">
@@ -187,7 +191,9 @@ function ConcentrationsPageInner() {
       </> : (
         <Alert>
           <AlertDescription>
-            {quality.holdingCount > 0 ? "Valuation unavailable for all selected positions. No concentration percentages can be calculated." : "No holdings in the selected portfolios."}
+            {quality.holdingCount === 0 ? "No holdings in the selected portfolios."
+              : quality.valuedCompanies.length > 0 ? "Known selected positions have zero value. No concentration percentages can be calculated."
+              : "Valuation unavailable for all selected positions. No concentration percentages can be calculated."}
           </AlertDescription>
         </Alert>
       )}

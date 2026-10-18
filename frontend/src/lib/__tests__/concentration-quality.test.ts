@@ -44,6 +44,23 @@ describe("concentration input and coverage", () => {
     expect(concentrationQuality(concentrationCompanies([row({ value_source: "none" })]), now).valuedCompanies).toEqual([]);
   });
 
+  it("counts authoritative zero values as known, distinct from missing valuation", () => {
+    const known = concentrationCompanies([
+      row(), row({ company: "Zero", portfolio: "Growth", current_value: 0, value_source: "custom" }),
+    ]);
+    const quality = concentrationQuality(known, now);
+    expect(quality.missingValuations).toBe(0);
+    expect(quality.valuedCompanies).toHaveLength(2);
+    expect(quality.knownValue).toBe(100);
+    const zeroOnly = concentrationQuality(known.slice(1), now);
+    expect(zeroOnly.missingValuations).toBe(0);
+    expect(zeroOnly.knownValue).toBe(0);
+    expect(groupByDimension(zeroOnly.valuedCompanies, "sector", false, 0)).toEqual([]);
+    expect(concentrationQuality(concentrationCompanies([
+      row({ current_value: 0, value_source: "none" }),
+    ]), now).missingValuations).toBe(1);
+  });
+
   it("uses custom timestamps and does not treat unknown freshness as fresh", () => {
     const quality = concentrationQuality(concentrationCompanies([
       row({ value_source: "custom", custom_value_date: "2026-01-01", last_updated: "2026-10-18" }),

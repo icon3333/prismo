@@ -152,8 +152,9 @@ export function useConcentrations() {
     applyUrlSelection();
   }, [portfolioIdFromUrl, portfolioList]);
 
-  const isLoading = allQuery.isLoading || portfoliosQuery.isLoading || cashQuery.isLoading || !stateLoaded;
-  const error = allQuery.error || portfoliosQuery.error || (includeCash ? cashQuery.error : null);
+  const isLoading = allQuery.isLoading || portfoliosQuery.isLoading || (includeCash && cashQuery.isLoading) || !stateLoaded;
+  const error = allQuery.error || allQuery.refreshError || portfoliosQuery.error || portfoliosQuery.refreshError
+    || (includeCash ? cashQuery.error || cashQuery.refreshError : null);
 
   const allCompanies = useMemo(
     () => concentrationCompanies(allQuery.data ?? []),
@@ -171,22 +172,23 @@ export function useConcentrations() {
 
   const quality = useMemo(() => concentrationQuality(filteredCompanies), [filteredCompanies]);
   const accountQuality = useMemo(() => concentrationQuality(allCompanies), [allCompanies]);
+  const targetsError = targetsQuery.error || targetsQuery.refreshError;
   const targets = useMemo(
     () => {
       const coverage = targetCoverage(targetsQuery.data?.portfolios,
         portfolios.filter((portfolio) => isAllSelected || selectedPortfolios.has(portfolio.name)).map((portfolio) => portfolio.name));
-      const distribution = portfolioDistribution(accountQuality.valuedCompanies, includeCash, cashBalance);
+      const distribution = portfolioDistribution(accountQuality.valuedCompanies, false, 0);
       return {
         ...coverage,
         entries: coverage.entries.map((entry) => {
           const actual = distribution.find((item) => item.name === entry.name)?.percentage ?? 0;
-          const comparable = accountQuality.missingValuations === 0 && distribution.length > 0;
+          const comparable = !targetsError && accountQuality.missingValuations === 0 && accountQuality.knownValue > 0;
           return { ...entry, actual: comparable ? actual : null,
             deviation: comparable && entry.target !== null ? actual - entry.target : null };
         }),
       };
     },
-    [targetsQuery.data, portfolios, isAllSelected, selectedPortfolios, accountQuality, includeCash, cashBalance],
+    [targetsQuery.data, targetsError, portfolios, isAllSelected, selectedPortfolios, accountQuality],
   );
 
   const sectorData = useMemo(
@@ -235,7 +237,7 @@ export function useConcentrations() {
     quality,
     targets,
     targetsLoading: targetsQuery.isLoading,
-    targetsError: targetsQuery.error,
+    targetsError,
     // Chart data
     sectorData,
     countryData,

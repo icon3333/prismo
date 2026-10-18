@@ -100,6 +100,11 @@ def calculate_share_changes(
                     if not newer_transactions.empty:
                         # Calculate net change from newer transactions
                         net_change = _calculate_net_change(newer_transactions)
+                        # Stored overrides already include prior CSV imports.
+                        # Reconcile against that baseline so repeating a full
+                        # history does not add post-edit trades a second time.
+                        if user_edit_info.get('original_shares') is not None:
+                            net_change = current_shares - float(user_edit_info['original_shares'])
 
                         # Apply the net change to BOTH original CSV shares and user-edited shares
                         final_csv_shares = round(current_shares, 6)

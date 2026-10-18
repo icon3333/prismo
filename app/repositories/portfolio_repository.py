@@ -360,7 +360,7 @@ class PortfolioRepository:
             except Exception as e:
                 logger.error(f"Error processing row: {row}")
                 logger.error(f"Error details: {str(e)}")
-                continue
+                raise
 
         logger.info(f"Returning {len(portfolio_data)} portfolio items")
         return portfolio_data

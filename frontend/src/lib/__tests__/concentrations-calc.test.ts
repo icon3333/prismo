@@ -104,6 +104,15 @@ describe("groupByDimension", () => {
 });
 
 describe("topHoldings", () => {
+  it("combines one instrument across virtual portfolios before ranking", () => {
+    const companies = [
+      company("Example", 300, { identifier: "EX", portfolio_name: "Core" }),
+      company("Example", 300, { identifier: "EX", portfolio_name: "Growth" }),
+      company("Other", 400),
+    ];
+    const result = topHoldings(companies, 1, false, 0);
+    expect(result).toEqual([{ name: "Example", value: 600, percentage: 60 }]);
+  });
   it("returns the N largest holdings with percentages", () => {
     const companies = [company("A", 100), company("B", 500), company("C", 400)];
     const result = topHoldings(companies, 2, false, 0);

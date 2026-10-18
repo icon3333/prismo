@@ -7,6 +7,8 @@ Supports both Parqet and IBKR Flex Query CSV formats with auto-detection.
 import pandas as pd
 import io
 import logging
+import math
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -48,8 +50,8 @@ def parse_csv_file(file_content: str, *, strict_rows: bool = False) -> pd.DataFr
     df = pd.read_csv(
         io.StringIO(file_content),
         delimiter=';',
-        decimal=',',
-        thousands='.'
+        dtype=str,
+        keep_default_na=False,
     )
     df.columns = df.columns.str.lower()
 
@@ -116,7 +118,7 @@ def parse_csv_file(file_content: str, *, strict_rows: bool = False) -> pd.DataFr
     if 'tax' not in df.columns:
         df['tax'] = 0
     if 'date' not in df.columns:
-        df['date'] = pd.Timestamp.now()
+        raise ValueError("Invalid holding row: transaction date is required")
 
     # Clean and validate data
     df = _clean_and_validate_data(df, strict_rows=strict_rows)
@@ -157,12 +159,14 @@ def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> 
         )
     if len(df) == 0:
         raise ValueError("No valid entries found in CSV file")
+    if (df['holdingname'].str.len() == 0).any():
+        raise ValueError("Invalid holding row: holding name is required")
 
     # Convert numeric columns with field names for better error messages
-    df['shares'] = df['shares'].apply(lambda x: _convert_numeric(x, 'shares'))
-    df['price'] = df['price'].apply(lambda x: _convert_numeric(x, 'price'))
-    df['fee'] = df['fee'].apply(lambda x: _convert_numeric(x, 'fee'))
-    df['tax'] = df['tax'].apply(lambda x: _convert_numeric(x, 'tax'))
+    df['shares'] = df['shares'].apply(lambda x: _convert_numeric(x, 'shares', german=True))
+    df['price'] = df['price'].apply(lambda x: _convert_numeric(x, 'price', german=True))
+    df['fee'] = df['fee'].apply(lambda x: _convert_numeric(x, 'fee', german=True))
+    df['tax'] = df['tax'].apply(lambda x: _convert_numeric(x, 'tax', german=True))
 
     # Log how many rows have conversion failures
     shares_null = df['shares'].isna().sum()
@@ -174,12 +178,12 @@ def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> 
             f"These rows will be skipped."
         )
 
-    invalid_numeric_count = int((df['shares'].isna() | df['price'].isna()).sum())
+    invalid_numeric_count = int(df[['shares', 'price', 'fee', 'tax']].isna().any(axis=1).sum())
     if strict_rows and invalid_numeric_count:
-        raise ValueError("Invalid holding row: shares and price must be numeric")
+        raise ValueError("Invalid holding row: shares, price, fee and tax must be finite numbers")
 
     # Drop rows with invalid numeric data in non-destructive add imports.
-    df = df.dropna(subset=['shares', 'price'])
+    df = df.dropna(subset=['shares', 'price', 'fee', 'tax'])
     if invalid_numeric_count:
         skipped_count += invalid_numeric_count
         warnings.append(
@@ -187,6 +191,8 @@ def _clean_and_validate_data(df: pd.DataFrame, *, strict_rows: bool = False) -> 
         )
     if df.empty:
         raise ValueError("No valid entries found after converting numeric values")
+    if ((df['shares'] < 0) | (df['price'] < 0)).any():
+        raise ValueError("Invalid holding row: shares and price must be nonnegative")
 
     # Parse and sort by date
     df = _parse_dates(df)
@@ -217,7 +223,7 @@ def _normalize_transaction_type(t):
         raise ValueError(f"Unknown transaction type: {t}")
 
 
-def _convert_numeric(val, field_name: str = None):
+def _convert_numeric(val, field_name: str | None = None, *, german: bool = False):
     """
     Convert value to numeric, handling various formats.
 
@@ -229,15 +235,20 @@ def _convert_numeric(val, field_name: str = None):
         float: Converted value, or None if conversion fails (to allow proper filtering)
     """
     if pd.isna(val):
-        return 0.0
-    if isinstance(val, (int, float)):
-        return float(val)
+        return 0.0 if field_name in ('fee', 'tax') else None
     try:
-        val_str = str(val).strip().replace(',', '.')
+        val_str = str(val).strip()
+        if ',' in val_str:
+            val_str = val_str.replace('.', '').replace(',', '.')
+        elif german and isinstance(val, str) and re.fullmatch(r'[+-]?\d{1,3}(?:\.\d{3})+', val_str):
+            # Parqet uses German grouping, including whole amounts with no comma.
+            # IBKR's dot-decimal strings must not pass through this rule.
+            val_str = val_str.replace('.', '')
         # Handle empty strings after stripping
         if not val_str:
-            return 0.0
-        return float(val_str)
+            return 0.0 if field_name in ('fee', 'tax') else None
+        number = float(val_str)
+        return number if math.isfinite(number) else None
     except (ValueError, TypeError) as e:
         # Log the conversion failure instead of silently returning 0
         logger.warning(
@@ -280,44 +291,20 @@ def _parse_dates(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("Fixing numeric datetime column (corrupted by thousands='.' setting)")
         df['datetime'] = _fix_numeric_date_column(df['datetime'])
 
-    try:
-        if 'datetime' in df.columns:
-            df['parsed_date'] = pd.to_datetime(df['datetime'], utc=True, dayfirst=True, errors='coerce')
-            mask = df['parsed_date'].isna()
-            if mask.any():
-                df.loc[mask, 'parsed_date'] = pd.to_datetime(
-                    df.loc[mask, 'datetime'], format='%d.%m.%Y', errors='coerce'
-                )
-                still_mask = df['parsed_date'].isna()
-                if still_mask.any():
-                    df.loc[still_mask, 'parsed_date'] = pd.to_datetime(
-                        df.loc[still_mask, 'datetime'], dayfirst=True, errors='coerce'
-                    )
-        else:
-            df['parsed_date'] = pd.to_datetime(
-                df['date'], format='%d.%m.%Y', errors='coerce'
-            )
-            mask = df['parsed_date'].isna()
-            if mask.any():
-                df.loc[mask, 'parsed_date'] = pd.to_datetime(
-                    df.loc[mask, 'date'], dayfirst=True, errors='coerce'
-                )
-    except Exception as e:
-        logger.warning(f"Error during date parsing: {str(e)}. Falling back to default parsing.")
-        df['parsed_date'] = pd.to_datetime(df['date'], dayfirst=True, errors='coerce')
-
-    # Strip timezone info to keep everything tz-naive (avoids TypeError on comparison)
-    # utc=True parsing produces tz-aware timestamps, but date-only parsing produces tz-naive
-    if hasattr(df['parsed_date'].dtype, 'tz') and df['parsed_date'].dtype.tz is not None:
-        df['parsed_date'] = df['parsed_date'].dt.tz_localize(None)
-
-    nat_count = df['parsed_date'].isna().sum()
-    if nat_count > 0:
-        logger.warning(f"{nat_count} dates could not be parsed and will be set to current time")
-    df['parsed_date'] = df['parsed_date'].fillna(pd.Timestamp.now())
+    raw = df['datetime'] if 'datetime' in df.columns else df['date']
+    # Separate explicit formats: dayfirst=True can silently interpret ISO July 1
+    # as January 7. Normalize offsets to UTC before dropping timezone metadata.
+    dates = pd.to_datetime(raw, format='ISO8601', errors='coerce', utc=True)
+    missing = dates.isna()
+    dates.loc[missing] = pd.to_datetime(
+        raw.loc[missing], format='%d.%m.%Y', errors='coerce', utc=True
+    )
+    if dates.isna().any():
+        raise ValueError("Invalid holding row: transaction date is missing or invalid")
+    df['parsed_date'] = dates.dt.tz_localize(None)
 
     # Sort by date
-    df = df.sort_values('parsed_date', ascending=True)
+    df = df.sort_values('parsed_date', ascending=True, kind='stable')
 
     # Summary logging only (per-row logging was a major performance bottleneck)
     logger.info(f"Sorted {len(df)} transactions, date range: {df['parsed_date'].min()} to {df['parsed_date'].max()}")

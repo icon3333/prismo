@@ -167,7 +167,7 @@ function ReviewWorkspace({
       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `prismo-review-${review.period}.csv`;
+      anchor.download = `allokatr-review-${review.period}.csv`;
       anchor.click();
       URL.revokeObjectURL(url);
       setCompletionMessage("Persisted decisions exported as CSV");

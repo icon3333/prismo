@@ -3,7 +3,7 @@
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
-// Terminal §9.2 / §10 — Prismo has essentially no icons. Replace each toast type's
+// Terminal §9.2 / §10 — Allokatr has essentially no icons. Replace each toast type's
 // lucide icon with a 6px solid colored dot: success→green, error→red, info→cyan, warning→amber.
 // Loader stays as the mono FETCHING… text glyph (already in place from Phase 2).
 const Toaster = ({ ...props }: ToasterProps) => {

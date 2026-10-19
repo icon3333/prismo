@@ -587,36 +587,3 @@ def calculate_allocation_targets_with_type_constraints(
 
     logger.info(f"Calculated type-constrained targets for {len(portfolios)} portfolios")
     return portfolios
-
-def generate_rebalancing_plan(
-    portfolios_with_targets: List[Dict]
-) -> Dict:
-    """
-    Generate complete rebalancing plan with buy/sell recommendations.
-
-    Analyzes the difference between current and target values to generate
-    actionable recommendations for rebalancing the portfolio.
-
-    Args:
-        portfolios_with_targets: List of portfolio dicts with target values calculated
-
-    Returns:
-        Dict with complete rebalancing plan in frontend-compatible format
-    """
-    logger.info("Generating rebalancing plan")
-
-    # This method currently just returns the portfolios structure
-    # Future enhancement: Add buy/sell recommendations, rebalancing suggestions
-    result = {
-        'portfolios': portfolios_with_targets
-    }
-
-    # Calculate summary statistics
-    total_value = sum(p['currentValue'] for p in portfolios_with_targets)
-    total_target_value = sum(p.get('targetValue', 0) for p in portfolios_with_targets)
-
-    logger.info(
-        f"Rebalancing plan: {len(portfolios_with_targets)} portfolios, "
-        f"total_value={total_value}, total_target={total_target_value}")
-
-    return result

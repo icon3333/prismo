@@ -246,17 +246,6 @@ def _run_csv_job(
                 logger.error(f"Failed to update error status in database: {db_error}")
 
 
-def _update_csv_job_progress(job_id: str, progress: int, message: str = "Processing..."):
-    """Update CSV job progress in the database."""
-    try:
-        execute_background_db(
-            "UPDATE background_jobs SET progress = ?, result = ?, updated_at = ? WHERE id = ?",
-            (progress, message, datetime.now(), job_id)
-        )
-    except Exception as e:
-        logger.error(f"Failed to update CSV job progress for {job_id}: {e}")
-
-
 def _update_csv_job_final(job_id: str, progress: int, result, status: str = "completed"):
     """Mark CSV job as completed or failed in the database."""
     try:
@@ -741,31 +730,6 @@ def interrupt_stale_csv_jobs() -> int:
     )
     get_db().commit()
     return cursor.rowcount
-
-
-def cancel_background_job(job_id: str) -> bool:
-    """
-    Cancel a background job by marking it as cancelled in the database.
-    Returns True if successful, False otherwise.
-    """
-    try:
-        # Update job status to cancelled
-        from app.utils.db_utils import execute_background_db
-        rowcount = execute_background_db(
-            "UPDATE background_jobs SET status = 'cancelled', result = 'Upload cancelled by user', updated_at = ? WHERE id = ? AND status IN ('pending', 'processing')",
-            (datetime.now(), job_id)
-        )
-        
-        if rowcount > 0:
-            logger.info(f"Background job {job_id} marked as cancelled")
-            return True
-        else:
-            logger.warning(f"Background job {job_id} not found or already completed")
-            return False
-        
-    except Exception as e:
-        logger.error(f"Failed to cancel background job {job_id}: {e}")
-        return False
 
 
 def get_latest_job_progress() -> Dict[str, Any]:

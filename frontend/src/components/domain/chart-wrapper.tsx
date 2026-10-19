@@ -13,7 +13,7 @@ export const oceanDepthChartColors = {
   series: ["#06B6D4", "#14B8A6", "#F97316", "#22D3EE", "#94A3B8"],
 } as const;
 
-export function getChartTheme(isDark: boolean) {
+function getChartTheme(isDark: boolean) {
   return {
     chart: {
       background: "transparent",
@@ -37,8 +37,6 @@ export function getChartTheme(isDark: boolean) {
     },
   };
 }
-
-export const oceanDepthChartTheme = getChartTheme(true);
 
 export function useChartTheme() {
   const { resolvedTheme } = useTheme();

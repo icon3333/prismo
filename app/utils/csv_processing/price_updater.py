@@ -126,29 +126,3 @@ def _fetch_and_update_price(identifier: str) -> bool:
     except Exception as e:
         logger.error(f"API call exception for {identifier}: {str(e)}")
         return False
-
-
-def get_identifiers_for_update(account_id: int, company_names: List[str]) -> Set[str]:
-    """
-    Get all identifiers for a list of company names.
-
-    Args:
-        account_id: Account ID
-        company_names: List of company names
-
-    Returns:
-        Set[str]: Set of identifiers to update
-    """
-    identifiers = set()
-
-    for company_name in company_names:
-        company = query_db(
-            'SELECT identifier FROM companies WHERE name = ? AND account_id = ?',
-            [company_name, account_id],
-            one=True
-        )
-        if company and company['identifier']:
-            identifiers.add(company['identifier'])
-
-    logger.info(f"Found {len(identifiers)} identifiers for price updates")
-    return identifiers

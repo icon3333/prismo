@@ -1,96 +1,15 @@
 from flask import request, jsonify, g
 from app.db_manager import query_db, get_db
-from app.utils.portfolio_utils import get_stock_info
-from app.utils.db_utils import update_price_in_db
 from app.utils.value_calculator import calculate_item_value, VALUE_INPUT_COLUMNS_SQL
-from app.utils.batch_processing import start_batch_process, get_job_status, get_latest_job_progress
+from app.utils.batch_processing import start_batch_process, get_latest_job_progress
 from app.decorators import require_auth
 from app.utils.response_helpers import success_response, error_response, not_found_response, service_unavailable_response
 from app.exceptions import (
-    ValidationError, DataIntegrityError, ExternalAPIError, NotFoundError,
-    PriceFetchError
+    ValidationError, DataIntegrityError, ExternalAPIError, NotFoundError
 )
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-@require_auth
-def update_price_api(company_id: int):
-    """API endpoint to update a company's price by its ID."""
-    logger.info(f"Price update requested for company_id: {company_id}")
-
-    account_id = g.account_id
-    logger.info(f"Processing price update for company_id: {company_id}, account_id: {account_id}")
-
-    try:
-        # Fetch the identifier for the given company_id, ensuring it belongs to the current user
-        company = query_db(
-            'SELECT identifier FROM companies WHERE id = ? AND account_id = ?',
-            [company_id, account_id],
-            one=True
-        )
-
-        if not company:
-            logger.warning(f"Company {company_id} not found or access denied for account {account_id}")
-            return not_found_response('Company', company_id)
-
-        identifier = company['identifier'] if isinstance(company, dict) else None
-        if not identifier:
-            logger.warning(f"Company {company_id} has no identifier set")
-            return error_response('Company has no identifier set', 400)
-
-        logger.info(f"Forcing price update for company {company_id} with identifier '{identifier}' (bypassing 24h rule)")
-
-        # A forced update must hit the network — drop this identifier's 15-min
-        # cache entries first, or get_stock_info would return the cached price.
-        from app.utils.yfinance_utils import clear_price_cache
-        clear_price_cache(identifier)
-
-        result = get_stock_info(identifier)
-        if not result.get('success'):
-            error_msg = result.get('error', 'Unknown error')
-            logger.error(f"Failed to fetch price for {identifier}: {error_msg}")
-            return error_response(f"Failed to fetch price for {identifier}: {error_msg}", 400)
-
-        data = result.get('data', {})
-        price = data.get('currentPrice')
-        currency = data.get('currency')
-        price_eur = data.get('priceEUR')
-        modified_identifier = result.get('modified_identifier')
-
-        if price is None:
-            logger.error(f"No price data returned for {identifier}")
-            return error_response(f'Failed to fetch price for {identifier}', 400)
-
-        logger.info(f"Successfully fetched price for {identifier}: {price} {currency} ({price_eur} EUR)")
-
-        # Update price and other metadata in the database (this always updates, ignoring any timing rules)
-        if update_price_in_db(
-            identifier, price, currency, price_eur,
-            country=data.get('country'),
-            modified_identifier=modified_identifier
-        ):
-            logger.info(f"Successfully updated price in database for {identifier}")
-            return success_response(
-                data={
-                    'identifier': identifier,
-                    'price': price,
-                    'currency': currency,
-                    'price_eur': price_eur
-                },
-                message=f"Price for {identifier} updated successfully."
-            )
-
-        logger.error(f"Failed to update price in database for {identifier}")
-        return error_response(f'Failed to update price in database for {identifier}', 500)
-
-    except (DataIntegrityError, ExternalAPIError, PriceFetchError) as e:
-        logger.error(f"Error updating price for company {company_id}: {str(e)}")
-        return error_response(str(e), 500)
-    except Exception as e:
-        logger.exception(f"Unexpected error updating price for company {company_id}")
-        return error_response('An unexpected error occurred.', 500)
 
 
 @require_auth
@@ -249,45 +168,6 @@ def price_fetch_progress():
     except Exception as e:
         logger.exception(f"Unexpected error getting price fetch progress")
         return error_response('Failed to retrieve progress information', 500)
-
-
-@require_auth
-def price_update_status(job_id):
-    """API endpoint to get status of a specific price update job"""
-    try:
-        status = get_job_status(job_id)
-
-        if status.get('status') == 'not_found':
-            return not_found_response('Job', job_id)
-
-        # Calculate progress percentage
-        progress = status.get('progress', 0)
-        total = status.get('total', 1)
-        percentage = int((progress / total) * 100) if total > 0 else 0
-
-        response_data = {
-            'job_id': job_id,
-            'status': status.get('status'),
-            'progress': {
-                'current': progress,
-                'total': total,
-                'percentage': percentage
-            },
-            'is_complete': status.get('status') == 'completed'
-        }
-
-        # Add results if job is completed
-        if status.get('results'):
-            response_data['results'] = status['results']
-
-        return jsonify(response_data)
-
-    except (DataIntegrityError, NotFoundError) as e:
-        logger.error(f"Error getting job status for {job_id}: {str(e)}")
-        return error_response(str(e), 404 if isinstance(e, NotFoundError) else 500)
-    except Exception as e:
-        logger.exception(f"Unexpected error getting job status for {job_id}")
-        return error_response('Failed to retrieve job status', 500)
 
 
 @require_auth

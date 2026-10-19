@@ -5,20 +5,12 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type {
   AutoSaveStatus,
-  DeployManualItem,
   SimulatorItem,
 } from "@/types/simulator";
 
 type SimulationAutosavePayload = {
   items: SimulatorItem[];
   totalAmount: number;
-  deploy: {
-    lumpSum: number;
-    monthly: number;
-    months: number;
-    manualMode: boolean;
-    manualItems: DeployManualItem[];
-  };
 };
 
 type UseSimulationAutosaveOptions = {
@@ -58,11 +50,6 @@ export function useSimulationAutosave({
             items: nextPayload.items,
             global_value_mode: "euro",
             total_amount: nextPayload.totalAmount,
-            deploy_lump_sum: nextPayload.deploy.lumpSum,
-            deploy_monthly: nextPayload.deploy.monthly,
-            deploy_months: nextPayload.deploy.months,
-            deploy_manual_mode: nextPayload.deploy.manualMode,
-            deploy_manual_items: nextPayload.deploy.manualItems,
           }),
         }
       );

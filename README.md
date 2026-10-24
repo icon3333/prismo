@@ -1,4 +1,4 @@
-# Prismo
+# Allokatr
 
 **The portfolio tool [Parqet](https://parqet.com) and [IBKR](https://www.interactivebrokers.com/) don't give you.**
 
@@ -12,7 +12,7 @@ Self-hosted. Single-user. No subscriptions, no trackers, no fluff.
 
 You already have a broker. What you don't have is a fast way to answer:
 
-- **"Where should this €1,000 go?"** — Prismo tells you, across all your accounts, respecting your type constraints (Stock / ETF / Crypto).
+- **"Where should this €1,000 go?"** — Allokatr tells you, across all your accounts, respecting your type constraints (Stock / ETF / Crypto).
 - **"Am I accidentally 40% in one sector?"** — Concentration heatmaps across portfolios, not just per account.
 - **"What if I sell this and buy that?"** — Sandbox simulator. Clone your portfolio, mess with it, compare deltas. Nothing touches the real numbers.
 - **"How is this thesis actually doing?"** — P&L per position with your written rationale attached. Stop rediscovering why you bought the dip in 2023.

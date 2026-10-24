@@ -120,6 +120,11 @@ class TestGetExchangeRate:
 
         assert yfu.get_exchange_rate("GBp") == pytest.approx(0.0117)
 
+    def test_pence_to_pounds_short_circuits_without_network(self):
+        assert yfu.get_exchange_rate("GBp", "GBP") == 0.01
+        assert yfu.fetch_exchange_rate_from_network("GBp", "GBP") == 0.01
+        assert yfu.get_exchange_rate("GBp", "GBp") == 1.0
+
 
 class TestGetIsinDataFxContract:
     """get_isin_data must surface priceEUR=None (not a 1:1 value) when no

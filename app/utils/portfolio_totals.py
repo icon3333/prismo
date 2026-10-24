@@ -47,19 +47,3 @@ def get_portfolio_totals(account_id: int, holdings_value: float) -> dict:
     logger.debug(f"Portfolio totals for account {account_id}: holdings={holdings_value:.2f}, cash={cash:.2f}, total={totals['total']:.2f}")
 
     return totals
-
-
-def calculate_percentage(value: float, totals: dict) -> float:
-    """
-    Calculate percentage of a value against portfolio total (including cash).
-
-    Args:
-        value: The value to calculate percentage for
-        totals: Dictionary from get_portfolio_totals()
-
-    Returns:
-        Percentage value (0-100), or 0 if total is 0
-    """
-    if totals['total'] <= 0:
-        return 0.0
-    return (value / totals['total']) * 100

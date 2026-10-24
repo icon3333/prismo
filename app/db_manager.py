@@ -5,11 +5,18 @@ from pathlib import Path
 import logging
 import threading
 from flask import g, current_app
-import click
-from flask.cli import with_appcontext
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Schema version that app/schema.sql produces. Bump it together with every new
+# migration in migrate_database(); a database built fresh from schema.sql is
+# stamped straight at this version rather than replaying the migration chain.
+LATEST_SCHEMA_VERSION = 24
+
+# Oldest schema version this build can migrate FROM. Migrations 1-23 were
+# removed as unreachable (see migrate_database); commit 4226f05 still has them.
+MIN_MIGRATABLE_VERSION = 23
 
 # Store the database path when the app initializes
 _db_path = None
@@ -156,133 +163,80 @@ def close_db(e=None):
 
 def init_db(app):
     """
-    Initialize the database and create tables if they don't exist.
-    Then verify schema, run migrations, and optionally insert sample data if empty.
+    Bring the database up to date, then seed it if it is empty.
+
+    Order matters. schema.sql only ever CREATEs — it cannot add a column to a
+    table that already exists — so an older database has to be migrated FIRST,
+    otherwise schema.sql's newer indexes reference columns that are not there
+    yet (that is exactly how migration 24's `background_jobs.account_id` index
+    broke startup on a v23 database).
+
+      1. bootstrap schema_version
+      2. migrate_database()  — brings an existing database's columns forward
+      3. schema.sql          — creates anything still missing (idempotent)
     """
     with app.app_context():
         # Store the database path for background operations
         db_path = app.config['SQLALCHEMY_DATABASE_URI'].replace('sqlite:///', '')
         set_db_path(db_path)
         logger.info(f"Database path configured: {db_path}")
-        logger.info(f"Database directory: {os.path.dirname(db_path)}")
         logger.info(f"Database file exists: {os.path.exists(db_path)}")
-        
+
         db = get_db()
 
-        # Perform all initialization in a single transaction for atomicity.
-        # schema.sql is the single source of truth for tables/indexes/triggers;
-        # the only extra step here is the schema_version bootstrap.
-        with db:
-            try:
+        try:
+            with db:
+                # Is this an empty file, or an existing Prismo database?
+                # Must be decided before schema.sql creates anything.
+                is_new_database = db.execute(
+                    "SELECT COUNT(*) FROM sqlite_master "
+                    "WHERE type='table' AND name='accounts'"
+                ).fetchone()[0] == 0
+
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                if not db.execute('SELECT version FROM schema_version LIMIT 1').fetchone():
+                    # A new database gets built from the CURRENT schema.sql, so
+                    # it is already at the latest version — stamp it there
+                    # instead of replaying the whole chain over a schema that is
+                    # correct by construction. That replay is why every
+                    # migration also had to be a no-op on a fresh schema (see
+                    # migration 9's `category` guard). A pre-schema_version
+                    # database starts at 0 and migrates normally.
+                    start_version = LATEST_SCHEMA_VERSION if is_new_database else 0
+                    db.execute(
+                        'INSERT INTO schema_version (version) VALUES (?)',
+                        [start_version],
+                    )
+                    logger.info(
+                        f"Stamped {'new' if is_new_database else 'existing'} "
+                        f"database at schema version {start_version}"
+                    )
+
+            # 2. Migrate an existing database's columns forward.
+            migrate_database()
+
+            # 3. Create whatever is still missing. All statements are
+            #    CREATE ... IF NOT EXISTS, so this is a no-op once current.
+            with db:
                 with app.open_resource('schema.sql', mode='r') as f:
                     db.cursor().executescript(f.read())
-                logger.debug("Schema loaded from app/schema.sql")
-            except FileNotFoundError:
-                logger.warning("app/schema.sql not found - will use fallback table creation")
+            logger.debug("Schema applied from app/schema.sql")
 
-            db.execute('''
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            cursor = db.cursor()
-            cursor.execute('SELECT version FROM schema_version LIMIT 1')
-            if not cursor.fetchone():
-                db.execute('INSERT INTO schema_version (version) VALUES (0)')
-
-        logger.info("Database tables initialized successfully")
-
-        try:
-            # Create tables if not present
-            cursor = db.cursor()
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [row[0] for row in cursor.fetchall()]
-
-            if not tables or 'accounts' not in tables:
-                logger.info("Fallback: Initializing database schema from app/schema.sql ...")
-                try:
-                    with app.open_resource('schema.sql', mode='r') as f:
-                        db.executescript(f.read())
-                    db.commit()
-                    logger.info("Database schema initialized from app/schema.sql")
-                except FileNotFoundError:
-                    logger.error("CRITICAL: No schema file found. Database cannot be initialized.")
-                    raise
-
-            # Verify that required columns exist, etc.
-            verify_schema(db)
-
-            # Check if database is empty and insert sample data if you want
             if is_database_empty(db):
-                logger.info("Database appears empty. Optionally adding sample data.")
+                logger.info("Database is empty - creating default account.")
                 create_default_data(db)
 
-            # Assign teardown
             app.teardown_appcontext(close_db)
 
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             raise
-
-def verify_schema(db):
-    """
-    Verify that all required tables/columns are present.
-    If something is missing, you can recreate or raise an error.
-    """
-    required_tables = [
-        'accounts', 'portfolios', 'companies', 'company_shares',
-        'market_prices', 'expanded_state', 'identifier_mappings', 'exchange_rates',
-        'background_jobs', 'monthly_reviews'
-    ]
-    cursor = db.cursor()
-    for table in required_tables:
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table])
-        result = cursor.fetchone()
-        if not result:
-            logger.warning(f"Missing table: {table}. You might need to re-run schema.sql.")
-
-    # Check companies table structure
-    columns_check = cursor.execute("PRAGMA table_info(companies)").fetchall()
-    col_names = [col[1] for col in columns_check]
-    required_columns = ['id', 'name', 'identifier', 'sector', 'portfolio_id', 'account_id', 'total_invested', 'override_country', 'country_manually_edited', 'country_manual_edit_date']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'companies' table: {missing_columns}")
-
-    # Check market_prices table structure and add missing columns if necessary
-    market_prices_check = cursor.execute("PRAGMA table_info(market_prices)").fetchall()
-    col_names = [col[1] for col in market_prices_check]
-    required_columns = ['identifier', 'price', 'currency', 'price_eur', 'last_updated', 'country']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'market_prices' table: {missing_columns}")
-
-    # Check identifier_mappings table structure
-    identifier_mappings_check = cursor.execute("PRAGMA table_info(identifier_mappings)").fetchall()
-    col_names = [col[1] for col in identifier_mappings_check]
-    required_columns = ['id', 'account_id', 'csv_identifier', 'preferred_identifier', 'company_name', 'created_at', 'updated_at']
-    missing_columns = [col for col in required_columns if col not in col_names]
-    if missing_columns:
-        logger.warning(f"Missing columns in 'identifier_mappings' table: {missing_columns}")
-
-    background_jobs_check = cursor.execute("PRAGMA table_info(background_jobs)").fetchall()
-    background_job_columns = [col[1] for col in background_jobs_check]
-    if 'account_id' not in background_job_columns:
-        logger.warning("Missing column in 'background_jobs': account_id")
-
-    monthly_reviews_check = cursor.execute("PRAGMA table_info(monthly_reviews)").fetchall()
-    monthly_review_columns = [col[1] for col in monthly_reviews_check]
-    required_review_columns = [
-        'id', 'account_id', 'source_job_id', 'period', 'previous_review_id',
-        'status', 'version', 'payload', 'created_at', 'updated_at', 'completed_at'
-    ]
-    missing_review_columns = [
-        col for col in required_review_columns if col not in monthly_review_columns
-    ]
-    if missing_review_columns:
-        logger.warning(f"Missing columns in 'monthly_reviews': {missing_review_columns}")
 
 def is_database_empty(db):
     """
@@ -474,16 +428,22 @@ def _safe_add_column(cursor, table, column_def):
 
 def migrate_database():
     """
-    Run database migrations using version tracking for efficiency.
+    Bring an existing database forward to LATEST_SCHEMA_VERSION.
 
-    Only runs migrations that haven't been applied yet, tracked via schema_version table.
-    This avoids redundant SELECT queries on every startup.
+    Migrations 1-23 were deleted in favour of MIN_MIGRATABLE_VERSION: this is a
+    single-user application, and every database in existence — the live one and
+    every backup — was already at 23, so they could never run again. A database
+    created fresh is stamped at LATEST_SCHEMA_VERSION by init_db() and skips
+    this entirely.
+
+    The old chain is not lost, just not carried: `git show 4226f05` has it, and
+    the guard below names that commit. Upgrading a pre-v23 database means
+    checking that commit out and booting once.
     """
     db = get_db()
     cursor = db.cursor()
 
-    # Latest migration version
-    LATEST_VERSION = 24
+    LATEST_VERSION = LATEST_SCHEMA_VERSION
 
     try:
         # Get current schema version
@@ -495,503 +455,17 @@ def migrate_database():
             logger.debug(f"Database schema is up to date (version {current_version})")
             return
 
-        logger.info(f"Database schema version {current_version}, migrating to {LATEST_VERSION}")
-
-        # Migration 1: Add user-edited shares tracking columns
-        if current_version < 1:
-            logger.info("Applying migration 1: Adding user-edited shares tracking columns")
-            _safe_add_column(cursor, "company_shares", "manual_edit_date DATETIME")
-            _safe_add_column(cursor, "company_shares", "is_manually_edited BOOLEAN DEFAULT 0")
-            _safe_add_column(cursor, "company_shares", "csv_modified_after_edit BOOLEAN DEFAULT 0")
-            cursor.execute("UPDATE schema_version SET version = 1, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 1 completed")
-
-        # Migration 2: Add country override columns
-        if current_version < 2:
-            logger.info("Applying migration 2: Adding country override columns")
-            _safe_add_column(cursor, "companies", "override_country TEXT")
-            _safe_add_column(cursor, "companies", "country_manually_edited BOOLEAN DEFAULT 0")
-            _safe_add_column(cursor, "companies", "country_manual_edit_date DATETIME")
-            cursor.execute("UPDATE schema_version SET version = 2, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 2 completed")
-
-        # Migration 3: Add custom value columns
-        if current_version < 3:
-            logger.info("Applying migration 3: Adding custom value columns")
-            _safe_add_column(cursor, "companies", "custom_total_value REAL")
-            _safe_add_column(cursor, "companies", "custom_price_eur REAL")
-            _safe_add_column(cursor, "companies", "is_custom_value BOOLEAN DEFAULT 0")
-            _safe_add_column(cursor, "companies", "custom_value_date DATETIME")
-            cursor.execute("UPDATE schema_version SET version = 3, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 3 completed")
-
-        # Migration 4: Add investment_type column
-        if current_version < 4:
-            logger.info("Applying migration 4: Adding investment_type column")
-            _safe_add_column(cursor, "companies", "investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF'))")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)")
-            cursor.execute("UPDATE schema_version SET version = 4, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 4 completed")
-
-        # Migration 5: Add identifier manual edit tracking columns
-        if current_version < 5:
-            logger.info("Applying migration 5: Adding identifier manual edit tracking columns")
-            _safe_add_column(cursor, "companies", "override_identifier TEXT")
-            _safe_add_column(cursor, "companies", "identifier_manually_edited BOOLEAN DEFAULT 0")
-            _safe_add_column(cursor, "companies", "identifier_manual_edit_date DATETIME")
-            cursor.execute("UPDATE schema_version SET version = 5, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 5 completed")
-
-        # Migration 6: Add exchange_rates table for consistent currency conversion
-        if current_version < 6:
-            logger.info("Applying migration 6: Adding exchange_rates table")
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS exchange_rates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    from_currency TEXT NOT NULL,
-                    to_currency TEXT DEFAULT 'EUR',
-                    rate REAL NOT NULL,
-                    last_updated DATETIME NOT NULL,
-                    UNIQUE(from_currency, to_currency)
-                )
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency
-                ON exchange_rates(from_currency, to_currency)
-            ''')
-            cursor.execute("UPDATE schema_version SET version = 6, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 6 completed: exchange_rates table created")
-
-        # Migration 7: Add simulations table for allocation simulator scenarios
-        if current_version < 7:
-            logger.info("Applying migration 7: Adding simulations table")
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS simulations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id INTEGER NOT NULL,
-                    name TEXT NOT NULL,
-                    scope TEXT NOT NULL DEFAULT 'global',
-                    portfolio_id INTEGER,
-                    items TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (account_id) REFERENCES accounts(id),
-                    FOREIGN KEY (portfolio_id) REFERENCES portfolios(id)
-                )
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_simulations_account_id
-                ON simulations(account_id)
-            ''')
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_simulations_name
-                ON simulations(account_id, name)
-            ''')
-            cursor.execute("UPDATE schema_version SET version = 7, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 7 completed: simulations table created")
-
-        # Migration 8: Add thesis column for investment thesis tracking
-        if current_version < 8:
-            logger.info("Applying migration 8: Adding thesis column to companies")
-            _safe_add_column(cursor, "companies", "thesis TEXT DEFAULT ''")
-            cursor.execute("UPDATE schema_version SET version = 8, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 8 completed: thesis column added")
-
-        # Migration 9: Rename category to sector
-        if current_version < 9:
-            logger.info("Applying migration 9: Renaming category to sector")
-            # Fresh DBs from schema.sql already have `sector` — only rename if the
-            # legacy `category` column actually exists, otherwise this ALTER would
-            # raise `no such column: category` and abort the whole migration chain.
-            cols = {row[1] for row in cursor.execute("PRAGMA table_info(companies)").fetchall()}
-            if "category" in cols and "sector" not in cols:
-                cursor.execute('ALTER TABLE companies RENAME COLUMN category TO sector')
-            # Drop old indexes (no-op if absent)
-            cursor.execute('DROP INDEX IF EXISTS idx_companies_category')
-            cursor.execute('DROP INDEX IF EXISTS idx_companies_portfolio_category')
-            # Create new indexes with sector naming
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
-            cursor.execute("UPDATE schema_version SET version = 9, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 9 completed: category renamed to sector")
-
-        # Migration 10: Add cash balance column to accounts
-        if current_version < 10:
-            logger.info("Applying migration 10: Adding cash column to accounts")
-            _safe_add_column(cursor, "accounts", "cash REAL DEFAULT 0")
-            cursor.execute("UPDATE schema_version SET version = 10, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 10 completed: cash column added to accounts")
-
-        # Migration 11: Add source column for tracking manual vs CSV-imported companies
-        if current_version < 11:
-            logger.info("Applying migration 11: Adding source column to companies")
-            _safe_add_column(cursor, "companies", "source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual'))")
-            # Update existing companies to 'csv' (they all came from CSV imports)
-            cursor.execute("UPDATE companies SET source = 'csv' WHERE source IS NULL")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)")
-            cursor.execute("UPDATE schema_version SET version = 11, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 11 completed: source column added to companies")
-
-        # Migration 12: Make identifier and portfolio_id nullable in companies table
-        if current_version < 12:
-            logger.info("Applying migration 12: Making identifier and portfolio_id nullable")
-            # Disable foreign keys temporarily - company_shares references companies,
-            # which blocks DROP TABLE when foreign_keys is ON
-            cursor.execute('PRAGMA foreign_keys = OFF')
-            # SQLite doesn't support ALTER COLUMN, so we recreate the table
-            cursor.execute('''
-                CREATE TABLE companies_new (
-                    id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    identifier TEXT,
-                    sector TEXT NOT NULL,
-                    thesis TEXT DEFAULT '',
-                    portfolio_id INTEGER,
-                    account_id INTEGER NOT NULL,
-                    total_invested REAL DEFAULT 0,
-                    override_country TEXT,
-                    country_manually_edited BOOLEAN DEFAULT 0,
-                    country_manual_edit_date DATETIME,
-                    custom_total_value REAL,
-                    custom_price_eur REAL,
-                    is_custom_value BOOLEAN DEFAULT 0,
-                    custom_value_date DATETIME,
-                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
-                    override_identifier TEXT,
-                    identifier_manually_edited BOOLEAN DEFAULT 0,
-                    identifier_manual_edit_date DATETIME,
-                    source TEXT DEFAULT 'csv' CHECK(source IN ('csv', 'manual')),
-                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
-                    FOREIGN KEY (account_id) REFERENCES accounts (id),
-                    UNIQUE (account_id, name)
-                )
-            ''')
-            # Copy data from old table
-            cursor.execute('''
-                INSERT INTO companies_new
-                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
-                       total_invested, override_country, country_manually_edited,
-                       country_manual_edit_date, custom_total_value, custom_price_eur,
-                       is_custom_value, custom_value_date, investment_type,
-                       override_identifier, identifier_manually_edited,
-                       identifier_manual_edit_date, source
-                FROM companies
-            ''')
-            # Drop old table
-            cursor.execute('DROP TABLE companies')
-            # Rename new table
-            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
-            # Recreate indexes
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
-            # Re-enable foreign keys
-            cursor.execute('PRAGMA foreign_keys = ON')
-            cursor.execute("UPDATE schema_version SET version = 12, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 12 completed: identifier and portfolio_id are now nullable")
-
-        # Migration 13: Rename page_name values to match tab labels
-        if current_version < 13:
-            logger.info("Applying migration 13: Renaming page_name values in expanded_state")
-            cursor.execute("UPDATE expanded_state SET page_name = 'performance' WHERE page_name = 'analyse'")
-            cursor.execute("UPDATE expanded_state SET page_name = 'builder' WHERE page_name = 'build'")
-            cursor.execute("UPDATE schema_version SET version = 13, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 13 completed: page_name values renamed (analyse→performance, build→builder)")
-
-        # Migration 14: Add first_bought_date column for "Since Purchase" chart period
-        if current_version < 14:
-            logger.info("Applying migration 14: Adding first_bought_date column to companies")
-            _safe_add_column(cursor, "companies", "first_bought_date DATETIME")
-            cursor.execute("UPDATE schema_version SET version = 14, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 14 completed: first_bought_date column added to companies")
-
-        # Migration 15: Recover corrupted first_bought_date values
-        # Bug: parser.py column rename was inverted, causing dates to resolve to import timestamp
-        # This NULLs out any first_bought_date set within the last 30 days so the next
-        # CSV reimport (with the fixed parser) sets them correctly from actual transaction dates
-        if current_version < 15:
-            logger.info("Applying migration 15: Recovering corrupted first_bought_date values")
-            affected = cursor.execute(
-                "UPDATE companies SET first_bought_date = NULL WHERE first_bought_date > datetime('now', '-30 days')"
-            ).rowcount
-            logger.info(f"Migration 15: NULLed {affected} corrupted first_bought_date values")
-            cursor.execute("UPDATE schema_version SET version = 15, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 15 completed: corrupted first_bought_date values recovered")
-
-        # Migration 16: Extend source CHECK constraint for multi-broker support
-        # Rename 'csv' → 'parqet', add 'ibkr' as valid source
-        if current_version < 16:
-            logger.info("Applying migration 16: Extending source CHECK for multi-broker support")
-            cursor.execute('PRAGMA foreign_keys = OFF')
-            cursor.execute('''
-                CREATE TABLE companies_new (
-                    id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    identifier TEXT,
-                    sector TEXT NOT NULL,
-                    thesis TEXT DEFAULT '',
-                    portfolio_id INTEGER,
-                    account_id INTEGER NOT NULL,
-                    total_invested REAL DEFAULT 0,
-                    override_country TEXT,
-                    country_manually_edited BOOLEAN DEFAULT 0,
-                    country_manual_edit_date DATETIME,
-                    custom_total_value REAL,
-                    custom_price_eur REAL,
-                    is_custom_value BOOLEAN DEFAULT 0,
-                    custom_value_date DATETIME,
-                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
-                    override_identifier TEXT,
-                    identifier_manually_edited BOOLEAN DEFAULT 0,
-                    identifier_manual_edit_date DATETIME,
-                    source TEXT DEFAULT 'parqet' CHECK(source IN ('parqet', 'ibkr', 'manual')),
-                    first_bought_date DATETIME,
-                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
-                    FOREIGN KEY (account_id) REFERENCES accounts (id),
-                    UNIQUE (account_id, name)
-                )
-            ''')
-            cursor.execute('''
-                INSERT INTO companies_new
-                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
-                       total_invested, override_country, country_manually_edited,
-                       country_manual_edit_date, custom_total_value, custom_price_eur,
-                       is_custom_value, custom_value_date, investment_type,
-                       override_identifier, identifier_manually_edited,
-                       identifier_manual_edit_date,
-                       CASE WHEN source = 'csv' THEN 'parqet' ELSE source END,
-                       first_bought_date
-                FROM companies
-            ''')
-            cursor.execute('DROP TABLE companies')
-            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
-            # Recreate indexes
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
-            cursor.execute('PRAGMA foreign_keys = ON')
-            cursor.execute("UPDATE schema_version SET version = 16, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 16 completed: source CHECK extended (csv→parqet, added ibkr)")
-
-        if current_version < 17:
-            # Migration 17: Normalize existing sector, override_country, and thesis values
-            # sector/override_country → Title Case, thesis → trimmed
-            cursor = db.cursor()
-            rows = cursor.execute(
-                'SELECT id, sector, override_country, thesis FROM companies'
-            ).fetchall()
-            for row in rows:
-                cid = row[0]
-                sector = row[1]
-                country = row[2]
-                thesis = row[3]
-                new_sector = sector.strip().title() if sector and sector.strip() else sector
-                new_country = country.strip().title() if country and country.strip() else country
-                new_thesis = thesis.strip().title() if thesis and thesis.strip() else thesis
-                if new_sector != sector or new_country != country or new_thesis != thesis:
-                    cursor.execute(
-                        'UPDATE companies SET sector = ?, override_country = ?, thesis = ? WHERE id = ?',
-                        [new_sector, new_country, new_thesis, cid]
-                    )
-            cursor.execute("UPDATE schema_version SET version = 17, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 17 completed: normalized sector/country to Title Case, trimmed thesis")
-
-        # Migration 18: Re-normalize thesis (and sector/country) to Title Case
-        # Migration 17 was first deployed with thesis only getting .strip() (no .title()).
-        # Since migration 17 already ran, existing thesis values were never Title Cased.
-        if current_version < 18:
-            logger.info("Applying migration 18: Re-normalizing sector/country/thesis to Title Case")
-            rows = cursor.execute(
-                'SELECT id, sector, override_country, thesis FROM companies'
-            ).fetchall()
-            updated = 0
-            for row in rows:
-                cid, sector, country, thesis = row[0], row[1], row[2], row[3]
-                new_sector = sector.strip().title() if sector and sector.strip() else sector
-                new_country = country.strip().title() if country and country.strip() else country
-                new_thesis = thesis.strip().title() if thesis and thesis.strip() else thesis
-                if new_sector != sector or new_country != country or new_thesis != thesis:
-                    cursor.execute(
-                        'UPDATE companies SET sector = ?, override_country = ?, thesis = ? WHERE id = ?',
-                        [new_sector, new_country, new_thesis, cid]
-                    )
-                    updated += 1
-            cursor.execute("UPDATE schema_version SET version = 18, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info(f"Migration 18 completed: re-normalized {updated} companies to Title Case")
-
-        # Migration 19: Add type and clone tracking columns to simulations table
-        if current_version < 19:
-            logger.info("Applying migration 19: Adding type and clone columns to simulations")
-            # Schema.sql already includes these columns on fresh DBs — use the
-            # duplicate-tolerant helper so re-running on a fresh install doesn't crash.
-            _safe_add_column(cursor, "simulations",
-                             "type TEXT NOT NULL DEFAULT 'overlay' CHECK(type IN ('overlay', 'portfolio'))")
-            _safe_add_column(cursor, "simulations", "cloned_from_portfolio_id INTEGER")
-            _safe_add_column(cursor, "simulations", "cloned_from_name TEXT")
-            cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_simulations_type ON simulations(account_id, type)"
+        if current_version < MIN_MIGRATABLE_VERSION:
+            raise RuntimeError(
+                f"Database is at schema version {current_version}; this build can "
+                f"only migrate from {MIN_MIGRATABLE_VERSION} or later. Migrations "
+                f"1-{MIN_MIGRATABLE_VERSION} were removed as unreachable. To "
+                f"upgrade this file, check out commit 4226f05 (which still has "
+                f"the full chain), boot once against it, then return to this "
+                f"build. Refusing to start rather than half-migrate."
             )
-            cursor.execute("UPDATE schema_version SET version = 19, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 19 completed: added type, cloned_from_portfolio_id, cloned_from_name to simulations")
 
-        # Migration 20: Add global_value_mode and total_amount columns to simulations
-        if current_version < 20:
-            logger.info("Applying migration 20: Adding global_value_mode and total_amount to simulations")
-            _safe_add_column(cursor, "simulations",
-                             "global_value_mode TEXT NOT NULL DEFAULT 'euro' CHECK(global_value_mode IN ('euro', 'percent'))")
-            _safe_add_column(cursor, "simulations", "total_amount REAL DEFAULT 0")
-            cursor.execute("UPDATE schema_version SET version = 20, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 20 completed: added global_value_mode and total_amount to simulations")
-
-        # Migration 21: Lowercase all portfolio names
-        if current_version < 21:
-            logger.info("Applying migration 21: Lowercasing all portfolio names")
-
-            # Find collisions: portfolios that would have the same lowercase name
-            collisions = cursor.execute('''
-                SELECT account_id, LOWER(name) as lower_name, GROUP_CONCAT(id) as ids, COUNT(*) as cnt
-                FROM portfolios
-                GROUP BY account_id, LOWER(name)
-                HAVING cnt > 1
-            ''').fetchall()
-
-            for collision in collisions:
-                ids = [int(x) for x in collision['ids'].split(',')]
-                keep_id = ids[0]
-                duplicate_ids = ids[1:]
-                logger.info(f"Collision: '{collision['lower_name']}' account={collision['account_id']}, keeping ID {keep_id}, merging {duplicate_ids}")
-
-                # Move companies from duplicate portfolios to the kept one
-                for dup_id in duplicate_ids:
-                    cursor.execute(
-                        'UPDATE companies SET portfolio_id = ? WHERE portfolio_id = ?',
-                        [keep_id, dup_id]
-                    )
-                    cursor.execute('DELETE FROM portfolios WHERE id = ?', [dup_id])
-
-            # Lowercase all portfolio names
-            cursor.execute('UPDATE portfolios SET name = LOWER(name)')
-
-            # Lowercase cloned_from_name in simulations
-            cursor.execute('''
-                UPDATE simulations SET cloned_from_name = LOWER(cloned_from_name)
-                WHERE cloned_from_name IS NOT NULL
-            ''')
-
-            cursor.execute("UPDATE schema_version SET version = 21, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 21 completed: lowercased all portfolio names")
-
-        # Migration 22: Add deploy columns to simulations table
-        if current_version < 22:
-            logger.info("Applying migration 22: Adding deploy columns to simulations table")
-            _safe_add_column(cursor, "simulations", "deploy_lump_sum REAL DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_monthly REAL DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_months INTEGER DEFAULT 1")
-            _safe_add_column(cursor, "simulations", "deploy_manual_mode INTEGER DEFAULT 0")
-            _safe_add_column(cursor, "simulations", "deploy_manual_items TEXT")
-            cursor.execute("UPDATE schema_version SET version = 22, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 22 completed: added deploy columns to simulations")
-
-        # Migration 23: Add 'Crypto' to investment_type CHECK constraint
-        if current_version < 23:
-            logger.info("Applying migration 23: Adding 'Crypto' to investment_type CHECK constraint")
-            cursor.execute('PRAGMA foreign_keys = OFF')
-            cursor.execute('''
-                CREATE TABLE companies_new (
-                    id INTEGER PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    identifier TEXT,
-                    sector TEXT NOT NULL,
-                    thesis TEXT DEFAULT '',
-                    portfolio_id INTEGER,
-                    account_id INTEGER NOT NULL,
-                    total_invested REAL DEFAULT 0,
-                    override_country TEXT,
-                    country_manually_edited BOOLEAN DEFAULT 0,
-                    country_manual_edit_date DATETIME,
-                    custom_total_value REAL,
-                    custom_price_eur REAL,
-                    is_custom_value BOOLEAN DEFAULT 0,
-                    custom_value_date DATETIME,
-                    investment_type TEXT CHECK(investment_type IN ('Stock', 'ETF', 'Crypto')),
-                    override_identifier TEXT,
-                    identifier_manually_edited BOOLEAN DEFAULT 0,
-                    identifier_manual_edit_date DATETIME,
-                    source TEXT DEFAULT 'parqet' CHECK(source IN ('parqet', 'ibkr', 'manual')),
-                    first_bought_date DATETIME,
-                    FOREIGN KEY (portfolio_id) REFERENCES portfolios (id),
-                    FOREIGN KEY (account_id) REFERENCES accounts (id),
-                    UNIQUE (account_id, name)
-                )
-            ''')
-            cursor.execute('''
-                INSERT INTO companies_new
-                SELECT id, name, identifier, sector, thesis, portfolio_id, account_id,
-                       total_invested, override_country, country_manually_edited,
-                       country_manual_edit_date, custom_total_value, custom_price_eur,
-                       is_custom_value, custom_value_date, investment_type,
-                       override_identifier, identifier_manually_edited,
-                       identifier_manual_edit_date, source, first_bought_date
-                FROM companies
-            ''')
-            cursor.execute('DROP TABLE companies')
-            cursor.execute('ALTER TABLE companies_new RENAME TO companies')
-            # Auto-migrate existing crypto positions (common yfinance patterns like BTC-USD)
-            migrated = cursor.execute('''
-                UPDATE companies SET investment_type = 'Crypto'
-                WHERE investment_type = 'Stock'
-                AND (identifier LIKE '%-USD' OR identifier LIKE '%-EUR' OR identifier LIKE '%-GBP')
-            ''').rowcount
-            if migrated > 0:
-                logger.info(f"Migration 23: Auto-migrated {migrated} crypto positions from 'Stock' to 'Crypto'")
-            # Recreate indexes
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_account_id ON companies(account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_id ON companies(portfolio_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_identifier ON companies(identifier)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_investment_type ON companies(investment_type)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_sector ON companies(sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_account ON companies(portfolio_id, account_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_portfolio_sector ON companies(portfolio_id, sector)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_companies_source ON companies(source)')
-            cursor.execute('PRAGMA foreign_keys = ON')
-            cursor.execute("UPDATE schema_version SET version = 23, applied_at = CURRENT_TIMESTAMP")
-            db.commit()
-            logger.info("Migration 23 completed: added 'Crypto' to investment_type CHECK constraint")
+        logger.info(f"Database schema version {current_version}, migrating to {LATEST_VERSION}")
 
         # Migration 24: Account-owned CSV jobs and monthly decision reviews
         if current_version < 24:
@@ -1053,10 +527,3 @@ def migrate_database():
         logger.error(f"Unexpected error during database migration: {e}")
         db.rollback()
         raise
-
-@click.command('init-db')
-@with_appcontext
-def init_db_command():
-    """Clear the existing data and create new tables."""
-    init_db(current_app)
-    logger.info('Initialized the database.')

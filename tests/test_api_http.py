@@ -158,6 +158,26 @@ class TestAccountFlow:
 
 
 class TestPortfolioApi:
+    def test_companies_only_keeps_lean_response_and_skips_grouping(
+        self, client, account, monkeypatch
+    ):
+        import app.routes.portfolio_data_api as portfolio_data
+
+        def no_grouping(*args, **kwargs):
+            raise AssertionError('companies-only must skip grouping')
+
+        monkeypatch.setattr(portfolio_data, '_group_and_summarize', no_grouping)
+        response = client.get('/portfolio/api/portfolio_data/all?fields=companies')
+        assert response.status_code == 200, response.get_json()
+        data = response.get_json()
+        assert set(data) == {
+            'portfolio_id', 'portfolio_name', 'total_value', 'cash',
+            'portfolio_total', 'total_invested', 'num_holdings',
+            'last_updated', 'companies', 'sectors', 'theses', 'portfolios',
+        }
+        assert data['sectors'] == data['theses'] == data['portfolios'] == []
+        assert any(c['name'] == 'HttpCo' for c in data['companies'])
+
     def test_portfolio_data_returns_seeded_company(self, client, account):
         resp = client.get("/portfolio/api/portfolio_data")
         assert resp.status_code == 200
@@ -295,6 +315,117 @@ class TestCanonicalValuation:
         assert item["effective_shares"] == 4
 
 
+class TestSimulatorCrudApi:
+    def test_names_and_type_filter(self, client, account):
+        base = "/portfolio/api/simulator/simulations"
+        assert client.post(base, json={"name": "Unique", "type": "overlay"}).status_code == 201
+        assert client.post(base, json={"name": "Unique"}).status_code == 409
+        assert client.post(base, json={"name": "Portfolio simulation", "type": "portfolio"}).status_code == 201
+        listed = client.get(f"{base}?type=portfolio")
+        assert listed.status_code == 200
+        assert [s['name'] for s in listed.get_json()['data']['simulations']] == ["Portfolio simulation"]
+        assert client.get(f"{base}?type=invalid").status_code == 400
+
+    def test_portfolio_scope_requires_own_portfolio(self, client, account, http_app):
+        from app.db_manager import get_db
+
+        base = "/portfolio/api/simulator/simulations"
+        with http_app.app_context():
+            db = get_db()
+            other = db.execute(
+                "INSERT INTO accounts (username, created_at) VALUES ('other-portfolio-owner', datetime('now'))"
+            ).lastrowid
+            foreign_id = db.execute(
+                "INSERT INTO portfolios (name, account_id) VALUES ('Private portfolio', ?)", (other,)
+            ).lastrowid
+            own_id = db.execute(
+                "INSERT INTO portfolios (name, account_id) VALUES ('Own portfolio', ?)",
+                (account['id'],),
+            ).lastrowid
+            db.commit()
+
+        assert client.post(base, json={
+            'name': 'Foreign', 'scope': 'portfolio', 'portfolio_id': foreign_id,
+        }).status_code == 404
+        for provenance in (
+            {'cloned_from_portfolio_id': foreign_id},
+            {'cloned_from_name': 'Fabricated source'},
+        ):
+            response = client.post(base, json={'name': 'Forged clone', **provenance})
+            assert response.status_code == 400, response.get_json()
+        created = client.post(base, json={
+            'name': 'Owned', 'scope': 'portfolio', 'portfolio_id': own_id,
+        })
+        assert created.status_code == 201, created.get_json()
+        simulation_id = created.get_json()['data']['simulation']['id']
+        assert client.put(f"{base}/{simulation_id}", json={
+            'scope': 'portfolio', 'portfolio_id': foreign_id,
+        }).status_code == 404
+        assert client.get(f"{base}/{simulation_id}").get_json()['data']['simulation']['portfolio_id'] == own_id
+
+        switched = client.put(f"{base}/{simulation_id}", json={'scope': 'global'})
+        assert switched.status_code == 200
+        assert switched.get_json()['data']['simulation']['portfolio_id'] is None
+        assert switched.get_json()['data']['simulation']['portfolio_name'] is None
+
+        # Even legacy malformed records cannot expose another account's name.
+        with http_app.app_context():
+            db = get_db()
+            db.execute('UPDATE simulations SET portfolio_id = ? WHERE id = ?',
+                       (foreign_id, simulation_id))
+            db.commit()
+        listed = client.get(base).get_json()['data']['simulations']
+        assert next(s for s in listed if s['id'] == simulation_id)['portfolio_name'] is None
+
+    def test_simulation_crud_lifecycle(self, client, account):
+        base = "/portfolio/api/simulator/simulations"
+        created = client.post(base, json={"name": "HTTP lifecycle", "items": []})
+        assert created.status_code == 201, created.get_json()
+        simulation = created.get_json()["data"]["simulation"]
+        simulation_id = simulation["id"]
+
+        listed = client.get(base)
+        assert listed.status_code == 200
+        assert any(item["id"] == simulation_id for item in listed.get_json()["data"]["simulations"])
+
+        fetched = client.get(f"{base}/{simulation_id}")
+        assert fetched.status_code == 200
+        assert fetched.get_json()["data"]["simulation"]["name"] == "HTTP lifecycle"
+
+        updated = client.put(
+            f"{base}/{simulation_id}",
+            json={"name": "HTTP lifecycle updated", "items": [{"ticker": "HTTP"}]},
+        )
+        assert updated.status_code == 200
+        assert updated.get_json()["data"]["simulation"]["name"] == "HTTP lifecycle updated"
+
+        deleted = client.delete(f"{base}/{simulation_id}")
+        assert deleted.status_code == 200
+        assert client.get(f"{base}/{simulation_id}").status_code == 404
+
+    def test_simulation_crud_does_not_cross_account_ownership(self, client, account, http_app):
+        base = "/portfolio/api/simulator/simulations"
+        created = client.post(base, json={"name": "Owned simulation"})
+        assert created.status_code == 201
+        simulation_id = created.get_json()["data"]["simulation"]["id"]
+
+        from app.db_manager import get_db
+        with http_app.app_context():
+            db = get_db()
+            other = db.execute(
+                "INSERT INTO accounts (username, created_at) VALUES ('other-http-user', datetime('now'))"
+            ).lastrowid
+            db.commit()
+
+        client.post(f"/api/select_account/{other}")
+        assert client.get(f"{base}/{simulation_id}").status_code == 404
+        assert client.put(f"{base}/{simulation_id}", json={"name": "hijacked"}).status_code == 404
+        assert client.delete(f"{base}/{simulation_id}").status_code == 404
+
+        client.post(f"/api/select_account/{account['id']}")
+        assert client.get(f"{base}/{simulation_id}").status_code == 200
+
+
 class TestRebalanceModeParam:
     def test_portfolio_data_without_mode_has_no_rebalanced(self, client, account):
         resp = client.get("/portfolio/api/simulator/portfolio-data")
@@ -323,6 +454,35 @@ class TestRebalanceModeParam:
 
 
 class TestMonthlyReviewApi:
+    @pytest.mark.parametrize("mode", ["existing-only", "new-only", "new-with-sells"])
+    def test_patch_capital_mode_persists_and_increments_version(self, client, account, mode):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+        url = f"/portfolio/api/monthly-reviews/{created['id']}"
+
+        response = client.patch(url, json={"version": created["version"], "mode": mode})
+
+        assert response.status_code == 200, response.get_json()
+        updated = response.get_json()["data"]["review"]
+        assert updated["payload"]["inputs"]["mode"] == mode
+        assert updated["version"] == created["version"] + 1
+        assert client.get(url).get_json()["data"]["review"] == updated
+
+    def test_patch_invalid_capital_mode_rejected_without_mutation(self, client, account):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+        url = f"/portfolio/api/monthly-reviews/{created['id']}"
+
+        response = client.patch(url, json={"version": created["version"], "mode": "bogus"})
+
+        assert response.status_code == 422
+        assert response.get_json()["error_code"] == "review_validation"
+        unchanged = client.get(url).get_json()["data"]["review"]
+        assert unchanged["version"] == created["version"]
+        assert unchanged["payload"] == created["payload"]
+
     @pytest.mark.parametrize("invalid_version", [1.5, True])
     def test_patch_rejects_non_integer_versions_without_mutation(
         self, client, account, invalid_version

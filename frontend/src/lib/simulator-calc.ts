@@ -481,19 +481,3 @@ export function getGlobalTotal(
   );
   return portfolioSum + simulatedSum;
 }
-
-// ---------------------------------------------------------------------------
-// DCA calculation (stored for Phase 2 UI, logic included)
-// ---------------------------------------------------------------------------
-
-export function calculateDCA(
-  lumpSum: number,
-  monthly: number,
-  months: number
-): { lumpPortion: number; monthlyInvestment: number; totalDeployed: number } {
-  const safeMonths = Math.max(1, months);
-  const lumpPortion = lumpSum / safeMonths;
-  const monthlyInvestment = lumpPortion + monthly;
-  const totalDeployed = monthlyInvestment * safeMonths;
-  return { lumpPortion, monthlyInvestment, totalDeployed };
-}

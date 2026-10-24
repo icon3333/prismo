@@ -70,7 +70,6 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
     )
     from app.utils.csv_processing.portfolio_handler import get_existing_overrides, get_user_edit_data
     from app.utils.csv_processing.share_calculator import identify_companies_to_remove
-    from app.utils.data_processing import clear_data_caches
 
     db = None
     cursor = None
@@ -181,7 +180,6 @@ def process_csv_data(account_id: int, file_content: str, progress_callback=None,
 
         # Commit changes
         db.commit()
-        clear_data_caches()
 
         logger.info(
             f"Database commit completed - added: {len(results['added'])}, "

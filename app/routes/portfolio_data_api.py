@@ -78,6 +78,40 @@ def _group_and_summarize(companies, key_fn, portfolio_total: float):
     return _finalize_groups(groups.values(), portfolio_total)
 
 
+def _serialize_holdings(companies, account_id, portfolio_id, portfolio_name,
+                         extra_groups=None, companies_only=False):
+    """Build the common holdings response for one portfolio or an aggregate."""
+    companies.sort(key=lambda c: c['current_value'], reverse=True)
+    holdings_value = sum(c['current_value'] for c in companies)
+    totals = get_portfolio_totals(account_id, holdings_value)
+    total_invested = sum(float(c.get('total_invested', 0) or 0) for c in companies)
+    portfolio_total = totals['total']
+    _apply_company_percentages(companies, portfolio_total)
+    response = {
+        'portfolio_id': portfolio_id, 'portfolio_name': portfolio_name,
+        'total_value': holdings_value, 'cash': totals['cash'],
+        'portfolio_total': portfolio_total, 'total_invested': total_invested,
+        'num_holdings': len(companies),
+        'last_updated': max((c['last_updated'] for c in companies if c.get('last_updated')), default=None),
+        'companies': companies,
+    }
+    if companies_only:
+        response.update(sectors=[], theses=[], portfolios=[])
+        return response
+
+    overall = {'total_invested': total_invested, 'total_value': holdings_value}
+    _apply_pnl(overall)
+    response.update(
+        portfolio_pnl_absolute=overall['pnl_absolute'],
+        portfolio_pnl_percentage=overall['pnl_percentage'],
+        sectors=_group_and_summarize(companies, _sector_key, portfolio_total),
+        theses=_group_and_summarize(companies, _thesis_key, portfolio_total),
+    )
+    if extra_groups is not None:
+        response['portfolios'] = _finalize_groups(extra_groups, portfolio_total, True)
+    return response
+
+
 def _sector_key(company) -> str:
     return company['sector'] or 'Uncategorized'
 
@@ -230,13 +264,8 @@ def _get_simulator_portfolio_data_internal(account_id: int) -> Dict[str, Any]:
             rules=rules
         )
 
-        # Step 3: Generate rebalancing plan
-        result = allocation_service.generate_rebalancing_plan(
-            portfolios_with_targets=portfolios_with_targets
-        )
-
-        logger.info(f"Returning {len(result['portfolios'])} portfolios")
-        return result
+        logger.info(f"Returning {len(portfolios_with_targets)} portfolios")
+        return {'portfolios': portfolios_with_targets}
 
     except ImportError as e:
         logger.error(f"Failed to import allocation service: {e}")
@@ -477,66 +506,19 @@ def _get_all_portfolios_data(account_id: int, fields: str = None) -> dict:
     # Sort by current_value descending
     companies.sort(key=lambda c: c['current_value'], reverse=True)
 
-    # Calculate totals and percentages (including cash in denominator)
-    holdings_value = sum(c['current_value'] for c in companies)
-    totals = get_portfolio_totals(account_id, holdings_value)
-    total_value = holdings_value  # Keep for backwards compatibility in return value
-    portfolio_total = totals['total']  # Use this for percentages (includes cash)
-
-    _apply_company_percentages(companies, portfolio_total)
-
     if companies_only:
-        # Fast path: skip groupings, just return companies
-        last_updated = max((c['last_updated'] for c in companies if c['last_updated']), default=None)
+        response = _serialize_holdings(
+            companies, account_id, 'all', 'All Portfolios', companies_only=True)
         logger.info(f"Returning {len(companies)} unique companies (companies-only mode)")
-        return {
-            'portfolio_id': 'all',
-            'portfolio_name': 'All Portfolios',
-            'total_value': total_value,
-            'cash': totals['cash'],
-            'portfolio_total': portfolio_total,
-            'total_invested': sum(float(c.get('total_invested', 0)) for c in companies),
-            'num_holdings': len(companies),
-            'last_updated': last_updated,
-            'companies': companies,
-            'sectors': [],
-            'theses': [],
-            'portfolios': []
-        }
+        return response
 
-    sectors_list = _group_and_summarize(companies, _sector_key, portfolio_total)
-    theses_list = _group_and_summarize(companies, _thesis_key, portfolio_total)
-    portfolios_list = _finalize_groups(
-        portfolios_raw.values(), portfolio_total, company_pct_within_group=True)
-
-    # Calculate total portfolio P&L
-    total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
-    overall = {'total_invested': total_invested, 'total_value': total_value}
-    _apply_pnl(overall)
-    portfolio_pnl_absolute = overall['pnl_absolute']
-    portfolio_pnl_percentage = overall['pnl_percentage']
-
-    # Get the most recent last_updated across all companies
-    last_updated = max((c['last_updated'] for c in companies if c['last_updated']), default=None)
-
-    logger.info(f"Returning {len(companies)} unique companies from all portfolios ({len(sectors_list)} sectors, {len(theses_list)} theses, {len(portfolios_list)} portfolios)")
-
-    return {
-        'portfolio_id': 'all',
-        'portfolio_name': 'All Portfolios',
-        'total_value': total_value,
-        'cash': totals['cash'],
-        'portfolio_total': portfolio_total,  # Holdings + cash (for percentage calculations)
-        'total_invested': total_invested,
-        'portfolio_pnl_absolute': portfolio_pnl_absolute,
-        'portfolio_pnl_percentage': portfolio_pnl_percentage,
-        'num_holdings': len(companies),
-        'last_updated': last_updated,
-        'companies': companies,
-        'sectors': sectors_list,
-        'theses': theses_list,
-        'portfolios': portfolios_list
-    }
+    response = _serialize_holdings(
+        companies, account_id, 'all', 'All Portfolios', portfolios_raw.values())
+    logger.info(
+        f"Returning {len(companies)} unique companies from all portfolios "
+        f"({len(response['sectors'])} sectors, {len(response['theses'])} theses, "
+        f"{len(response['portfolios'])} portfolios)")
+    return response
 
 
 @require_auth
@@ -628,45 +610,11 @@ def get_single_portfolio_data_api(portfolio_id):
         for company in companies:
             company['current_value'] = float(calculate_item_value(company))
 
-        # Sort by current_value descending (was previously done in SQL)
-        companies.sort(key=lambda c: c['current_value'], reverse=True)
-
-        # Calculate totals and percentages (including cash in denominator)
-        holdings_value = sum(c['current_value'] for c in companies)
-        totals = get_portfolio_totals(account_id, holdings_value)
-        total_value = holdings_value  # Keep for backwards compatibility in return value
-        portfolio_total = totals['total']  # Use this for percentages (includes cash)
-
-        _apply_company_percentages(companies, portfolio_total)
-
-        sectors_list = _group_and_summarize(companies, _sector_key, portfolio_total)
-        theses_list = _group_and_summarize(companies, _thesis_key, portfolio_total)
-
-        # Calculate total portfolio P&L
-        total_invested = sum(float(c.get('total_invested', 0)) for c in companies)
-        overall = {'total_invested': total_invested, 'total_value': total_value}
-        _apply_pnl(overall)
-        portfolio_pnl_absolute = overall['pnl_absolute']
-        portfolio_pnl_percentage = overall['pnl_percentage']
-
-        # Build response
-        response_data = {
-            'portfolio_id': portfolio['id'],
-            'portfolio_name': portfolio['name'],
-            'total_value': total_value,
-            'cash': totals['cash'],
-            'portfolio_total': portfolio_total,  # Holdings + cash (for percentage calculations)
-            'total_invested': total_invested,
-            'portfolio_pnl_absolute': portfolio_pnl_absolute,
-            'portfolio_pnl_percentage': portfolio_pnl_percentage,
-            'num_holdings': len(companies),
-            'last_updated': max((c['last_updated'] for c in companies if c['last_updated']), default=None),
-            'companies': companies,
-            'sectors': sectors_list,
-            'theses': theses_list
-        }
-
-        logger.info(f"Returning {len(companies)} companies in {len(sectors_list)} sectors and {len(theses_list)} theses for portfolio {portfolio_id}")
+        response_data = _serialize_holdings(
+            companies, account_id, portfolio['id'], portfolio['name'])
+        logger.info(
+            f"Returning {len(companies)} companies in {len(response_data['sectors'])} "
+            f"sectors and {len(response_data['theses'])} theses for portfolio {portfolio_id}")
         return jsonify(response_data)
 
     except ValidationError as e:

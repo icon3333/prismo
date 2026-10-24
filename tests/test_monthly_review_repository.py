@@ -249,3 +249,19 @@ def test_full_account_data_replacement_rejects_active_csv_job(
         "SELECT status FROM background_jobs WHERE id = 'active-import'"
     ).fetchone()
     assert active_job["status"] == job_status
+
+
+def test_summary_reads_omit_payload_while_full_reads_decode_it(db):
+    """Pin the repository's public summary/full lifecycle representations."""
+    from app.repositories.monthly_review_repository import MonthlyReviewRepository
+
+    account_id = seed_account(db)
+    review = MonthlyReviewRepository.create(account_id, "2026-07", _payload("shape"))
+
+    summary = MonthlyReviewRepository.list_summaries(account_id)[0]
+    full = MonthlyReviewRepository.get_by_id(review["id"], account_id)
+
+    assert "payload" not in summary
+    assert full["payload"] == _payload("shape")
+    assert summary["id"] == full["id"]
+    assert summary["status"] == full["status"] == "draft"

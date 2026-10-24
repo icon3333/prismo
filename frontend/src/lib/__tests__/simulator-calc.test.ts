@@ -11,7 +11,6 @@ import {
   ensureItemPercentages,
   calculateCombinedAllocations,
   calculateAllocationSummary,
-  calculateDCA,
 } from "@/lib/simulator-calc";
 import type { SimulatorItem, PortfolioData } from "@/types/simulator";
 
@@ -243,19 +242,5 @@ describe("calculateAllocationSummary", () => {
   it("overlay mode only reports EUR total", () => {
     const result = calculateAllocationSummary([item({ value: 500 })], "overlay", 1000);
     expect(result).toEqual({ totalPercent: 0, status: "under", totalEur: 500 });
-  });
-});
-
-describe("calculateDCA", () => {
-  it("spreads lump sum across months and adds monthly amount", () => {
-    expect(calculateDCA(1200, 100, 12)).toEqual({
-      lumpPortion: 100,
-      monthlyInvestment: 200,
-      totalDeployed: 2400,
-    });
-  });
-
-  it("guards against zero months", () => {
-    expect(calculateDCA(100, 0, 0).lumpPortion).toBe(100);
   });
 });

@@ -1,10 +1,13 @@
 """Focused schema and v23 -> v24 migration coverage."""
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
 from tests.conftest import seed_account
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _columns(db, table):
@@ -134,3 +137,87 @@ def test_v23_migrates_once_to_v24_and_repeat_is_noop(app, tmp_path):
 
         assert schema_after == schema_before
         assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 24
+
+
+def test_init_db_boots_on_a_v23_database(app, tmp_path):
+    """The full startup path, not just migrate_database().
+
+    schema.sql only CREATEs — it cannot add a column to an existing table — so
+    it has to run AFTER migrations. Applying it first made startup die with
+    "no such column: account_id" on any pre-v24 database, because
+    uq_background_jobs_active_account indexes a column migration 24 adds.
+    """
+    from app import db_manager
+
+    db_path = tmp_path / "legacy-v23.db"
+    _create_v23_database(db_path)
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    app.root_path = str(REPO_ROOT / "app")
+
+    db_manager.init_db(app)
+
+    with app.app_context():
+        db_manager.set_db_path(str(db_path))
+        conn = db_manager.get_db()
+        assert conn.execute("SELECT version FROM schema_version").fetchone()[0] == 24
+        assert "account_id" in _columns(conn, "background_jobs")
+        assert "uq_background_jobs_active_account" in _indexes(conn, "background_jobs")
+        assert "idx_monthly_reviews_account_completed" in _indexes(conn, "monthly_reviews")
+
+
+def test_init_db_stamps_a_new_database_at_the_latest_version(app, tmp_path):
+    """A database built from the current schema.sql needs no migration replay."""
+    from app import db_manager
+
+    db_path = tmp_path / "brand-new.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    app.root_path = str(REPO_ROOT / "app")
+
+    db_manager.init_db(app)
+
+    with app.app_context():
+        db_manager.set_db_path(str(db_path))
+        conn = db_manager.get_db()
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == db_manager.LATEST_SCHEMA_VERSION
+        assert "monthly_reviews" in {
+            r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+
+
+def test_pre_v23_database_is_refused_not_half_migrated(app, tmp_path):
+    """Migrations 1-23 were removed as unreachable (see migrate_database).
+
+    A database below MIN_MIGRATABLE_VERSION must fail loudly and name the commit
+    that still has the chain — never boot on a schema this build cannot complete.
+    """
+    from app import db_manager
+
+    db_path = tmp_path / "ancient.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE accounts (id INTEGER PRIMARY KEY, username TEXT, created_at TEXT);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP);
+        INSERT INTO schema_version (version) VALUES (22);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
+    app.root_path = str(REPO_ROOT / "app")
+
+    with pytest.raises(Exception) as excinfo:
+        db_manager.init_db(app)
+
+    message = str(excinfo.value)
+    assert "22" in message
+    assert str(db_manager.MIN_MIGRATABLE_VERSION) in message
+    assert "4226f05" in message, "the guard must name the commit holding the old chain"
+
+
+def test_min_migratable_is_not_above_latest(app):
+    from app import db_manager
+
+    assert db_manager.MIN_MIGRATABLE_VERSION <= db_manager.LATEST_SCHEMA_VERSION

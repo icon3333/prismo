@@ -69,29 +69,6 @@ def _reset_thread_conn_on_error() -> None:
     _bg_local.conn = None
 
 
-def query_background_db(query, args=(), one=False):
-    """
-    Query the database from background threads. Uses a thread-local connection.
-    """
-    cursor = None
-    try:
-        db = _get_thread_conn()
-        cursor = db.execute(query, args)
-        rv = cursor.fetchall()
-        result = [dict(row) for row in rv]
-        return (result[0] if result else None) if one else result
-    except Exception as e:
-        logger.error(f"Background query failed: {e} | query={query} args={args}")
-        _reset_thread_conn_on_error()
-        raise
-    finally:
-        if cursor is not None:
-            try:
-                cursor.close()
-            except Exception:
-                pass
-
-
 def execute_background_db(query, args=()):
     """
     Execute a statement from background threads and commit, returning rowcount.

@@ -45,17 +45,6 @@ export interface SimulationFull extends SimulationSummary {
   total_amount: number;
   cloned_from_portfolio_id: number | null;
   cloned_from_name: string | null;
-  deploy_lump_sum: number;
-  deploy_monthly: number;
-  deploy_months: number;
-  deploy_manual_mode: boolean;
-  deploy_manual_items: DeployManualItem[];
-}
-
-export interface DeployManualItem {
-  name: string;
-  ticker: string;
-  percent: number;
 }
 
 export interface PortfolioOption {

@@ -67,7 +67,14 @@ export function topHoldings(
   const { cash, total } = cashSlice(totalHoldings, includeCash, cashBalance);
   if (total <= 0) return [];
 
-  const sorted = [...companies].sort(
+  const combined = new Map<string, { name: string; current_value: number }>();
+  for (const company of companies) {
+    const key = company.identifier?.trim().toUpperCase() || `name:${company.name}`;
+    const existing = combined.get(key);
+    if (existing) existing.current_value += company.current_value || 0;
+    else combined.set(key, { name: company.name, current_value: company.current_value || 0 });
+  }
+  const sorted = [...combined.values()].sort(
     (a, b) => (b.current_value || 0) - (a.current_value || 0)
   );
 

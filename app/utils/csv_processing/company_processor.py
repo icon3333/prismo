@@ -1,7 +1,4 @@
-"""
-Company Processor Module
-Handles company record processing and identifier mapping.
-"""
+"""Reconstruct imported holdings and match them without crossing feed ownership."""
 
 import pandas as pd
 import logging
@@ -12,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 
 def _match_existing_companies(
-    company_positions: Dict[str, Dict], existing_companies, cursor
+    company_positions: Dict[str, Dict], existing_companies, cursor, source='parqet'
 ) -> Dict[str, Dict]:
-    """Match by identifier first and reject identity collisions before writes."""
+    """Validate all identities/source owners before applying identifier-based renames."""
     by_identifier = {}
     by_name = {}
     for company in existing_companies:
@@ -43,297 +40,144 @@ def _match_existing_companies(
         name_matches = by_name.get(name.casefold(), [])
         if len(id_matches) > 1 or len(name_matches) > 1:
             raise ValueError(f"Holding identity collision for '{name}'")
-
         existing = id_matches[0] if id_matches else None
         if name_matches and (not existing or name_matches[0]['id'] != existing['id']):
-            raise ValueError(
-                f"Holding identity collision: '{name}' has a different identifier"
-            )
-
+            raise ValueError(f"Holding identity collision: '{name}' has a different identifier")
         if existing:
+            if (existing.get('source') or 'parqet') != source:
+                raise ValueError(f"Holding source conflict for '{name}': owned by another source")
             if existing['id'] in used_ids:
                 raise ValueError(f"Holding identity collision for '{name}'")
             used_ids.add(existing['id'])
-            if existing['name'] != name:
-                cursor.execute(
-                    "UPDATE companies SET name = ? WHERE id = ?", (name, existing['id'])
-                )
-                existing = dict(existing)
-                existing['name'] = name
             matched[name] = existing
 
+    # A later conflict must not leave earlier holdings renamed, even for callers
+    # that invoke this helper outside the full import transaction.
+    for name, existing in matched.items():
+        if existing['name'] != name:
+            cursor.execute("UPDATE companies SET name = ? WHERE id = ?", (name, existing['id']))
+            matched[name] = {**existing, 'name': name}
     return matched
 
 
-def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, int], Dict[str, Dict]]:
-    """
-    Process company records from CSV and create identifier mappings.
+def process_companies(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, Dict], Dict[str, Dict]]:
+    """Reconstruct a full transaction history in stable chronological order.
 
-    This function:
-    1. Normalizes identifiers using user preferences and standard normalization
-    2. Calculates share positions through two-pass buy/sell processing
-    3. Returns mappings for database operations
-
-    Args:
-        df: DataFrame with parsed CSV data
-        account_id: Account ID for this import
-        cursor: Database cursor for queries
-
-    Returns:
-        Tuple of:
-        - Dict[str, int]: company_name -> company_id mapping
-        - Dict[str, Dict]: company_name -> position data (shares, invested, identifier)
+    Basis retains the existing proportional-average policy, not FIFO or tax
+    accounting. Fees/tax and sale proceeds do not enter remaining purchase basis.
     """
     from app.utils.identifier_normalization import normalize_identifier
     from app.utils.identifier_mapping import get_preferred_identifier
 
-    logger.info("FIRST PASS: Processing buy and transferin transactions")
-
-    company_positions = {}
-    total_transactions = len(df)
-
-    # First pass: Accumulate buys and transfers in
-    for idx, row in df.iterrows():
-        company_name = row['holdingname']
-        transaction_type = row['type']
-
-        # Check for NaN identifier
+    positions_by_identifier = {}
+    names_by_identifier = {}
+    identifiers_by_name = {}
+    for _, row in df.sort_values('parsed_date', kind='stable').iterrows():
+        name = row['holdingname']
+        kind = row['type']
+        if kind == 'dividend':
+            continue
         if pd.isna(row['identifier']) or not str(row['identifier']).strip():
-            logger.warning(f"Skipping transaction {idx}: missing identifier for {company_name}")
             continue
-
-        if transaction_type == 'dividend':
-            logger.info(f"Skipping dividend transaction for {company_name}")
-            continue
-
-        if transaction_type not in ['buy', 'transferin']:
-            continue
-
+        identifier = normalize_identifier(
+            get_preferred_identifier(account_id, row['identifier']) or row['identifier']
+        )
+        if name.casefold() in identifiers_by_name and identifiers_by_name[name.casefold()] != identifier:
+            raise ValueError(f"Holding identity collision: '{name}' has multiple identifiers")
         shares = round(float(row['shares']), 6)
-        price = float(row['price'])
-        raw_identifier = row['identifier']
-
-        # Check for user's preferred identifier mapping first
-        preferred_identifier = get_preferred_identifier(account_id, raw_identifier)
-        if preferred_identifier:
-            identifier = preferred_identifier
-            logger.info(f"Using mapped identifier for {company_name}: '{raw_identifier}' -> '{identifier}'")
-        else:
-            # Fall back to standard normalization
-            identifier = normalize_identifier(raw_identifier)
-            if raw_identifier != identifier:
-                logger.info(f"Normalized identifier for {company_name}: '{raw_identifier}' -> '{identifier}'")
-
-        if (
-            company_name in company_positions
-            and company_positions[company_name]['identifier'] != identifier
-        ):
-            raise ValueError(
-                f"Holding identity collision: '{company_name}' has multiple identifiers"
-            )
-
-        fee = float(row['fee']) if 'fee' in row else 0
-        tax = float(row['tax']) if 'tax' in row else 0
-
         if shares <= 0:
-            logger.info(f"Skipping {transaction_type} transaction with zero shares for {company_name}")
             continue
-
-        # Initialize or update company position
-        if company_name not in company_positions:
-            company_positions[company_name] = {
-                'identifier': identifier,
-                'total_shares': 0,
-                'total_invested': 0,
-                'first_bought_date': None,
+        identifiers_by_name[name.casefold()] = identifier
+        # Display names can change within one export; inventory belongs to the
+        # normalized identifier, with the latest chronological name for display.
+        names_by_identifier[identifier] = name
+        if kind in ('sell', 'transferout'):
+            company = positions_by_identifier.get(identifier)
+            available = company['total_shares'] if company else 0
+            if shares - available > 1e-6:
+                raise ValueError(
+                    f"Incomplete transaction history for '{name}': outgoing shares exceed "
+                    "the preceding holdings; import the full history including transfers"
+                )
+            if company and available > 0:
+                sold = min(shares, available)
+                company['total_invested'] = round(
+                    company['total_invested'] * (1 - sold / available), 2
+                )
+                company['total_shares'] = round(available - sold, 6)
+            continue
+        if identifier not in positions_by_identifier:
+            positions_by_identifier[identifier] = {
+                'identifier': identifier, 'total_shares': 0,
+                'total_invested': 0, 'first_bought_date': None,
             }
-
-        company = company_positions[company_name]
-        transaction_amount = shares * price
+        company = positions_by_identifier[identifier]
         company['total_shares'] = round(company['total_shares'] + shares, 6)
-        company['total_invested'] = round(company['total_invested'] + transaction_amount, 2)
+        company['total_invested'] = round(company['total_invested'] + shares * float(row['price']), 2)
+        if company['first_bought_date'] is None:
+            company['first_bought_date'] = row['parsed_date']
 
-        # Track earliest buy date
-        if 'parsed_date' in row and pd.notna(row['parsed_date']):
-            txn_date = row['parsed_date']
-            if company['first_bought_date'] is None or txn_date < company['first_bought_date']:
-                company['first_bought_date'] = txn_date
-
-        logger.info(
-            f"Buy/TransferIn: {company_name}, +{shares} @ {price}, "
-            f"total shares: {company['total_shares']}, total invested: {company['total_invested']:.2f}"
-        )
-
-    # Second pass: Process sells and transfers out
-    logger.info("SECOND PASS: Processing sell and transferout transactions")
-
-    for idx, row in df.iterrows():
-        company_name = row['holdingname']
-        transaction_type = row['type']
-
-        # Check for NaN identifier for consistency
-        if pd.isna(row['identifier']) or not str(row['identifier']).strip():
-            logger.warning(f"Skipping transaction {idx}: missing identifier for {company_name}")
-            continue
-
-        if transaction_type == 'dividend':
-            logger.info(f"Skipping dividend transaction for {company_name}")
-            continue
-
-        if transaction_type not in ['sell', 'transferout']:
-            continue
-
-        shares = round(float(row['shares']), 6)
-        price = float(row['price'])
-        fee = float(row['fee']) if 'fee' in row else 0
-        tax = float(row['tax']) if 'tax' in row else 0
-
-        if shares <= 0:
-            logger.info(f"Skipping {transaction_type} transaction with zero shares for {company_name}")
-            continue
-
-        if company_name not in company_positions:
-            logger.warning(
-                f"Cannot {transaction_type} shares of {company_name} - company not in positions"
-            )
-            continue
-
-        company = company_positions[company_name]
-        logger.info(
-            f"Processing {transaction_type} of {shares} shares for {company_name} "
-            f"(current total: {company['total_shares']})"
-        )
-
-        # Validate and limit shares to available amount
-        if shares > (company['total_shares'] + 1e-6):
-            logger.warning(
-                f"Attempting to {transaction_type} more shares ({shares}) than available "
-                f"({company['total_shares']}). Limiting to available shares."
-            )
-            shares = company['total_shares']
-
-        if shares <= 0:
-            logger.info(f"Skipping {transaction_type} with zero or negative shares")
-            continue
-
-        # Calculate proportional reduction
-        proportion_sold = shares / company['total_shares'] if company['total_shares'] > 0 else 0
-        investment_reduction = company['total_invested'] * proportion_sold
-
-        company['total_shares'] = round(company['total_shares'] - shares, 6)
-        company['total_invested'] = round(company['total_invested'] - investment_reduction, 2)
-
-    # Get existing companies for mapping
+    company_positions = {
+        names_by_identifier[identifier]: position
+        for identifier, position in positions_by_identifier.items()
+    }
     existing_companies = query_db(
         'SELECT id, name, identifier, total_invested, portfolio_id, source FROM companies WHERE account_id = ?',
         [account_id]
     )
-    existing_company_map = _match_existing_companies(
-        company_positions, existing_companies, cursor
-    )
+    existing_company_map = _match_existing_companies(company_positions, existing_companies, cursor)
     matched_ids = {matched['id'] for matched in existing_company_map.values()}
     existing_company_map.update({
-        c['name']: c for c in existing_companies
-        if c['id'] not in matched_ids
+        c['name']: c for c in existing_companies if c['id'] not in matched_ids
     })
-
     return existing_company_map, company_positions
 
 
-def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, int], Dict[str, Dict]]:
-    """
-    Process company records from a snapshot CSV (e.g., IBKR Open Positions).
-
-    Unlike process_companies() which calculates positions from buy/sell transactions,
-    this function treats each row as the final position state. Multiple rows for the
-    same company are aggregated (IBKR may split into lots).
-
-    Args:
-        df: DataFrame with parsed snapshot data (must have 'holdingname', 'identifier', 'shares')
-        account_id: Account ID for this import
-        cursor: Database cursor for queries
-
-    Returns:
-        Tuple of:
-        - Dict[str, Dict]: company_name -> existing DB record (id, name, identifier, etc.)
-        - Dict[str, Dict]: company_name -> position data (shares, invested, identifier, etc.)
-    """
+def process_companies_snapshot(df: pd.DataFrame, account_id: int, cursor) -> Tuple[Dict[str, Dict], Dict[str, Dict]]:
+    """Read IBKR final positions, aggregating lots rather than replaying trades."""
     from app.utils.identifier_normalization import normalize_identifier
     from app.utils.identifier_mapping import get_preferred_identifier
 
-    logger.info("Processing snapshot positions (IBKR mode)")
-
     company_positions = {}
-
     for idx, row in df.iterrows():
         company_name = row['holdingname']
-
         if pd.isna(row['identifier']) or not str(row['identifier']).strip():
             logger.warning(f"Skipping row {idx}: missing identifier for {company_name}")
             continue
-
         shares = round(float(row['shares']), 6)
         if shares <= 0:
-            logger.info(f"Skipping {company_name}: zero or negative shares ({shares})")
             continue
-
         raw_identifier = row['identifier']
-
-        # Check for user's preferred identifier mapping first
-        preferred_identifier = get_preferred_identifier(account_id, raw_identifier)
-        if preferred_identifier:
-            identifier = preferred_identifier
-        else:
-            identifier = normalize_identifier(raw_identifier)
-
-        if (
-            company_name in company_positions
-            and company_positions[company_name]['identifier'] != identifier
-        ):
-            raise ValueError(
-                f"Holding identity collision: '{company_name}' has multiple identifiers"
-            )
-
+        identifier = get_preferred_identifier(account_id, raw_identifier) or normalize_identifier(raw_identifier)
+        if company_name in company_positions and company_positions[company_name]['identifier'] != identifier:
+            raise ValueError(f"Holding identity collision: '{company_name}' has multiple identifiers")
         total_invested = float(row['total_invested']) if 'total_invested' in row and pd.notna(row['total_invested']) else 0.0
-        first_bought = row.get('first_bought_date') if 'first_bought_date' in row else None
-        investment_type = row.get('investment_type') if 'investment_type' in row else None
+        first_bought = row.get('first_bought_date')
+        investment_type = row.get('investment_type')
         price = float(row['price']) if 'price' in row and pd.notna(row['price']) else None
-        currency = row.get('currency', 'USD') if 'currency' in row else 'USD'
-
-        # Aggregate if same company appears in multiple lots
+        currency = row.get('currency', 'USD')
         if company_name in company_positions:
             existing = company_positions[company_name]
             existing['total_shares'] = round(existing['total_shares'] + shares, 6)
             existing['total_invested'] = round(existing['total_invested'] + total_invested, 2)
-            # Keep earliest first_bought_date
             if first_bought and (existing['first_bought_date'] is None or first_bought < existing['first_bought_date']):
                 existing['first_bought_date'] = first_bought
-            logger.info(f"Aggregated lot for {company_name}: +{shares} shares, total now {existing['total_shares']}")
         else:
             company_positions[company_name] = {
-                'identifier': identifier,
-                'total_shares': shares,
-                'total_invested': total_invested,
-                'first_bought_date': first_bought,
-                'investment_type': investment_type,
-                'price': price,
-                'currency': currency,
+                'identifier': identifier, 'total_shares': shares,
+                'total_invested': total_invested, 'first_bought_date': first_bought,
+                'investment_type': investment_type, 'price': price, 'currency': currency,
             }
 
-    logger.info(f"Snapshot processing completed: {len(company_positions)} unique positions")
-
-    # Get existing companies for mapping
     existing_companies = query_db(
         'SELECT id, name, identifier, total_invested, portfolio_id, source FROM companies WHERE account_id = ?',
         [account_id]
     )
     existing_company_map = _match_existing_companies(
-        company_positions, existing_companies, cursor
+        company_positions, existing_companies, cursor, source='ibkr'
     )
     matched_ids = {matched['id'] for matched in existing_company_map.values()}
     existing_company_map.update({
-        c['name']: c for c in existing_companies
-        if c['id'] not in matched_ids
+        c['name']: c for c in existing_companies if c['id'] not in matched_ids
     })
-
     return existing_company_map, company_positions

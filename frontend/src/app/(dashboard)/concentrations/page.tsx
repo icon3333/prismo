@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shell/page-header";
 import { PortfolioFilter } from "./portfolio-filter";
 import { DistributionBar } from "./distribution-bar";
 import { DonutChart } from "./donut-chart";
+import * as fmt from "@/lib/format";
 
 // useConcentrations reads useSearchParams (to seed the filter from
 // ?portfolio=), which suspends during prerender.
@@ -55,6 +56,10 @@ function ConcentrationsPageInner() {
     holdingsData,
     portfolioDistData,
     heatmapCompanies,
+    quality,
+    targets,
+    targetsLoading,
+    targetsError,
   } = useConcentrations();
 
   if (isLoading) {
@@ -87,23 +92,82 @@ function ConcentrationsPageInner() {
         onIncludeCashChange={setIncludeCash}
       />
 
+      <section aria-label="Concentration data coverage" className="border border-border bg-card p-4 space-y-2 text-sm">
+        <h2 className="font-medium">
+          {quality.missingValuations > 0 ? "Partial valuation coverage" : "Valuation coverage"}
+        </h2>
+        <p>
+          {quality.valuedCompanies.length} of {quality.holdingCount} selected positions valued.
+          {" "}Known holdings value: {fmt.eur(quality.knownValue)}.
+          {quality.missingValuations > 0 && " Unvalued positions are excluded from chart percentages; their missing value is unknown, not zero."}
+        </p>
+        <p>
+          Unknown classifications: {quality.unknownCountry} country, {quality.unknownSector} sector,
+          {" "}{quality.unknownThesis} thesis. Countries describe issuer domicile, not revenue exposure.
+          {" "}ETFs are not looked through to underlying holdings.
+        </p>
+        <p>
+          Oldest known valuation: {quality.oldestValuation ?? "unavailable"}.
+          {" "}{quality.staleValuations} valuations at least 90 days old;
+          {" "}{quality.unknownPriceAge} with unknown age. Manual values use their own timestamp.
+          {" "}FX freshness is not provided by this view.
+          {" "}Valuation dates do not date the CSV import. Full transaction history is required;
+          failed imports retain previous holdings, and omitted history cannot be recovered.
+        </p>
+        <p>
+          {includeCash ? "Account-wide cash is included" : "Cash is excluded"}
+          {includeCash && !isAllSelected ? "; it is not assigned to the selected virtual portfolios" : ""}.
+          {" "}Percentages use known selected holdings{includeCash ? " plus account-wide cash" : ""}.
+        </p>
+        <details>
+          <summary className="cursor-pointer">
+            Saved portfolio targets — {targetsLoading ? "loading" : targetsError ? "unavailable" : `${targets.missing} selected portfolios without a target`} (raw, not normalized)
+          </summary>
+          {targetsLoading ? <p>Loading target coverage…</p> : targetsError ? (
+            <p>Target coverage unavailable. Saved targets could not be loaded or refreshed; comparisons are unavailable.</p>
+          ) : (
+            <div className="mt-2 space-y-1">
+              <p>Known saved account targets total: {targets.rawTotal === null ? "unavailable" : fmt.pct(targets.rawTotal)}.
+                {" "}{targets.missing} selected portfolios without an explicit target.</p>
+              <ul className="space-y-1">
+                {targets.entries.map((entry) => (
+                  <li key={entry.name}>
+                    {entry.name}: target {entry.target === null ? "Not set" : fmt.pct(entry.target)},
+                    {" "}actual {entry.actual === null ? "unavailable" : fmt.pct(entry.actual)},
+                    {" "}deviation {entry.deviation === null ? "unavailable" : `${fmt.signedPct(entry.deviation)} points`}
+                  </li>
+                ))}
+              </ul>
+              <p>Explicit 0% is a saved zero target. Missing targets are not inferred; filtered targets are not rescaled.</p>
+              <p>Actual target comparison uses the whole account excluding cash, not the filtered chart denominator.
+                {" "}Deviations are unavailable when account valuations are incomplete or known holdings total zero.</p>
+            </div>
+          )}
+        </details>
+      </section>
+
+      {quality.knownValue > 0 || (includeCash && cashBalance > 0) ? <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartWrapper title="Portfolio Distribution">
-          <DonutChart
-            labels={portfolioDistData.map((d) => d.name)}
-            values={portfolioDistData.map((d) => d.value)}
-          />
+          <div role="img" aria-label="Portfolio distribution chart">
+            <DonutChart
+              labels={portfolioDistData.map((d) => d.name)}
+              values={portfolioDistData.map((d) => d.value)}
+            />
+          </div>
         </ChartWrapper>
 
         <ChartWrapper title="Top 15 Holdings">
-          <DistributionBar data={holdingsData} height={380} />
+          <div role="img" aria-label="Top holdings chart">
+            <DistributionBar data={holdingsData} height={380} />
+          </div>
         </ChartWrapper>
 
         <ChartWrapper title="Sector Distribution">
           <DistributionBar data={sectorData} />
         </ChartWrapper>
 
-        <ChartWrapper title="Geographic Spread">
+        <ChartWrapper title="Issuer Domicile (not Revenue Exposure)">
           <DistributionBar data={countryData} />
         </ChartWrapper>
 
@@ -124,6 +188,15 @@ function ConcentrationsPageInner() {
         includeCash={includeCash}
         cashBalance={cashBalance}
       />
+      </> : (
+        <Alert>
+          <AlertDescription>
+            {quality.holdingCount === 0 ? "No holdings in the selected portfolios."
+              : quality.valuedCompanies.length > 0 ? "Known selected positions have zero value. No concentration percentages can be calculated."
+              : "Valuation unavailable for all selected positions. No concentration percentages can be calculated."}
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

@@ -6,16 +6,17 @@ import { apiFetch } from "@/lib/api";
 import { useApiQuery } from "@/lib/api-cache";
 import { usePagePersistence } from "@/hooks/use-page-persistence";
 import {
-  filterByPortfolios,
   groupByDimension,
   topHoldings,
   portfolioDistribution,
 } from "@/lib/concentrations-calc";
 import type {
   PortfolioOption,
-  PerformanceCompany,
-  PerformancePortfolioData,
 } from "@/types/performance";
+import {
+  concentrationCompanies, concentrationQuality, targetCoverage,
+  type ConcentrationRow,
+} from "@/lib/concentration-quality";
 
 interface PersistedFields {
   includeCash?: string;
@@ -24,9 +25,8 @@ interface PersistedFields {
 
 export function useConcentrations() {
   // Shared cached reads — instant render when cached, background revalidate.
-  const allQuery = useApiQuery<PerformancePortfolioData>(
-    "/portfolio_data/all?fields=companies"
-  );
+  const allQuery = useApiQuery<ConcentrationRow[]>("/portfolio_data");
+  const targetsQuery = useApiQuery<{ portfolios?: string }>("/state?page=builder");
   const portfoliosQuery = useApiQuery<PortfolioOption[]>(
     "/portfolios?include_ids=true&has_companies=true"
   );
@@ -152,11 +152,12 @@ export function useConcentrations() {
     applyUrlSelection();
   }, [portfolioIdFromUrl, portfolioList]);
 
-  const isLoading = allQuery.isLoading || !stateLoaded;
-  const error = allQuery.error;
+  const isLoading = allQuery.isLoading || portfoliosQuery.isLoading || (includeCash && cashQuery.isLoading) || !stateLoaded;
+  const error = allQuery.error || allQuery.refreshError || portfoliosQuery.error || portfoliosQuery.refreshError
+    || (includeCash ? cashQuery.error || cashQuery.refreshError : null);
 
-  const allCompanies = useMemo<PerformanceCompany[]>(
-    () => allQuery.data?.companies ?? [],
+  const allCompanies = useMemo(
+    () => concentrationCompanies(allQuery.data ?? []),
     [allQuery.data]
   );
   const portfolios = useMemo(() => portfolioList ?? [], [portfolioList]);
@@ -165,41 +166,62 @@ export function useConcentrations() {
   const isAllSelected = selectedPortfolios.size === 0;
 
   const filteredCompanies = useMemo(
-    () => (isAllSelected ? allCompanies : filterByPortfolios(allCompanies, selectedPortfolios)),
+    () => (isAllSelected ? allCompanies : allCompanies.filter((company) => selectedPortfolios.has(company.portfolio_name ?? ""))),
     [allCompanies, selectedPortfolios, isAllSelected]
   );
 
+  const quality = useMemo(() => concentrationQuality(filteredCompanies), [filteredCompanies]);
+  const accountQuality = useMemo(() => concentrationQuality(allCompanies), [allCompanies]);
+  const targetsError = targetsQuery.error || targetsQuery.refreshError;
+  const targets = useMemo(
+    () => {
+      const coverage = targetCoverage(targetsQuery.data?.portfolios,
+        portfolios.filter((portfolio) => isAllSelected || selectedPortfolios.has(portfolio.name)).map((portfolio) => portfolio.name));
+      const distribution = portfolioDistribution(accountQuality.valuedCompanies, false, 0);
+      return {
+        ...coverage,
+        entries: coverage.entries.map((entry) => {
+          const actual = distribution.find((item) => item.name === entry.name)?.percentage ?? 0;
+          const comparable = !targetsError && accountQuality.missingValuations === 0 && accountQuality.knownValue > 0;
+          return { ...entry, actual: comparable ? actual : null,
+            deviation: comparable && entry.target !== null ? actual - entry.target : null };
+        }),
+      };
+    },
+    [targetsQuery.data, targetsError, portfolios, isAllSelected, selectedPortfolios, accountQuality],
+  );
+
   const sectorData = useMemo(
-    () => groupByDimension(filteredCompanies, "sector", includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => groupByDimension(quality.valuedCompanies, "sector", includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
   const countryData = useMemo(
-    () => groupByDimension(filteredCompanies, "country", includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => groupByDimension(quality.valuedCompanies, "country", includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
   const thesisData = useMemo(
-    () => groupByDimension(filteredCompanies, "thesis", includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => groupByDimension(quality.valuedCompanies, "thesis", includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
   const typeData = useMemo(
-    () => groupByDimension(filteredCompanies, "investment_type", includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => groupByDimension(quality.valuedCompanies, "investment_type", includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
   const holdingsData = useMemo(
-    () => topHoldings(filteredCompanies, 15, includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => topHoldings(quality.valuedCompanies, 15, includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
   const portfolioDistData = useMemo(
-    () => portfolioDistribution(filteredCompanies, includeCash, cashBalance),
-    [filteredCompanies, includeCash, cashBalance]
+    () => portfolioDistribution(quality.valuedCompanies, includeCash, cashBalance),
+    [quality, includeCash, cashBalance]
   );
 
-  const heatmapCompanies = filteredCompanies;
+  const heatmapCompanies = quality.valuedCompanies;
 
   return {
     portfolios,
@@ -212,6 +234,10 @@ export function useConcentrations() {
     setIncludeCash,
     isLoading,
     error,
+    quality,
+    targets,
+    targetsLoading: targetsQuery.isLoading,
+    targetsError,
     // Chart data
     sectorData,
     countryData,

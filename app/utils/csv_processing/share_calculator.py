@@ -100,6 +100,11 @@ def calculate_share_changes(
                     if not newer_transactions.empty:
                         # Calculate net change from newer transactions
                         net_change = _calculate_net_change(newer_transactions)
+                        if (
+                            user_edit_info.get('csv_modified_after_edit')
+                            and user_edit_info.get('original_shares') is not None
+                        ):
+                            net_change = current_shares - float(user_edit_info['original_shares'])
 
                         # Apply the net change to BOTH original CSV shares and user-edited shares
                         final_csv_shares = round(current_shares, 6)

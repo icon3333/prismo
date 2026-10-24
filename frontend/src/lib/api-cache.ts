@@ -10,6 +10,8 @@ import { apiFetch, clearApiCache, onApiMutation } from "./api";
 export interface ApiQueryState<T> {
   data: T | undefined;
   error: string | null;
+  /** Latest failed refresh when cached data is retained; cleared on success. */
+  refreshError: string | null;
   /** True until the first fetch for this key settles (success or failure). */
   isLoading: boolean;
   /** True while a fetch for this key is in flight. */
@@ -20,6 +22,7 @@ interface Entry {
   data: unknown;
   hasData: boolean;
   error: string | null;
+  refreshError: string | null;
   promise: Promise<void> | null;
   /** Bumped on every invalidation; in-flight fetches from an older epoch discard their result. */
   epoch: number;
@@ -30,10 +33,11 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 
-function snapshotOf(e: Pick<Entry, "data" | "hasData" | "error" | "promise">): ApiQueryState<unknown> {
+function snapshotOf(e: Pick<Entry, "data" | "hasData" | "error" | "refreshError" | "promise">): ApiQueryState<unknown> {
   return {
     data: e.data,
     error: e.error,
+    refreshError: e.refreshError,
     isLoading: !e.hasData && e.error === null,
     isValidating: e.promise !== null,
   };
@@ -46,10 +50,11 @@ function getEntry(path: string): Entry {
       data: undefined,
       hasData: false,
       error: null,
+      refreshError: null,
       promise: null,
       epoch: 0,
       subscribers: new Set(),
-      snapshot: { data: undefined, error: null, isLoading: true, isValidating: false },
+      snapshot: { data: undefined, error: null, refreshError: null, isLoading: true, isValidating: false },
     };
     entries.set(path, entry);
   }
@@ -93,12 +98,13 @@ export function revalidateApiQuery(path: string): Promise<void> {
       entry.data = data;
       entry.hasData = true;
       entry.error = null;
+      entry.refreshError = null;
     })
     .catch((err: unknown) => {
       if (entry.epoch !== epochAtStart) return;
-      if (!entry.hasData) {
-        entry.error = err instanceof Error ? err.message : "Request failed";
-      }
+      const message = err instanceof Error ? err.message : "Request failed";
+      if (entry.hasData) entry.refreshError = message;
+      else entry.error = message;
     })
     .finally(() => {
       entry.promise = null;
@@ -144,6 +150,7 @@ onApiMutation(() => {
 const IDLE_STATE: ApiQueryState<never> = {
   data: undefined,
   error: null,
+  refreshError: null,
   isLoading: true,
   isValidating: false,
 };

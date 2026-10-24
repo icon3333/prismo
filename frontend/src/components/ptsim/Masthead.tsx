@@ -132,7 +132,7 @@ export function Masthead() {
             className="inline-block w-[10px] h-[10px] bg-cyan"
           />
           <span className="font-mono font-bold uppercase text-chrome tracking-[0.12em] text-cyan">
-            PRISMO
+            ALLOKATR
           </span>
         </div>
 

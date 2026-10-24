@@ -117,7 +117,7 @@ export default function ThemePage() {
             Ocean Depth Design System
           </h1>
           <p className="text-muted-foreground mt-1">
-            Prismo component showcase - shadcn/ui themed to Ocean Depth
+            Allokatr component showcase - shadcn/ui themed to Ocean Depth
           </p>
         </div>
 

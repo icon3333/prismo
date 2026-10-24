@@ -3,7 +3,7 @@ import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Prismo",
+  title: "Allokatr",
   description: "Portfolio management and rebalancing",
 };
 

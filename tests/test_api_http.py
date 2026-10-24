@@ -454,6 +454,35 @@ class TestRebalanceModeParam:
 
 
 class TestMonthlyReviewApi:
+    @pytest.mark.parametrize("mode", ["existing-only", "new-only", "new-with-sells"])
+    def test_patch_capital_mode_persists_and_increments_version(self, client, account, mode):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+        url = f"/portfolio/api/monthly-reviews/{created['id']}"
+
+        response = client.patch(url, json={"version": created["version"], "mode": mode})
+
+        assert response.status_code == 200, response.get_json()
+        updated = response.get_json()["data"]["review"]
+        assert updated["payload"]["inputs"]["mode"] == mode
+        assert updated["version"] == created["version"] + 1
+        assert client.get(url).get_json()["data"]["review"] == updated
+
+    def test_patch_invalid_capital_mode_rejected_without_mutation(self, client, account):
+        created = client.post(
+            "/portfolio/api/monthly-reviews", json={"period": "2026-07"}
+        ).get_json()["data"]["review"]
+        url = f"/portfolio/api/monthly-reviews/{created['id']}"
+
+        response = client.patch(url, json={"version": created["version"], "mode": "bogus"})
+
+        assert response.status_code == 422
+        assert response.get_json()["error_code"] == "review_validation"
+        unchanged = client.get(url).get_json()["data"]["review"]
+        assert unchanged["version"] == created["version"]
+        assert unchanged["payload"] == created["payload"]
+
     @pytest.mark.parametrize("invalid_version", [1.5, True])
     def test_patch_rejects_non_integer_versions_without_mutation(
         self, client, account, invalid_version

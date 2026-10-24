@@ -25,7 +25,7 @@ from app.services.monthly_review_snapshot import (
     reconcile_cash,
     reconcile_previous_actions,
 )
-from app.services.rebalance_service import calculate_detailed_rebalancing
+from app.services.rebalance_service import VALID_MODES, calculate_detailed_rebalancing
 from app.utils.db_utils import utc_now_iso
 
 

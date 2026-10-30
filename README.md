@@ -34,7 +34,7 @@ You already have a broker. What you don't have is a fast way to answer:
 ## Quick start
 
 ```bash
-git clone https://github.com/your-username/prismo.git
+git clone https://github.com/icon3333/prismo.git
 cd prismo
 python3 -m venv venv && source venv/bin/activate
 python -m pip install --upgrade "pip>=26.1.2"

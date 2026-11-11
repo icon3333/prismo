@@ -106,3 +106,6 @@ id_ecdsa
 *.sqlite3.backup*
 instance_backup/
 flask_session/
+
+# Private portfolio screenshots
+/docs/screenshots/

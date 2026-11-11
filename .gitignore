@@ -75,3 +75,37 @@ htmlcov/
 # Keep local runtime backups out of Git
 /.env.backup
 /instance_backup/
+
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.*.example
+!.env.*.sample
+!.env.*.template
+secret_key
+secrets.json
+credentials.json
+id_rsa
+id_ed25519
+id_ecdsa
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*.db.backup*
+*.sqlite.backup*
+*.sqlite3.backup*
+instance_backup/
+flask_session/
+
+# Private portfolio screenshots
+/docs/screenshots/

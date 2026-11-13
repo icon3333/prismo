@@ -45,14 +45,6 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-const cetTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Europe/Berlin",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
 const MINUS = "−";
 const DASH = "—";
 
@@ -111,12 +103,6 @@ export const longDate = (value: DateInput): string => {
 export const dateTime = (value: DateInput): string => {
   const parsed = parseDate(value);
   return parsed ? dateTimeFmt.format(parsed) : DASH;
-};
-
-/** Berlin market-clock timestamp. e.g. `14:32:08 CET`. */
-export const cetTime = (value: DateInput): string => {
-  const parsed = parseDate(value);
-  return parsed ? `${cetTimeFmt.format(parsed)} CET` : DASH;
 };
 
 // ---------- Legacy compat (rebalancer surfaces still import these) ----------

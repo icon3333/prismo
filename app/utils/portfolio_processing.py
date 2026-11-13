@@ -289,18 +289,12 @@ def _seed_ibkr_prices(company_positions, cursor):
         if not identifier or not price or price <= 0:
             continue
 
-        # Only seed if no existing price (don't overwrite fresher data)
-        cursor.execute('SELECT identifier FROM market_prices WHERE identifier = ?', [identifier])
-        if cursor.fetchone():
-            continue
-
         from app.utils.db_utils import utc_now_iso
-        cursor.execute(
+        seeded += cursor.execute(
             '''INSERT OR IGNORE INTO market_prices (identifier, price, currency, last_updated)
                VALUES (?, ?, ?, ?)''',
             [identifier, price, currency, utc_now_iso()]
-        )
-        seeded += 1
+        ).rowcount
 
     if seeded > 0:
         logger.info(f"Seeded {seeded} market prices from IBKR data")

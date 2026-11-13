@@ -54,6 +54,43 @@ class TestUpdatePriceInDb:
         assert row["price_eur"] is None  # nothing to preserve; must not be 50.0
 
 
+class TestSeedIbkrPrices:
+    def test_insert_only_new_identifiers_and_report_inserted_count(self, db, caplog):
+        from app.utils.portfolio_processing import _seed_ibkr_prices
+
+        seed_price(db, "EXISTING", price=12.0, currency="EUR", price_eur=12.0)
+        db.commit()
+        original = dict(db.execute(
+            "SELECT * FROM market_prices WHERE identifier = 'EXISTING'"
+        ).fetchone())
+        positions = {
+            "Existing": {"identifier": "EXISTING", "price": 99.0, "currency": "USD"},
+            "New": {"identifier": "NEW", "price": 25.0, "currency": "USD"},
+            "Duplicate": {"identifier": "NEW", "price": 30.0, "currency": "GBP"},
+        }
+
+        with caplog.at_level("INFO", logger="app.utils.portfolio_processing"):
+            _seed_ibkr_prices(positions, db.cursor())
+
+        assert caplog.messages == ["Seeded 1 market prices from IBKR data"]
+        assert dict(db.execute(
+            "SELECT * FROM market_prices WHERE identifier = 'EXISTING'"
+        ).fetchone()) == original
+
+        rows = db.execute(
+            "SELECT identifier, price, currency, price_eur FROM market_prices ORDER BY identifier"
+        ).fetchall()
+        assert [dict(row) for row in rows] == [
+            {"identifier": "EXISTING", "price": 12.0, "currency": "EUR", "price_eur": 12.0},
+            {"identifier": "NEW", "price": 25.0, "currency": "USD", "price_eur": None},
+        ]
+
+        caplog.clear()
+        with caplog.at_level("INFO", logger="app.utils.portfolio_processing"):
+            _seed_ibkr_prices(positions, db.cursor())
+        assert caplog.messages == []
+
+
 class TestBatchExtractPriceData:
     def test_price_eur_none_passes_through(self):
         """No `or price` fallback: unconverted results keep price_eur=None."""

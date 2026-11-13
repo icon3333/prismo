@@ -7,6 +7,18 @@ from app.db_manager import query_db, execute_db, get_background_db
 
 logger = logging.getLogger(__name__)
 
+_UPSERT_MARKET_PRICE_SQL = '''
+    INSERT INTO market_prices
+    (identifier, price, currency, price_eur, last_updated, country)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(identifier) DO UPDATE SET
+        price = excluded.price,
+        currency = excluded.currency,
+        price_eur = COALESCE(excluded.price_eur, market_prices.price_eur),
+        last_updated = excluded.last_updated,
+        country = excluded.country
+'''
+
 
 def utc_now_iso() -> str:
     """Timezone-aware UTC ISO timestamp (ends in +00:00).
@@ -138,17 +150,10 @@ def update_price_in_db_background(identifier: str, price: float, currency: str, 
         # contention. price_eur=None (EUR conversion unavailable) preserves
         # the previously stored price_eur instead of clobbering it with NULL.
         logger.debug(f"Upserting price record for {identifier}")
-        cursor.execute('''
-            INSERT INTO market_prices
-            (identifier, price, currency, price_eur, last_updated, country)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(identifier) DO UPDATE SET
-                price = excluded.price,
-                currency = excluded.currency,
-                price_eur = COALESCE(excluded.price_eur, market_prices.price_eur),
-                last_updated = excluded.last_updated,
-                country = excluded.country
-        ''', [identifier, price, currency, price_eur, now, country])
+        cursor.execute(
+            _UPSERT_MARKET_PRICE_SQL,
+            [identifier, price, currency, price_eur, now, country],
+        )
 
         # NOTE: accounts.last_price_update is no longer updated here. The
         # batch_processing job calls bulk_update_accounts_last_price_update()
@@ -262,17 +267,10 @@ def update_price_in_db(identifier: str, price: float, currency: str, price_eur: 
                 f"Updated {rows_updated} company records with new identifier {modified_identifier}")
             identifier = modified_identifier
 
-        execute_db('''
-            INSERT INTO market_prices
-            (identifier, price, currency, price_eur, last_updated, country)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(identifier) DO UPDATE SET
-                price = excluded.price,
-                currency = excluded.currency,
-                price_eur = COALESCE(excluded.price_eur, market_prices.price_eur),
-                last_updated = excluded.last_updated,
-                country = excluded.country
-        ''', [identifier, price, currency, price_eur, now, country])
+        execute_db(
+            _UPSERT_MARKET_PRICE_SQL,
+            [identifier, price, currency, price_eur, now, country],
+        )
 
         execute_db('''
             UPDATE accounts

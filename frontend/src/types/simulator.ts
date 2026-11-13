@@ -3,7 +3,6 @@ export type SimulatorScope = "global" | "portfolio";
 export type ItemSource = "ticker" | "sector" | "thesis" | "country";
 export type CategoryMode = "sector" | "thesis";
 export type AutoSaveStatus = "idle" | "saving" | "saved" | "error";
-export type CloneValueMode = "with-values" | "zeroed";
 
 /** Data about the matching real portfolio position (from ticker lookup). */
 export interface PortfolioPositionData {
